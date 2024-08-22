@@ -6,7 +6,9 @@ CONFIG = {
         'fitbit': 300,  # 5 minutes
         'stocks': 900,  # 15 minutes
         'weather': 1800,  # 30 minutes
-        'calendar': 3600  # 1 hour
+        'calendar': 3600,  # 1 hour
+        'smart_home': 60,  # 1 minute
+        'clock': 60  # 1 minute
     },
     'frame_rate': 30,
     'fitbit': {
@@ -26,7 +28,7 @@ CONFIG = {
         'credentials_file': 'path/to/your/credentials.json',
         'token_file': 'path/to/your/token.pickle'
     },
-     'smart_home': {
+    'smart_home': {
         'class': 'SmartHomeModule',
         'params': {
             'ha_url': 'http://your_home_assistant_ip:8123',
@@ -36,14 +38,20 @@ CONFIG = {
                 'sensor.living_room_humidity',
                 'sensor.bedroom_temperature',
                 'sensor.bedroom_humidity'
-    }, 
+            ]
+        },
+        'font_size': 24,
+        'color': (255, 255, 255),  # White
+        'update_interval_minutes': 1,
+        'retry_attempts': 3
+    },
     'clock': {
-    'font_file': 'path/to/your/font.ttf',  # Optional, use None for system default
-    'font_size': 60,
-    'color': (255, 255, 255),  # White
-    'time_format': '%H:%M:%S',
-    'date_format': '%A, %B %d, %Y',
-    'timezone': 'local'  # Or specify a timezone like 'US/Pacific'
+        'font_file': None,  # Use None for system default
+        'font_size': 60,
+        'color': (255, 255, 255),  # White
+        'time_format': '%H:%M:%S',
+        'date_format': '%A, %B %d, %Y',
+        'timezone': 'local'  # Or specify a timezone like 'US/Pacific'
     },
     'positions': {
         'time': (10, 10),
@@ -51,6 +59,7 @@ CONFIG = {
         'weather': (10, 50),
         'fitbit': (10, 200),
         'stocks': (400, 50),
-        'calendar': (400, 200)
+        'calendar': (400, 200),
+        'smart_home': (10, 300)  # Added smart home position
     }
 }
