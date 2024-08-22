@@ -26,8 +26,17 @@ CONFIG = {
         'credentials_file': 'path/to/your/credentials.json',
         'token_file': 'path/to/your/token.pickle'
     },
+    'clock': {
+    'font_file': 'path/to/your/font.ttf',  # Optional, use None for system default
+    'font_size': 60,
+    'color': (255, 255, 255),  # White
+    'time_format': '%H:%M:%S',
+    'date_format': '%A, %B %d, %Y',
+    'timezone': 'local'  # Or specify a timezone like 'US/Pacific'
+    },
     'positions': {
         'time': (10, 10),
+        'clock': (10, 100),
         'weather': (10, 50),
         'fitbit': (10, 200),
         'stocks': (400, 50),
