@@ -7,6 +7,7 @@ CONFIG = {
     },
     'stocks': {
         'api_key': 'your_stocks_api_key'
+        'tickers': ['AAPL', 'BTC-USD', 'LLOY.L', 'NVDA']
     },
     'weather': {
         'api_key': 'your_weather_api_key'
