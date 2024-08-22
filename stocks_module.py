@@ -2,42 +2,45 @@ import yfinance as yf
 import pygame
 import logging
 from datetime import datetime, timedelta
+from pytz import timezone
 
 class StocksModule:
-    def __init__(self, tickers):
+    def __init__(self, tickers, market_timezone='America/New_York'):
         self.tickers = tickers
         self.stock_data = {}
         self.font = pygame.font.Font(None, 24)
         self.last_update = datetime.min
-        self.update_interval = timedelta(minutes=15)  # Update every 15 minutes
+        self.update_interval = timedelta(minutes=15)
+        self.market_timezone = timezone(market_timezone)
         self.market_hours = {
-            'open': datetime.now().replace(hour=9, minute=30, second=0, microsecond=0),
-            'close': datetime.now().replace(hour=16, minute=0, second=0, microsecond=0)
+            'open': self.market_timezone.localize(datetime.now().replace(hour=9, minute=30, second=0, microsecond=0)),
+            'close': self.market_timezone.localize(datetime.now().replace(hour=16, minute=0, second=0, microsecond=0))
         }
 
     def update(self):
-        current_time = datetime.now()
+        current_time = datetime.now(self.market_timezone)
         if current_time - self.last_update < self.update_interval:
             return  # Skip update if not enough time has passed
 
-        if not self.is_market_open():
-            logging.info("Market is closed. Skipping update.")
-            return
+        if not self.is_market_open(current_time):
+            logging.info("Market is closed. Displaying last available data.")
+            return  # Optional: You can still update based on the last available data
 
         try:
             for ticker in self.tickers:
                 stock = yf.Ticker(ticker)
-                data = stock.history(period="2d")  # Get 2 days of data to ensure we have yesterday's close
+                data = stock.history(period="1d", interval="1m")
                 if not data.empty:
-                    last_close = data['Close'].iloc[-2]  # Yesterday's close
-                    current_price = data['Close'].iloc[-1]  # Today's current price or last close
+                    last_close = data['Close'].iloc[0]  # Last session's close
+                    current_price = data['Close'].iloc[-1]  # Current price or last close
                     percent_change = ((current_price - last_close) / last_close) * 100
                     volume = data['Volume'].iloc[-1]
+                    day_range = f"{data['Low'].min():.2f} - {data['High'].max():.2f}"
                     self.stock_data[ticker] = {
                         'price': current_price,
                         'percent_change': percent_change,
                         'volume': volume,
-                        'day_range': f"{data['Low'].iloc[-1]:.2f} - {data['High'].iloc[-1]:.2f}"
+                        'day_range': day_range
                     }
                 else:
                     self.stock_data[ticker] = {
@@ -77,9 +80,9 @@ class StocksModule:
             error_surface = self.font.render("Stock data unavailable", True, (255, 0, 0))
             screen.blit(error_surface, position)
 
-    def is_market_open(self):
-        now = datetime.now().time()
-        return self.market_hours['open'].time() <= now < self.market_hours['close'].time()
+    def is_market_open(self, current_time):
+        return self.market_hours['open'].time() <= current_time.time() < self.market_hours['close'].time()
 
     def cleanup(self):
         pass  # No cleanup needed for this module
+
