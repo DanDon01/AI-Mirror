@@ -26,6 +26,17 @@ CONFIG = {
         'credentials_file': 'path/to/your/credentials.json',
         'token_file': 'path/to/your/token.pickle'
     },
+     'smart_home': {
+        'class': 'SmartHomeModule',
+        'params': {
+            'ha_url': 'http://your_home_assistant_ip:8123',
+            'access_token': 'your_long_lived_access_token',
+            'entities': [
+                'sensor.living_room_temperature',
+                'sensor.living_room_humidity',
+                'sensor.bedroom_temperature',
+                'sensor.bedroom_humidity'
+    }, 
     'clock': {
     'font_file': 'path/to/your/font.ttf',  # Optional, use None for system default
     'font_size': 60,
