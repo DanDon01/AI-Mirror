@@ -4,7 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from config import CONFIG
-from modules import FitbitModule, StocksModule, WeatherModule, NewsModule, CalendarModule
+from modules import FitbitModule, StocksModule, WeatherModule, CalendarModule
 
 class MagicMirror:
     def __init__(self):
@@ -30,7 +30,6 @@ class MagicMirror:
                 "fitbit": FitbitModule(**CONFIG['fitbit']),
                 "stocks": StocksModule(**CONFIG['stocks']),
                 "weather": WeatherModule(**CONFIG['weather']),
-                "news": NewsModule(**CONFIG['news']),
                 "calendar": CalendarModule(**CONFIG['calendar'])
             }
         except Exception as e:
@@ -90,7 +89,7 @@ class MagicMirror:
             while self.handle_events():
                 self.update()
                 self.draw()
-                self.clock.tick(self.frame_rate)  # Configurable frame rate
+                self.clock.tick(self.frame_rate)
         except Exception as e:
             logging.error(f"Unexpected error in main loop: {e}")
         finally:
