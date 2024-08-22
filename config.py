@@ -1,4 +1,14 @@
 CONFIG = {
+    'screen': {
+        'size': (800, 480)  # Adjust as needed for your display
+    },
+    'update_intervals': {
+        'fitbit': 300,  # 5 minutes
+        'stocks': 900,  # 15 minutes
+        'weather': 1800,  # 30 minutes
+        'calendar': 3600  # 1 hour
+    },
+    'frame_rate': 30,
     'fitbit': {
         'client_id': 'your_fitbit_client_id',
         'client_secret': 'your_fitbit_client_secret',
@@ -6,24 +16,21 @@ CONFIG = {
         'refresh_token': 'your_fitbit_refresh_token'
     },
     'stocks': {
-        'api_key': 'your_stocks_api_key'
-        'tickers': ['AAPL', 'BTC-USD', 'LLOY.L', 'NVDA']
+        'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers
     },
     'weather': {
-        'api_key': 'your_weather_api_key'
-    },
-    'news': {
-        'api_key': 'your_news_api_key'
+        'api_key': 'your_openweathermap_api_key',
+        'city': 'Your City'
     },
     'calendar': {
-        'calendar_id': 'your_calendar_id',
-        'api_key': 'your_calendar_api_key'
+        'credentials_file': 'path/to/your/credentials.json',
+        'token_file': 'path/to/your/token.pickle'
     },
     'positions': {
-        'fitbit': (10, 50),
-        'stocks': (10, 150),
-        'weather': (400, 50),
-        'news': (10, 350),
-        'calendar': (400, 350)
+        'time': (10, 10),
+        'weather': (10, 50),
+        'fitbit': (10, 200),
+        'stocks': (400, 50),
+        'calendar': (400, 200)
     }
 }
