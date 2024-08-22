@@ -3,8 +3,9 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
+import traceback
 from config import CONFIG
-from modules import FitbitModule, StocksModule, WeatherModule, CalendarModule
+from modules import FitbitModule, StocksModule, WeatherModule, CalendarModule, ClockModule
 
 class MagicMirror:
     def __init__(self):
@@ -12,11 +13,12 @@ class MagicMirror:
         self.setup_logging()
         self.screen = pygame.display.set_mode(CONFIG['screen']['size'], pygame.FULLSCREEN)
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 36)
         self.modules = self.initialize_modules()
-        self.last_update = {module: datetime.now() for module in self.modules}
+        self.last_update = {module: datetime.min for module in self.modules}
         self.update_intervals = CONFIG['update_intervals']
         self.frame_rate = CONFIG.get('frame_rate', 30)
+        self.error_font = pygame.font.Font(None, 24)
+        self.running = True
 
     def setup_logging(self):
         handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
@@ -25,22 +27,21 @@ class MagicMirror:
         logging.info("Magic Mirror started")
 
     def initialize_modules(self):
-        try:
-            return {
-                "fitbit": FitbitModule(**CONFIG['fitbit']),
-                "stocks": StocksModule(**CONFIG['stocks']),
-                "weather": WeatherModule(**CONFIG['weather']),
-                "calendar": CalendarModule(**CONFIG['calendar'])
-            }
-        except Exception as e:
-            logging.error(f"Error initializing modules: {e}")
-            pygame.quit()
-            sys.exit(1)
+        modules = {}
+        for module_name, module_config in CONFIG['modules'].items():
+            try:
+                module_class = globals()[module_config['class']]
+                modules[module_name] = module_class(**module_config['params'])
+                logging.info(f"Initialized {module_name} module")
+            except Exception as e:
+                logging.error(f"Error initializing {module_name} module: {e}")
+                self.display_error(f"Failed to initialize {module_name}")
+        return modules
 
     def update(self):
         current_time = datetime.now()
         for module_name, module in self.modules.items():
-            if (current_time - self.last_update[module_name]).total_seconds() > self.update_intervals[module_name]:
+            if (current_time - self.last_update[module_name]).total_seconds() > self.update_intervals.get(module_name, 0):
                 try:
                     module.update()
                     self.last_update[module_name] = current_time
@@ -50,32 +51,27 @@ class MagicMirror:
 
     def draw(self):
         self.screen.fill((0, 0, 0))  # Black background
-        try:
-            for module_name, module in self.modules.items():
+        for module_name, module in self.modules.items():
+            try:
                 module.draw(self.screen, CONFIG['positions'][module_name])
-            self.draw_time()
-        except Exception as e:
-            logging.error(f"Error drawing modules: {e}")
-            self.display_error("Error rendering display")
+            except Exception as e:
+                logging.error(f"Error drawing {module_name}: {e}")
+                self.display_error(f"Error rendering {module_name}")
         pygame.display.flip()
 
-    def draw_time(self):
-        current_time = datetime.now().strftime("%H:%M:%S")
-        time_surface = self.font.render(current_time, True, (255, 255, 255))
-        self.screen.blit(time_surface, CONFIG['positions'].get('time', (10, 10)))
-
     def display_error(self, message):
-        error_surface = self.font.render(f"ERROR: {message}", True, (255, 0, 0))
-        self.screen.blit(error_surface, (10, CONFIG['screen']['size'][1] - 40))
+        error_surface = self.error_font.render(f"ERROR: {message}", True, (255, 0, 0))
+        self.screen.blit(error_surface, (10, CONFIG['screen']['size'][1] - 30))
 
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return False
+                self.running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    return False
-        return True
+                    self.running = False
+                elif event.key == pygame.K_r:
+                    self.reload_modules()
 
     def cleanup(self):
         for module_name, module in self.modules.items():
@@ -84,14 +80,23 @@ class MagicMirror:
             except Exception as e:
                 logging.error(f"Error during cleanup of {module_name}: {e}")
 
+    def reload_modules(self):
+        logging.info("Reloading modules")
+        self.cleanup()
+        self.modules = self.initialize_modules()
+        self.last_update = {module: datetime.min for module in self.modules}
+
     def run(self):
         try:
-            while self.handle_events():
+            while self.running:
+                self.handle_events()
                 self.update()
                 self.draw()
                 self.clock.tick(self.frame_rate)
         except Exception as e:
-            logging.error(f"Unexpected error in main loop: {e}")
+            logging.error(f"Unexpected error in main loop: {traceback.format_exc()}")
+            self.display_error("Critical error occurred")
+            pygame.time.wait(5000)  # Display error for 5 seconds
         finally:
             logging.info("Shutting down Magic Mirror")
             self.cleanup()
