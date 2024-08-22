@@ -9,14 +9,17 @@ import pygame
 import logging
 
 class CalendarModule:
-    def __init__(self, credentials_file, token_file):
+    def __init__(self, credentials_file, token_file, max_events=5, time_format='%m/%d %H:%M'):
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
         self.credentials_file = credentials_file
         self.token_file = token_file
+        self.max_events = max_events
+        self.time_format = time_format
         self.events = []
         self.font = pygame.font.Font(None, 24)
         self.last_update = datetime.datetime.min
         self.update_interval = datetime.timedelta(minutes=15)
+        self.service = None
 
     def authenticate(self):
         creds = None
@@ -33,24 +36,28 @@ class CalendarModule:
                 pickle.dump(creds, token)
         return creds
 
+    def build_service(self):
+        if not self.service:
+            creds = self.authenticate()
+            self.service = build('calendar', 'v3', credentials=creds)
+
     def update(self):
         current_time = datetime.datetime.now()
         if current_time - self.last_update < self.update_interval:
             return  # Skip update if not enough time has passed
 
         try:
-            creds = self.authenticate()
-            service = build('calendar', 'v3', credentials=creds)
-
-            now = datetime.datetime.utcnow().isoformat() + 'Z'
-            events_result = service.events().list(calendarId='primary', timeMin=now,
-                                                  maxResults=5, singleEvents=True,
-                                                  orderBy='startTime').execute()
+            self.build_service()
+            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+            events_result = self.service.events().list(calendarId='primary', timeMin=now,
+                                                       maxResults=self.max_events, singleEvents=True,
+                                                       orderBy='startTime').execute()
             self.events = events_result.get('items', [])
             self.last_update = current_time
             logging.info("Calendar data updated successfully")
         except Exception as e:
             logging.error(f"Error updating calendar data: {e}")
+            self.events = None  # Indicate that an error occurred
 
     def draw(self, screen, position):
         try:
@@ -59,14 +66,17 @@ class CalendarModule:
             screen.blit(title_surface, (x, y))
             y += 30
 
-            if not self.events:
+            if self.events is None:
+                error_surface = self.font.render("Error loading calendar", True, (255, 0, 0))
+                screen.blit(error_surface, (x, y))
+            elif not self.events:
                 no_events_surface = self.font.render("No upcoming events", True, (200, 200, 200))
                 screen.blit(no_events_surface, (x, y))
             else:
                 for event in self.events:
                     start = event['start'].get('dateTime', event['start'].get('date'))
                     start_dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
-                    event_text = f"{start_dt.strftime('%m/%d %H:%M')} - {event['summary']}"
+                    event_text = f"{start_dt.strftime(self.time_format)} - {event['summary']}"
                     event_surface = self.font.render(event_text, True, (200, 200, 200))
                     screen.blit(event_surface, (x, y))
                     y += 25
@@ -77,3 +87,4 @@ class CalendarModule:
 
     def cleanup(self):
         pass  # No specific cleanup needed for this module
+
