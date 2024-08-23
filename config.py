@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Load variables from .env file
+
 CONFIG = {
     'screen': {
         'size': (800, 480)  # Adjust as needed for your display
