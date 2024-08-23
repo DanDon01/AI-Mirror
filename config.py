@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Load variables from .env file
+
 CONFIG = {
     'screen': {
         'size': (800, 480)  # Adjust as needed for your display
@@ -12,10 +17,10 @@ CONFIG = {
     },
     'frame_rate': 30,
     'fitbit': {
-        'client_id': 'your_fitbit_client_id',
-        'client_secret': 'your_fitbit_client_secret',
-        'access_token': 'your_fitbit_access_token',
-        'refresh_token': 'your_fitbit_refresh_token'
+        'client_id': 'FITBIT_CLIENT_ID',
+        'client_secret': 'FITBIT_CLIENT_SECRET',
+        'access_token': 'FITBIT_ACCESS_TOKEN',
+        'refresh_token': 'FITBIT_REFRESH_TOKEN'
     },
     'stocks': {
         'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers

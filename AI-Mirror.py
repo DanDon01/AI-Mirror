@@ -5,7 +5,13 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import traceback
 from config import CONFIG
-from modules import FitbitModule, StocksModule, WeatherModule, CalendarModule, ClockModule
+import sys
+sys.path.append(f"C:/Users/danie/GitHub/Projects/AI-Mirror")
+from fitbit_module import *
+from stocks_module import *
+from weather_module import *
+from calendar_module import *
+from clock_module import *
 
 class MagicMirror:
     def __init__(self):
@@ -38,16 +44,37 @@ class MagicMirror:
                 self.display_error(f"Failed to initialize {module_name}")
         return modules
 
-    def update(self):
-        current_time = datetime.now()
-        for module_name, module in self.modules.items():
-            if (current_time - self.last_update[module_name]).total_seconds() > self.update_intervals.get(module_name, 0):
-                try:
-                    module.update()
-                    self.last_update[module_name] = current_time
-                except Exception as e:
-                    logging.error(f"Error updating {module_name}: {e}")
-                    self.display_error(f"{module_name} update failed")
+def update(self):
+    current_time = datetime.now()
+    if current_time - self.last_update < self.update_interval:
+        return  # Skip update if not enough time has passed
+
+    try:
+        today = current_time.strftime("%Y-%m-%d")
+        
+        # Fetch all daily activity data in one API call
+        daily_data = self.client.activities(date=today)['summary']
+        self.data['steps'] = daily_data['steps']
+        self.data['calories'] = daily_data['caloriesOut']
+        self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
+
+        # Fetch weight data
+        weight_data = self.client.body(date=today)['weight']
+        self.data['weight'] = weight_data[0]['weight'] if weight_data else 'N/A'
+
+        # Fetch sleep data
+        sleep_data = self.client.sleep(date=today)['summary']
+        self.data['sleep'] = sleep_data['totalMinutesAsleep']
+
+        self.last_update = current_time
+        logging.info("Fitbit data updated successfully")
+    except fitbit.exceptions.HTTPUnauthorized:
+        logging.warning("Access token expired, refreshing token...")
+        self.client.refresh_token()  # Assume you have a method to refresh the token
+        # Repeat the API request after refreshing token
+    except Exception as e:
+        logging.error(f"Error fetching Fitbit data: {e}")
+
 
     def draw(self):
         self.screen.fill((0, 0, 0))  # Black background
