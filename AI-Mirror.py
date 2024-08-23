@@ -5,7 +5,13 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import traceback
 from config import CONFIG
-from modules import FitbitModule, StocksModule, WeatherModule, CalendarModule, ClockModule
+import sys
+sys.path.append(f"C:/Users/danie/GitHub/Projects/AI-Mirror")
+from fitbit_module import *
+from stocks_module import *
+from weather_module import *
+from calendar_module import *
+from clock_module import *
 
 class MagicMirror:
     def __init__(self):
@@ -28,7 +34,7 @@ class MagicMirror:
 
     def initialize_modules(self):
         modules = {}
-        for module_name, module_config in CONFIG['modules'].items():
+        for module_name, module_config in CONFIG['modules'].items()
             try:
                 module_class = globals()[module_config['class']]
                 modules[module_name] = module_class(**module_config['params'])
