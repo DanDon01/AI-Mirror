@@ -2,7 +2,14 @@ from dotenv import load_dotenv
 import os
 from datetime import time
 
-load_dotenv('Variables.env')  # Load variables from Variables.env file
+# Get the directory of the current file (config.py)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Construct the path to Variables.env in the parent directory
+env_path = os.path.join(current_dir, '..', 'Variables.env')
+
+# Load the .env file
+load_dotenv(env_path)
 
 CONFIG = {
     'screen': {
