@@ -1,0 +1,39 @@
+2024-08-24 13:51:03,391 - INFO - Magic Mirror started
+2024-08-24 14:28:10,792 - INFO - Magic Mirror started
+2024-08-24 14:57:58,645 - INFO - Magic Mirror started
+2024-08-24 14:57:59,195 - INFO - Initialized fitbit module
+2024-08-24 14:57:59,832 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:57:59,832 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:00,238 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:00,244 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:00,639 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:00,640 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:00,884 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:00,884 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:01,295 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:01,295 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:01,469 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:01,470 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:01,882 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:01,882 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:02,356 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:02,357 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:02,691 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:02,691 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:02,941 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:02,941 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:03,271 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:03,271 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:03,881 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:03,881 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:04,285 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:04,286 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:04,919 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:04,919 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:05,185 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:05,185 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:06,075 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:06,076 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:06,516 - ERROR - Error fetching Fitbit data: Access token invalid: YOUR_FITBIT_ACCESS_TOKEN. Visit https://dev.fitbit.com/docs/oauth2 for more information on the Fitbit Web API authorization process.
+2024-08-24 14:58:06,517 - ERROR - Error drawing fitbit: 'positions'
+2024-08-24 14:58:06,517 - INFO - Shutting down Magic Mirror

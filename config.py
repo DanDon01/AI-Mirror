@@ -1,43 +1,45 @@
 from dotenv import load_dotenv
 import os
+from datetime import time
 
-load_dotenv()  # Load variables from .env file
+load_dotenv('Variables.env')  # Load variables from Variables.env file
 
 CONFIG = {
     'screen': {
         'size': (800, 480)  # Adjust as needed for your display
     },
-    'update_intervals': {
-        'fitbit': 300,  # 5 minutes
-        'stocks': 900,  # 15 minutes
-        'weather': 1800,  # 30 minutes
-        'calendar': 3600,  # 1 hour
-        'smart_home': 60,  # 1 minute
-        'clock': 60  # 1 minute
+    'update_schedule': {
+        'time': time(5, 30),  # Update at 5:30 AM
+        'frequency': 'daily'
     },
     'frame_rate': 30,
-    'fitbit': {
-        'client_id': 'FITBIT_CLIENT_ID',
-        'client_secret': 'FITBIT_CLIENT_SECRET',
-        'access_token': 'FITBIT_ACCESS_TOKEN',
-        'refresh_token': 'FITBIT_REFRESH_TOKEN'
+        'fitbit': {
+            'class': 'FitbitModule',
+            'params': {
+                'client_id': 'YOUR_FITBIT_CLIENT_ID',
+                'client_secret': 'YOUR_FITBIT_CLIENT_SECRET',
+                'access_token': 'YOUR_FITBIT_ACCESS_TOKEN',
+                'refresh_token': 'YOUR_FITBIT_REFRESH_TOKEN',
+                'update_interval': 5  # in minutes
     },
     'stocks': {
         'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers
     },
     'weather': {
-        'api_key': 'your_openweathermap_api_key',
+        'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
         'city': 'Your City'
     },
     'calendar': {
-        'credentials_file': 'path/to/your/credentials.json',
-        'token_file': 'path/to/your/token.pickle'
+        'client_id': os.getenv('GOOGLE_CLIENT_ID'),
+        'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
+        'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
+        'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
     },
     'smart_home': {
         'class': 'SmartHomeModule',
         'params': {
-            'ha_url': 'http://your_home_assistant_ip:8123',
-            'access_token': 'your_long_lived_access_token',
+            'ha_url': os.getenv('HOME_ASSISTANT_URL'),
+            'access_token': os.getenv('HOME_ASSISTANT_ACCESS_TOKEN'),
             'entities': [
                 'sensor.living_room_temperature',
                 'sensor.living_room_humidity',
@@ -47,7 +49,6 @@ CONFIG = {
         },
         'font_size': 24,
         'color': (255, 255, 255),  # White
-        'update_interval_minutes': 1,
         'retry_attempts': 3
     },
     'clock': {
@@ -67,4 +68,4 @@ CONFIG = {
         'calendar': (400, 200),
         'smart_home': (10, 300)  # Added smart home position
     }
-}
+}}

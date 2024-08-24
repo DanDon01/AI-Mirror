@@ -4,11 +4,12 @@ import pygame
 import logging
 
 class FitbitModule:
-    def __init__(self, client_id, client_secret, access_token, refresh_token):
+    def __init__(self, config):
         self.client = fitbit.Fitbit(
-            client_id, client_secret,
-            access_token=access_token,
-            refresh_token=refresh_token,
+            config['client_id'],
+            config['client_secret'],
+            access_token=config['access_token'],
+            refresh_token=config['refresh_token'],
             system='en_US'
         )
         self.data = {
@@ -18,29 +19,26 @@ class FitbitModule:
             'active_minutes': 'N/A',
             'sleep': 'N/A'
         }
-        self.font = pygame.font.Font(None, 36)
+        self.font = None
         self.last_update = datetime.min
-        self.update_interval = timedelta(minutes=5)  # Update every 5 minutes
+        self.update_interval = timedelta(minutes=config.get('update_interval', 5))
 
     def update(self):
         current_time = datetime.now()
         if current_time - self.last_update < self.update_interval:
-            return  # Skip update if not enough time has passed
+            return
 
         try:
             today = current_time.strftime("%Y-%m-%d")
             
-            # Fetch all daily activity data in one API call
             daily_data = self.client.activities(date=today)['summary']
             self.data['steps'] = daily_data['steps']
             self.data['calories'] = daily_data['caloriesOut']
             self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
 
-            # Fetch weight data
             weight_data = self.client.body(date=today)['weight']
             self.data['weight'] = weight_data[0]['weight'] if weight_data else 'N/A'
 
-            # Fetch sleep data
             sleep_data = self.client.sleep(date=today)['summary']
             self.data['sleep'] = sleep_data['totalMinutesAsleep']
 
@@ -50,6 +48,9 @@ class FitbitModule:
             logging.error(f"Error fetching Fitbit data: {e}")
 
     def draw(self, screen, position):
+        if self.font is None:
+            self.font = pygame.font.Font(None, 36)
+
         try:
             x, y = position
             labels = [
@@ -68,6 +69,4 @@ class FitbitModule:
             screen.blit(error_surface, position)
 
     def cleanup(self):
-        # No specific cleanup needed for Fitbit module
         pass
-

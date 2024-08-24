@@ -5,13 +5,12 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import traceback
 from config import CONFIG
-import sys
-sys.path.append(f"C:/Users/danie/GitHub/Projects/AI-Mirror")
-from fitbit_module import *
-from stocks_module import *
-from weather_module import *
-from calendar_module import *
-from clock_module import *
+
+# Import your modules here
+from calendar_module import CalendarModule
+from weather_module import WeatherModule
+from fitbit_module import FitbitModule
+# Import other modules as needed again
 
 class MagicMirror:
     def __init__(self):
@@ -20,11 +19,9 @@ class MagicMirror:
         self.screen = pygame.display.set_mode(CONFIG['screen']['size'], pygame.FULLSCREEN)
         self.clock = pygame.time.Clock()
         self.modules = self.initialize_modules()
-        self.last_update = {module: datetime.min for module in self.modules}
-        self.update_intervals = CONFIG['update_intervals']
         self.frame_rate = CONFIG.get('frame_rate', 30)
-        self.error_font = pygame.font.Font(None, 24)
         self.running = True
+        self.state = "active"  # Can be "active" or "sleep"
 
     def setup_logging(self):
         handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
@@ -34,61 +31,15 @@ class MagicMirror:
 
     def initialize_modules(self):
         modules = {}
-        for module_name, module_config in CONFIG['modules'].items():
-            try:
-                module_class = globals()[module_config['class']]
-                modules[module_name] = module_class(**module_config['params'])
-                logging.info(f"Initialized {module_name} module")
-            except Exception as e:
-                logging.error(f"Error initializing {module_name} module: {e}")
-                self.display_error(f"Failed to initialize {module_name}")
+        for module_name, module_config in CONFIG.items():
+            if isinstance(module_config, dict) and 'class' in module_config:
+                try:
+                    module_class = globals()[module_config['class']]
+                    modules[module_name] = module_class(module_config.get('params', {}))
+                    logging.info(f"Initialized {module_name} module")
+                except Exception as e:
+                    logging.error(f"Error initializing {module_name} module: {e}")
         return modules
-
-def update(self):
-    current_time = datetime.now()
-    if current_time - self.last_update < self.update_interval:
-        return  # Skip update if not enough time has passed
-
-    try:
-        today = current_time.strftime("%Y-%m-%d")
-        
-        # Fetch all daily activity data in one API call
-        daily_data = self.client.activities(date=today)['summary']
-        self.data['steps'] = daily_data['steps']
-        self.data['calories'] = daily_data['caloriesOut']
-        self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
-
-        # Fetch weight data
-        weight_data = self.client.body(date=today)['weight']
-        self.data['weight'] = weight_data[0]['weight'] if weight_data else 'N/A'
-
-        # Fetch sleep data
-        sleep_data = self.client.sleep(date=today)['summary']
-        self.data['sleep'] = sleep_data['totalMinutesAsleep']
-
-        self.last_update = current_time
-        logging.info("Fitbit data updated successfully")
-    except fitbit.exceptions.HTTPUnauthorized:
-        logging.warning("Access token expired, refreshing token...")
-        self.client.refresh_token()  # Assume you have a method to refresh the token
-        # Repeat the API request after refreshing token
-    except Exception as e:
-        logging.error(f"Error fetching Fitbit data: {e}")
-
-
-    def draw(self):
-        self.screen.fill((0, 0, 0))  # Black background
-        for module_name, module in self.modules.items():
-            try:
-                module.draw(self.screen, CONFIG['positions'][module_name])
-            except Exception as e:
-                logging.error(f"Error drawing {module_name}: {e}")
-                self.display_error(f"Error rendering {module_name}")
-        pygame.display.flip()
-
-    def display_error(self, message):
-        error_surface = self.error_font.render(f"ERROR: {message}", True, (255, 0, 0))
-        self.screen.blit(error_surface, (10, CONFIG['screen']['size'][1] - 30))
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -97,40 +48,55 @@ def update(self):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
-                elif event.key == pygame.K_r:
-                    self.reload_modules()
+                elif event.key == pygame.K_s:
+                    self.toggle_sleep_mode()
+            # Add more event handling here (e.g., for voice commands or gestures)
 
-    def cleanup(self):
-        for module_name, module in self.modules.items():
-            try:
-                module.cleanup()
-            except Exception as e:
-                logging.error(f"Error during cleanup of {module_name}: {e}")
+    def toggle_sleep_mode(self):
+        self.state = "sleep" if self.state == "active" else "active"
+        logging.info(f"Mirror state changed to: {self.state}")
 
-    def reload_modules(self):
-        logging.info("Reloading modules")
-        self.cleanup()
-        self.modules = self.initialize_modules()
-        self.last_update = {module: datetime.min for module in self.modules}
+    def update_modules(self):
+        for module in self.modules.values():
+            module.update()
+
+    def draw_modules(self):
+        self.screen.fill((0, 0, 0))  # Clear screen with black
+        if self.state == "active":
+            for module_name, module in self.modules.items():
+                try:
+                    module.draw(self.screen, CONFIG['positions'][module_name])
+                except Exception as e:
+                    logging.error(f"Error drawing {module_name}: {e}")
+        else:
+            # Draw sleep mode screen (e.g., just the time)
+            current_time = datetime.now().strftime("%H:%M")
+            font = pygame.font.Font(None, 100)
+            text = font.render(current_time, True, (100, 100, 100))
+            text_rect = text.get_rect(center=(self.screen.get_width() / 2, self.screen.get_height() / 2))
+            self.screen.blit(text, text_rect)
+        pygame.display.flip()
 
     def run(self):
         try:
             while self.running:
                 self.handle_events()
-                self.update()
-                self.draw()
+                self.update_modules()
+                self.draw_modules()
                 self.clock.tick(self.frame_rate)
         except Exception as e:
             logging.error(f"Unexpected error in main loop: {traceback.format_exc()}")
-            self.display_error("Critical error occurred")
-            pygame.time.wait(5000)  # Display error for 5 seconds
         finally:
-            logging.info("Shutting down Magic Mirror")
             self.cleanup()
+            logging.info("Shutting down Magic Mirror")
             pygame.quit()
             sys.exit()
+
+    def cleanup(self):
+        for module in self.modules.values():
+            if hasattr(module, 'cleanup'):
+                module.cleanup()
 
 if __name__ == "__main__":
     mirror = MagicMirror()
     mirror.run()
-
