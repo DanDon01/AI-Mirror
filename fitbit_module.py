@@ -47,69 +47,69 @@ class FitbitModule:
 
         while retry_count < max_retries:
             if self.should_update():
-                    try:
-                        today = datetime.now().strftime("%Y-%m-%d")
-                        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+                try:
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
                 
-                # Fetch activity data
-                        daily_data = self.client.activities(date=today)['summary']
-                        self.data['steps'] = daily_data['steps']
-                        self.data['calories'] = daily_data['caloriesOut']
-                        self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
+                    # Fetch activity data
+                    daily_data = self.client.activities(date=today)['summary']
+                    self.data['steps'] = daily_data['steps']
+                    self.data['calories'] = daily_data['caloriesOut']
+                    self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
 
                 # Fetch heart rate data
-                        heart_data = self.client.heart(date=today)['activities-heart']
-                        self.data['resting_heart_rate'] = heart_data[0]['value'].get('restingHeartRate', 'N/A')
+                    heart_data = self.client.heart(date=today)['activities-heart']
+                    self.data['resting_heart_rate'] = heart_data[0]['value'].get('restingHeartRate', 'N/A')
 
                 # Fetch sleep data
-                        sleep_url = f"https://api.fitbit.com/1.2/user/-/sleep/date/{yesterday}.json"
-                        headers = {
-                            "Authorization": f"Bearer {self.access_token}",
-                            "Accept": "application/json"
-                        }
-                        response = requests.get(sleep_url, headers=headers)
-                        response.raise_for_status()  # Raise an exception for bad responses
-                        sleep_data = response.json()
+                    sleep_url = f"https://api.fitbit.com/1.2/user/-/sleep/date/{yesterday}.json"
+                    headers = {
+                        "Authorization": f"Bearer {self.access_token}",
+                        "Accept": "application/json"
+                    }
+                    response = requests.get(sleep_url, headers=headers)
+                    response.raise_for_status()  # Raise an exception for bad responses
+                    sleep_data = response.json()
                 
                 # Process sleep data
-                        if 'summary' in sleep_data:
-                            total_minutes_asleep = sleep_data['summary'].get('totalMinutesAsleep', 0)
-                            total_time_in_bed = sleep_data['summary'].get('totalTimeInBed', 0)
-                            hours_asleep, minutes_asleep = divmod(total_minutes_asleep, 60)
-                            self.data['sleep'] = f"{hours_asleep:02}:{minutes_asleep:02}"
-                            self.data['time_in_bed'] = f"{total_time_in_bed // 60:02}:{total_time_in_bed % 60:02}"
-                    
-                            if 'stages' in sleep_data['summary']:
-                                stages = sleep_data['summary']['stages']
-                                self.data['deep_sleep'] = stages.get('deep', 'N/A')
-                                self.data['light_sleep'] = stages.get('light', 'N/A')
-                                self.data['rem_sleep'] = stages.get('rem', 'N/A')
-                                self.data['wake_sleep'] = stages.get('wake', 'N/A')
-                        else:
-                            logging.warning("Sleep summary data not found in the response")
-                            self.data['sleep'] = 'N/A'
-                            self.data['time_in_bed'] = 'N/A'
-
-                        self.last_update = datetime.now()
-                        logging.info("Fitbit data updated successfully")
-                        logging.debug(f"Updated Fitbit data: {self.data}")
-            
-                    except requests.exceptions.RequestException as e:
-                        logging.error(f"Error fetching sleep data: {e}")
+                    if 'summary' in sleep_data:
+                        total_minutes_asleep = sleep_data['summary'].get('totalMinutesAsleep', 0)
+                        total_time_in_bed = sleep_data['summary'].get('totalTimeInBed', 0)
+                        hours_asleep, minutes_asleep = divmod(total_minutes_asleep, 60)
+                        self.data['sleep'] = f"{hours_asleep:02}:{minutes_asleep:02}"
+                        self.data['time_in_bed'] = f"{total_time_in_bed // 60:02}:{total_time_in_bed % 60:02}"
+                    else:
+                        logging.warning("Sleep summary data not found in the response")
                         self.data['sleep'] = 'N/A'
                         self.data['time_in_bed'] = 'N/A'
+
+                    self.last_update = datetime.now()
+                    logging.info("Fitbit data updated successfully")
+                    logging.debug(f"Updated Fitbit data: {self.data}")
+                    break  # Exit the loop if successful
             
-                    except fitbit.exceptions.HTTPUnauthorized:
-                        logging.warning("Access token expired, refreshing token")
-                        self.refresh_access_token()
-                        self.update()  # Retry update after refreshing token
+                except requests.exceptions.RequestException as e:
+                    logging.error(f"Error fetching sleep data: {e}")
+                    if hasattr(e.response, 'text'):
+                        logging.error(f"Response content: {e.response.text}")
+                    self.data['sleep'] = 'N/A'
+                    self.data['time_in_bed'] = 'N/A'
             
-                    except Exception as e:
-                        logging.error(f"Error fetching Fitbit data: {e}")
-                        for key in self.data:
-                            self.data[key] = 'N/A'
+                except fitbit.exceptions.HTTPUnauthorized:
+                    logging.warning("Access token expired, refreshing token")
+                    self.refresh_access_token()
+                    retry_count += 1
+            
+                except Exception as e:
+                    logging.error(f"Error fetching Fitbit data: {e}")
+                    for key in self.data:
+                        self.data[key] = 'N/A'
+                    break  # Exit the loop for other exceptions
             else:
                 break  # Exit if update is not needed
+
+        if retry_count == max_retries:
+            logging.error("Max retries reached. Unable to update Fitbit data.")
 
     def refresh_access_token(self):
         try:

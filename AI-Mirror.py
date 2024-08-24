@@ -61,8 +61,11 @@ class MagicMirror:
         logging.info(f"Mirror state changed to: {self.state}")
 
     def update_modules(self):
-        for module in self.modules.values():
-            module.update()
+        for module_name, module in self.modules.items():
+            try:
+                module.update()
+            except Exception as e:
+                logging.error(f"Error updating {module_name}: {e}")
         
         # Update scroll position
         self.scroll_x -= 2
@@ -78,10 +81,12 @@ class MagicMirror:
             
             for module_name, module in self.modules.items():
                 try:
-                    logging.info(f"Drawing module: {module_name}")
                     module.draw(self.screen, CONFIG['positions'][module_name])
                 except Exception as e:
                     logging.error(f"Error drawing {module_name}: {e}")
+                    error_font = pygame.font.Font(None, 24)
+                    error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
+                    self.screen.blit(error_text, CONFIG['positions'][module_name])
         else:
             # Draw sleep mode screen (e.g., just the time)
             current_time = datetime.now().strftime("%H:%M")
