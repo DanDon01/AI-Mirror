@@ -25,7 +25,7 @@ class FitbitModule:
             'steps': 'N/A',
             'calories': 'N/A',
             'active_minutes': 'N/A',
-            'sleep': 'N/A'
+            'sleep': 'N/A',
             'resting_heart_rate': 'N/A'
         }
         self.font = None
@@ -49,7 +49,7 @@ class FitbitModule:
             if self.should_update():
                 try:
                     today = datetime.now().strftime("%Y-%m-%d")
-                    
+                
                     daily_data = self.client.activities(date=today)['summary']
                     self.data['steps'] = daily_data['steps']
                     self.data['calories'] = daily_data['caloriesOut']
@@ -63,11 +63,10 @@ class FitbitModule:
 
                     self.last_update = datetime.now()
                     logging.info("Fitbit data updated successfully")
-                    break  # Exit the loop if successful
-                except fitbit.exceptions.HTTPUnauthorized:
+                except fitbit.exceptions.HTTPUnauthorized as e:
                     logging.warning("Access token expired, refreshing token")
                     self.refresh_access_token()
-                    retry_count += 1
+                    self.update()  # Retry update after refreshing token
                 except Exception as e:
                     logging.error(f"Error fetching Fitbit data: {e}")
                     break  # Exit the loop for other exceptions
