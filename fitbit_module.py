@@ -14,13 +14,8 @@ class FitbitModule:
         self.client_secret = config['client_secret']
         self.access_token = config['access_token']
         self.refresh_token = config['refresh_token']
-        self.client = fitbit.Fitbit(
-            self.client_id,
-            self.client_secret,
-            access_token=self.access_token,
-            refresh_token=self.refresh_token,
-            system='en_US'
-        )
+        self.client = None
+        self.initialize_client()
         self.data = {
             'steps': 'N/A',
             'calories': 'N/A',
@@ -28,114 +23,91 @@ class FitbitModule:
             'sleep': 'N/A',
             'resting_heart_rate': 'N/A'
         }
-        self.font = None
         self.last_update = None
+        self.update_interval = config.get('update_interval', 300)  # 5 minutes default
         logging.info(f"Initializing FitbitModule with client_id: {self.client_id}")
-        logging.info(f"access_token: {'set' if self.access_token else 'not set'}")
-        logging.info(f"refresh_token: {'set' if self.refresh_token else 'not set'}")
+
+    def initialize_client(self):
+        try:
+            self.client = fitbit.Fitbit(
+                self.client_id,
+                self.client_secret,
+                access_token=self.access_token,
+                refresh_token=self.refresh_token,
+                system='en_US'
+            )
+            logging.info("Fitbit client initialized successfully")
+        except Exception as e:
+            logging.error(f"Error initializing Fitbit client: {e}")
 
     def should_update(self):
-        now = datetime.now()
-        scheduled_time = CONFIG['update_schedule']['time']
-        if now.time() >= scheduled_time and (self.last_update is None or self.last_update.date() < now.date()):
-            return True
-        return False
+        return self.last_update is None or (datetime.now() - self.last_update).total_seconds() >= self.update_interval
 
     def update(self):
-        max_retries = 3
-        retry_count = 0
+        if not self.should_update():
+            return
 
-        while retry_count < max_retries:
-            if self.should_update():
-                try:
-                    today = datetime.now().strftime("%Y-%m-%d")
-                    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-                
-                    # Fetch activity data
-                    daily_data = self.client.activities(date=today)['summary']
-                    self.data['steps'] = daily_data['steps']
-                    self.data['calories'] = daily_data['caloriesOut']
-                    self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
+        try:
+            if not self.client:
+                self.initialize_client()
+                if not self.client:
+                    return
 
-                # Fetch heart rate data
-                    heart_data = self.client.heart(date=today)['activities-heart']
-                    self.data['resting_heart_rate'] = heart_data[0]['value'].get('restingHeartRate', 'N/A')
+            today = datetime.now().strftime("%Y-%m-%d")
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-                # Fetch sleep data
-                    sleep_url = f"https://api.fitbit.com/1.2/user/-/sleep/date/{yesterday}.json"
-                    headers = {
-                        "Authorization": f"Bearer {self.access_token}",
-                        "Accept": "application/json"
-                    }
-                    response = requests.get(sleep_url, headers=headers)
-                    response.raise_for_status()  # Raise an exception for bad responses
-                    sleep_data = response.json()
-                
-                # Process sleep data
-                    if 'summary' in sleep_data:
-                        total_minutes_asleep = sleep_data['summary'].get('totalMinutesAsleep', 0)
-                        total_time_in_bed = sleep_data['summary'].get('totalTimeInBed', 0)
-                        hours_asleep, minutes_asleep = divmod(total_minutes_asleep, 60)
-                        self.data['sleep'] = f"{hours_asleep:02}:{minutes_asleep:02}"
-                        self.data['time_in_bed'] = f"{total_time_in_bed // 60:02}:{total_time_in_bed % 60:02}"
-                    else:
-                        logging.warning("Sleep summary data not found in the response")
-                        self.data['sleep'] = 'N/A'
-                        self.data['time_in_bed'] = 'N/A'
+            # Fetch activity data
+            daily_data = self.client.activities(date=today)['summary']
+            self.data['steps'] = daily_data['steps']
+            self.data['calories'] = daily_data['caloriesOut']
+            self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
 
-                    self.last_update = datetime.now()
-                    logging.info("Fitbit data updated successfully")
-                    logging.debug(f"Updated Fitbit data: {self.data}")
-                    break  # Exit the loop if successful
-            
-                except requests.exceptions.RequestException as e:
-                    logging.error(f"Error fetching sleep data: {e}")
-                    if hasattr(e.response, 'text'):
-                        logging.error(f"Response content: {e.response.text}")
-                    self.data['sleep'] = 'N/A'
-                    self.data['time_in_bed'] = 'N/A'
-            
-                except fitbit.exceptions.HTTPUnauthorized:
-                    logging.warning("Access token expired, refreshing token")
-                    self.refresh_access_token()
-                    retry_count += 1
-            
-                except Exception as e:
-                    logging.error(f"Error fetching Fitbit data: {e}")
-                    for key in self.data:
-                        self.data[key] = 'N/A'
-                    break  # Exit the loop for other exceptions
+            # Fetch heart rate data
+            heart_data = self.client.heart(date=today)['activities-heart']
+            self.data['resting_heart_rate'] = heart_data[0]['value'].get('restingHeartRate', 'N/A')
+
+            # Fetch sleep data
+            sleep_data = self.client.sleep(date=yesterday)
+            if 'summary' in sleep_data:
+                total_minutes_asleep = sleep_data['summary'].get('totalMinutesAsleep', 0)
+                hours, minutes = divmod(total_minutes_asleep, 60)
+                self.data['sleep'] = f"{hours:02}:{minutes:02}"
             else:
-                break  # Exit if update is not needed
+                self.data['sleep'] = 'N/A'
 
-        if retry_count == max_retries:
-            logging.error("Max retries reached. Unable to update Fitbit data.")
+            self.last_update = datetime.now()
+            logging.info("Fitbit data updated successfully")
+            logging.debug(f"Updated Fitbit data: {self.data}")
+
+        except fitbit.exceptions.HTTPUnauthorized:
+            logging.warning("Access token expired, refreshing token")
+            self.refresh_access_token()
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error fetching Fitbit data: {e}")
+            if hasattr(e, 'response') and e.response:
+                logging.error(f"Response status code: {e.response.status_code}")
+                logging.error(f"Response content: {e.response.text}")
+        except Exception as e:
+            logging.error(f"Unexpected error updating Fitbit data: {e}")
 
     def refresh_access_token(self):
         try:
             token_url = "https://api.fitbit.com/oauth2/token"
-            auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
-            headers = {
-                "Authorization": f"Basic {auth_header}",
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-            data = {
-                "grant_type": "refresh_token",
-                "refresh_token": self.refresh_token
-            }
-            response = requests.post(token_url, headers=headers, data=data)
+            response = requests.post(
+                token_url,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": self.refresh_token,
+                    "client_id": self.client_id,
+                },
+                auth=(self.client_id, self.client_secret)
+            )
             new_tokens = response.json()
             
             if 'access_token' in new_tokens and 'refresh_token' in new_tokens:
                 self.access_token = new_tokens['access_token']
                 self.refresh_token = new_tokens['refresh_token']
-                self.client = fitbit.Fitbit(
-                    self.client_id,
-                    self.client_secret,
-                    access_token=self.access_token,
-                    refresh_token=self.refresh_token,
-                    system='en_US'
-                )
+                self.initialize_client()
                 self.save_tokens(new_tokens)
                 logging.info("Access token refreshed successfully")
             else:
@@ -165,25 +137,12 @@ class FitbitModule:
             logging.error(f"Error saving tokens to Variables.env: {e}")
 
     def draw(self, screen, position):
-        if self.font is None:
-            self.font = pygame.font.Font(None, 36)
-
-        try:
-            x, y = position
-            labels = [
-                f"Steps: {self.data['steps']}",
-                f"Calories: {self.data['calories']}",
-                f"Active Minutes: {self.data['active_minutes']}",
-                f"Sleep: {self.data['sleep']} mins",
-                f"Resting Heart Rate: {self.data['resting_heart_rate']} bpm"
-            ]
-            for i, label in enumerate(labels):
-                text_surface = self.font.render(label, True, (255, 255, 255))
-                screen.blit(text_surface, (x, y + i * 40))
-        except Exception as e:
-            logging.error(f"Error drawing Fitbit data: {e}")
-            error_surface = self.font.render("Fitbit data unavailable", True, (255, 0, 0))
-            screen.blit(error_surface, position)
+        font = pygame.font.Font(None, 36)
+        x, y = position
+        for i, (key, value) in enumerate(self.data.items()):
+            text = f"{key.replace('_', ' ').title()}: {value}"
+            text_surface = font.render(text, True, (255, 255, 255))
+            screen.blit(text_surface, (x, y + i * 40))
 
     def cleanup(self):
         pass
