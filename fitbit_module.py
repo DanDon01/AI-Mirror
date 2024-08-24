@@ -47,29 +47,32 @@ class FitbitModule:
 
         while retry_count < max_retries:
             if self.should_update():
-                try:
-                    today = datetime.now().strftime("%Y-%m-%d")
+                    try:
+                        today = datetime.now().strftime("%Y-%m-%d")
+                        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
                 
-                    daily_data = self.client.activities(date=today)['summary']
-                    self.data['steps'] = daily_data['steps']
-                    self.data['calories'] = daily_data['caloriesOut']
-                    self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
+                        daily_data = self.client.activities(date=today)['summary']
+                        self.data['steps'] = daily_data['steps']
+                        self.data['calories'] = daily_data['caloriesOut']
+                        self.data['active_minutes'] = daily_data['fairlyActiveMinutes'] + daily_data['veryActiveMinutes']
 
-                    heart_data = self.client.heart(date=today)['activities-heart']
-                    self.data['resting_heart_rate'] = heart_data[0]['value']['restingHeartRate'] if heart_data else 'N/A'
+                        heart_data = self.client.heart(date=today)['activities-heart']
+                        self.data['resting_heart_rate'] = heart_data[0]['value']['restingHeartRate'] if heart_data else 'N/A'
 
-                    sleep_data = self.client.sleep(date=today)['summary']
-                    self.data['sleep'] = sleep_data['totalMinutesAsleep']
+                        sleep_data = self.client.sleep(date=yesterday)['summary']
+                        total_minutes_asleep = sleep_data['totalMinutesAsleep']
+                        hours, minutes = divmod(total_minutes_asleep, 60)
+                        self.data['sleep'] = f"{hours:02}:{minutes:02}"
 
-                    self.last_update = datetime.now()
-                    logging.info("Fitbit data updated successfully")
-                except fitbit.exceptions.HTTPUnauthorized as e:
-                    logging.warning("Access token expired, refreshing token")
-                    self.refresh_access_token()
-                    self.update()  # Retry update after refreshing token
-                except Exception as e:
-                    logging.error(f"Error fetching Fitbit data: {e}")
-                    break  # Exit the loop for other exceptions
+                        self.last_update = datetime.now()
+                        logging.info("Fitbit data updated successfully")
+                    except fitbit.exceptions.HTTPUnauthorized as e:
+                        logging.warning("Access token expired, refreshing token")
+                        self.refresh_access_token()
+                        self.update()  # Retry update after refreshing token
+                    except Exception as e:
+                        logging.error(f"Error fetching Fitbit data: {e}")
+                        break  # Exit the loop for other exceptions
             else:
                 break  # Exit if update is not needed
 
@@ -136,7 +139,7 @@ class FitbitModule:
                 f"Steps: {self.data['steps']}",
                 f"Calories: {self.data['calories']}",
                 f"Active Minutes: {self.data['active_minutes']}",
-                f"Sleep: {self.data['sleep']} mins"
+                f"Sleep: {self.data['sleep']} mins",
                 f"Resting Heart Rate: {self.data['resting_heart_rate']} bpm"
             ]
             for i, label in enumerate(labels):
