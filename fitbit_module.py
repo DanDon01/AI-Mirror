@@ -5,14 +5,20 @@ import logging
 from config import CONFIG
 import os
 from pathlib import Path
+import requests
+import base64
 
 class FitbitModule:
     def __init__(self, config):
+        self.client_id = config['client_id']
+        self.client_secret = config['client_secret']
+        self.access_token = config['access_token']
+        self.refresh_token = config['refresh_token']
         self.client = fitbit.Fitbit(
-            config['client_id'],
-            config['client_secret'],
-            access_token=config['access_token'],
-            refresh_token=config['refresh_token'],
+            self.client_id,
+            self.client_secret,
+            access_token=self.access_token,
+            refresh_token=self.refresh_token,
             system='en_US'
         )
         self.data = {
@@ -24,13 +30,13 @@ class FitbitModule:
         }
         self.font = None
         self.last_update = None
-        logging.info(f"Initializing FitbitModule with client_id: {config['client_id']}")
-        logging.info(f"access_token: {'set' if config['access_token'] else 'not set'}")
-        logging.info(f"refresh_token: {'set' if config['refresh_token'] else 'not set'}")
+        logging.info(f"Initializing FitbitModule with client_id: {self.client_id}")
+        logging.info(f"access_token: {'set' if self.access_token else 'not set'}")
+        logging.info(f"refresh_token: {'set' if self.refresh_token else 'not set'}")
 
     def should_update(self):
         now = datetime.now()
-        scheduled_time = CONFIG['update_schedule']['time']  # Use imported CONFIG
+        scheduled_time = CONFIG['update_schedule']['time']
         if now.time() >= scheduled_time and (self.last_update is None or self.last_update.date() < now.date()):
             return True
         return False
@@ -70,42 +76,54 @@ class FitbitModule:
 
     def refresh_access_token(self):
         try:
-            new_tokens = self.client.refresh_token()
-            self.client.access_token = new_tokens['access_token']
-            self.client.refresh_token = new_tokens['refresh_token']
-            self.save_tokens(new_tokens)
-            logging.info("Access token refreshed successfully")
-        except fitbit.exceptions.HTTPUnauthorized:
-            logging.error("Failed to refresh token: Invalid refresh token")
-            # Handle invalid refresh token (e.g., prompt for re-authorization)
+            token_url = "https://api.fitbit.com/oauth2/token"
+            auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+            headers = {
+                "Authorization": f"Basic {auth_header}",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+            data = {
+                "grant_type": "refresh_token",
+                "refresh_token": self.refresh_token
+            }
+            response = requests.post(token_url, headers=headers, data=data)
+            new_tokens = response.json()
+            
+            if 'access_token' in new_tokens and 'refresh_token' in new_tokens:
+                self.access_token = new_tokens['access_token']
+                self.refresh_token = new_tokens['refresh_token']
+                self.client = fitbit.Fitbit(
+                    self.client_id,
+                    self.client_secret,
+                    access_token=self.access_token,
+                    refresh_token=self.refresh_token,
+                    system='en_US'
+                )
+                self.save_tokens(new_tokens)
+                logging.info("Access token refreshed successfully")
+            else:
+                logging.error(f"Error refreshing token: {new_tokens.get('errors', 'Unknown error')}")
         except Exception as e:
             logging.error(f"Error refreshing access token: {e}")
 
     def save_tokens(self, tokens):
         try:
-            # Get the path to the Variables.env file
             current_dir = Path(__file__).parent
             env_file_path = current_dir.parent / 'Variables.env'
 
-            # Read the current contents of the file
             with open(env_file_path, 'r') as file:
                 lines = file.readlines()
 
-            # Update the FITBIT_ACCESS_TOKEN line
             for i, line in enumerate(lines):
                 if line.startswith('FITBIT_ACCESS_TOKEN='):
                     lines[i] = f"FITBIT_ACCESS_TOKEN={tokens['access_token']}\n"
-                    break
-            else:
-                # If the line doesn't exist, append it
-                lines.append(f"FITBIT_ACCESS_TOKEN={tokens['access_token']}\n")
+                elif line.startswith('FITBIT_REFRESH_TOKEN='):
+                    lines[i] = f"FITBIT_REFRESH_TOKEN={tokens['refresh_token']}\n"
 
-            # Write the updated contents back to the file
             with open(env_file_path, 'w') as file:
                 file.writelines(lines)
 
-            logging.info("Access token updated in Variables.env")
-
+            logging.info("Tokens updated in Variables.env")
         except Exception as e:
             logging.error(f"Error saving tokens to Variables.env: {e}")
 
