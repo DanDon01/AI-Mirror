@@ -22,6 +22,10 @@ class MagicMirror:
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
         self.state = "active"  # Can be "active" or "sleep"
+        self.scroll_text = "ONLINE"
+        self.scroll_x = self.screen.get_width()
+        self.font = pygame.font.Font(None, 36)
+        logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
     def setup_logging(self):
         handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
@@ -59,12 +63,22 @@ class MagicMirror:
     def update_modules(self):
         for module in self.modules.values():
             module.update()
+        
+        # Update scroll position
+        self.scroll_x -= 2
+        if self.scroll_x < -self.font.size(self.scroll_text)[0]:
+            self.scroll_x = self.screen.get_width()
 
     def draw_modules(self):
         self.screen.fill((0, 0, 0))  # Clear screen with black
         if self.state == "active":
+            # Draw scrolling text
+            text_surface = self.font.render(self.scroll_text, True, (255, 255, 255))
+            self.screen.blit(text_surface, (self.scroll_x, 10))
+            
             for module_name, module in self.modules.items():
                 try:
+                    logging.info(f"Drawing module: {module_name}")
                     module.draw(self.screen, CONFIG['positions'][module_name])
                 except Exception as e:
                     logging.error(f"Error drawing {module_name}: {e}")
@@ -79,6 +93,7 @@ class MagicMirror:
 
     def run(self):
         try:
+            logging.info("Starting main loop")
             while self.running:
                 self.handle_events()
                 self.update_modules()
