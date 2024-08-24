@@ -20,14 +20,14 @@ CONFIG = {
         'frequency': 'daily'
     },
     'frame_rate': 30,
-        'fitbit': {
-            'class': 'FitbitModule',
-            'params': {
-                'client_id': 'YOUR_FITBIT_CLIENT_ID',
-                'client_secret': 'YOUR_FITBIT_CLIENT_SECRET',
-                'access_token': 'YOUR_FITBIT_ACCESS_TOKEN',
-                'refresh_token': 'YOUR_FITBIT_REFRESH_TOKEN',
-                'update_interval': 5  # in minutes
+    'fitbit': {
+        'class': 'FitbitModule',
+        'params': {
+            'client_id': os.getenv('FITBIT_CLIENT_ID'),
+            'client_secret': os.getenv('FITBIT_CLIENT_SECRET'),
+            'access_token': os.getenv('FITBIT_ACCESS_TOKEN'),
+            'refresh_token': os.getenv('FITBIT_REFRESH_TOKEN')
+        }
     },
     'stocks': {
         'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers
@@ -75,4 +75,4 @@ CONFIG = {
         'calendar': (400, 200),
         'smart_home': (10, 300)  # Added smart home position
     }
-}}
+}
