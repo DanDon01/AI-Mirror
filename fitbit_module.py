@@ -25,6 +25,7 @@ class FitbitModule:
         }
         self.last_update = None
         self.update_interval = config.get('update_interval', 300)  # 5 minutes default
+        self.retry_after = 0
         logging.info(f"Initializing FitbitModule with client_id: {self.client_id}")
 
     def initialize_client(self):
@@ -41,6 +42,9 @@ class FitbitModule:
             logging.error(f"Error initializing Fitbit client: {e}")
 
     def should_update(self):
+        now = time.time()
+        if now < self.retry_after:
+            return False
         return self.last_update is None or (datetime.now() - self.last_update).total_seconds() >= self.update_interval
 
     def update(self):
@@ -79,6 +83,10 @@ class FitbitModule:
             logging.info("Fitbit data updated successfully")
             logging.debug(f"Updated Fitbit data: {self.data}")
 
+        except fitbit.exceptions.HTTPTooManyRequests as e:
+            retry_after = int(e.retry_after_secs)
+            self.retry_after = time.time() + retry_after
+            logging.warning(f"Rate limited. Retrying after {retry_after} seconds.")
         except fitbit.exceptions.HTTPUnauthorized:
             logging.warning("Access token expired, refreshing token")
             self.refresh_access_token()
