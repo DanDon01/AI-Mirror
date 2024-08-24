@@ -42,10 +42,13 @@ class FitbitModule:
             logging.error(f"Error initializing Fitbit client: {e}")
 
     def should_update(self):
-        now = time.time()
-        if now < self.retry_after:
+        current_time = time.time()
+        if current_time < self.retry_after:
             return False
-        return self.last_update is None or (datetime.now() - self.last_update).total_seconds() >= self.update_interval
+        if self.last_update is None:
+            return True
+        time_since_last_update = current_time - self.last_update
+        return time_since_last_update >= self.update_interval
 
     def update(self):
         if not self.should_update():
@@ -79,7 +82,7 @@ class FitbitModule:
             else:
                 self.data['sleep'] = 'N/A'
 
-            self.last_update = datetime.now()
+            self.last_update = time.time()
             logging.info("Fitbit data updated successfully")
             logging.debug(f"Updated Fitbit data: {self.data}")
 
