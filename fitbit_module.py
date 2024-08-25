@@ -41,19 +41,32 @@ class FitbitModule:
             logging.error(f"Error initializing Fitbit client: {e}")
 
     def should_update(self):
-        current_time = datetime.now().time()
-        update_time = self.config['update_schedule']['time']
-        
-        if self.last_update is None:
-            return current_time >= update_time
-        
-        last_update_date = self.last_update.date()
-        today = datetime.now().date()
-        
-        if today > last_update_date and current_time >= update_time:
-            return True
-        
-        return False
+        logging.debug("Checking if update is needed")
+        try:
+            current_time = datetime.now().time()
+            update_time = self.config.get('update_schedule', {}).get('time')
+            
+            if not isinstance(update_time, time):
+                logging.warning("Update time in config is not a time object, defaulting to always update")
+                return True
+            
+            if self.last_update is None:
+                logging.debug("First update, should update")
+                return True
+            
+            last_update_date = self.last_update.date()
+            today = datetime.now().date()
+            
+            if today > last_update_date and current_time >= update_time:
+                logging.debug("New day and past update time, should update")
+                return True
+            
+            logging.debug("No update needed")
+            return False
+        except Exception as e:
+            logging.error(f"Error in should_update: {e}")
+            logging.error(traceback.format_exc())
+            return False
 
     def update(self):
         logging.debug("Entering update method")
