@@ -26,9 +26,14 @@ CONFIG = {
             'client_id': os.getenv('FITBIT_CLIENT_ID'),
             'client_secret': os.getenv('FITBIT_CLIENT_SECRET'),
             'access_token': os.getenv('FITBIT_ACCESS_TOKEN'),
-            'refresh_token': os.getenv('FITBIT_REFRESH_TOKEN')
+            'refresh_token': os.getenv('FITBIT_REFRESH_TOKEN'),
+            'update_schedule': {
+                'time': time(5, 30)  # Update at 5:30 AM
+            }
         }
     },
+    # ... (other config items)
+
     'stocks': {
         'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers
     },
