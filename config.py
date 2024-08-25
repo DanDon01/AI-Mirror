@@ -31,8 +31,7 @@ CONFIG = {
                 'time': time(5, 30)  # Update at 5:30 AM
             }
         }
-    },
-    # ... (other config items)
+    },  
 
     'stocks': {
         'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers

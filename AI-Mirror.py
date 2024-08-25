@@ -33,17 +33,23 @@ class MagicMirror:
                             format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info("Magic Mirror started")
 
-    def initialize_modules(self):
-        modules = {}
-        for module_name, module_config in CONFIG.items():
-            if isinstance(module_config, dict) and 'class' in module_config:
-                try:
-                    module_class = globals()[module_config['class']]
+def initialize_modules(self):
+    modules = {}
+    for module_name, module_config in CONFIG.items():
+        if isinstance(module_config, dict) and 'class' in module_config:
+            try:
+                module_class = globals()[module_config['class']]
+                if module_name == 'fitbit':
+                    # Pass the entire 'params' dictionary to the FitbitModule
+                    modules[module_name] = module_class(module_config['params'])
+                else:
+                    # For other modules, you might need to adjust this based on their requirements
                     modules[module_name] = module_class(module_config.get('params', {}))
-                    logging.info(f"Initialized {module_name} module")
-                except Exception as e:
-                    logging.error(f"Error initializing {module_name} module: {e}")
-        return modules
+                logging.info(f"Initialized {module_name} module")
+            except Exception as e:
+                logging.error(f"Error initializing {module_name} module: {e}")
+                logging.error(traceback.format_exc())
+    return modules
 
     def handle_events(self):
         for event in pygame.event.get():

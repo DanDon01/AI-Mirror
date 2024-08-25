@@ -11,10 +11,13 @@ import traceback
 
 class FitbitModule:
     def __init__(self, config):
-        self.client_id = config['client_id']
-        self.client_secret = config['client_secret']
-        self.access_token = config['access_token']
-        self.refresh_token = config['refresh_token']
+        logging.info("Initializing FitbitModule")
+        self.config = config  # Store the entire config
+        self.client_id = config.get('client_id')
+        self.client_secret = config.get('client_secret')
+        self.access_token = config.get('access_token')
+        self.refresh_token = config.get('refresh_token')
+        self.update_time = config.get('update_schedule', {}).get('time', time(0, 0))  # Default to midnight
         self.client = None
         self.initialize_client()
         self.data = {
@@ -25,10 +28,10 @@ class FitbitModule:
             'resting_heart_rate': 'N/A'
         }
         self.last_update = None
-        self.retry_after = 0
-        logging.info(f"Initializing FitbitModule with client_id: {self.client_id}")
+        logging.info(f"FitbitModule initialized with client_id: {self.client_id}")
 
     def initialize_client(self):
+        logging.debug("Initializing Fitbit client")
         try:
             self.client = fitbit.Fitbit(
                 self.client_id,
@@ -40,16 +43,12 @@ class FitbitModule:
             logging.info("Fitbit client initialized successfully")
         except Exception as e:
             logging.error(f"Error initializing Fitbit client: {e}")
+            logging.error(traceback.format_exc())
 
     def should_update(self):
         logging.debug("Checking if update is needed")
         try:
             current_time = datetime.now().time()
-            update_time = self.config.get('update_schedule', {}).get('time')
-            
-            if not isinstance(update_time, time):
-                logging.warning("Update time in config is not a time object, defaulting to always update")
-                return True
             
             if self.last_update is None:
                 logging.debug("First update, should update")
@@ -58,7 +57,7 @@ class FitbitModule:
             last_update_date = self.last_update.date()
             today = datetime.now().date()
             
-            if today > last_update_date and current_time >= update_time:
+            if today > last_update_date and current_time >= self.update_time:
                 logging.debug("New day and past update time, should update")
                 return True
             
