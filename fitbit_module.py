@@ -24,7 +24,6 @@ class FitbitModule:
             'resting_heart_rate': 'N/A'
         }
         self.last_update = None
-        self.update_interval = config.get('update_interval', 300)  # 5 minutes default
         self.retry_after = 0
         logging.info(f"Initializing FitbitModule with client_id: {self.client_id}")
 
@@ -42,16 +41,24 @@ class FitbitModule:
             logging.error(f"Error initializing Fitbit client: {e}")
 
     def should_update(self):
-        current_time = time.time()
-        if current_time < self.retry_after:
-            return False
+        current_time = datetime.now().time()
+        update_time = self.config['update_schedule']['time']
+        
         if self.last_update is None:
+            return current_time >= update_time
+        
+        last_update_date = self.last_update.date()
+        today = datetime.now().date()
+        
+        if today > last_update_date and current_time >= update_time:
             return True
-        time_since_last_update = current_time - self.last_update
-        return time_since_last_update >= self.update_interval
+        
+        return False
 
     def update(self):
+        logging.debug("Entering update method")
         if not self.should_update():
+            logging.debug("Skipping update")
             return
 
         try:
@@ -82,7 +89,7 @@ class FitbitModule:
             else:
                 self.data['sleep'] = 'N/A'
 
-            self.last_update = time.time()
+            self.last_update = datetime.now()
             logging.info("Fitbit data updated successfully")
             logging.debug(f"Updated Fitbit data: {self.data}")
 
