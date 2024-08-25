@@ -1,5 +1,6 @@
 import fitbit
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
+import time as time_module
 import pygame
 import logging
 from config import CONFIG
@@ -17,7 +18,8 @@ class FitbitModule:
         self.client_secret = config['client_secret']
         self.access_token = config['access_token']
         self.refresh_token = config['refresh_token']
-        self.update_time = config.get('update_schedule', {}).get('time', time(0, 0))
+        self.update_time = config.get('update_schedule', {}).get('time')
+        logging.debug(f"Update time set to: {self.update_time}")
         self.client = None
         self.initialize_client()
         self.data = {
@@ -47,7 +49,9 @@ class FitbitModule:
             logging.error(traceback.format_exc())
 
     def update(self):
+        logging.debug("Entering update method")
         if not self.should_update():
+            logging.debug("Update not needed")
             return
 
         try:
@@ -55,6 +59,8 @@ class FitbitModule:
             
             today = datetime.now().strftime("%Y-%m-%d")
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+            logging.debug(f"Fetching data for today: {today}, yesterday: {yesterday}")
 
             # Fetch activity data
             daily_data = self.make_api_call(self.client.activities, date=today)['summary']
@@ -87,41 +93,51 @@ class FitbitModule:
             logging.info("Fitbit data updated successfully")
             logging.debug(f"Updated Fitbit data: {self.data}")
 
-        except fitbit.exceptions.HTTPTooManyRequests as e:
-            logging.warning(f"Rate limited. Retrying after {e.retry_after_secs} seconds.")
-            self.backoff_time = max(self.backoff_time * 2, e.retry_after_secs)
-        except fitbit.exceptions.HTTPUnauthorized:
-            logging.warning("Access token expired, refreshing token")
-            self.refresh_access_token()
         except Exception as e:
             logging.error(f"Unexpected error updating Fitbit data: {e}")
             logging.error(traceback.format_exc())
 
     def should_update(self):
+        logging.debug("Checking if update is needed")
         now = datetime.now()
+        logging.debug(f"Current time: {now}")
+        logging.debug(f"Last update: {self.last_update}")
         if self.last_update is None:
+            logging.debug("First update, should update")
             return True
         time_since_last_update = now - self.last_update
-        return time_since_last_update.total_seconds() >= 3600  # Update every hour
+        should_update = time_since_last_update.total_seconds() >= 3600  # Update every hour
+        logging.debug(f"Time since last update: {time_since_last_update.total_seconds()} seconds")
+        logging.debug(f"Should update: {should_update}")
+        return should_update
 
     def rate_limit_api_call(self):
-        current_time = time.time()
+        logging.debug("Entering rate_limit_api_call method")
+        current_time = time_module.time()
+        logging.debug(f"Current time: {current_time}")
+        logging.debug(f"Last API call: {self.last_api_call}")
         if current_time - self.last_api_call < 1:  # Ensure at least 1 second between calls
-            time.sleep(1 - (current_time - self.last_api_call))
-        self.last_api_call = time.time()
+            sleep_time = 1 - (current_time - self.last_api_call)
+            logging.debug(f"Sleeping for {sleep_time} seconds")
+            time_module.sleep(sleep_time)
+        self.last_api_call = time_module.time()
         self.api_call_count += 1
+        logging.debug(f"API call count: {self.api_call_count}")
         if self.api_call_count > 150:  # Fitbit's rate limit is 150 calls per hour
-            time.sleep(self.backoff_time)
+            logging.warning(f"Rate limit reached. Backing off for {self.backoff_time} seconds")
+            time_module.sleep(self.backoff_time)
             self.backoff_time *= 2  # Exponential backoff
             if self.backoff_time > 3600:  # Cap at 1 hour
                 self.backoff_time = 3600
             self.api_call_count = 0
 
     def make_api_call(self, func, **kwargs):
+        logging.debug(f"Making API call to {func.__name__} with args {kwargs}")
         self.rate_limit_api_call()
         return func(**kwargs)
 
     def refresh_access_token(self):
+        logging.info("Refreshing access token")
         try:
             token = self.client.client.refresh_token()
             self.access_token = token['access_token']
