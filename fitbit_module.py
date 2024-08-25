@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import requests
 import base64
+import traceback
 
 class FitbitModule:
     def __init__(self, config):
