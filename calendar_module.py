@@ -3,34 +3,53 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 import datetime
 import pygame
+import os
+from dotenv import load_dotenv
 
 class CalendarModule:
     def __init__(self, config):
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-        self.client_id = config['client_id']
-        self.client_secret = config['client_secret']
-        self.access_token = config['access_token']
-        self.refresh_token = config['refresh_token']
+        self.config = config
         self.events = []
-        self.font = None  # Initialize font to None
+        self.font = None
         self.last_update = datetime.datetime.min
         self.update_interval = datetime.timedelta(hours=24)  # Update daily
         self.service = None
+        self.env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
+        load_dotenv(self.env_file)
 
     def authenticate(self):
         creds = Credentials(
-            token=self.access_token,
-            refresh_token=self.refresh_token,
+            token=self.config['access_token'],
+            refresh_token=self.config['refresh_token'],
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=self.client_id,
-            client_secret=self.client_secret,
+            client_id=self.config['client_id'],
+            client_secret=self.config['client_secret'],
             scopes=self.SCOPES
         )
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            # Update the stored access token
-            self.access_token = creds.token
+        
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                self.save_tokens(creds)
+        
         return creds
+
+    def save_tokens(self, creds):
+        self.config['access_token'] = creds.token
+        self.config['refresh_token'] = creds.refresh_token
+        
+        with open(self.env_file, 'r') as file:
+            lines = file.readlines()
+        
+        with open(self.env_file, 'w') as file:
+            for line in lines:
+                if line.startswith('GOOGLE_ACCESS_TOKEN='):
+                    file.write(f"GOOGLE_ACCESS_TOKEN={creds.token}\n")
+                elif line.startswith('GOOGLE_REFRESH_TOKEN='):
+                    file.write(f"GOOGLE_REFRESH_TOKEN={creds.refresh_token}\n")
+                else:
+                    file.write(line)
 
     def build_service(self):
         if not self.service:

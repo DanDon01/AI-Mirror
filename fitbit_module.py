@@ -148,43 +148,43 @@ class FitbitModule:
 
     def refresh_access_token(self):
         refresh_url = "https://api.fitbit.com/oauth2/token"
-        response = requests.post(refresh_url, data={
-            'grant_type': 'refresh_token',
-            'refresh_token': self.refresh_token,
-            'client_id': self.client_id,
-            'client_secret': self.client_secret
-        }, headers={
-            'Content-Type': 'application/x-www-form-urlencoded'
-        })
-        if response.status_code == 200:
+        auth = requests.auth.HTTPBasicAuth(self.client_id, self.client_secret)
+        headers = {
+            "Authorization": f"Basic {auth.encode('utf-8').decode('ascii')}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": self.refresh_token
+        }
+        try:
+            response = requests.post(refresh_url, headers=headers, data=data)
+            response.raise_for_status()
             tokens = response.json()
             self.access_token = tokens['access_token']
             self.refresh_token = tokens['refresh_token']
+            self.save_tokens(tokens)
             logging.info("Access token refreshed successfully")
-        else:
-            logging.error(f"Failed to refresh access token: {response.json()}")
+        except Exception as e:
+            logging.error(f"Failed to refresh access token: {e}")
             raise Exception("Failed to refresh access token")
 
     def save_tokens(self, tokens):
-        try:
-            current_dir = Path(__file__).parent
-            env_file_path = current_dir.parent / 'Variables.env'
-
-            with open(env_file_path, 'r') as file:
-                lines = file.readlines()
-
-            for i, line in enumerate(lines):
+        self.config['access_token'] = tokens['access_token']
+        self.config['refresh_token'] = tokens['refresh_token']
+        # Update the tokens in the environment file
+        env_path = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
+        with open(env_path, 'r') as file:
+            lines = file.readlines()
+        with open(env_path, 'w') as file:
+            for line in lines:
                 if line.startswith('FITBIT_ACCESS_TOKEN='):
-                    lines[i] = f"FITBIT_ACCESS_TOKEN={tokens['access_token']}\n"
+                    file.write(f"FITBIT_ACCESS_TOKEN={tokens['access_token']}\n")
                 elif line.startswith('FITBIT_REFRESH_TOKEN='):
-                    lines[i] = f"FITBIT_REFRESH_TOKEN={tokens['refresh_token']}\n"
-
-            with open(env_file_path, 'w') as file:
-                file.writelines(lines)
-
-            logging.info("Tokens updated in Variables.env")
-        except Exception as e:
-            logging.error(f"Error saving tokens to Variables.env: {e}")
+                    file.write(f"FITBIT_REFRESH_TOKEN={tokens['refresh_token']}\n")
+                else:
+                    file.write(line)
+        logging.info("Fitbit tokens updated in Variables.env")
 
     def draw(self, screen, position):
         font = pygame.font.Font(None, 36)
