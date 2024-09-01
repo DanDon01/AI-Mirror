@@ -84,6 +84,7 @@ class MagicMirror:
             for module_name, module in self.modules.items():
                 try:
                     module.draw(self.screen, CONFIG['positions'][module_name])
+                    logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
                 except Exception as e:
                     logging.error(f"Error drawing {module_name}: {e}")
                     error_font = pygame.font.Font(None, 24)

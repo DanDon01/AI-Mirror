@@ -75,7 +75,7 @@ class FitbitModule:
 
             # Fetch heart rate data
             try:
-                heart_data = self.make_api_call(self.client.intraday_time_series, resource='activities/heart', base_date=today, detail_level='1d')
+                heart_data = self.make_api_call(self.client.intraday_time_series, resource='activities/heart', base_date=today, detail_level='1min')
                 self.data['resting_heart_rate'] = heart_data['activities-heart'][0]['value'].get('restingHeartRate', 'N/A')
             except Exception as e:
                 logging.error(f"Error fetching heart rate data: {e}")

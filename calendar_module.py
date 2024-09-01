@@ -7,6 +7,7 @@ import pygame
 import os
 from dotenv import load_dotenv
 import traceback
+from google_auth_oauthlib.flow import Flow
 
 class CalendarModule:
     def __init__(self, config):
@@ -30,11 +31,34 @@ class CalendarModule:
             scopes=self.SCOPES
         )
         
-        # Always refresh the token
-        creds.refresh(Request())
-        self.save_tokens(creds)
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    logging.error(f"Error refreshing token: {e}")
+                    # If refresh fails, we need to re-authenticate
+                    creds = self.reauth()
+            else:
+                creds = self.reauth()
         
+        self.save_tokens(creds)
         return creds
+
+    def reauth(self):
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.config['client_id'],
+                    "client_secret": self.config['client_secret'],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token"
+                }
+            },
+            scopes=self.SCOPES
+        )
+        flow.run_local_server(port=0)
+        return flow.credentials
 
     def save_tokens(self, creds):
         self.config['access_token'] = creds.token
