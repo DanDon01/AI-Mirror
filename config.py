@@ -23,10 +23,12 @@ CONFIG = {
     'fitbit': {
         'class': 'FitbitModule',
         'params': {
-            'client_id': os.getenv('FITBIT_CLIENT_ID'),
-            'client_secret': os.getenv('FITBIT_CLIENT_SECRET'),
-            'access_token': os.getenv('FITBIT_ACCESS_TOKEN'),
-            'refresh_token': os.getenv('FITBIT_REFRESH_TOKEN'),
+            'config': {
+                'client_id': os.getenv('FITBIT_CLIENT_ID'),
+                'client_secret': os.getenv('FITBIT_CLIENT_SECRET'),
+                'access_token': os.getenv('FITBIT_ACCESS_TOKEN'),
+                'refresh_token': os.getenv('FITBIT_REFRESH_TOKEN'),
+            },
             'update_schedule': {
                 'time': time(5, 30)  # Update at 5:30 AM
             }
@@ -45,10 +47,12 @@ CONFIG = {
     'calendar': {
         'class': 'CalendarModule',  # Added Calendar module class
         'params': {
-            'client_id': os.getenv('GOOGLE_CLIENT_ID'),
-            'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
-            'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
-            'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
+            'config': {
+                'client_id': os.getenv('GOOGLE_CLIENT_ID'),
+                'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
+                'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
+                'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
+            }
         }
     },
     'positions': {

@@ -14,14 +14,14 @@ from fitbit.exceptions import HTTPUnauthorized
 from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
 
 class FitbitModule:
-    def __init__(self, config):
+    def __init__(self, config, update_schedule):
         logging.info("Initializing FitbitModule")
         self.config = config
         self.client_id = config['client_id']
         self.client_secret = config['client_secret']
         self.access_token = config['access_token']
         self.refresh_token = config['refresh_token']
-        self.update_time = config.get('update_schedule', {}).get('time')
+        self.update_time = update_schedule.get('time')
         logging.debug(f"Update time set to: {self.update_time}")
         self.client = None
         self.initialize_client()
