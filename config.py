@@ -13,7 +13,7 @@ load_dotenv(env_path)
 
 CONFIG = {
     'screen': {
-        'size': (800, 480)  # Adjust as needed for your display
+        'size': (1080, 1920)  # Portrait mode 21-inch monitor
     },
     'update_schedule': {
         'time': time(5, 30),  # Update at 5:30 AM
@@ -76,12 +76,11 @@ CONFIG = {
         'timezone': 'local'  # Or specify a timezone like 'US/Pacific'
     },
     'positions': {
-        'time': (10, 10),
-        'clock': (10, 100),
-        'fitbit': (10, 200),
-        'weather': (10, 300),  # Positioned under Fitbit
-        'calendar': (200, 200),  # Positioned next to Fitbit
-        'stocks': (400, 50),
-        'smart_home': (10, 400)  # Moved down to accommodate weather
+        'clock': (20, 20),  # Top-left corner
+        'weather': (20, 240),  # Below clock in top-left
+        'fitbit': (20, 1620),  # Bottom-left corner
+        'smart_home': (20, 1400),  # Above fitbit in bottom-left
+        'calendar': (540, 20),  # Top-right corner
+        'stocks': (540, 1620),  # Bottom-right corner
     }
 }
