@@ -43,7 +43,7 @@ class MagicMirror:
                     modules[module_name] = module_class(**module_config['params'])
                     logging.info(f"Initialized {module_name} module")
                 except Exception as e:
-                    logging.error(f"Error initializing {module_name} module: {e}")
+                    logging.error(f"Error initializing {module_name} module: {str(e)}")
                     logging.error(traceback.format_exc())
         return modules
 

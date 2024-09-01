@@ -51,30 +51,6 @@ CONFIG = {
             'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
         }
     },
-    'smart_home': {
-        'class': 'SmartHomeModule',
-        'params': {
-            'ha_url': os.getenv('HOME_ASSISTANT_URL'),
-            'access_token': os.getenv('HOME_ASSISTANT_ACCESS_TOKEN'),
-            'entities': [
-                'sensor.living_room_temperature',
-                'sensor.living_room_humidity',
-                'sensor.bedroom_temperature',
-                'sensor.bedroom_humidity'
-            ]
-        },
-        'font_size': 24,
-        'color': (255, 255, 255),  # White
-        'retry_attempts': 3
-    },
-    'clock': {
-        'font_file': None,  # Use None for system default
-        'font_size': 60,
-        'color': (255, 255, 255),  # White
-        'time_format': '%H:%M:%S',
-        'date_format': '%A, %B %d, %Y',
-        'timezone': 'local'  # Or specify a timezone like 'US/Pacific'
-    },
     'positions': {
         'clock': (20, 20),  # Top-left corner
         'weather': (20, 240),  # Below clock in top-left

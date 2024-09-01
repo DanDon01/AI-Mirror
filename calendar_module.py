@@ -7,10 +7,10 @@ import pygame
 class CalendarModule:
     def __init__(self, config):
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-        self.client_id = config['calendar']['client_id']
-        self.client_secret = config['calendar']['client_secret']
-        self.access_token = config['calendar']['access_token']
-        self.refresh_token = config['calendar']['refresh_token']
+        self.client_id = config['client_id']
+        self.client_secret = config['client_secret']
+        self.access_token = config['access_token']
+        self.refresh_token = config['refresh_token']
         self.events = []
         self.font = None  # Initialize font to None
         self.last_update = datetime.datetime.min
