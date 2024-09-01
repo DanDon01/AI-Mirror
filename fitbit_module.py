@@ -43,6 +43,7 @@ class FitbitModule:
             self.client = fitbit.Fitbit(
                 self.client_id,
                 self.client_secret,
+                oauth2=True,
                 access_token=self.access_token,
                 refresh_token=self.refresh_token,
                 system='en_US'
@@ -97,10 +98,9 @@ class FitbitModule:
             logging.info("Fitbit data updated successfully")
             logging.debug(f"Updated Fitbit data: {self.data}")
 
-        except (HTTPUnauthorized, TokenExpiredError):
-            self.refresh_access_token()
-            # Retry the update after refreshing the token
-            self.update()
+        except Exception as e:
+            logging.error(f"Error updating Fitbit data: {e}")
+            logging.error(traceback.format_exc())
 
     def should_update(self):
         logging.debug("Checking if update is needed")
@@ -148,26 +148,15 @@ class FitbitModule:
             return func(**kwargs)
 
     def refresh_access_token(self):
-        refresh_url = "https://api.fitbit.com/oauth2/token"
-        auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
-        headers = {
-            "Authorization": f"Basic {auth_header}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        data = {
-            "grant_type": "refresh_token",
-            "refresh_token": self.refresh_token
-        }
         try:
-            response = requests.post(refresh_url, headers=headers, data=data)
-            response.raise_for_status()
-            tokens = response.json()
+            tokens = self.client.client.refresh_token()
             self.access_token = tokens['access_token']
             self.refresh_token = tokens['refresh_token']
             self.save_tokens(tokens)
             logging.info("Access token refreshed successfully")
         except Exception as e:
             logging.error(f"Failed to refresh access token: {e}")
+            logging.error(traceback.format_exc())
             raise Exception("Failed to refresh access token")
 
     def save_tokens(self, tokens):
