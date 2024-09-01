@@ -9,6 +9,9 @@ from pathlib import Path
 import requests
 import base64
 import traceback
+from fitbit.api import Fitbit
+from fitbit.exceptions import HTTPUnauthorized
+from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
 
 class FitbitModule:
     def __init__(self, config):
@@ -93,9 +96,10 @@ class FitbitModule:
             logging.info("Fitbit data updated successfully")
             logging.debug(f"Updated Fitbit data: {self.data}")
 
-        except Exception as e:
-            logging.error(f"Unexpected error updating Fitbit data: {e}")
-            logging.error(traceback.format_exc())
+        except (HTTPUnauthorized, TokenExpiredError):
+            self.refresh_access_token()
+            # Retry the update after refreshing the token
+            self.update()
 
     def should_update(self):
         logging.debug("Checking if update is needed")

@@ -10,6 +10,7 @@ from config import CONFIG
 from calendar_module import CalendarModule
 from weather_module import WeatherModule
 from fitbit_module import FitbitModule
+from smarthome_module import SmartHomeModule
 # Import other modules as needed again
 
 class MagicMirror:
