@@ -2,9 +2,11 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 import datetime
+import logging
 import pygame
 import os
 from dotenv import load_dotenv
+import traceback
 
 class CalendarModule:
     def __init__(self, config):
@@ -28,10 +30,9 @@ class CalendarModule:
             scopes=self.SCOPES
         )
         
-        if not creds.valid:
-            if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-                self.save_tokens(creds)
+        # Always refresh the token
+        creds.refresh(Request())
+        self.save_tokens(creds)
         
         return creds
 
@@ -70,7 +71,8 @@ class CalendarModule:
             self.events = events_result.get('items', [])
             self.last_update = current_time
         except Exception as e:
-            print(f"Error updating calendar data: {e}")
+            logging.error(f"Error updating Calendar data: {e}")
+            logging.error(traceback.format_exc())
             self.events = None  # Indicate that an error occurred
 
     def draw(self, screen, position):

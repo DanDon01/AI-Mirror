@@ -12,6 +12,7 @@ import traceback
 from fitbit.api import Fitbit
 from fitbit.exceptions import HTTPUnauthorized
 from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
+import base64
 
 class FitbitModule:
     def __init__(self, config, update_schedule):
@@ -148,9 +149,9 @@ class FitbitModule:
 
     def refresh_access_token(self):
         refresh_url = "https://api.fitbit.com/oauth2/token"
-        auth = requests.auth.HTTPBasicAuth(self.client_id, self.client_secret)
+        auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
         headers = {
-            "Authorization": f"Basic {auth.encode('utf-8').decode('ascii')}",
+            "Authorization": f"Basic {auth_header}",
             "Content-Type": "application/x-www-form-urlencoded"
         }
         data = {
