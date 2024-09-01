@@ -32,19 +32,24 @@ CONFIG = {
             }
         }
     },  
-
     'stocks': {
         'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers
     },
     'weather': {
-        'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
-        'city': 'Your City'
+        'class': 'WeatherModule',
+        'params': {
+            'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
+            'city': 'Your City'
+        }
     },
     'calendar': {
-        'client_id': os.getenv('GOOGLE_CLIENT_ID'),
-        'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
-        'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
-        'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
+        'class': 'CalendarModule',  # Added Calendar module class
+        'params': {
+            'client_id': os.getenv('GOOGLE_CLIENT_ID'),
+            'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
+            'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
+            'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
+        }
     },
     'smart_home': {
         'class': 'SmartHomeModule',
@@ -73,10 +78,10 @@ CONFIG = {
     'positions': {
         'time': (10, 10),
         'clock': (10, 100),
-        'weather': (10, 50),
         'fitbit': (10, 200),
+        'weather': (10, 300),  # Positioned under Fitbit
+        'calendar': (200, 200),  # Positioned next to Fitbit
         'stocks': (400, 50),
-        'calendar': (400, 200),
-        'smart_home': (10, 300)  # Added smart home position
+        'smart_home': (10, 400)  # Moved down to accommodate weather
     }
 }
