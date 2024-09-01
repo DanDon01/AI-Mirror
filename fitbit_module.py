@@ -7,7 +7,7 @@ from config import CONFIG
 import os
 from pathlib import Path
 import requests
-import base64
+import time
 import traceback
 from fitbit.api import Fitbit
 from fitbit.exceptions import HTTPUnauthorized
@@ -136,22 +136,34 @@ class FitbitModule:
             self.api_call_count = 0
 
     def make_api_call(self, func, **kwargs):
-        logging.debug(f"Making API call to {func.__name__} with args {kwargs}")
-        self.rate_limit_api_call()
-        return func(**kwargs)
+        try:
+            return func(**kwargs)
+        except fitbit.exceptions.HTTPUnauthorized:
+            self.refresh_access_token()
+            return func(**kwargs)
+        except fitbit.exceptions.HTTPTooManyRequests as e:
+            retry_after = int(e.response.headers.get('Retry-After', 1))
+            time.sleep(retry_after)
+            return func(**kwargs)
 
     def refresh_access_token(self):
-        logging.info("Refreshing access token")
-        try:
-            token = self.client.client.refresh_token()
-            self.access_token = token['access_token']
-            self.refresh_token = token['refresh_token']
-            self.initialize_client()
-            self.save_tokens(token)
+        refresh_url = "https://api.fitbit.com/oauth2/token"
+        response = requests.post(refresh_url, data={
+            'grant_type': 'refresh_token',
+            'refresh_token': self.refresh_token,
+            'client_id': self.client_id,
+            'client_secret': self.client_secret
+        }, headers={
+            'Content-Type': 'application/x-www-form-urlencoded'
+        })
+        if response.status_code == 200:
+            tokens = response.json()
+            self.access_token = tokens['access_token']
+            self.refresh_token = tokens['refresh_token']
             logging.info("Access token refreshed successfully")
-        except Exception as e:
-            logging.error(f"Error refreshing access token: {e}")
-            logging.error(traceback.format_exc())
+        else:
+            logging.error(f"Failed to refresh access token: {response.json()}")
+            raise Exception("Failed to refresh access token")
 
     def save_tokens(self, tokens):
         try:

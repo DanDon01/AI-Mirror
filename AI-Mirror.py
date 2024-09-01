@@ -40,7 +40,7 @@ class MagicMirror:
             if isinstance(module_config, dict) and 'class' in module_config:
                 try:
                     module_class = globals()[module_config['class']]
-                    modules[module_name] = module_class(module_config['params'])
+                    modules[module_name] = module_class(**module_config['params'])
                     logging.info(f"Initialized {module_name} module")
                 except Exception as e:
                     logging.error(f"Error initializing {module_name} module: {e}")
