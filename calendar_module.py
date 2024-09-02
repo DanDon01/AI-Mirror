@@ -62,17 +62,19 @@ class CalendarModule:
             scopes=self.SCOPES
         )
         flow.run_local_server(port=0)
-        return flow.credentials
+        creds = flow.credentials
+        self.save_tokens(creds)
+        return creds
 
     def save_tokens(self, creds):
         self.config['access_token'] = creds.token
         self.config['refresh_token'] = creds.refresh_token
         
-        # Write the updated tokens back to the environment file
-        with open(self.env_file, 'r') as file:
+        env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
+        with open(env_file, 'r') as file:
             lines = file.readlines()
         
-        with open(self.env_file, 'w') as file:
+        with open(env_file, 'w') as file:
             for line in lines:
                 if line.startswith('GOOGLE_ACCESS_TOKEN='):
                     file.write(f"GOOGLE_ACCESS_TOKEN={creds.token}\n")
@@ -81,7 +83,7 @@ class CalendarModule:
                 else:
                     file.write(line)
 
-        logging.info("Tokens have been saved to environment file.")
+        logging.info("Google Calendar tokens have been saved to environment file")
 
     def build_service(self):
         if not self.service:
