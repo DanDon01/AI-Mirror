@@ -23,25 +23,29 @@ class CalendarModule:
 
     def authenticate(self):
         creds = Credentials(
-            token=self.config['access_token'],
-            refresh_token=self.config['refresh_token'],
+            token=self.config.get('access_token'),
+            refresh_token=self.config.get('refresh_token'),
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=self.config['client_id'],
-            client_secret=self.config['client_secret'],
+            client_id=self.config.get('client_id'),
+            client_secret=self.config.get('client_secret'),
             scopes=self.SCOPES
         )
-        
+
         if not creds.valid:
+            logging.info("Credentials are not valid.")
             if creds.expired and creds.refresh_token:
                 try:
+                    logging.info("Refreshing expired token...")
                     creds.refresh(Request())
+                    logging.info("Token successfully refreshed.")
                 except Exception as e:
                     logging.error(f"Error refreshing token: {e}")
-                    # If refresh fails, we need to re-authenticate
+                    logging.info("Attempting re-authentication...")
                     creds = self.reauth()
             else:
+                logging.info("Credentials are invalid or refresh token not available. Re-authenticating...")
                 creds = self.reauth()
-        
+
         self.save_tokens(creds)
         return creds
 
@@ -49,8 +53,8 @@ class CalendarModule:
         flow = Flow.from_client_config(
             {
                 "web": {
-                    "client_id": self.config['client_id'],
-                    "client_secret": self.config['client_secret'],
+                    "client_id": self.config.get('client_id'),
+                    "client_secret": self.config.get('client_secret'),
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token"
                 }
@@ -64,6 +68,7 @@ class CalendarModule:
         self.config['access_token'] = creds.token
         self.config['refresh_token'] = creds.refresh_token
         
+        # Write the updated tokens back to the environment file
         with open(self.env_file, 'r') as file:
             lines = file.readlines()
         
@@ -76,24 +81,31 @@ class CalendarModule:
                 else:
                     file.write(line)
 
+        logging.info("Tokens have been saved to environment file.")
+
     def build_service(self):
         if not self.service:
             creds = self.authenticate()
             self.service = build('calendar', 'v3', credentials=creds)
+            logging.info("Google Calendar service built successfully.")
 
     def update(self):
         current_time = datetime.datetime.now()
         if current_time - self.last_update < self.update_interval:
+            logging.info("Skipping update: Not enough time has passed since last update.")
             return  # Skip update if not enough time has passed
 
         try:
             self.build_service()
             now = current_time.isoformat() + 'Z'  # 'Z' indicates UTC time
+            logging.debug(f"Requesting events starting from: {now}")
+            
             events_result = self.service.events().list(calendarId='primary', timeMin=now,
                                                        maxResults=10, singleEvents=True,
                                                        orderBy='startTime').execute()
             self.events = events_result.get('items', [])
             self.last_update = current_time
+            logging.info(f"Successfully updated calendar events. Number of events fetched: {len(self.events)}")
         except Exception as e:
             logging.error(f"Error updating Calendar data: {e}")
             logging.error(traceback.format_exc())
@@ -101,7 +113,6 @@ class CalendarModule:
 
     def draw(self, screen, position):
         if self.font is None:
-            # Initialize the font when drawing for the first time
             self.font = pygame.font.Font(None, 24)
         
         x, y = position
