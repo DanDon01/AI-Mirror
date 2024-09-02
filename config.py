@@ -13,7 +13,7 @@ load_dotenv(env_path)
 
 CONFIG = {
     'screen': {
-        'size': (1080, 1920)  # Portrait mode 21-inch monitor
+        'size': (768, 1024)  # Portrait mode 21-inch monitor
     },
     'update_schedule': {
         'time': time(5, 30),  # Update at 5:30 AM
