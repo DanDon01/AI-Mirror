@@ -110,7 +110,7 @@ CONFIG = {
             'screen_size': (768, 1024),
             'icon_size': 64,
             'icon_directory': retro_icons_path,
-            'spawn_probability': 0.02,  # Increased for more frequent icons
+            'spawn_probability': 0.002,  # Increased for more frequent icons
             'fall_speed': 1,
             'max_active_icons': 20,  # Increased for more icons on screen
             'rotation_speed': 1
