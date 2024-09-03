@@ -18,27 +18,22 @@ class RetroCharactersModule:
         logging.info(f"RetroCharactersModule initialized with spawn_probability: {self.spawn_probability}, fall_speed: {self.fall_speed}, max_active_icons: {self.max_active_icons}")
 
     def load_icons(self):
-        # Get the directory of the current script
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Construct the path to the icons directory
-        icon_dir = os.path.join(current_dir, '..', self.icon_directory)
-        
-        if not os.path.exists(icon_dir):
-            logging.error(f"Icon directory {icon_dir} does not exist")
+        if not os.path.exists(self.icon_directory):
+            logging.error(f"Icon directory {self.icon_directory} does not exist")
             return
         try:
-            png_files = [f for f in os.listdir(icon_dir) if f.endswith('.png')]
+            png_files = [f for f in os.listdir(self.icon_directory) if f.endswith('.png')]
             if not png_files:
-                logging.error(f"No PNG files found in {icon_dir}")
+                logging.error(f"No PNG files found in {self.icon_directory}")
                 return
             for filename in png_files:
-                icon_path = os.path.join(icon_dir, filename)
+                icon_path = os.path.join(self.icon_directory, filename)
                 icon_image = pygame.image.load(icon_path)
                 icon_image = pygame.transform.scale(icon_image, (self.icon_size, self.icon_size))
                 self.icons.append(icon_image)
-            logging.info(f"Loaded {len(self.icons)} retro icons from {icon_dir}")
+            logging.info(f"Loaded {len(self.icons)} retro icons from {self.icon_directory}")
         except Exception as e:
-            logging.error(f"Error loading retro icons from {icon_dir}: {e}")
+            logging.error(f"Error loading retro icons from {self.icon_directory}: {e}")
 
     def update(self):
         if not self.icons:

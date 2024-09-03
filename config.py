@@ -105,7 +105,7 @@ CONFIG = {
         'params': {
             'screen_size': (768, 1024),  # Use the same size as your screen
             'icon_size': 64,
-            'icon_directory': 'assets/retro_icons',  # Updated path
+            'icon_directory': retro_icons_path,  # Use the absolute path
             'spawn_probability': 0.1,
             'fall_speed': 3,
             'max_active_icons': 10
