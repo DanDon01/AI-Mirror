@@ -181,7 +181,7 @@ class FitbitModule:
 
     def draw_progress_bar(self, screen, x, y, width, height, progress, goal):
         # Draw background
-        pygame.draw.rect(screen, (200, 200, 200), (x, y, width, height))
+        pygame.draw.rect(screen, (000, 000, 000), (x, y, width, height))
         
         # Calculate progress width
         progress_width = int((progress / goal) * width)
@@ -221,7 +221,7 @@ class FitbitModule:
         screen.blit(step_surface, (x, y + 25))
         
         # Draw other Fitbit data
-        y += 50  # Adjust starting y position for other data
+        y += 10  # Adjust starting y position for other data
         for i, (key, value) in enumerate(self.data.items()):
             if key != 'steps':  # Skip steps as we've already displayed it
                 text = f"{key.replace('_', ' ').title()}: {value}"
