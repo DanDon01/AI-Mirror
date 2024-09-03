@@ -64,7 +64,7 @@ CONFIG = {
         'class': 'WeatherModule',
         'params': {
             'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
-            'city': 'Birmingham',
+            'city': 'Birmingham,UK',  # Specify the country code
             'screen_width': 768,  # Match your screen width
             'screen_height': 1024  # Match your screen height
         }
@@ -81,7 +81,7 @@ CONFIG = {
         }
     },
     'positions': {
-        'clock': (0, 0),  # Position for the clock at the top of the screen
+        'clock': (5, 5),  # Position for the clock at the top of the screen
         'weather': (20, 100),  # Below clock in top-left
         'fitbit': (20, 280),  # Bottom-left corner
         'smart_home': (20, 0),  # Above fitbit in bottom-left
@@ -91,8 +91,8 @@ CONFIG = {
     'clock': {
         'class': 'ClockModule',
         'params': {
-            'time_font_size': 48,
-            'date_font_size': 24,
+            'time_font_size': 24,
+            'date_font_size': 12,
             'color': COLOR_FONT_DEFAULT,  # Make sure this color is defined in your config
             'time_format': '%H:%M:%S',
             'date_format': '%A, %B %d, %Y',

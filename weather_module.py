@@ -29,20 +29,20 @@ class WeatherModule:
             response.raise_for_status()
             self.weather_data = response.json()
 
-            # Print the city name returned by the API for debugging
+            # Print the city name and country returned by the API for debugging
             print(f"Weather data received for: {self.weather_data['name']}, {self.weather_data['sys']['country']}")
 
             # Set animation based on weather condition
             self.update_animation()
 
             self.last_update = current_time
-            logging.info("Weather data updated successfully")
+            logging.info(f"Weather data updated successfully for {self.city}")
         except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to fetch weather data: {e}")
+            logging.error(f"Failed to fetch weather data for {self.city}: {e}")
             self.weather_data = None
             self.animation = None
         except Exception as e:
-            logging.error(f"Error updating weather: {e}")
+            logging.error(f"Error updating weather for {self.city}: {e}")
             self.animation = None
 
     def update_animation(self):
