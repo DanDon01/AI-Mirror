@@ -44,18 +44,19 @@ class RetroCharactersModule:
         if random.random() < self.spawn_probability and len(self.active_icons) < self.max_active_icons:
             new_icon = random.choice(self.icons)
             x_position = random.randint(0, self.screen_width - self.icon_size)
-            self.active_icons.append((new_icon, x_position, 0, 0))  # Added 0 for initial rotation angle
+            rotation_direction = random.choice([-1, 1])  # -1 for counterclockwise, 1 for clockwise
+            self.active_icons.append((new_icon, x_position, 0, 0, rotation_direction))
             logging.debug(f"Spawned new icon. Total active icons: {len(self.active_icons)}")
 
         # Update positions and rotation angles of active icons
-        self.active_icons = [(icon, x, y + self.fall_speed, angle + self.rotation_speed) 
-                             for icon, x, y, angle in self.active_icons if y < self.screen_height]
+        self.active_icons = [(icon, x, y + self.fall_speed, angle + self.rotation_speed * direction, direction) 
+                             for icon, x, y, angle, direction in self.active_icons if y < self.screen_height]
         
         if len(self.active_icons) > 0:
             logging.debug(f"Active icons: {len(self.active_icons)}")
 
     def draw(self, screen):
-        for icon, x, y, angle in self.active_icons:
+        for icon, x, y, angle, direction in self.active_icons:
             # Rotate the icon
             rotated_icon = pygame.transform.rotate(icon, angle)
             # Get the rect of the rotated image
