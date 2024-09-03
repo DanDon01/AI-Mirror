@@ -17,7 +17,8 @@ pygame.font.init()
 
 # Font settings
 FONT_NAME = "Helvetica"
-FONT_SIZE = 24
+FONT_SIZE = 18
+LINE_SPACING = 25  # Add this line for consistent line spacing
 
 # Color settings
 COLOR_FONT_DEFAULT = (200, 200, 200)  # Light grey

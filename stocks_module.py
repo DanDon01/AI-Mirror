@@ -3,7 +3,7 @@ import pygame
 import logging
 from datetime import datetime, timedelta
 from pytz import timezone
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED  # Import font settings and color constants from config
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING  # Import font settings and color constants from config
 
 class StocksModule:
     def __init__(self, tickers, market_timezone='America/New_York'):
@@ -98,36 +98,36 @@ class StocksModule:
             us_status_text = "US Market: OPEN" if us_open else "US Market: CLOSED"
             uk_status_text = "UK Market: OPEN" if uk_open else "UK Market: CLOSED"
 
-            # When rendering text, use the new color constants
             us_status_surface = self.font.render(us_status_text, True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
             uk_status_surface = self.font.render(uk_status_text, True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
             screen.blit(us_status_surface, (x, y))
-            screen.blit(uk_status_surface, (x, y + 25))
+            screen.blit(uk_status_surface, (x, y + LINE_SPACING))
 
-            y += 60  # Move position down after displaying market status
+            y += LINE_SPACING * 2  # Move position down after displaying market status
 
             # Draw stock data
             for ticker, data in self.stock_data.items():
                 price = data['price']
                 percent_change = data['percent_change']
-                volume = data['volume']
-                day_range = data['day_range']
 
                 # Determine color based on percent change
                 color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
 
-                text = f"{ticker}: ${price:.2f} ({percent_change:+.2f}%)" if percent_change != 'N/A' else f"{ticker}: ${price:.2f}"
+                # Determine currency symbol based on the market
+                currency_symbol = '£' if ticker.endswith('.L') else '$'
+
+                if percent_change != 'N/A':
+                    text = f"{ticker}: {currency_symbol}{price:.2f} ({percent_change:+.2f}%)"
+                else:
+                    text = f"{ticker}: {currency_symbol}{price:.2f}"
+
                 text_surface = self.font.render(text, True, color)
                 screen.blit(text_surface, (x, y))
 
-                details_text = f"Vol: {volume} | Range: {day_range}"
-                details_surface = self.font.render(details_text, True, COLOR_FONT_DEFAULT)
-                screen.blit(details_surface, (x, y + 25))
-
-                y += 60  # Move to the next stock
+                y += LINE_SPACING  # Move to the next stock
         except Exception as e:
             logging.error(f"Error drawing stock data: {e}")
-            error_surface = self.font.render("Stock data unavailable", True, (255, 0, 0))
+            error_surface = self.font.render("Stock data unavailable", True, COLOR_PASTEL_RED)
             screen.blit(error_surface, position)
 
     def is_market_open(self, current_market_time, market):

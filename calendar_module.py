@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 from google_auth_oauthlib.flow import Flow
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED  # Add this import at the top of the file
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING  # Add this import at the top of the file
 
 class CalendarModule:
     def __init__(self, config):
@@ -155,7 +155,7 @@ class CalendarModule:
             event_text = f"{day_name} {date_str} {time_str}: {event_summary}"
             event_surface = self.font.render(event_text, True, COLOR_FONT_DEFAULT)
             screen.blit(event_surface, (x, y + y_offset))
-            y_offset += 25
+            y_offset += LINE_SPACING
 
         if y_offset == 0:
             no_events_surface = self.font.render("No upcoming events", True, COLOR_FONT_DEFAULT)
