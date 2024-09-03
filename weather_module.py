@@ -65,6 +65,16 @@ class WeatherModule:
             logging.error(f"Error creating weather animation: {e}")
             self.animation = None
 
+    def get_temperature_color(self, temperature):
+        # Clamp temperature between 0 and 32
+        t = max(0, min(temperature, 32))
+        # Calculate the ratio (0 to 1)
+        ratio = t / 32
+        # Interpolate between blue (0, 0, 255) and red (255, 0, 0)
+        r = int(255 * ratio)
+        b = int(255 * (1 - ratio))
+        return (r, 0, b)
+
     def draw(self, screen, position):
         if self.font is None:
             try:
@@ -97,7 +107,11 @@ class WeatherModule:
             ]
 
             for i, line in enumerate(lines):
-                text_surface = self.font.render(line, True, COLOR_FONT_DEFAULT)
+                if "Feels like" in line:
+                    color = self.get_temperature_color(feels_like)
+                else:
+                    color = COLOR_FONT_DEFAULT
+                text_surface = self.font.render(line, True, color)
                 text_surface.set_alpha(TRANSPARENCY)
                 screen.blit(text_surface, (x, y + i * LINE_SPACING))
 

@@ -198,7 +198,7 @@ class FitbitModule:
         pygame.draw.rect(screen, color, (x, y, progress_width, height))
         
         # Draw border
-        pygame.draw.rect(screen, (0, 0, 0), (x, y, width, height), 2)
+        pygame.draw.rect(screen, (100, 100, 100), (x, y, width, height), 2)
 
     def draw(self, screen, position):
         if self.font is None:
@@ -221,7 +221,7 @@ class FitbitModule:
         screen.blit(step_surface, (x, y + 25))
         
         # Draw other Fitbit data
-        y += 10  # Adjust starting y position for other data
+        y += 20  # Adjust starting y position for other data
         for i, (key, value) in enumerate(self.data.items()):
             if key != 'steps':  # Skip steps as we've already displayed it
                 text = f"{key.replace('_', ' ').title()}: {value}"
