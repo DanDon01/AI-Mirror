@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import time as time_module
 import pygame
 import logging
-from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING  # Add this import at the top of the file
+from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING, TRANSPARENCY  # Add this import at the top of the file
 import os
 from pathlib import Path
 import requests
@@ -190,6 +190,7 @@ class FitbitModule:
         for i, (key, value) in enumerate(self.data.items()):
             text = f"{key.replace('_', ' ').title()}: {value}"
             text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
+            text_surface.set_alpha(TRANSPARENCY)
             screen.blit(text_surface, (x, y + i * LINE_SPACING))
 
     def cleanup(self):

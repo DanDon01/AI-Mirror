@@ -26,6 +26,9 @@ COLOR_PASTEL_GREEN = (152, 251, 152)  # Pale green
 COLOR_PASTEL_RED = (255, 182, 193)    # Light pink (as a pastel red)
 COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
 
+# Transparency setting (0 is fully transparent, 255 is fully opaque)
+TRANSPARENCY = 200
+
 CONFIG = {
     'screen': {
         'size': (768, 1024)  # Portrait mode 21-inch monitor

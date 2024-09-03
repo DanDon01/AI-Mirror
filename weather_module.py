@@ -2,7 +2,7 @@ import requests
 import pygame
 import logging
 from datetime import datetime, timedelta
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING  # Import font settings from config
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY  # Import font settings from config
 
 class WeatherModule:
     def __init__(self, api_key, city):
@@ -62,6 +62,9 @@ class WeatherModule:
             current_surface = self.font.render(current_text, True, COLOR_FONT_DEFAULT)
             details_surface = self.font.render(details_text, True, COLOR_FONT_DEFAULT)
             
+            current_surface.set_alpha(TRANSPARENCY)
+            details_surface.set_alpha(TRANSPARENCY)
+            
             screen.blit(current_surface, (x, y))
             screen.blit(details_surface, (x, y + LINE_SPACING))
             
@@ -74,6 +77,7 @@ class WeatherModule:
                 
                 forecast_text = f"{date}: {temp:.1f}°C, {condition}"
                 forecast_surface = self.font.render(forecast_text, True, COLOR_FONT_DEFAULT)
+                forecast_surface.set_alpha(TRANSPARENCY)
                 screen.blit(forecast_surface, (x, y + LINE_SPACING * 2 + i * LINE_SPACING))
             
             # Change LED color based on current weather condition
@@ -83,6 +87,7 @@ class WeatherModule:
         else:
             error_text = "Weather data unavailable"
             error_surface = self.font.render(error_text, True, COLOR_PASTEL_RED)
+            error_surface.set_alpha(TRANSPARENCY)
             screen.blit(error_surface, position)
 
     def get_led_color(self, condition):

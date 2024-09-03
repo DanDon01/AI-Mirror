@@ -3,7 +3,7 @@ import pygame
 import logging
 from datetime import datetime, timedelta
 from pytz import timezone
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING  # Import font settings and color constants from config
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY  # Import font settings and color constants from config
 
 class StocksModule:
     def __init__(self, tickers, market_timezone='America/New_York'):
@@ -100,6 +100,11 @@ class StocksModule:
 
             us_status_surface = self.font.render(us_status_text, True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
             uk_status_surface = self.font.render(uk_status_text, True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
+            
+            # Apply transparency
+            us_status_surface.set_alpha(TRANSPARENCY)
+            uk_status_surface.set_alpha(TRANSPARENCY)
+            
             screen.blit(us_status_surface, (x, y))
             screen.blit(uk_status_surface, (x, y + LINE_SPACING))
 
@@ -122,6 +127,7 @@ class StocksModule:
                     text = f"{ticker}: {currency_symbol}{price:.2f}"
 
                 text_surface = self.font.render(text, True, color)
+                text_surface.set_alpha(TRANSPARENCY)
                 screen.blit(text_surface, (x, y))
 
                 y += LINE_SPACING  # Move to the next stock
