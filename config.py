@@ -112,7 +112,8 @@ CONFIG = {
             'icon_directory': retro_icons_path,  # Use the absolute path
             'spawn_probability': 0.001,
             'fall_speed': 3,
-            'max_active_icons': 10
+            'max_active_icons': 10,
+            'rotation_speed': 2  # Add this line, adjust the value to control rotation speed
         }
     }
 }

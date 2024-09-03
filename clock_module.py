@@ -35,16 +35,22 @@ class ClockModule:
             date_str = self.format_date(current_time)
             date_surface = self.date_font.render(date_str, True, self.color)
 
-            # Calculate total width
-            self.total_width = time_surface.get_width() + date_surface.get_width() + 20  # 20 pixels gap
+            # Calculate total width (use the wider of the two surfaces)
+            self.total_width = max(time_surface.get_width(), date_surface.get_width())
 
             # Reset scroll position if it's off-screen
             if self.scroll_position < -self.total_width:
                 self.scroll_position = self.screen_width
 
-            # Draw time and date
-            screen.blit(time_surface, (self.scroll_position, y))
-            screen.blit(date_surface, (self.scroll_position + time_surface.get_width() + 20, y + time_surface.get_height() + 5))
+            # Calculate centered positions for time and date
+            time_x = self.scroll_position + (self.total_width - time_surface.get_width()) // 2
+            date_x = self.scroll_position + (self.total_width - date_surface.get_width()) // 2
+
+            # Draw time
+            screen.blit(time_surface, (time_x, y))
+
+            # Draw date underneath time
+            screen.blit(date_surface, (date_x, y + time_surface.get_height() + 5))
 
         except Exception as e:
             logging.error(f"Error drawing clock data: {e}")

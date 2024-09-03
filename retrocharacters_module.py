@@ -2,10 +2,11 @@ import pygame
 import random
 import os
 import logging
+import math
 from config import CONFIG, COLOR_FONT_DEFAULT, TRANSPARENCY
 
 class RetroCharactersModule:
-    def __init__(self, screen_size, icon_size=64, icon_directory='assets/retro_icons', spawn_probability=0.01, fall_speed=2, max_active_icons=10):
+    def __init__(self, screen_size, icon_size=64, icon_directory='assets/retro_icons', spawn_probability=0.01, fall_speed=2, max_active_icons=10, rotation_speed=2):
         self.icons = []
         self.screen_width, self.screen_height = screen_size
         self.icon_size = icon_size
@@ -15,6 +16,7 @@ class RetroCharactersModule:
         self.spawn_probability = spawn_probability
         self.fall_speed = fall_speed
         self.max_active_icons = max_active_icons
+        self.rotation_speed = rotation_speed
         logging.info(f"RetroCharactersModule initialized with spawn_probability: {self.spawn_probability}, fall_speed: {self.fall_speed}, max_active_icons: {self.max_active_icons}")
 
     def load_icons(self):
@@ -42,15 +44,24 @@ class RetroCharactersModule:
         if random.random() < self.spawn_probability and len(self.active_icons) < self.max_active_icons:
             new_icon = random.choice(self.icons)
             x_position = random.randint(0, self.screen_width - self.icon_size)
-            self.active_icons.append((new_icon, x_position, 0))
+            self.active_icons.append((new_icon, x_position, 0, 0))  # Added 0 for initial rotation angle
 
-        # Update positions of active icons
-        self.active_icons = [(icon, x, y + self.fall_speed) for icon, x, y in self.active_icons if y < self.screen_height]
+        # Update positions and rotation angles of active icons
+        self.active_icons = [(icon, x, y + self.fall_speed, angle + self.rotation_speed) 
+                             for icon, x, y, angle in self.active_icons if y < self.screen_height]
 
     def draw(self, screen):
-        for icon, x, y in self.active_icons:
-            icon.set_alpha(TRANSPARENCY)
-            screen.blit(icon, (x, y))
+        for icon, x, y, angle in self.active_icons:
+            # Rotate the icon
+            rotated_icon = pygame.transform.rotate(icon, angle)
+            # Get the rect of the rotated image
+            rect = rotated_icon.get_rect()
+            # Set the center of the rect to the icon's position
+            rect.center = (x + self.icon_size // 2, y + self.icon_size // 2)
+            # Set transparency
+            rotated_icon.set_alpha(TRANSPARENCY)
+            # Draw the rotated icon
+            screen.blit(rotated_icon, rect)
 
     def cleanup(self):
         self.active_icons.clear()  # Clear all active icons
