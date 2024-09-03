@@ -95,8 +95,8 @@ class StocksModule:
             us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
             uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
 
-            us_status_text = "US Market: OPEN" if us_open else "US Market: CLOSED"
-            uk_status_text = "UK Market: OPEN" if uk_open else "UK Market: CLOSED"
+            us_status_text = "US Market: Open" if us_open else "US Market: Closed"
+            uk_status_text = "UK Market: Open" if uk_open else "UK Market: Closed"
 
             us_status_surface = self.font.render(us_status_text, True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
             uk_status_surface = self.font.render(uk_status_text, True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)

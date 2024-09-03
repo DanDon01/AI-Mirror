@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 from google_auth_oauthlib.flow import Flow
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY  # Add this import at the top of the file
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY
 
 class CalendarModule:
     def __init__(self, config):
@@ -21,6 +21,7 @@ class CalendarModule:
         self.service = None
         self.env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
         load_dotenv(self.env_file)
+        self.color_map = {}  # To store calendar color information
 
     def authenticate(self):
         creds = Credentials(
@@ -103,6 +104,10 @@ class CalendarModule:
             now = current_time.isoformat() + 'Z'  # 'Z' indicates UTC time
             logging.debug(f"Requesting events starting from: {now}")
             
+            # Fetch calendar color information
+            colors = self.service.colors().get().execute()
+            self.color_map = colors['event']
+
             events_result = self.service.events().list(calendarId='primary', timeMin=now,
                                                        maxResults=10, singleEvents=True,
                                                        orderBy='startTime').execute()
@@ -154,7 +159,16 @@ class CalendarModule:
             event_summary = event['summary'] if len(event['summary']) <= 15 else event['summary'][:12] + "..."
             
             event_text = f"{day_name} {date_str} {time_str}: {event_summary}"
-            event_surface = self.font.render(event_text, True, COLOR_FONT_DEFAULT)
+
+            # Get event color
+            color_id = event.get('colorId')
+            if color_id and color_id in self.color_map:
+                color = self.color_map[color_id]['background']
+                event_color = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))  # Convert hex to RGB
+            else:
+                event_color = COLOR_FONT_DEFAULT
+
+            event_surface = self.font.render(event_text, True, event_color)
             event_surface.set_alpha(TRANSPARENCY)
             screen.blit(event_surface, (x, y + y_offset))
             y_offset += LINE_SPACING

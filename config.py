@@ -27,7 +27,7 @@ COLOR_PASTEL_RED = (255, 182, 193)    # Light pink (as a pastel red)
 COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
 
 # Transparency setting (0 is fully transparent, 255 is fully opaque)
-TRANSPARENCY = 200
+TRANSPARENCY = 215
 
 CONFIG = {
     'screen': {
@@ -56,7 +56,7 @@ CONFIG = {
     'stocks': {
        'class': 'StocksModule',  # Add this line to specify the class
        'params': {
-            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'RR.L', 'LLOY.L']
+            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L', 'BAE.L']
        }
     },
 
@@ -81,9 +81,9 @@ CONFIG = {
     'positions': {
         'clock': (20, 20),  # Top-left corner
         'weather': (20, 100),  # Below clock in top-left
-        'fitbit': (20, 300),  # Bottom-left corner
+        'fitbit': (20, 250),  # Bottom-left corner
         'smart_home': (20, 0),  # Above fitbit in bottom-left
-        'calendar': (20, 500),  # Top-right corner
-        'stocks': (550, 300),  # Bottom-right corner
+        'calendar': (20, 350),  # Top-right corner
+        'stocks': (550, 100),  # Bottom-right corner
     }
 }
