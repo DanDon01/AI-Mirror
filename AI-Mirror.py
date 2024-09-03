@@ -11,6 +11,8 @@ from calendar_module import CalendarModule
 from weather_module import WeatherModule
 from fitbit_module import FitbitModule
 from smarthome_module import SmartHomeModule
+from stocks_module import StocksModule  # Add this import at the top
+
 # Import other modules as needed again
 
 class MagicMirror:
@@ -65,7 +67,10 @@ class MagicMirror:
     def update_modules(self):
         for module_name, module in self.modules.items():
             try:
-                module.update()
+                if hasattr(module, 'update'):
+                    module.update()
+                else:
+                    logging.warning(f"{module_name} does not have an update method")
             except Exception as e:
                 logging.error(f"Error updating {module_name}: {e}")
         
@@ -83,13 +88,16 @@ class MagicMirror:
             
             for module_name, module in self.modules.items():
                 try:
-                    module.draw(self.screen, CONFIG['positions'][module_name])
-                    logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
+                    if module_name in CONFIG['positions']:
+                        module.draw(self.screen, CONFIG['positions'][module_name])
+                        logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
+                    else:
+                        logging.warning(f"No position defined for {module_name} in CONFIG")
                 except Exception as e:
                     logging.error(f"Error drawing {module_name}: {e}")
                     error_font = pygame.font.Font(None, 24)
                     error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
-                    self.screen.blit(error_text, CONFIG['positions'][module_name])
+                    self.screen.blit(error_text, (10, 10))  # Fallback position
         else:
             # Draw sleep mode screen (e.g., just the time)
             current_time = datetime.now().strftime("%H:%M")

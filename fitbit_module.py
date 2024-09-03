@@ -152,29 +152,30 @@ class FitbitModule:
             tokens = self.client.client.refresh_token()
             self.access_token = tokens['access_token']
             self.refresh_token = tokens['refresh_token']
-            self.save_tokens(tokens)
-            logging.info("Access token refreshed successfully")
+            self.config['access_token'] = self.access_token
+            self.config['refresh_token'] = self.refresh_token
+            self.save_tokens()
+            logging.info("Fitbit access token refreshed successfully")
         except Exception as e:
-            logging.error(f"Failed to refresh access token: {e}")
-            logging.error(traceback.format_exc())
+            logging.error(f"Error refreshing Fitbit access token: {e}")
             raise Exception("Failed to refresh access token")
 
-    def save_tokens(self, tokens):
-        self.config['access_token'] = tokens['access_token']
-        self.config['refresh_token'] = tokens['refresh_token']
+    def save_tokens(self):
         # Update the tokens in the environment file
-        env_path = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
-        with open(env_path, 'r') as file:
+        env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
+        with open(env_file, 'r') as file:
             lines = file.readlines()
-        with open(env_path, 'w') as file:
+        
+        with open(env_file, 'w') as file:
             for line in lines:
                 if line.startswith('FITBIT_ACCESS_TOKEN='):
-                    file.write(f"FITBIT_ACCESS_TOKEN={tokens['access_token']}\n")
+                    file.write(f"FITBIT_ACCESS_TOKEN={self.access_token}\n")
                 elif line.startswith('FITBIT_REFRESH_TOKEN='):
-                    file.write(f"FITBIT_REFRESH_TOKEN={tokens['refresh_token']}\n")
+                    file.write(f"FITBIT_REFRESH_TOKEN={self.refresh_token}\n")
                 else:
                     file.write(line)
-        logging.info("Fitbit tokens updated in Variables.env")
+        
+        logging.info("Fitbit tokens have been saved to environment file")
 
     def draw(self, screen, position):
         font = pygame.font.Font(None, 36)

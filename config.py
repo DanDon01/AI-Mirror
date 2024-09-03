@@ -13,7 +13,7 @@ load_dotenv(env_path)
 
 CONFIG = {
     'screen': {
-        'size': (1080, 1920)  # Portrait mode 21-inch monitor
+        'size': (768, 1024)  # Portrait mode 21-inch monitor
     },
     'update_schedule': {
         'time': time(5, 30),  # Update at 5:30 AM
@@ -35,7 +35,7 @@ CONFIG = {
         }
     },  
     'stocks': {
-        'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers
+        'tickers': ['AAPL', 'GOOGL', 'MSFT', 'RR.L', 'LLOY.L']  # Add your preferred stock tickers
     },
     'weather': {
         'class': 'WeatherModule',
@@ -57,10 +57,10 @@ CONFIG = {
     },
     'positions': {
         'clock': (20, 20),  # Top-left corner
-        'weather': (20, 100),  # Below clock in top-left
-        'fitbit': (20, 300),  # Bottom-left corner
-        'smart_home': (20, 500),  # Above fitbit in bottom-left
-        'calendar': (400, 20),  # Top-right corner
-        'stocks': (600, 20),  # Bottom-right corner
+        'weather': (20, 240),  # Below clock in top-left
+        'fitbit': (20, 1620),  # Bottom-left corner
+        'smart_home': (20, 1400),  # Above fitbit in bottom-left
+        'calendar': (540, 20),  # Top-right corner
+        'stocks': (540, 1620),  # Bottom-right corner
     }
 }
