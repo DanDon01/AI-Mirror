@@ -6,7 +6,7 @@ import math
 from config import CONFIG, COLOR_FONT_DEFAULT, TRANSPARENCY
 
 class RetroCharactersModule:
-    def __init__(self, screen_size, icon_size=64, icon_directory='assets/retro_icons', spawn_probability=0.01, fall_speed=2, max_active_icons=10, rotation_speed=2):
+    def __init__(self, screen_size, icon_size=64, icon_directory='assets/retro_icons', spawn_probability=0.01, fall_speed=1, max_active_icons=10, rotation_speed=1):
         self.icons = []
         self.screen_width, self.screen_height = screen_size
         self.icon_size = icon_size
@@ -45,10 +45,14 @@ class RetroCharactersModule:
             new_icon = random.choice(self.icons)
             x_position = random.randint(0, self.screen_width - self.icon_size)
             self.active_icons.append((new_icon, x_position, 0, 0))  # Added 0 for initial rotation angle
+            logging.debug(f"Spawned new icon. Total active icons: {len(self.active_icons)}")
 
         # Update positions and rotation angles of active icons
         self.active_icons = [(icon, x, y + self.fall_speed, angle + self.rotation_speed) 
                              for icon, x, y, angle in self.active_icons if y < self.screen_height]
+        
+        if len(self.active_icons) > 0:
+            logging.debug(f"Active icons: {len(self.active_icons)}")
 
     def draw(self, screen):
         for icon, x, y, angle in self.active_icons:

@@ -110,10 +110,10 @@ CONFIG = {
             'screen_size': (768, 1024),  # Use the same size as your screen
             'icon_size': 64,
             'icon_directory': retro_icons_path,  # Use the absolute path
-            'spawn_probability': 0.001,
-            'fall_speed': 3,
+            'spawn_probability': 0.01,  # Increased from 0.001 to 0.01
+            'fall_speed': 1,
             'max_active_icons': 10,
-            'rotation_speed': 2  # Add this line, adjust the value to control rotation speed
+            'rotation_speed': 1  # Reduced from 2 to 1 for slower rotation
         }
     }
 }
