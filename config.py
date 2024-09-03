@@ -81,9 +81,9 @@ CONFIG = {
     'positions': {
         'clock': (20, 20),  # Top-left corner
         'weather': (20, 100),  # Below clock in top-left
-        'fitbit': (20, 250),  # Bottom-left corner
+        'fitbit': (20, 300),  # Bottom-left corner
         'smart_home': (20, 0),  # Above fitbit in bottom-left
-        'calendar': (20, 400),  # Top-right corner
+        'calendar': (20, 450),  # Top-right corner
         'stocks': (550, 120),  # Bottom-right corner
     }
 }

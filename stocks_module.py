@@ -111,29 +111,36 @@ class StocksModule:
             y += LINE_SPACING * 2  # Move position down after displaying market status
 
             # Draw stock data
-            for ticker, data in self.stock_data.items():
-                price = data['price']
-                percent_change = data['percent_change']
+            if self.stock_data:
+                for ticker, data in self.stock_data.items():
+                    price = data['price']
+                    percent_change = data['percent_change']
 
-                # Determine color based on percent change
-                color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
+                    # Determine color based on percent change
+                    color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
 
-                # Determine currency symbol based on the market
-                currency_symbol = '£' if ticker.endswith('.L') else '$'
+                    # Determine currency symbol based on the market
+                    currency_symbol = '£' if ticker.endswith('.L') else '$'
 
-                if percent_change != 'N/A':
-                    text = f"{ticker}: {currency_symbol}{price:.2f} ({percent_change:+.2f}%)"
-                else:
-                    text = f"{ticker}: {currency_symbol}{price:.2f}"
+                    if percent_change != 'N/A':
+                        text = f"{ticker}: {currency_symbol}{price:.2f} ({percent_change:+.2f}%)"
+                    else:
+                        text = f"{ticker}: {currency_symbol}{price:.2f}"
 
-                text_surface = self.font.render(text, True, color)
-                text_surface.set_alpha(TRANSPARENCY)
-                screen.blit(text_surface, (x, y))
+                    text_surface = self.font.render(text, True, color)
+                    text_surface.set_alpha(TRANSPARENCY)
+                    screen.blit(text_surface, (x, y))
 
-                y += LINE_SPACING  # Move to the next stock
+                    y += LINE_SPACING  # Move to the next stock
+            else:
+                no_data_surface = self.font.render("Stock data unavailable", True, COLOR_PASTEL_RED)
+                no_data_surface.set_alpha(TRANSPARENCY)
+                screen.blit(no_data_surface, (x, y))
+
         except Exception as e:
             logging.error(f"Error drawing stock data: {e}")
-            error_surface = self.font.render("Stock data unavailable", True, COLOR_PASTEL_RED)
+            error_surface = self.font.render("Error displaying stock data", True, COLOR_PASTEL_RED)
+            error_surface.set_alpha(TRANSPARENCY)
             screen.blit(error_surface, position)
 
     def is_market_open(self, current_market_time, market):
