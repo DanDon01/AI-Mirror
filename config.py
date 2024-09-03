@@ -86,7 +86,7 @@ CONFIG = {
         'fitbit': (20, 280),  # Bottom-left corner
         'smart_home': (20, 0),  # Above fitbit in bottom-left
         'calendar': (20, 500),  # Top-right corner
-        'stocks': (550, 120),  # Bottom-right corner
+        'stocks': (550, 140),  # Bottom-right corner
     },
     'clock': {
         'class': 'ClockModule',

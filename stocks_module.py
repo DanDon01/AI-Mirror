@@ -39,6 +39,9 @@ class StocksModule:
         self.scroll_speed = 1
         self.alerts = []
 
+        self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
+        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 2)
+
     def update(self):
         current_time = datetime.now(timezone('UTC'))
         
@@ -101,19 +104,33 @@ class StocksModule:
             us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
             uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
 
-            us_status_text = "US Market: Open" if us_open else "US Market: Closed"
-            uk_status_text = "UK Market: Open" if uk_open else "UK Market: Closed"
+            # Create fonts
+            markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)  # Slightly larger font for "Markets:"
+            status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 2)  # Smaller font for status
 
-            us_status_surface = self.font.render(us_status_text, True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
-            uk_status_surface = self.font.render(uk_status_text, True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
-            
-            us_status_surface.set_alpha(TRANSPARENCY)
-            uk_status_surface.set_alpha(TRANSPARENCY)
-            
-            screen.blit(us_status_surface, (x, y))
-            screen.blit(uk_status_surface, (x, y + LINE_SPACING))
+            # Render text
+            markets_text = markets_font.render("Markets:", True, COLOR_FONT_DEFAULT)
+            us_status = "Open" if us_open else "Closed"
+            uk_status = "Open" if uk_open else "Closed"
+            us_text = status_font.render(f"US: {us_status}", True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
+            uk_text = status_font.render(f"UK: {uk_status}", True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
 
-            y += LINE_SPACING * 2  # Move position down after displaying market status
+            # Set transparency
+            markets_text.set_alpha(TRANSPARENCY)
+            us_text.set_alpha(TRANSPARENCY)
+            uk_text.set_alpha(TRANSPARENCY)
+
+            # Calculate positions
+            markets_width = markets_text.get_width()
+            us_width = us_text.get_width()
+            uk_width = uk_text.get_width()
+
+            # Draw text
+            screen.blit(markets_text, (x, y))
+            screen.blit(us_text, (x + markets_width + 10, y + 2))  # +2 to align vertically
+            screen.blit(uk_text, (x + markets_width + us_width + 20, y + 2))  # +2 to align vertically
+
+            y += LINE_SPACING + 5  # Move position down after displaying market status
 
             # Draw scrolling ticker
             self.draw_scrolling_ticker(screen)

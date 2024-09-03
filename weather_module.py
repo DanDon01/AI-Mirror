@@ -71,12 +71,27 @@ class WeatherModule:
     def get_temperature_color(self, temperature):
         # Clamp temperature between 0 and 32
         t = max(0, min(temperature, 32))
-        # Calculate the ratio (0 to 1)
-        ratio = t / 32
-        # Interpolate between blue (0, 0, 255) and red (255, 0, 0)
-        r = int(255 * ratio)
-        b = int(255 * (1 - ratio))
-        return (r, 0, b)
+        
+        if t <= 15:
+            # White (255, 255, 255) to Blue (0, 0, 255)
+            ratio = t / 15
+            r = int(255 * (1 - ratio))
+            g = int(255 * (1 - ratio))
+            b = 255
+        elif t <= 21:
+            # Blue (0, 0, 255) to Yellow (255, 255, 0)
+            ratio = (t - 15) / 6
+            r = int(255 * ratio)
+            g = int(255 * ratio)
+            b = int(255 * (1 - ratio))
+        else:
+            # Yellow (255, 255, 0) to Red (255, 0, 0)
+            ratio = (t - 21) / 11
+            r = 255
+            g = int(255 * (1 - ratio))
+            b = 0
+        
+        return (r, g, b)
 
     def draw(self, screen, position):
         if self.font is None:
