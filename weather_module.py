@@ -14,7 +14,6 @@ class WeatherModule:
         self.font = None
         self.last_update = datetime.min
         self.update_interval = timedelta(minutes=30)
-        self.icon = None
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.animation = None
@@ -35,16 +34,20 @@ class WeatherModule:
             is_night = self.weather_data['dt'] > self.weather_data['sys']['sunset'] or self.weather_data['dt'] < self.weather_data['sys']['sunrise']
 
             if is_night:
-                self.animation = MoonAnimation(self.screen_width, self.screen_height)
+                self.animation = MoonAnimation(self.screen_width, self.screen_height, cloudy=weather_id >= 801)
             elif weather_id >= 200 and weather_id < 300:  # Thunderstorm
                 self.animation = StormAnimation(self.screen_width, self.screen_height)
-            elif weather_id >= 300 and weather_id < 600:  # Drizzle and Rain
+            elif weather_id >= 300 and weather_id < 500:  # Drizzle
                 self.animation = RainAnimation(self.screen_width, self.screen_height)
+            elif weather_id >= 500 and weather_id < 600:  # Rain
+                self.animation = RainAnimation(self.screen_width, self.screen_height, heavy=True)
             elif weather_id >= 600 and weather_id < 700:  # Snow
                 self.animation = SnowAnimation(self.screen_width, self.screen_height)
-            elif weather_id >= 801 and weather_id < 900:  # Clouds
-                self.animation = CloudAnimation(self.screen_width, self.screen_height)
-            else:  # Clear sky or other conditions
+            elif weather_id == 800:  # Clear sky
+                self.animation = SunAnimation(self.screen_width, self.screen_height)
+            elif weather_id > 800 and weather_id < 900:  # Clouds
+                self.animation = CloudAnimation(self.screen_width, self.screen_height, partly=weather_id == 801)
+            else:  # Other conditions
                 self.animation = SunAnimation(self.screen_width, self.screen_height)
 
             self.last_update = current_time
