@@ -28,6 +28,10 @@ class MagicMirror:
         self.font = pygame.font.Font(None, 48)  # Larger font for the clock
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
+        # Remove these lines if they're still present
+        # self.scroll_text = "ONLINE"
+        # self.scroll_x = self.screen.get_width()
+
     def setup_logging(self):
         handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
         logging.basicConfig(level=logging.DEBUG, handlers=[handler],
@@ -71,11 +75,7 @@ class MagicMirror:
                     logging.warning(f"{module_name} does not have an update method")
             except Exception as e:
                 logging.error(f"Error updating {module_name}: {e}")
-        
-        # Update scroll position
-        self.scroll_x -= 2
-        if self.scroll_x < -self.font.size(self.scroll_text)[0]:
-            self.scroll_x = self.screen.get_width()
+
 
     def draw_modules(self):
         self.screen.fill((0, 0, 0))  # Clear screen with black
