@@ -127,8 +127,8 @@ class StocksModule:
 
             # Draw text
             screen.blit(markets_text, (x, y))
-            screen.blit(us_text, (x + markets_width + 10, y + 2))  # +2 to align vertically
-            screen.blit(uk_text, (x + markets_width + 10, y + 8))  # +2 to align vertically
+            screen.blit(us_text, (x + markets_width + 10, y - 4))  # +2 to align vertically
+            screen.blit(uk_text, (x + markets_width + 10, y + 10))  # +2 to align vertically
 
             y += LINE_SPACING + 5  # Move position down after displaying market status
 
