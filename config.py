@@ -34,9 +34,14 @@ CONFIG = {
             }
         }
     },  
+    
     'stocks': {
-        'tickers': ['AAPL', 'GOOGL', 'MSFT', 'RR.L', 'LLOY.L']  # Add your preferred stock tickers
+       'class': 'StocksModule',  # Add this line to specify the class
+       'params': {
+            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'RR.L', 'LLOY.L']
+       }
     },
+
     'weather': {
         'class': 'WeatherModule',
         'params': {
