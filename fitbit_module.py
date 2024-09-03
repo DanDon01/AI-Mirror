@@ -38,6 +38,7 @@ class FitbitModule:
         self.api_call_count = 0
         self.backoff_time = 1  # Start with 1 second backoff
         self.font = None
+        self.step_goal = 10000  # Set the step goal
 
     def initialize_client(self):
         try:
@@ -178,6 +179,27 @@ class FitbitModule:
         
         logging.info("Fitbit tokens have been saved to environment file")
 
+    def draw_progress_bar(self, screen, x, y, width, height, progress, goal):
+        # Draw background
+        pygame.draw.rect(screen, (200, 200, 200), (x, y, width, height))
+        
+        # Calculate progress width
+        progress_width = int((progress / goal) * width)
+        
+        # Determine color based on progress
+        if progress < 5000:
+            color = (255, 0, 0)  # Red
+        elif progress < 8000:
+            color = (255, 255, 0)  # Yellow
+        else:
+            color = (0, 255, 0)  # Green
+        
+        # Draw progress
+        pygame.draw.rect(screen, color, (x, y, progress_width, height))
+        
+        # Draw border
+        pygame.draw.rect(screen, (0, 0, 0), (x, y, width, height), 2)
+
     def draw(self, screen, position):
         if self.font is None:
             try:
@@ -187,11 +209,25 @@ class FitbitModule:
                 self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
         
         x, y = position
+        
+        # Draw progress bar for steps
+        steps = int(self.data['steps']) if self.data['steps'] != 'N/A' else 0
+        self.draw_progress_bar(screen, x, y, 200, 20, steps, self.step_goal)
+        
+        # Draw step count and goal
+        step_text = f"Steps: {steps} / {self.step_goal}"
+        step_surface = self.font.render(step_text, True, COLOR_FONT_DEFAULT)
+        step_surface.set_alpha(TRANSPARENCY)
+        screen.blit(step_surface, (x, y + 25))
+        
+        # Draw other Fitbit data
+        y += 50  # Adjust starting y position for other data
         for i, (key, value) in enumerate(self.data.items()):
-            text = f"{key.replace('_', ' ').title()}: {value}"
-            text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
-            text_surface.set_alpha(TRANSPARENCY)
-            screen.blit(text_surface, (x, y + i * LINE_SPACING))
+            if key != 'steps':  # Skip steps as we've already displayed it
+                text = f"{key.replace('_', ' ').title()}: {value}"
+                text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
+                text_surface.set_alpha(TRANSPARENCY)
+                screen.blit(text_surface, (x, y + i * LINE_SPACING))
 
     def cleanup(self):
         pass
