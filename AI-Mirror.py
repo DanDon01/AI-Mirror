@@ -25,9 +25,7 @@ class MagicMirror:
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
         self.state = "active"  # Can be "active" or "sleep"
-        self.scroll_text = "ONLINE"
-        self.scroll_x = self.screen.get_width()
-        self.font = pygame.font.Font(None, 36)
+        self.font = pygame.font.Font(None, 48)  # Larger font for the clock
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
     def setup_logging(self):
@@ -82,9 +80,11 @@ class MagicMirror:
     def draw_modules(self):
         self.screen.fill((0, 0, 0))  # Clear screen with black
         if self.state == "active":
-            # Draw scrolling text
-            text_surface = self.font.render(self.scroll_text, True, (255, 255, 255))
-            self.screen.blit(text_surface, (self.scroll_x, 10))
+            # Draw digital clock
+            current_time = datetime.now().strftime("%H:%M")
+            text_surface = self.font.render(current_time, True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=(self.screen.get_width() // 2, 30))
+            self.screen.blit(text_surface, text_rect)
             
             for module_name, module in self.modules.items():
                 try:
@@ -101,8 +101,7 @@ class MagicMirror:
         else:
             # Draw sleep mode screen (e.g., just the time)
             current_time = datetime.now().strftime("%H:%M")
-            font = pygame.font.Font(None, 100)
-            text = font.render(current_time, True, (100, 100, 100))
+            text = self.font.render(current_time, True, (100, 100, 100))
             text_rect = text.get_rect(center=(self.screen.get_width() / 2, self.screen.get_height() / 2))
             self.screen.blit(text, text_rect)
         pygame.display.flip()
