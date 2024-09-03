@@ -5,15 +5,16 @@ import logging
 from config import CONFIG, COLOR_FONT_DEFAULT, TRANSPARENCY
 
 class RetroCharactersModule:
-    def __init__(self, screen_size):
+    def __init__(self, screen_size, icon_size=64, icon_directory='retro_icons', spawn_probability=0.01, fall_speed=2, max_active_icons=10):
         self.icons = []
         self.screen_width, self.screen_height = screen_size
-        self.icon_size = CONFIG.get('retro_characters', {}).get('icon_size', 64)
+        self.icon_size = icon_size
+        self.icon_directory = icon_directory
         self.load_icons()
         self.active_icons = []
-        self.spawn_probability = CONFIG.get('retro_characters', {}).get('spawn_probability', 0.01)
-        self.fall_speed = CONFIG.get('retro_characters', {}).get('fall_speed', 2)
-        self.max_active_icons = CONFIG.get('retro_characters', {}).get('max_active_icons', 10)
+        self.spawn_probability = spawn_probability
+        self.fall_speed = fall_speed
+        self.max_active_icons = max_active_icons
         logging.info(f"RetroCharactersModule initialized with spawn_probability: {self.spawn_probability}, fall_speed: {self.fall_speed}, max_active_icons: {self.max_active_icons}")
 
     def load_icons(self):

@@ -14,38 +14,37 @@ class ClockModule:
         self.tz = pytz.timezone(timezone) if timezone != 'local' else None
         self.scroll_position = 0
         self.scroll_speed = 2
+        self.screen_width = 0  # This will be set in the draw method
+        self.total_width = 0  # This will be calculated in the draw method
 
     def update(self):
         # Update scroll position
         self.scroll_position -= self.scroll_speed
-        if self.scroll_position < -self.total_width:
+        if self.total_width > 0 and self.scroll_position < -self.total_width:
             self.scroll_position = self.screen_width
-            logging.info("Clock reset position")  # Log only when resetting position
+            logging.info("Clock reset position")
 
     def draw(self, screen, position):
         try:
             x, y = position
+            self.screen_width = screen.get_width()  # Set the screen width
             current_time = datetime.now(self.tz) if self.tz else datetime.now()
 
-            # Render time
+            # Render time and date
             time_surface = self.time_font.render(current_time.strftime(self.time_format), True, self.color)
-            
-            # Render date with custom formatting
             date_str = self.format_date(current_time)
             date_surface = self.date_font.render(date_str, True, self.color)
 
             # Calculate total width
-            total_width = time_surface.get_width() + date_surface.get_width() + 20  # 20 pixels gap
+            self.total_width = time_surface.get_width() + date_surface.get_width() + 20  # 20 pixels gap
 
             # Reset scroll position if it's off-screen
-            if self.scroll_position < -total_width:
-                self.scroll_position = screen.get_width()
+            if self.scroll_position < -self.total_width:
+                self.scroll_position = self.screen_width
 
-            # Draw time
+            # Draw time and date
             screen.blit(time_surface, (self.scroll_position, y))
-            
-            # Draw date below time
-            screen.blit(date_surface, (self.scroll_position, y + time_surface.get_height() + 5))
+            screen.blit(date_surface, (self.scroll_position + time_surface.get_width() + 20, y + time_surface.get_height() + 5))
 
         except Exception as e:
             logging.error(f"Error drawing clock data: {e}")

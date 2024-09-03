@@ -104,16 +104,12 @@ class StocksModule:
             us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
             uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
 
-            # Create fonts
-            markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)  # Slightly larger font for "Markets:"
-            status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 2)  # Smaller font for status
-
             # Render text
-            markets_text = markets_font.render("Markets:", True, COLOR_FONT_DEFAULT)
+            markets_text = self.markets_font.render("Markets:", True, COLOR_FONT_DEFAULT)
             us_status = "Open" if us_open else "Closed"
             uk_status = "Open" if uk_open else "Closed"
-            us_text = status_font.render(f"US: {us_status}", True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
-            uk_text = status_font.render(f"UK: {uk_status}", True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
+            us_text = self.status_font.render(f"US: {us_status}", True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
+            uk_text = self.status_font.render(f"UK: {uk_status}", True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
 
             # Set transparency
             markets_text.set_alpha(TRANSPARENCY)
@@ -127,16 +123,13 @@ class StocksModule:
 
             # Draw text
             screen.blit(markets_text, (x, y))
-            screen.blit(us_text, (x + markets_width + 10, y - 4))  # +2 to align vertically
-            screen.blit(uk_text, (x + markets_width + 10, y + 10))  # +2 to align vertically
+            screen.blit(us_text, (x + markets_width + 10, y - 4))
+            screen.blit(uk_text, (x + markets_width + 10, y + 10))
 
             y += LINE_SPACING + 5  # Move position down after displaying market status
 
-            # Draw scrolling ticker
-            self.draw_scrolling_ticker(screen)
-
-            # Draw alerts
-            self.draw_alerts(screen, position)
+            # Draw alerts (now integrated into the main stock list)
+            y = self.draw_alerts(screen, (x, y))
 
             # Draw stock data
             if self.stock_data:
@@ -163,9 +156,11 @@ class StocksModule:
                 no_data_surface.set_alpha(TRANSPARENCY)
                 screen.blit(no_data_surface, (x, y))
 
+            # Draw scrolling ticker
+            self.draw_scrolling_ticker(screen)
+
         except Exception as e:
             logging.error(f"Error drawing stock data: {e}")
-            # Do not render any error message here to avoid overlapping
 
     def draw_scrolling_ticker(self, screen):
         ticker_height = 30
@@ -207,15 +202,17 @@ class StocksModule:
                 self.alerts.append((ticker, percent_change))
 
         if self.alerts:
-            logging.info(f"Displaying {len(self.alerts)} stock alerts")  # Log only when there are alerts
-            alert_y = y - 60  # Position above the regular stock display
+            logging.info(f"Displaying {len(self.alerts)} stock alerts")
+            alert_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE, bold=True)  # Use the same size as regular font, but bold
             for ticker, percent_change in self.alerts:
                 color = COLOR_PASTEL_GREEN if percent_change > 0 else COLOR_PASTEL_RED
-                text = f"ALERT: {ticker} {percent_change:+.2f}%"
-                text_surface = self.alert_font.render(text, True, color)
-                text_surface.set_alpha(int(TRANSPARENCY * (1 + 0.5 * (pygame.time.get_ticks() % 1000) / 1000)))  # Flashing effect
-                screen.blit(text_surface, (x, alert_y))
-                alert_y += 60  # Move down for the next alert
+                text = f"{ticker} {percent_change:+.2f}%"
+                text_surface = alert_font.render(text, True, color)
+                text_surface.set_alpha(TRANSPARENCY)
+                screen.blit(text_surface, (x, y))
+                y += LINE_SPACING  # Move down for the next alert
+
+        return y  # Return the new y position after drawing alerts
 
     def is_market_open(self, current_market_time, market):
         market_hours = self.market_hours[market]
