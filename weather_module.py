@@ -14,8 +14,8 @@ class WeatherModule:
         self.font = None
         self.last_update = datetime.min
         self.update_interval = timedelta(minutes=30)
-        self.screen_width = None
-        self.screen_height = None
+        self.screen_width = 800  # Set a default value
+        self.screen_height = 600  # Set a default value
         self.animation = None
 
     def update(self):
@@ -30,25 +30,7 @@ class WeatherModule:
             self.weather_data = response.json()
 
             # Set animation based on weather condition
-            weather_id = self.weather_data['weather'][0]['id']
-            is_night = self.weather_data['dt'] > self.weather_data['sys']['sunset'] or self.weather_data['dt'] < self.weather_data['sys']['sunrise']
-
-            if is_night:
-                self.animation = MoonAnimation(self.screen_width, self.screen_height, cloudy=weather_id >= 801)
-            elif weather_id >= 200 and weather_id < 300:  # Thunderstorm
-                self.animation = StormAnimation(self.screen_width, self.screen_height)
-            elif weather_id >= 300 and weather_id < 500:  # Drizzle
-                self.animation = RainAnimation(self.screen_width, self.screen_height)
-            elif weather_id >= 500 and weather_id < 600:  # Rain
-                self.animation = RainAnimation(self.screen_width, self.screen_height, heavy=True)
-            elif weather_id >= 600 and weather_id < 700:  # Snow
-                self.animation = SnowAnimation(self.screen_width, self.screen_height)
-            elif weather_id == 800:  # Clear sky
-                self.animation = SunAnimation(self.screen_width, self.screen_height)
-            elif weather_id > 800 and weather_id < 900:  # Clouds
-                self.animation = CloudAnimation(self.screen_width, self.screen_height, partly=weather_id == 801)
-            else:  # Other conditions
-                self.animation = SunAnimation(self.screen_width, self.screen_height)
+            self.update_animation()
 
             self.last_update = current_time
             logging.info("Weather data updated successfully")
@@ -56,24 +38,31 @@ class WeatherModule:
             logging.error(f"Failed to fetch weather data: {e}")
             self.weather_data = None
             self.animation = None
+        except Exception as e:
+            logging.error(f"Error updating weather: {e}")
+            self.animation = None
 
     def update_animation(self):
-        weather_main = self.weather_data['weather'][0]['main'].lower()
-        weather_description = self.weather_data['weather'][0]['description'].lower()
+        try:
+            weather_main = self.weather_data['weather'][0]['main'].lower()
+            weather_description = self.weather_data['weather'][0]['description'].lower()
 
-        if 'clear' in weather_main:
-            self.animation = SunAnimation(self.screen_width, self.screen_height)
-        elif 'cloud' in weather_main or 'broken' in weather_description:
-            partly = 'partly' in weather_description or 'broken' in weather_description
-            self.animation = CloudAnimation(self.screen_width, self.screen_height, partly=partly)
-        elif 'rain' in weather_main:
-            heavy = 'heavy' in weather_description
-            self.animation = RainAnimation(self.screen_width, self.screen_height, heavy=heavy)
-        elif 'thunderstorm' in weather_main:
-            self.animation = StormAnimation(self.screen_width, self.screen_height)
-        elif 'snow' in weather_main:
-            self.animation = SnowAnimation(self.screen_width, self.screen_height)
-        else:
+            if 'clear' in weather_main:
+                self.animation = SunAnimation(self.screen_width, self.screen_height)
+            elif 'cloud' in weather_main or 'broken' in weather_description:
+                partly = 'partly' in weather_description or 'broken' in weather_description
+                self.animation = CloudAnimation(self.screen_width, self.screen_height, partly=partly)
+            elif 'rain' in weather_main:
+                heavy = 'heavy' in weather_description
+                self.animation = RainAnimation(self.screen_width, self.screen_height, heavy=heavy)
+            elif 'thunderstorm' in weather_main:
+                self.animation = StormAnimation(self.screen_width, self.screen_height)
+            elif 'snow' in weather_main:
+                self.animation = SnowAnimation(self.screen_width, self.screen_height)
+            else:
+                self.animation = None
+        except Exception as e:
+            logging.error(f"Error creating weather animation: {e}")
             self.animation = None
 
     def draw(self, screen, position):

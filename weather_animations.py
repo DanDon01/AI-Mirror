@@ -7,7 +7,8 @@ class WeatherAnimation:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.particles = []
-        self.icon_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'weather_icons')
+        # Update the icon_path to use an absolute path
+        self.icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'weather_icons')
 
     def update(self):
         pass
@@ -16,7 +17,13 @@ class WeatherAnimation:
         pass
 
     def load_image(self, filename):
-        return pygame.image.load(os.path.join(self.icon_path, filename)).convert_alpha()
+        try:
+            full_path = os.path.join(self.icon_path, filename)
+            return pygame.image.load(full_path).convert_alpha()
+        except pygame.error as e:
+            print(f"Error loading image {filename}: {e}")
+            # Return a dummy surface if the image can't be loaded
+            return pygame.Surface((50, 50))
 
 class CloudAnimation(WeatherAnimation):
     def __init__(self, screen_width, screen_height, partly=False):
