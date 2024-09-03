@@ -13,6 +13,7 @@ from fitbit_module import FitbitModule
 from smarthome_module import SmartHomeModule
 from stocks_module import StocksModule  # Add this import at the top
 from clock_module import ClockModule  # Add this import
+from retrocharacters_module import RetroCharactersModule  # Add this import
 
 # Import other modules as needed again
 
@@ -81,19 +82,24 @@ class MagicMirror:
         try:
             self.screen.fill((0, 0, 0))  # Clear screen with black
             if self.state == "active":
+                # Draw RetroCharactersModule first so it's in the background
+                if 'retro_characters' in self.modules:
+                    self.modules['retro_characters'].draw(self.screen)
+
                 for module_name, module in self.modules.items():
-                    try:
-                        if module_name in CONFIG['positions']:
-                            module.draw(self.screen, CONFIG['positions'][module_name])
-                            logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
-                        else:
-                            logging.warning(f"No position defined for {module_name} in CONFIG")
-                    except Exception as e:
-                        logging.error(f"Error drawing {module_name}: {e}")
-                        logging.error(traceback.format_exc())
-                        error_font = pygame.font.Font(None, 24)
-                        error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
-                        self.screen.blit(error_text, (10, 10))  # Fallback position
+                    if module_name != 'retro_characters':  # Skip retro_characters as we've already drawn it
+                        try:
+                            if module_name in CONFIG['positions']:
+                                module.draw(self.screen, CONFIG['positions'][module_name])
+                                logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
+                            else:
+                                logging.warning(f"No position defined for {module_name} in CONFIG")
+                        except Exception as e:
+                            logging.error(f"Error drawing {module_name}: {e}")
+                            logging.error(traceback.format_exc())
+                            error_font = pygame.font.Font(None, 24)
+                            error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
+                            self.screen.blit(error_text, (10, 10))  # Fallback position
             else:
                 # Draw sleep mode screen (e.g., just the time)
                 self.modules['clock'].draw(self.screen, (0, self.screen.get_height() // 2 - 30))

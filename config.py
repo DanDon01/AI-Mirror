@@ -87,6 +87,7 @@ CONFIG = {
         'smart_home': (20, 0),  # Above fitbit in bottom-left
         'calendar': (20, 500),  # Top-right corner
         'stocks': (550, 140),  # Bottom-right corner
+        'retro_characters': (0, 0),  # This module doesn't need a specific position as it covers the whole screen
     },
     'clock': {
         'class': 'ClockModule',
@@ -97,6 +98,17 @@ CONFIG = {
             'time_format': '%H:%M:%S',
             'date_format': '%A, %B %d, %Y',
             'timezone': 'local'  # Or specify a timezone like 'Europe/London'
+        }
+    },
+    'retro_characters': {
+        'class': 'RetroCharactersModule',
+        'params': {
+            'screen_size': (768, 1024),  # Use the same size as your screen
+            'icon_size': 64,
+            'icon_directory': 'retro_icons',
+            'spawn_probability': 0.01,
+            'fall_speed': 2,
+            'max_active_icons': 10
         }
     }
 }

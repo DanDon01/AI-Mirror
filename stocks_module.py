@@ -39,8 +39,8 @@ class StocksModule:
         self.scroll_speed = 2
         self.alerts = []
 
-        self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 0)
-        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 8)
+        self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
+        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 16)
 
     def update(self):
         current_time = datetime.now(timezone('UTC'))
