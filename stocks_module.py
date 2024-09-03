@@ -33,6 +33,12 @@ class StocksModule:
             }
         }
 
+        self.ticker_font = pygame.font.SysFont(FONT_NAME, 24)
+        self.alert_font = pygame.font.SysFont(FONT_NAME, 48)
+        self.scroll_position = 0
+        self.scroll_speed = 1
+        self.alerts = []
+
     def update(self):
         current_time = datetime.now(timezone('UTC'))
         
@@ -109,6 +115,12 @@ class StocksModule:
 
             y += LINE_SPACING * 2  # Move position down after displaying market status
 
+            # Draw scrolling ticker
+            self.draw_scrolling_ticker(screen)
+
+            # Draw alerts
+            self.draw_alerts(screen, position)
+
             # Draw stock data
             if self.stock_data:
                 for ticker, data in self.stock_data.items():
@@ -137,6 +149,54 @@ class StocksModule:
         except Exception as e:
             logging.error(f"Error drawing stock data: {e}")
             # Do not render any error message here to avoid overlapping
+
+    def draw_scrolling_ticker(self, screen):
+        ticker_height = 30
+        y = screen.get_height() - ticker_height
+        total_width = 0
+
+        for ticker, data in self.stock_data.items():
+            price = data['price']
+            percent_change = data['percent_change']
+
+            color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
+
+            currency_symbol = '£' if ticker.endswith('.L') else '$'
+            arrow = "▲" if isinstance(percent_change, float) and percent_change > 0 else "▼" if isinstance(percent_change, float) and percent_change < 0 else ""
+
+            if percent_change != 'N/A':
+                text = f"{ticker}: {currency_symbol}{price:.2f} {arrow} ({percent_change:+.2f}%)   "
+            else:
+                text = f"{ticker}: {currency_symbol}{price:.2f}   "
+
+            text_surface = self.ticker_font.render(text, True, color)
+            text_surface.set_alpha(TRANSPARENCY)
+            screen.blit(text_surface, (self.scroll_position + total_width, y))
+            total_width += text_surface.get_width()
+
+        self.scroll_position -= self.scroll_speed
+        if self.scroll_position < -total_width:
+            self.scroll_position = screen.get_width()
+
+    def draw_alerts(self, screen, position):
+        x, y = position
+        current_time = datetime.now(timezone('UTC'))
+        
+        self.alerts = []
+        for ticker, data in self.stock_data.items():
+            percent_change = data['percent_change']
+            if isinstance(percent_change, float) and abs(percent_change) >= 5:
+                self.alerts.append((ticker, percent_change))
+
+        if self.alerts:
+            alert_y = y - 60  # Position above the regular stock display
+            for ticker, percent_change in self.alerts:
+                color = COLOR_PASTEL_GREEN if percent_change > 0 else COLOR_PASTEL_RED
+                text = f"ALERT: {ticker} {percent_change:+.2f}%"
+                text_surface = self.alert_font.render(text, True, color)
+                text_surface.set_alpha(int(TRANSPARENCY * (1 + 0.5 * (pygame.time.get_ticks() % 1000) / 1000)))  # Flashing effect
+                screen.blit(text_surface, (x, alert_y))
+                alert_y += 60  # Move down for the next alert
 
     def is_market_open(self, current_market_time, market):
         market_hours = self.market_hours[market]
