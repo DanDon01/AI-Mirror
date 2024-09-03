@@ -35,7 +35,7 @@ CONFIG = {
         }
     },  
     'stocks': {
-        'tickers': ['AAPL', 'GOOGL', 'MSFT']  # Add your preferred stock tickers
+        'tickers': ['AAPL', 'GOOGL', 'MSFT', 'RR.L', 'LLOY.L']  # Add your preferred stock tickers
     },
     'weather': {
         'class': 'WeatherModule',
