@@ -34,7 +34,7 @@ class StocksModule:
         }
 
         self.ticker_font = pygame.font.SysFont(FONT_NAME, 24)
-        self.alert_font = pygame.font.SysFont(FONT_NAME, 48)
+        self.alert_font = pygame.font.SysFont(FONT_NAME, 32)
         self.scroll_position = 0
         self.scroll_speed = 2
         self.alerts = []
