@@ -12,6 +12,7 @@ from weather_module import WeatherModule
 from fitbit_module import FitbitModule
 from smarthome_module import SmartHomeModule
 from stocks_module import StocksModule  # Add this import at the top
+from clock_module import ClockModule  # Add this import
 
 # Import other modules as needed again
 
@@ -49,6 +50,10 @@ class MagicMirror:
                 except Exception as e:
                     logging.error(f"Error initializing {module_name} module: {str(e)}")
                     logging.error(traceback.format_exc())
+        
+        # Add ClockModule
+        modules['clock'] = ClockModule(time_font_size=48, date_font_size=24, color=CONFIG['colors']['font_default'])
+        
         return modules
 
     def handle_events(self):
@@ -76,34 +81,29 @@ class MagicMirror:
             except Exception as e:
                 logging.error(f"Error updating {module_name}: {e}")
 
-
     def draw_modules(self):
         self.screen.fill((0, 0, 0))  # Clear screen with black
         if self.state == "active":
-            # Draw digital clock
-            current_time = datetime.now().strftime("%H:%M")
-            text_surface = self.font.render(current_time, True, (255, 255, 255))
-            text_rect = text_surface.get_rect(center=(self.screen.get_width() // 2, 30))
-            self.screen.blit(text_surface, text_rect)
+            # Draw clock at the top
+            self.modules['clock'].draw(self.screen, (0, 0))
             
             for module_name, module in self.modules.items():
-                try:
-                    if module_name in CONFIG['positions']:
-                        module.draw(self.screen, CONFIG['positions'][module_name])
-                        logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
-                    else:
-                        logging.warning(f"No position defined for {module_name} in CONFIG")
-                except Exception as e:
-                    logging.error(f"Error drawing {module_name}: {e}")
-                    error_font = pygame.font.Font(None, 24)
-                    error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
-                    self.screen.blit(error_text, (10, 10))  # Fallback position
+                if module_name != 'clock':  # Skip clock as we've already drawn it
+                    try:
+                        if module_name in CONFIG['positions']:
+                            module.draw(self.screen, CONFIG['positions'][module_name])
+                            logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
+                        else:
+                            logging.warning(f"No position defined for {module_name} in CONFIG")
+                    except Exception as e:
+                        logging.error(f"Error drawing {module_name}: {e}")
+                        error_font = pygame.font.Font(None, 24)
+                        error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
+                        self.screen.blit(error_text, (10, 10))  # Fallback position
         else:
             # Draw sleep mode screen (e.g., just the time)
-            current_time = datetime.now().strftime("%H:%M")
-            text = self.font.render(current_time, True, (100, 100, 100))
-            text_rect = text.get_rect(center=(self.screen.get_width() / 2, self.screen.get_height() / 2))
-            self.screen.blit(text, text_rect)
+            self.modules['clock'].draw(self.screen, (0, self.screen.get_height() // 2 - 30))
+        
         pygame.display.flip()
 
     def run(self):

@@ -29,6 +29,9 @@ class WeatherModule:
             response.raise_for_status()
             self.weather_data = response.json()
 
+            # Print the city name returned by the API for debugging
+            print(f"Weather data received for: {self.weather_data['name']}, {self.weather_data['sys']['country']}")
+
             # Set animation based on weather condition
             self.update_animation()
 
@@ -86,6 +89,10 @@ class WeatherModule:
         if self.weather_data:
             x, y = position
             
+            # Get city name and country code from the weather data
+            city_name = self.weather_data['name']
+            country_code = self.weather_data['sys']['country']
+            
             # Current weather
             temp = self.weather_data['main']['temp']
             condition = self.weather_data['weather'][0]['description'].capitalize()
@@ -98,7 +105,7 @@ class WeatherModule:
             rain_chance = self.weather_data['clouds']['all']  # Cloud coverage as a proxy for rain chance
 
             lines = [
-                f"{self.city}: {temp:.1f}°C, {condition}",
+                f"{city_name}, {country_code}: {temp:.1f}°C, {condition}",
                 f"Feels like: {feels_like:.1f}°C",
                 f"Humidity: {humidity}%",
                 f"Wind: {wind_speed} m/s",

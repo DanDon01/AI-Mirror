@@ -23,7 +23,7 @@ LINE_SPACING = 25  # Add this line for consistent line spacing
 # Color settings
 COLOR_FONT_DEFAULT = (200, 200, 200)  # Light grey
 COLOR_PASTEL_GREEN = (152, 251, 152)  # Pale green
-COLOR_PASTEL_RED = (255, 182, 193)    # Light pink (as a pastel red)
+COLOR_PASTEL_RED = (255, 162, 173)    # Light pink (as a pastel red)
 COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
 
 # Transparency setting (0 is fully transparent, 255 is fully opaque)

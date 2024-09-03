@@ -1,23 +1,22 @@
 import pygame
+import logging
 from datetime import datetime
 import pytz
 
 class ClockModule:
-    def __init__(self, font_file=None, font_size=60, color=(255, 255, 255), time_format='%H:%M:%S', date_format='%A, %B %d, %Y', timezone='local', align='vertical'):
-        self.font = pygame.font.Font(font_file, font_size) if font_file else pygame.font.SysFont('Arial', font_size)
-        self.date_font = pygame.font.Font(font_file, font_size // 2)  # Smaller font for the date
+    def __init__(self, font_file=None, time_font_size=60, date_font_size=30, color=(255, 255, 255), time_format='%H:%M:%S', date_format='%A, %B %d, %Y', timezone='local'):
+        self.time_font = pygame.font.Font(font_file, time_font_size) if font_file else pygame.font.SysFont('Arial', time_font_size)
+        self.date_font = pygame.font.Font(font_file, date_font_size) if font_file else pygame.font.SysFont('Arial', date_font_size)
         self.color = color
         self.time_format = time_format
         self.date_format = date_format
-        self.align = align
-        if timezone != 'local':
-            self.tz = pytz.timezone(timezone)
-        else:
-            self.tz = None
+        self.tz = pytz.timezone(timezone) if timezone != 'local' else None
+        self.scroll_position = 0
+        self.scroll_speed = 1
 
     def update(self):
-        # No need for an update method as we'll get the current time when drawing
-        pass
+        # Update scroll position
+        self.scroll_position -= self.scroll_speed
 
     def draw(self, screen, position):
         try:
@@ -25,28 +24,27 @@ class ClockModule:
             current_time = datetime.now(self.tz) if self.tz else datetime.now()
 
             # Render time
-            time_surface = self.font.render(current_time.strftime(self.time_format), True, self.color)
-            time_width, time_height = time_surface.get_size()
-
+            time_surface = self.time_font.render(current_time.strftime(self.time_format), True, self.color)
+            
             # Render date
             date_surface = self.date_font.render(current_time.strftime(self.date_format), True, self.color)
-            date_width, date_height = date_surface.get_size()
 
-            # Determine positioning based on alignment
-            if self.align == 'vertical':
-                screen.blit(time_surface, (x, y))
-                screen.blit(date_surface, (x, y + time_height + 10))
-            elif self.align == 'horizontal':
-                total_width = time_width + date_width + 20  # 20 pixels gap between time and date
-                screen.blit(time_surface, (x, y))
-                screen.blit(date_surface, (x + time_width + 20, y))
-            else:
-                logging.warning(f"Unknown alignment '{self.align}'. Defaulting to vertical.")
-                screen.blit(time_surface, (x, y))
-                screen.blit(date_surface, (x, y + time_height + 10))
+            # Calculate total width
+            total_width = time_surface.get_width() + date_surface.get_width() + 20  # 20 pixels gap
+
+            # Reset scroll position if it's off-screen
+            if self.scroll_position < -total_width:
+                self.scroll_position = screen.get_width()
+
+            # Draw time
+            screen.blit(time_surface, (self.scroll_position, y))
+            
+            # Draw date below time
+            screen.blit(date_surface, (self.scroll_position, y + time_surface.get_height() + 5))
+
         except Exception as e:
             logging.error(f"Error drawing clock data: {e}")
-            error_surface = self.font.render("Clock data unavailable", True, (255, 0, 0))
+            error_surface = self.time_font.render("Clock data unavailable", True, (255, 0, 0))
             screen.blit(error_surface, position)
 
     def cleanup(self):
