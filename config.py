@@ -56,7 +56,7 @@ CONFIG = {
     'stocks': {
        'class': 'StocksModule',  # Add this line to specify the class
        'params': {
-            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L', 'BAES.L']
+            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L', ]
        }
     },
 
@@ -105,7 +105,7 @@ CONFIG = {
         'params': {
             'screen_size': (768, 1024),  # Use the same size as your screen
             'icon_size': 64,
-            'icon_directory': 'retro_icons',
+            'icon_directory': 'assets/retro_icons',  # Updated path
             'spawn_probability': 0.1,
             'fall_speed': 3,
             'max_active_icons': 10

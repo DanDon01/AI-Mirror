@@ -5,7 +5,7 @@ import logging
 from config import CONFIG, COLOR_FONT_DEFAULT, TRANSPARENCY
 
 class RetroCharactersModule:
-    def __init__(self, screen_size, icon_size=64, icon_directory='retro_icons', spawn_probability=0.01, fall_speed=2, max_active_icons=10):
+    def __init__(self, screen_size, icon_size=64, icon_directory='assets/retro_icons', spawn_probability=0.01, fall_speed=2, max_active_icons=10):
         self.icons = []
         self.screen_width, self.screen_height = screen_size
         self.icon_size = icon_size
@@ -18,7 +18,11 @@ class RetroCharactersModule:
         logging.info(f"RetroCharactersModule initialized with spawn_probability: {self.spawn_probability}, fall_speed: {self.fall_speed}, max_active_icons: {self.max_active_icons}")
 
     def load_icons(self):
-        icon_dir = CONFIG.get('retro_characters', {}).get('icon_directory', 'retro_icons')
+        # Get the directory of the current script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Construct the path to the icons directory
+        icon_dir = os.path.join(current_dir, '..', self.icon_directory)
+        
         if not os.path.exists(icon_dir):
             logging.error(f"Icon directory {icon_dir} does not exist")
             return
@@ -37,6 +41,9 @@ class RetroCharactersModule:
             logging.error(f"Error loading retro icons from {icon_dir}: {e}")
 
     def update(self):
+        if not self.icons:
+            logging.warning("No icons loaded, skipping update")
+            return
         if random.random() < self.spawn_probability and len(self.active_icons) < self.max_active_icons:
             new_icon = random.choice(self.icons)
             x_position = random.randint(0, self.screen_width - self.icon_size)
