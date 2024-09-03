@@ -7,15 +7,15 @@ import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 
 class WeatherModule:
-    def __init__(self, api_key, city_id):
+    def __init__(self, api_key, city, screen_width=800, screen_height=600):
         self.api_key = api_key
-        self.city = city_id
+        self.city = city
         self.weather_data = None
         self.font = None
         self.last_update = datetime.min
         self.update_interval = timedelta(minutes=30)
-        self.screen_width = 800  # Set a default value
-        self.screen_height = 600  # Set a default value
+        self.screen_width = screen_width
+        self.screen_height = screen_height
         self.animation = None
 
     def update(self):
