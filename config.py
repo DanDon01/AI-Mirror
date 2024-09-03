@@ -29,6 +29,11 @@ COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
 # Transparency setting (0 is fully transparent, 255 is fully opaque)
 TRANSPARENCY = 215
 
+# Construct paths for asset directories
+assets_dir = os.path.join(current_dir, 'assets')
+retro_icons_path = os.path.join(assets_dir, 'retro_icons')
+weather_icons_path = os.path.join(assets_dir, 'weather_icons')  # Add this if you're using weather icons
+
 CONFIG = {
     'screen': {
         'size': (768, 1024)  # Portrait mode 21-inch monitor
@@ -52,21 +57,20 @@ CONFIG = {
             }
         }
     },  
-    
     'stocks': {
        'class': 'StocksModule',  # Add this line to specify the class
        'params': {
             'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L', ]
        }
     },
-
     'weather': {
         'class': 'WeatherModule',
         'params': {
             'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
             'city': 'Birmingham,UK',  # Specify the country code
             'screen_width': 768,  # Match your screen width
-            'screen_height': 1024  # Match your screen height
+            'screen_height': 1024,  # Match your screen height
+            'icons_path': weather_icons_path  # Add this if you're using weather icons
         }
     },
     'calendar': {

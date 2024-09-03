@@ -18,7 +18,7 @@ class StocksModule:
             'US': timezone('America/New_York'),
             'UK': timezone('Europe/London')
         }
-        self.update_interval = timedelta(minutes=15)
+        self.update_interval = timedelta(minutes=10)  # Change this to your desired interval
         
         # Set last_update to a timezone-aware datetime
         self.last_update = datetime.now(timezone('UTC')) - self.update_interval
