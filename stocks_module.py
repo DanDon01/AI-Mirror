@@ -39,8 +39,8 @@ class StocksModule:
         self.scroll_speed = 2
         self.alerts = []
 
-        self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 2)
-        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 4)
+        self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 0)
+        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 8)
 
     def update(self):
         current_time = datetime.now(timezone('UTC'))
@@ -128,7 +128,7 @@ class StocksModule:
             # Draw text
             screen.blit(markets_text, (x, y))
             screen.blit(us_text, (x + markets_width + 10, y + 2))  # +2 to align vertically
-            screen.blit(uk_text, (x + markets_width + us_width + 10, y + 8))  # +2 to align vertically
+            screen.blit(uk_text, (x + markets_width + 10, y + 8))  # +2 to align vertically
 
             y += LINE_SPACING + 5  # Move position down after displaying market status
 
