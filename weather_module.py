@@ -7,7 +7,7 @@ import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 
 class WeatherModule:
-    def __init__(self, api_key, city, screen_width=800, screen_height=600):
+    def __init__(self, api_key, city, screen_width=800, screen_height=600, icons_path=None):
         self.api_key = api_key
         self.city = city
         self.weather_data = None
@@ -17,6 +17,7 @@ class WeatherModule:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.animation = None
+        self.icons_path = icons_path  # Add this line
 
     def update(self):
         current_time = datetime.now()

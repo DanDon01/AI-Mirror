@@ -67,10 +67,10 @@ CONFIG = {
         'class': 'WeatherModule',
         'params': {
             'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
-            'city': 'Birmingham,UK',  # Specify the country code
-            'screen_width': 768,  # Match your screen width
-            'screen_height': 1024,  # Match your screen height
-            'icons_path': weather_icons_path  # Add this if you're using weather icons
+            'city': 'Birmingham,UK',
+            'screen_width': 768,
+            'screen_height': 1024,
+            'icons_path': weather_icons_path  # This line should match the parameter name in WeatherModule.__init__
         }
     },
     'calendar': {
@@ -110,7 +110,7 @@ CONFIG = {
             'screen_size': (768, 1024),  # Use the same size as your screen
             'icon_size': 64,
             'icon_directory': retro_icons_path,  # Use the absolute path
-            'spawn_probability': 0.1,
+            'spawn_probability': 0.01,
             'fall_speed': 3,
             'max_active_icons': 10
         }
