@@ -194,6 +194,7 @@ class StocksModule:
         self.scroll_position -= self.scroll_speed
         if self.scroll_position < -total_width:
             self.scroll_position = screen.get_width()
+            logging.info("Stock ticker reset position")  # Log only when resetting position
 
     def draw_alerts(self, screen, position):
         x, y = position
@@ -206,6 +207,7 @@ class StocksModule:
                 self.alerts.append((ticker, percent_change))
 
         if self.alerts:
+            logging.info(f"Displaying {len(self.alerts)} stock alerts")  # Log only when there are alerts
             alert_y = y - 60  # Position above the regular stock display
             for ticker, percent_change in self.alerts:
                 color = COLOR_PASTEL_GREEN if percent_change > 0 else COLOR_PASTEL_RED

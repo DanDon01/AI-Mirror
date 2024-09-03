@@ -33,7 +33,7 @@ class MagicMirror:
 
     def setup_logging(self):
         handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
-        logging.basicConfig(level=logging.DEBUG, handlers=[handler],
+        logging.basicConfig(level=logging.INFO, handlers=[handler],
                             format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info("Magic Mirror started")
 
@@ -71,12 +71,10 @@ class MagicMirror:
             try:
                 if hasattr(module, 'update'):
                     module.update()
-                    logging.debug(f"Updated {module_name} module")
                 else:
                     logging.warning(f"{module_name} does not have an update method")
             except Exception as e:
                 logging.error(f"Error updating {module_name}: {e}")
-                logging.error(traceback.format_exc())
 
     def draw_modules(self):
         try:

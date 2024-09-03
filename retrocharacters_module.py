@@ -40,7 +40,6 @@ class RetroCharactersModule:
             new_icon = random.choice(self.icons)
             x_position = random.randint(0, self.screen_width - self.icon_size)
             self.active_icons.append((new_icon, x_position, 0))
-            logging.debug(f"Spawned new icon. Active icons: {len(self.active_icons)}")
 
         # Update positions of active icons
         self.active_icons = [(icon, x, y + self.fall_speed) for icon, x, y in self.active_icons if y < self.screen_height]
@@ -49,7 +48,6 @@ class RetroCharactersModule:
         for icon, x, y in self.active_icons:
             icon.set_alpha(TRANSPARENCY)
             screen.blit(icon, (x, y))
-        logging.debug(f"Drew {len(self.active_icons)} active icons")
 
     def cleanup(self):
         self.active_icons.clear()  # Clear all active icons
