@@ -101,7 +101,6 @@ class StocksModule:
             us_status_surface = self.font.render(us_status_text, True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
             uk_status_surface = self.font.render(uk_status_text, True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
             
-            # Apply transparency
             us_status_surface.set_alpha(TRANSPARENCY)
             uk_status_surface.set_alpha(TRANSPARENCY)
             
@@ -116,10 +115,8 @@ class StocksModule:
                     price = data['price']
                     percent_change = data['percent_change']
 
-                    # Determine color based on percent change
                     color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
 
-                    # Determine currency symbol based on the market
                     currency_symbol = '£' if ticker.endswith('.L') else '$'
 
                     if percent_change != 'N/A':
@@ -139,9 +136,7 @@ class StocksModule:
 
         except Exception as e:
             logging.error(f"Error drawing stock data: {e}")
-            error_surface = self.font.render("Error displaying stock data", True, COLOR_PASTEL_RED)
-            error_surface.set_alpha(TRANSPARENCY)
-            screen.blit(error_surface, position)
+            # Do not render any error message here to avoid overlapping
 
     def is_market_open(self, current_market_time, market):
         market_hours = self.market_hours[market]
