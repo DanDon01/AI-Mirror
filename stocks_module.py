@@ -9,12 +9,14 @@ class StocksModule:
         self.tickers = tickers
         self.stock_data = {}
         self.font = pygame.font.Font(None, 24)
-        self.last_update = datetime.min
-        self.update_interval = timedelta(minutes=15)
         self.market_timezones = {
             'US': timezone('America/New_York'),
             'UK': timezone('Europe/London')
         }
+        self.update_interval = timedelta(minutes=15)
+        
+        # Set last_update to a timezone-aware datetime
+        self.last_update = datetime.now(timezone('UTC')) - self.update_interval
         self.market_hours = {
             'US': {
                 'open': self.market_timezones['US'].localize(datetime.now().replace(hour=9, minute=30, second=0, microsecond=0)),
@@ -27,7 +29,9 @@ class StocksModule:
         }
 
     def update(self):
+        # Make sure current_time is timezone-aware
         current_time = datetime.now(timezone('UTC'))
+        
         if current_time - self.last_update < self.update_interval:
             return  # Skip update if not enough time has passed
 
@@ -59,7 +63,7 @@ class StocksModule:
                         'volume': 'N/A',
                         'day_range': 'N/A'
                     }
-            self.last_update = current_time
+            self.last_update = current_time  # Update last_update to the current time
             logging.info("Stock data updated successfully")
         except Exception as e:
             logging.error(f"Error updating stock data: {e}")
@@ -116,6 +120,7 @@ class StocksModule:
         return market_hours['open'].time() <= current_time.time() < market_hours['close'].time()
 
     def cleanup(self):
-        pass  # No cleanup needed for this module
+        pass  #
+
 
 
