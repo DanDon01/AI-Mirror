@@ -142,24 +142,39 @@ class FitbitModule:
         try:
             return func(**kwargs)
         except fitbit.exceptions.HTTPUnauthorized:
+            logging.info("Received HTTPUnauthorized, attempting to refresh token")
             self.refresh_access_token()
             return func(**kwargs)
         except fitbit.exceptions.HTTPTooManyRequests as e:
             retry_after = int(e.response.headers.get('Retry-After', 1))
+            logging.warning(f"Rate limit exceeded. Retrying after {retry_after} seconds")
             time.sleep(retry_after)
             return func(**kwargs)
+        except Exception as e:
+            logging.error(f"Unexpected error in make_api_call: {e}")
+            logging.error(traceback.format_exc())
+            raise
 
     def refresh_access_token(self):
         try:
             tokens = self.client.client.refresh_token()
+            logging.debug(f"Received tokens: {tokens}")
+            if 'access_token' not in tokens or 'refresh_token' not in tokens:
+                raise KeyError("Missing access_token or refresh_token in response")
             self.access_token = tokens['access_token']
             self.refresh_token = tokens['refresh_token']
             self.config['access_token'] = self.access_token
             self.config['refresh_token'] = self.refresh_token
             self.save_tokens()
             logging.info("Fitbit access token refreshed successfully")
+        except KeyError as e:
+            logging.error(f"KeyError in refresh_access_token: {e}")
+            logging.error(f"Tokens received: {tokens}")
         except Exception as e:
             logging.error(f"Error refreshing Fitbit access token: {e}")
+            logging.error(f"Full exception: {traceback.format_exc()}")
+
+        if not self.access_token or not self.refresh_token:
             raise Exception("Failed to refresh access token")
 
     def save_tokens(self):
