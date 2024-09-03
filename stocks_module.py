@@ -3,12 +3,17 @@ import pygame
 import logging
 from datetime import datetime, timedelta
 from pytz import timezone
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED  # Import font settings and color constants from config
 
 class StocksModule:
     def __init__(self, tickers, market_timezone='America/New_York'):
         self.tickers = tickers
         self.stock_data = {}
-        self.font = pygame.font.Font(None, 24)
+        try:
+            self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+        except:
+            print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
+            self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
         self.market_timezones = {
             'US': timezone('America/New_York'),
             'UK': timezone('Europe/London')
@@ -93,12 +98,9 @@ class StocksModule:
             us_status_text = "US Market: OPEN" if us_open else "US Market: CLOSED"
             uk_status_text = "UK Market: OPEN" if uk_open else "UK Market: CLOSED"
 
-            us_color = (0, 255, 0) if us_open else (255, 0, 0)
-            uk_color = (0, 255, 0) if uk_open else (255, 0, 0)
-
-            # Draw market status
-            us_status_surface = self.font.render(us_status_text, True, us_color)
-            uk_status_surface = self.font.render(uk_status_text, True, uk_color)
+            # When rendering text, use the new color constants
+            us_status_surface = self.font.render(us_status_text, True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
+            uk_status_surface = self.font.render(uk_status_text, True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
             screen.blit(us_status_surface, (x, y))
             screen.blit(uk_status_surface, (x, y + 25))
 
@@ -112,14 +114,14 @@ class StocksModule:
                 day_range = data['day_range']
 
                 # Determine color based on percent change
-                color = (0, 255, 0) if isinstance(percent_change, float) and percent_change > 0 else (255, 0, 0) if isinstance(percent_change, float) and percent_change < 0 else (255, 255, 255)
+                color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
 
                 text = f"{ticker}: ${price:.2f} ({percent_change:+.2f}%)" if percent_change != 'N/A' else f"{ticker}: ${price:.2f}"
                 text_surface = self.font.render(text, True, color)
                 screen.blit(text_surface, (x, y))
 
                 details_text = f"Vol: {volume} | Range: {day_range}"
-                details_surface = self.font.render(details_text, True, (200, 200, 200))
+                details_surface = self.font.render(details_text, True, COLOR_FONT_DEFAULT)
                 screen.blit(details_surface, (x, y + 25))
 
                 y += 60  # Move to the next stock

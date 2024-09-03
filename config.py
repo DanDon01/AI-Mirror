@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 from datetime import time
+import pygame
 
 # Get the directory of the current file (config.py)
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -10,6 +11,19 @@ env_path = os.path.join(current_dir, '..', 'Variables.env')
 
 # Load the .env file
 load_dotenv(env_path)
+
+# Initialize pygame to access font information
+pygame.font.init()
+
+# Font settings
+FONT_NAME = "Helvetica"
+FONT_SIZE = 24
+
+# Color settings
+COLOR_FONT_DEFAULT = (200, 200, 200)  # Light grey
+COLOR_PASTEL_GREEN = (152, 251, 152)  # Pale green
+COLOR_PASTEL_RED = (255, 182, 193)    # Light pink (as a pastel red)
+COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
 
 CONFIG = {
     'screen': {

@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 from google_auth_oauthlib.flow import Flow
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED  # Add this import at the top of the file
 
 class CalendarModule:
     def __init__(self, config):
@@ -115,11 +116,15 @@ class CalendarModule:
 
     def draw(self, screen, position):
         if self.font is None:
-            self.font = pygame.font.Font(None, 24)
+            try:
+                self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+            except:
+                print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
+                self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
         
         x, y = position
         if self.events is None:
-            error_surface = self.font.render("Calendar Error", True, (255, 0, 0))
+            error_surface = self.font.render("Calendar Error", True, COLOR_PASTEL_RED)
             screen.blit(error_surface, (x, y))
             return
 
@@ -148,12 +153,12 @@ class CalendarModule:
             event_summary = event['summary'] if len(event['summary']) <= 15 else event['summary'][:12] + "..."
             
             event_text = f"{day_name} {date_str} {time_str}: {event_summary}"
-            event_surface = self.font.render(event_text, True, (200, 200, 200))
+            event_surface = self.font.render(event_text, True, COLOR_FONT_DEFAULT)
             screen.blit(event_surface, (x, y + y_offset))
             y_offset += 25
 
         if y_offset == 0:
-            no_events_surface = self.font.render("No upcoming events", True, (200, 200, 200))
+            no_events_surface = self.font.render("No upcoming events", True, COLOR_FONT_DEFAULT)
             screen.blit(no_events_surface, (x, y))
 
     def test(self):

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import time as time_module
 import pygame
 import logging
-from config import CONFIG
+from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT  # Add this import at the top of the file
 import os
 from pathlib import Path
 import requests
@@ -37,6 +37,7 @@ class FitbitModule:
         self.last_api_call = 0
         self.api_call_count = 0
         self.backoff_time = 1  # Start with 1 second backoff
+        self.font = None
 
     def initialize_client(self):
         try:
@@ -178,11 +179,17 @@ class FitbitModule:
         logging.info("Fitbit tokens have been saved to environment file")
 
     def draw(self, screen, position):
-        font = pygame.font.Font(None, 24)
+        if self.font is None:
+            try:
+                self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+            except:
+                print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
+                self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
+        
         x, y = position
         for i, (key, value) in enumerate(self.data.items()):
             text = f"{key.replace('_', ' ').title()}: {value}"
-            text_surface = font.render(text, True, (255, 255, 255))
+            text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
             screen.blit(text_surface, (x, y + i * 40))
 
     def cleanup(self):

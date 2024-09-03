@@ -2,6 +2,7 @@ import requests
 import pygame
 import logging
 from datetime import datetime, timedelta
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED  # Import font settings from config
 
 class WeatherModule:
     def __init__(self, api_key, city):
@@ -9,7 +10,7 @@ class WeatherModule:
         self.city = city
         self.weather_data = None
         self.forecast_data = None
-        self.font = pygame.font.Font(None, 24)
+        self.font = None
         self.last_update = datetime.min
         self.update_interval = timedelta(minutes=30)  # Update every 30 minutes
 
@@ -39,6 +40,13 @@ class WeatherModule:
             self.forecast_data = None
 
     def draw(self, screen, position):
+        if self.font is None:
+            try:
+                self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+            except:
+                print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
+                self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
+
         if self.weather_data and self.forecast_data:
             x, y = position
             
@@ -51,8 +59,8 @@ class WeatherModule:
             current_text = f"{self.city}: {temp:.1f}°C, {condition}"
             details_text = f"Humidity: {humidity}%, Wind: {wind_speed} m/s"
             
-            current_surface = self.font.render(current_text, True, (255, 255, 255))
-            details_surface = self.font.render(details_text, True, (200, 200, 200))
+            current_surface = self.font.render(current_text, True, COLOR_FONT_DEFAULT)
+            details_surface = self.font.render(details_text, True, COLOR_FONT_DEFAULT)
             
             screen.blit(current_surface, (x, y))
             screen.blit(details_surface, (x, y + 30))
@@ -65,7 +73,7 @@ class WeatherModule:
                 condition = forecast['weather'][0]['main']
                 
                 forecast_text = f"{date}: {temp:.1f}°C, {condition}"
-                forecast_surface = self.font.render(forecast_text, True, (180, 180, 180))
+                forecast_surface = self.font.render(forecast_text, True, COLOR_FONT_DEFAULT)
                 screen.blit(forecast_surface, (x, y + 60 + i*30))
             
             # Change LED color based on current weather condition
@@ -74,7 +82,7 @@ class WeatherModule:
             # Example: self.set_led_color(led_color)
         else:
             error_text = "Weather data unavailable"
-            error_surface = self.font.render(error_text, True, (255, 0, 0))
+            error_surface = self.font.render(error_text, True, COLOR_PASTEL_RED)
             screen.blit(error_surface, position)
 
     def get_led_color(self, condition):
