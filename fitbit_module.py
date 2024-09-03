@@ -178,7 +178,7 @@ class FitbitModule:
         logging.info("Fitbit tokens have been saved to environment file")
 
     def draw(self, screen, position):
-        font = pygame.font.Font(None, 36)
+        font = pygame.font.Font(None, 24)
         x, y = position
         for i, (key, value) in enumerate(self.data.items()):
             text = f"{key.replace('_', ' ').title()}: {value}"
