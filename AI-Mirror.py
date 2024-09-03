@@ -14,6 +14,7 @@ from smarthome_module import SmartHomeModule
 from stocks_module import StocksModule  # Add this import at the top
 from clock_module import ClockModule  # Add this import
 from retrocharacters_module import RetroCharactersModule  # Add this import
+from AI_Module import AIInteractionModule  # Add this import at the top
 
 # Import other modules as needed again
 
@@ -60,6 +61,9 @@ class MagicMirror:
                     self.running = False
                 elif event.key == pygame.K_s:
                     self.toggle_mode()
+                elif event.key == pygame.K_SPACE:
+                    if 'ai_interaction' in self.modules:
+                        self.modules['ai_interaction'].handle_event(event)
             # Add more event handling here (e.g., for voice commands or gestures)
 
     def toggle_mode(self):

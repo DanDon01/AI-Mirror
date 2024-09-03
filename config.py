@@ -92,6 +92,7 @@ CONFIG = {
         'calendar': (20, 500),  # Top-right corner
         'stocks': (550, 140),  # Bottom-right corner
         'retro_characters': (0, 0),  # This module doesn't need a specific position as it covers the whole screen
+        'ai_interaction': (20, 900),  # Adjust this position as needed
     },
     'clock': {
         'class': 'ClockModule',
@@ -114,6 +115,17 @@ CONFIG = {
             'fall_speed': 1,
             'max_active_icons': 20,  # Increased for more icons on screen
             'rotation_speed': 1
+        }
+    },
+    'ai_interaction': {
+        'class': 'AIInteractionModule',
+        'params': {
+            'config': {
+                'openai': {
+                    'api_key': os.getenv('OPENAI_API_KEY'),
+                    'model': 'text-davinci-003'
+                }
+            }
         }
     }
 }
