@@ -107,13 +107,13 @@ CONFIG = {
     'retro_characters': {
         'class': 'RetroCharactersModule',
         'params': {
-            'screen_size': (768, 1024),  # Use the same size as your screen
+            'screen_size': (768, 1024),
             'icon_size': 64,
-            'icon_directory': retro_icons_path,  # Use the absolute path
-            'spawn_probability': 0.01,  # Increased from 0.001 to 0.01
+            'icon_directory': retro_icons_path,
+            'spawn_probability': 0.02,  # Increased for more frequent icons
             'fall_speed': 1,
-            'max_active_icons': 10,
-            'rotation_speed': 1  # Reduced from 2 to 1 for slower rotation
+            'max_active_icons': 20,  # Increased for more icons on screen
+            'rotation_speed': 1
         }
     }
 }

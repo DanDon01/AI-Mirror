@@ -27,7 +27,7 @@ class MagicMirror:
         self.modules = self.initialize_modules()
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
-        self.state = "active"  # Can be "active" or "sleep"
+        self.state = "active"  # Can be "active", "sleep", or "screensaver"
         self.font = pygame.font.Font(None, 48)  # Larger font for the clock
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
@@ -59,37 +59,42 @@ class MagicMirror:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
                 elif event.key == pygame.K_s:
-                    self.toggle_sleep_mode()
+                    self.toggle_mode()
             # Add more event handling here (e.g., for voice commands or gestures)
 
-    def toggle_sleep_mode(self):
-        self.state = "sleep" if self.state == "active" else "active"
+    def toggle_mode(self):
+        if self.state == "active":
+            self.state = "screensaver"
+        elif self.state == "screensaver":
+            self.state = "sleep"
+        else:
+            self.state = "active"
         logging.info(f"Mirror state changed to: {self.state}")
 
     def update_modules(self):
         for module_name, module in self.modules.items():
             try:
                 if hasattr(module, 'update'):
+                    if self.state == "screensaver" and module_name != 'retro_characters':
+                        continue  # Skip updating other modules in screensaver mode
                     module.update()
-                else:
-                    logging.warning(f"{module_name} does not have an update method")
             except Exception as e:
                 logging.error(f"Error updating {module_name}: {e}")
 
     def draw_modules(self):
         try:
             self.screen.fill((0, 0, 0))  # Clear screen with black
-            if self.state == "active":
-                # Draw RetroCharactersModule first so it's in the background
-                if 'retro_characters' in self.modules:
-                    self.modules['retro_characters'].draw(self.screen)
+            
+            # Always draw RetroCharactersModule
+            if 'retro_characters' in self.modules:
+                self.modules['retro_characters'].draw(self.screen)
 
+            if self.state == "active":
                 for module_name, module in self.modules.items():
                     if module_name != 'retro_characters':  # Skip retro_characters as we've already drawn it
                         try:
                             if module_name in CONFIG['positions']:
                                 module.draw(self.screen, CONFIG['positions'][module_name])
-                                logging.debug(f"Drew {module_name} at position {CONFIG['positions'][module_name]}")
                             else:
                                 logging.warning(f"No position defined for {module_name} in CONFIG")
                         except Exception as e:
@@ -98,10 +103,10 @@ class MagicMirror:
                             error_font = pygame.font.Font(None, 24)
                             error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
                             self.screen.blit(error_text, (10, 10))  # Fallback position
-            else:
+            elif self.state == "sleep":
                 # Draw sleep mode screen (e.g., just the time)
                 self.modules['clock'].draw(self.screen, (0, self.screen.get_height() // 2 - 30))
-                logging.debug("Drew clock in sleep mode")
+            # No need for an "elif self.state == "screensaver":" block, as we're always drawing RetroCharactersModule
             
             pygame.display.flip()
             logging.debug("Updated display")
