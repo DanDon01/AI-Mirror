@@ -20,6 +20,7 @@ class MagicMirror:
     def __init__(self):
         pygame.init()
         self.setup_logging()
+        logging.info("Initializing MagicMirror")
         self.screen = pygame.display.set_mode(CONFIG['screen']['size'], pygame.FULLSCREEN)
         self.clock = pygame.time.Clock()
         self.modules = self.initialize_modules()
@@ -28,10 +29,6 @@ class MagicMirror:
         self.state = "active"  # Can be "active" or "sleep"
         self.font = pygame.font.Font(None, 48)  # Larger font for the clock
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
-
-        # Remove these lines if they're still present
-        # self.scroll_text = "ONLINE"
-        # self.scroll_x = self.screen.get_width()
 
     def setup_logging(self):
         handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
@@ -51,10 +48,7 @@ class MagicMirror:
                     logging.error(f"Error initializing {module_name} module: {str(e)}")
                     logging.error(traceback.format_exc())
         
-        # Add ClockModule
-        modules['clock'] = ClockModule(time_font_size=48, date_font_size=24, color=CONFIG['colors']['font_default'])
-        
-        return modules
+        return modules  # Remove the manual ClockModule creation
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -76,19 +70,18 @@ class MagicMirror:
             try:
                 if hasattr(module, 'update'):
                     module.update()
+                    logging.debug(f"Updated {module_name} module")
                 else:
                     logging.warning(f"{module_name} does not have an update method")
             except Exception as e:
                 logging.error(f"Error updating {module_name}: {e}")
+                logging.error(traceback.format_exc())
 
     def draw_modules(self):
-        self.screen.fill((0, 0, 0))  # Clear screen with black
-        if self.state == "active":
-            # Draw clock at the top
-            self.modules['clock'].draw(self.screen, (0, 0))
-            
-            for module_name, module in self.modules.items():
-                if module_name != 'clock':  # Skip clock as we've already drawn it
+        try:
+            self.screen.fill((0, 0, 0))  # Clear screen with black
+            if self.state == "active":
+                for module_name, module in self.modules.items():
                     try:
                         if module_name in CONFIG['positions']:
                             module.draw(self.screen, CONFIG['positions'][module_name])
@@ -97,14 +90,20 @@ class MagicMirror:
                             logging.warning(f"No position defined for {module_name} in CONFIG")
                     except Exception as e:
                         logging.error(f"Error drawing {module_name}: {e}")
+                        logging.error(traceback.format_exc())
                         error_font = pygame.font.Font(None, 24)
                         error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
                         self.screen.blit(error_text, (10, 10))  # Fallback position
-        else:
-            # Draw sleep mode screen (e.g., just the time)
-            self.modules['clock'].draw(self.screen, (0, self.screen.get_height() // 2 - 30))
-        
-        pygame.display.flip()
+            else:
+                # Draw sleep mode screen (e.g., just the time)
+                self.modules['clock'].draw(self.screen, (0, self.screen.get_height() // 2 - 30))
+                logging.debug("Drew clock in sleep mode")
+            
+            pygame.display.flip()
+            logging.debug("Updated display")
+        except Exception as e:
+            logging.error(f"Error in draw_modules: {e}")
+            logging.error(traceback.format_exc())
 
     def run(self):
         try:

@@ -81,11 +81,22 @@ CONFIG = {
         }
     },
     'positions': {
-        'clock': (20, 20),  # Top-left corner
+        'clock': (0, 0),  # Position for the clock at the top of the screen
         'weather': (20, 100),  # Below clock in top-left
         'fitbit': (20, 280),  # Bottom-left corner
         'smart_home': (20, 0),  # Above fitbit in bottom-left
         'calendar': (20, 500),  # Top-right corner
         'stocks': (550, 120),  # Bottom-right corner
+    },
+    'clock': {
+        'class': 'ClockModule',
+        'params': {
+            'time_font_size': 48,
+            'date_font_size': 24,
+            'color': COLOR_FONT_DEFAULT,  # Make sure this color is defined in your config
+            'time_format': '%H:%M:%S',
+            'date_format': '%A, %B %d, %Y',
+            'timezone': 'local'  # Or specify a timezone like 'Europe/London'
+        }
     }
 }
