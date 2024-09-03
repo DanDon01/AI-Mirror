@@ -29,7 +29,6 @@ class StocksModule:
         }
 
     def update(self):
-        # Make sure current_time is timezone-aware
         current_time = datetime.now(timezone('UTC'))
         
         if current_time - self.last_update < self.update_interval:
@@ -38,10 +37,24 @@ class StocksModule:
         try:
             for ticker in self.tickers:
                 market = 'UK' if ticker.endswith('.L') else 'US'
-                if not self.is_market_open(current_time, market):
-                    logging.info(f"Market is closed for {ticker}. Displaying last available data.")
-                    continue  # Market is closed, skip updating this ticker
+                current_market_time = current_time.astimezone(self.market_timezones[market])
 
+                if not self.is_market_open(current_market_time, market):
+                    logging.info(f"Market is closed for {ticker}. Displaying last available data.")
+                    # Fetching last available data (closing prices from the previous session)
+                    stock = yf.Ticker(ticker)
+                    data = stock.history(period="1d")
+                    if not data.empty:
+                        last_close = data['Close'].iloc[-1]
+                        self.stock_data[ticker] = {
+                            'price': last_close,
+                            'percent_change': 'N/A',
+                            'volume': 'N/A',
+                            'day_range': 'N/A'
+                        }
+                    continue
+
+                # Fetch real-time data if the market is open
                 stock = yf.Ticker(ticker)
                 data = stock.history(period="1d", interval="1m")
                 if not data.empty:
@@ -63,7 +76,7 @@ class StocksModule:
                         'volume': 'N/A',
                         'day_range': 'N/A'
                     }
-            self.last_update = current_time  # Update last_update to the current time
+            self.last_update = current_time
             logging.info("Stock data updated successfully")
         except Exception as e:
             logging.error(f"Error updating stock data: {e}")
@@ -74,8 +87,8 @@ class StocksModule:
             current_time = datetime.now(timezone('UTC'))
             
             # Check market status
-            us_open = self.is_market_open(current_time, 'US')
-            uk_open = self.is_market_open(current_time, 'UK')
+            us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
+            uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
 
             us_status_text = "US Market: OPEN" if us_open else "US Market: CLOSED"
             uk_status_text = "UK Market: OPEN" if uk_open else "UK Market: CLOSED"
@@ -99,13 +112,13 @@ class StocksModule:
                 day_range = data['day_range']
 
                 # Determine color based on percent change
-                color = (0, 255, 0) if percent_change > 0 else (255, 0, 0) if percent_change < 0 else (255, 255, 255)
+                color = (0, 255, 0) if isinstance(percent_change, float) and percent_change > 0 else (255, 0, 0) if isinstance(percent_change, float) and percent_change < 0 else (255, 255, 255)
 
-                text = f"{ticker}: ${price:.2f} ({percent_change:+.2f}%)"
+                text = f"{ticker}: ${price:.2f} ({percent_change:+.2f}%)" if percent_change != 'N/A' else f"{ticker}: ${price:.2f}"
                 text_surface = self.font.render(text, True, color)
                 screen.blit(text_surface, (x, y))
 
-                details_text = f"Vol: {volume:,} | Range: {day_range}"
+                details_text = f"Vol: {volume} | Range: {day_range}"
                 details_surface = self.font.render(details_text, True, (200, 200, 200))
                 screen.blit(details_surface, (x, y + 25))
 
@@ -115,12 +128,12 @@ class StocksModule:
             error_surface = self.font.render("Stock data unavailable", True, (255, 0, 0))
             screen.blit(error_surface, position)
 
-    def is_market_open(self, current_time, market):
+    def is_market_open(self, current_market_time, market):
         market_hours = self.market_hours[market]
-        return market_hours['open'].time() <= current_time.time() < market_hours['close'].time()
+        return market_hours['open'].time() <= current_market_time.time() < market_hours['close'].time()
 
     def cleanup(self):
-        pass  #
+        pass  # No cleanup needed for this module
 
 
 
