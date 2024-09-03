@@ -64,7 +64,9 @@ CONFIG = {
         'class': 'WeatherModule',
         'params': {
             'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
-            'city': 'Birmingham'  # Replace with your actual city name
+            'city': 'Birmingham',
+            'screen_width': 768,  # Match your screen width
+            'screen_height': 1024  # Match your screen height
         }
     },
     'calendar': {

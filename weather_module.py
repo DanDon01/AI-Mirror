@@ -4,9 +4,10 @@ import logging
 from datetime import datetime, timedelta
 from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY
 import os
+from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 
 class WeatherModule:
-    def __init__(self, api_key, city):
+    def __init__(self, api_key, city, screen_width, screen_height):
         self.api_key = api_key
         self.city = city
         self.weather_data = None
@@ -14,6 +15,9 @@ class WeatherModule:
         self.last_update = datetime.min
         self.update_interval = timedelta(minutes=30)
         self.icon = None
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.animation = None
 
     def update(self):
         current_time = datetime.now()
@@ -26,22 +30,29 @@ class WeatherModule:
             response.raise_for_status()
             self.weather_data = response.json()
 
-            # Fetch weather icon
-            icon_id = self.weather_data['weather'][0]['icon']
-            icon_url = f"http://openweathermap.org/img/wn/{icon_id}@2x.png"
-            icon_response = requests.get(icon_url)
-            icon_response.raise_for_status()
-            icon_path = os.path.join(os.path.dirname(__file__), f"{icon_id}.png")
-            with open(icon_path, 'wb') as icon_file:
-                icon_file.write(icon_response.content)
-            self.icon = pygame.image.load(icon_path)
+            # Set animation based on weather condition
+            weather_id = self.weather_data['weather'][0]['id']
+            is_night = self.weather_data['dt'] > self.weather_data['sys']['sunset'] or self.weather_data['dt'] < self.weather_data['sys']['sunrise']
+
+            if is_night:
+                self.animation = MoonAnimation(self.screen_width, self.screen_height)
+            elif weather_id >= 200 and weather_id < 300:  # Thunderstorm
+                self.animation = StormAnimation(self.screen_width, self.screen_height)
+            elif weather_id >= 300 and weather_id < 600:  # Drizzle and Rain
+                self.animation = RainAnimation(self.screen_width, self.screen_height)
+            elif weather_id >= 600 and weather_id < 700:  # Snow
+                self.animation = SnowAnimation(self.screen_width, self.screen_height)
+            elif weather_id >= 801 and weather_id < 900:  # Clouds
+                self.animation = CloudAnimation(self.screen_width, self.screen_height)
+            else:  # Clear sky or other conditions
+                self.animation = SunAnimation(self.screen_width, self.screen_height)
 
             self.last_update = current_time
             logging.info("Weather data updated successfully")
         except requests.exceptions.RequestException as e:
             logging.error(f"Failed to fetch weather data: {e}")
             self.weather_data = None
-            self.icon = None
+            self.animation = None
 
     def draw(self, screen, position):
         if self.font is None:
@@ -79,9 +90,10 @@ class WeatherModule:
                 text_surface.set_alpha(TRANSPARENCY)
                 screen.blit(text_surface, (x, y + i * LINE_SPACING))
 
-            # Display weather icon
-            if self.icon:
-                screen.blit(self.icon, (x + 200, y))
+            # Update and draw weather animation
+            if self.animation:
+                self.animation.update()
+                self.animation.draw(screen)
 
         else:
             error_text = "Weather data unavailable"
@@ -90,8 +102,4 @@ class WeatherModule:
             screen.blit(error_surface, position)
 
     def cleanup(self):
-        # Remove downloaded icon file
-        if self.icon:
-            icon_path = os.path.join(os.path.dirname(__file__), f"{self.weather_data['weather'][0]['icon']}.png")
-            if os.path.exists(icon_path):
-                os.remove(icon_path)
+        pass
