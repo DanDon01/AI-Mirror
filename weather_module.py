@@ -7,15 +7,15 @@ import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 
 class WeatherModule:
-    def __init__(self, api_key, city, screen_width, screen_height):
+    def __init__(self, api_key, city_id):
         self.api_key = api_key
-        self.city = city
+        self.city = city_id
         self.weather_data = None
         self.font = None
         self.last_update = datetime.min
         self.update_interval = timedelta(minutes=30)
-        self.screen_width = screen_width
-        self.screen_height = screen_height
+        self.screen_width = None
+        self.screen_height = None
         self.animation = None
 
     def update(self):
@@ -55,6 +55,25 @@ class WeatherModule:
         except requests.exceptions.RequestException as e:
             logging.error(f"Failed to fetch weather data: {e}")
             self.weather_data = None
+            self.animation = None
+
+    def update_animation(self):
+        weather_main = self.weather_data['weather'][0]['main'].lower()
+        weather_description = self.weather_data['weather'][0]['description'].lower()
+
+        if 'clear' in weather_main:
+            self.animation = SunAnimation(self.screen_width, self.screen_height)
+        elif 'cloud' in weather_main or 'broken' in weather_description:
+            partly = 'partly' in weather_description or 'broken' in weather_description
+            self.animation = CloudAnimation(self.screen_width, self.screen_height, partly=partly)
+        elif 'rain' in weather_main:
+            heavy = 'heavy' in weather_description
+            self.animation = RainAnimation(self.screen_width, self.screen_height, heavy=heavy)
+        elif 'thunderstorm' in weather_main:
+            self.animation = StormAnimation(self.screen_width, self.screen_height)
+        elif 'snow' in weather_main:
+            self.animation = SnowAnimation(self.screen_width, self.screen_height)
+        else:
             self.animation = None
 
     def draw(self, screen, position):
