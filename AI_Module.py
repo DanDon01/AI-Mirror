@@ -23,8 +23,17 @@ class AIInteractionModule:
         self.status = "Idle"
         
         # Load sound effects
-        self.start_sound = pygame.mixer.Sound("start_listening.wav")
-        self.end_sound = pygame.mixer.Sound("end_listening.wav")
+        try:
+            self.start_sound = pygame.mixer.Sound("start_listening.wav")
+        except pygame.error:
+            print("Warning: 'start_listening.wav' not found. Using silent sound.")
+            self.start_sound = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
+
+        try:
+            self.end_sound = pygame.mixer.Sound("end_listening.wav")
+        except pygame.error:
+            print("Warning: 'end_listening.wav' not found. Using silent sound.")
+            self.end_sound = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
 
         # Set up GPIO for button press and LED control
         self.button = Button(23, pull_up=True)  # Change to pull_up=True
@@ -38,7 +47,10 @@ class AIInteractionModule:
         """Triggered when the button is pressed."""
         print("Button pressed. Listening for speech...")
         self.led.on()
-        self.start_sound.play()
+        try:
+            self.start_sound.play()
+        except pygame.error:
+            print("Warning: Could not play start sound.")
         self.listening = True
         self.status = "Listening..."
 
@@ -69,7 +81,10 @@ class AIInteractionModule:
             print("Please say your question...")
             try:
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
-                self.end_sound.play()
+                try:
+                    self.end_sound.play()
+                except pygame.error:
+                    print("Warning: Could not play end sound.")
                 self.status = "Processing..."
                 
                 prompt = self.recognizer.recognize_google(audio)
