@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import time as time_module
 import pygame
 import logging
-from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING, TRANSPARENCY  # Add this import at the top of the file
+from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING, TRANSPARENCY
 import os
 from pathlib import Path
 import requests
@@ -157,25 +157,38 @@ class FitbitModule:
 
     def refresh_access_token(self):
         try:
-            tokens = self.client.client.refresh_token()
-            logging.debug(f"Received tokens: {tokens}")
-            if 'access_token' not in tokens or 'refresh_token' not in tokens:
-                raise KeyError("Missing access_token or refresh_token in response")
+            # Prepare the token refresh request
+            token_url = "https://api.fitbit.com/oauth2/token"
+            headers = {
+                "Authorization": "Basic " + base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode(),
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+            data = {
+                "grant_type": "refresh_token",
+                "refresh_token": self.refresh_token
+            }
+
+            # Make the token refresh request
+            response = requests.post(token_url, headers=headers, data=data)
+            response.raise_for_status()  # Raise an exception for bad responses
+            tokens = response.json()
+
+            # Update tokens
             self.access_token = tokens['access_token']
             self.refresh_token = tokens['refresh_token']
             self.config['access_token'] = self.access_token
             self.config['refresh_token'] = self.refresh_token
+
+            # Reinitialize the Fitbit client with new tokens
+            self.initialize_client()
+
+            # Save the new tokens
             self.save_tokens()
             logging.info("Fitbit access token refreshed successfully")
-        except KeyError as e:
-            logging.error(f"KeyError in refresh_access_token: {e}")
-            logging.error(f"Tokens received: {tokens}")
         except Exception as e:
             logging.error(f"Error refreshing Fitbit access token: {e}")
-            logging.error(f"Full exception: {traceback.format_exc()}")
-
-        if not self.access_token or not self.refresh_token:
-            raise Exception("Failed to refresh access token")
+            logging.error(traceback.format_exc())
+            raise
 
     def save_tokens(self):
         # Update the tokens in the environment file
