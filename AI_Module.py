@@ -27,26 +27,33 @@ class AIInteractionModule:
         self.end_sound = pygame.mixer.Sound("end_listening.wav")
 
         # Set up GPIO for button press and LED control
-        self.button = Button(23, pull_down=True)  # Button connected to GPIO 23
-        self.led = LED(25)  # Button LED connected to GPIO 25
+        self.button = Button(23, pull_up=True)  # Change to pull_up=True
+        self.led = LED(25)
 
         # Bind button press event to start listening
         self.button.when_pressed = self.on_button_press
+        self.button.when_released = self.on_button_release  # Add this line
 
     def on_button_press(self):
         """Triggered when the button is pressed."""
         print("Button pressed. Listening for speech...")
-        self.led.on()  # Turn on the button LED when listening
+        self.led.on()
         self.start_sound.play()
         self.listening = True
         self.status = "Listening..."
 
-    def update(self):
-        """This method is called by the main loop."""
+    def on_button_release(self):
+        """Triggered when the button is released."""
+        print("Button released.")
         if self.listening:
             self.listen_and_respond()
             self.listening = False
-            self.led.off()  # Turn off the LED after responding
+            self.led.off()
+
+    def update(self):
+        """This method is called by the main loop."""
+        # Remove the listening check from here
+        pass
 
     def draw(self, screen, position):
         """This method is called by the main loop to draw any UI elements."""
