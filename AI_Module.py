@@ -6,7 +6,6 @@ import os
 import time
 from dotenv import load_dotenv
 from gpiozero import Button, LED
-from signal import pause
 
 class AIInteractionModule:
     def __init__(self, config):
@@ -15,10 +14,10 @@ class AIInteractionModule:
         openai.api_key = self.api_key
         self.recognizer = sr.Recognizer()
 
-        # Ensure you're using the VoiceHAT microphone (index 1 or try other indices)
-        self.microphone = sr.Microphone(device_index=1)
+        # Set the correct device index for the VoiceHAT microphone (card 2, device 0)
+        self.microphone = sr.Microphone(device_index=2)  # Use device_index=2 for Google VoiceHAT
 
-        # Set up Pygame for sound playback (ensure VoiceHAT is default output device)
+        # Set up Pygame for sound playback (Google VoiceHAT should be default playback device)
         pygame.mixer.init()
         self.listening = False
         self.status = "Idle"
