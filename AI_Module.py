@@ -36,14 +36,17 @@ class AIInteractionModule:
             self.end_sound = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
 
         # Set up GPIO for button press and LED control
-        self.button = Button(23, pull_up=True)  # Change to pull_up=True
+        self.button = Button(23, pull_up=False)
         self.led = LED(25)
 
         # Bind button press event to start listening
         self.button.when_pressed = self.on_button_press
-        self.button.when_released = self.on_button_release  # Add this line
+        self.button.when_released = self.on_button_release
+
+        print("Button and LED initialized")
 
     def on_button_press(self):
+        print("Button press detected")
         """Triggered when the button is pressed."""
         print("Button pressed. Listening for speech...")
         self.led.on()
@@ -55,6 +58,7 @@ class AIInteractionModule:
         self.status = "Listening..."
 
     def on_button_release(self):
+        print("Button release detected")
         """Triggered when the button is released."""
         print("Button released.")
         if self.listening:
