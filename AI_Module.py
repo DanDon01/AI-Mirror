@@ -5,6 +5,8 @@ import pygame
 import os
 import time
 from dotenv import load_dotenv
+from gpiozero import Button, LED
+from signal import pause
 
 class AIInteractionModule:
     def __init__(self, config):
@@ -12,7 +14,11 @@ class AIInteractionModule:
         self.openai_model = config['openai'].get('model', 'text-davinci-003')
         openai.api_key = self.api_key
         self.recognizer = sr.Recognizer()
-        self.microphone = sr.Microphone()
+
+        # Ensure you're using the VoiceHAT microphone (index 1 or try other indices)
+        self.microphone = sr.Microphone(device_index=1)
+
+        # Set up Pygame for sound playback (ensure VoiceHAT is default output device)
         pygame.mixer.init()
         self.listening = False
         self.status = "Idle"
@@ -21,25 +27,33 @@ class AIInteractionModule:
         self.start_sound = pygame.mixer.Sound("start_listening.wav")
         self.end_sound = pygame.mixer.Sound("end_listening.wav")
 
+        # Set up GPIO for button press and LED control
+        self.button = Button(23, pull_down=True)  # Button connected to GPIO 23
+        self.led = LED(25)  # Button LED connected to GPIO 25
+
+        # Bind button press event to start listening
+        self.button.when_pressed = self.on_button_press
+
+    def on_button_press(self):
+        """Triggered when the button is pressed."""
+        print("Button pressed. Listening for speech...")
+        self.led.on()  # Turn on the button LED when listening
+        self.start_sound.play()
+        self.listening = True
+        self.status = "Listening..."
+
     def update(self):
         """This method is called by the main loop."""
         if self.listening:
             self.listen_and_respond()
             self.listening = False
+            self.led.off()  # Turn off the LED after responding
 
     def draw(self, screen, position):
         """This method is called by the main loop to draw any UI elements."""
         font = pygame.font.Font(None, 36)
         text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
         screen.blit(text, position)
-
-    def handle_event(self, event):
-        """Handles Pygame events."""
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            self.listening = True
-            self.status = "Listening..."
-            print("Spacebar pressed. Listening for speech...")
-            self.start_sound.play()
 
     def listen_and_respond(self):
         """Listen to the user's question and respond using OpenAI API."""
