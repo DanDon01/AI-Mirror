@@ -91,10 +91,10 @@ class AIInteractionModule:
         """Listen to the user's question and respond using OpenAI API."""
         self.logger.info("Starting listen_and_respond method")
         with self.microphone as source:
-            self.logger.info("Adjusting for ambient noise...")
-            self.recognizer.adjust_for_ambient_noise(source, duration=1)
-            self.logger.info("Please say your question...")
             try:
+                self.logger.info("Adjusting for ambient noise...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                self.logger.info("Please say your question...")
                 self.logger.info("Listening for audio...")
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
                 self.logger.info("Audio captured successfully")
@@ -108,30 +108,35 @@ class AIInteractionModule:
                 self.status = "Processing..."
                 
                 self.logger.info("Recognizing speech...")
-                try:
-                    prompt = self.recognizer.recognize_google(audio)
-                    self.logger.info(f"Speech recognized: {prompt}")
-                except sr.UnknownValueError:
-                    self.logger.warning("Google Speech Recognition could not understand audio")
-                    self.status = "Speech not understood"
-                    return
-                except sr.RequestError as e:
-                    self.logger.error(f"Could not request results from Google Speech Recognition service; {e}")
-                    self.status = "Speech recognition error"
-                    return
+                prompt = self.recognizer.recognize_google(audio)
+                self.logger.info(f"Speech recognized: {prompt}")
                 
-                self.logger.info("Sending prompt to OpenAI...")
                 response = self.ask_openai(prompt)
-                self.logger.info(f"OpenAI response received: {response}")
-                
-                self.logger.info("Speaking response...")
-                self.speak_response(response)
+                if response != "Sorry, there was an issue contacting the OpenAI service.":
+                    self.logger.info("Speaking response...")
+                    self.speak_response(response)
+                else:
+                    self.logger.warning("OpenAI service issue, not speaking response")
+                    self.status = "OpenAI service issue"
             except sr.WaitTimeoutError:
                 self.logger.warning("No speech detected within the timeout period")
                 self.status = "No speech detected"
+                self.speak_response("I didn't hear anything. Could you please try again?")
+            except sr.UnknownValueError:
+                self.logger.warning("Google Speech Recognition could not understand audio")
+                self.status = "Speech not understood"
+                self.speak_response("I'm sorry, I couldn't understand that. Could you please repeat?")
+            except sr.RequestError as e:
+                self.logger.error(f"Could not request results from Google Speech Recognition service; {e}")
+                self.status = "Speech recognition error"
+                self.speak_response("There was an issue with the speech recognition service. Please try again later.")
             except Exception as e:
                 self.logger.error(f"An unexpected error occurred: {e}")
                 self.status = "Error occurred"
+                self.speak_response("An unexpected error occurred. Please try again.")
+            finally:
+                self.listening = False
+                self.led.off()
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         """Send the prompt to OpenAI and return the response."""
@@ -152,9 +157,18 @@ class AIInteractionModule:
             answer = response.choices[0].message.content.strip()
             self.logger.info(f"OpenAI response: {answer}")
             return answer
+        except openai.error.APIError as e:
+            self.logger.error(f"OpenAI API error: {e}")
+            return "I'm having trouble connecting to my knowledge base. Please try again in a moment."
+        except openai.error.Timeout as e:
+            self.logger.error(f"OpenAI API timeout: {e}")
+            return "It's taking longer than usual to access my knowledge. Could you please repeat your question?"
+        except openai.error.RateLimitError as e:
+            self.logger.error(f"OpenAI API rate limit error: {e}")
+            return "I'm a bit overwhelmed right now. Can you ask me again in a little while?"
         except Exception as e:
-            self.logger.error(f"Error with OpenAI API call: {e}")
-            return "Sorry, there was an issue contacting the OpenAI service."
+            self.logger.error(f"Unexpected error with OpenAI API call: {e}")
+            return "I'm experiencing some technical difficulties. Please try again later."
 
     def speak_response(self, text):
         """Convert text response to speech and play it."""
