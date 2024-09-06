@@ -33,12 +33,17 @@ class AIInteractionModule:
         
         # Load sound effects
         self.sound_effects = {}
-        sound_effects_path = os.path.join('assets', 'sound-effects')
+        sound_effects_path = CONFIG.get('sound_effects_path', os.path.join('assets', 'sound-effects'))
         for sound_name in ['mirror_listening', 'start_speaking', 'finished_speaking', 'error']:
             try:
-                self.sound_effects[sound_name] = pygame.mixer.Sound(os.path.join(sound_effects_path, f"{sound_name}.mp3"))
-            except pygame.error:
-                print(f"Warning: '{sound_name}.mp3' not found. Using silent sound.")
+                sound_file = os.path.join(sound_effects_path, f"{sound_name}.mp3")
+                if os.path.exists(sound_file):
+                    self.sound_effects[sound_name] = pygame.mixer.Sound(sound_file)
+                else:
+                    print(f"Warning: Sound file '{sound_file}' not found. Using silent sound.")
+                    self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
+            except pygame.error as e:
+                print(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
                 self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
 
         # Set up GPIO for button press and LED control
@@ -147,13 +152,13 @@ class AIInteractionModule:
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         """Send the prompt to OpenAI and return the response."""
-        formatted_prompt = f"You are a magic mirror, someone is looking at you and says this: '{prompt}' reply to this query as an all-knowing benevolent leader, with facts and humor, short but banterful answer, give sass and poke fun at them"
-        self.logger.info(f"Sending formatted prompt to OpenAI: {formatted_prompt}")
+        formatted_prompt = "You are a magic mirror, someone is looking at you and says this: '{}' reply to this query as an all-knowing benevolent leader, with facts and humor, short but banterful answer, give sass and poke fun at them".format(prompt)
+        self.logger.info("Sending formatted prompt to OpenAI: {}".format(formatted_prompt))
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",  # Always use gpt-4o-mini
                 messages=[
-                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorious answers."},
+                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorous answers."},
                     {"role": "user", "content": formatted_prompt}
                 ],
                 max_tokens=max_tokens,
@@ -162,19 +167,10 @@ class AIInteractionModule:
                 temperature=0.7,
             )
             answer = response.choices[0].message.content.strip()
-            self.logger.info(f"OpenAI response: {answer}")
+            self.logger.info("OpenAI response: {}".format(answer))
             return answer
-        except openai.error.APIError as e:
-            self.logger.error(f"OpenAI API error: {e}")
-            return "I'm having trouble connecting to my knowledge base. Please try again in a moment."
-        except openai.error.Timeout as e:
-            self.logger.error(f"OpenAI API timeout: {e}")
-            return "It's taking longer than usual to access my knowledge. Could you please repeat your question?"
-        except openai.error.RateLimitError as e:
-            self.logger.error(f"OpenAI API rate limit error: {e}")
-            return "I'm a bit overwhelmed right now. Can you ask me again in a little while?"
         except Exception as e:
-            self.logger.error(f"Unexpected error with OpenAI API call: {e}")
+            self.logger.error("Unexpected error with OpenAI API call: {}".format(e))
             return "I'm experiencing some technical difficulties. Please try again later."
 
     def speak_response(self, text):

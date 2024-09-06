@@ -12,7 +12,7 @@ class StocksModule:
         try:
             self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
         except:
-            print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
+            print("Warning: Font '{}' not found. Using default font.".format(FONT_NAME))
             self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
         self.market_timezones = {
             'US': timezone('America/New_York'),
@@ -46,6 +46,7 @@ class StocksModule:
         current_time = datetime.now(timezone('UTC'))
         
         if current_time - self.last_update < self.update_interval:
+            logging.debug("Skipping stock update: Not enough time has passed since last update")
             return  # Skip update if not enough time has passed
 
         try:
@@ -53,8 +54,12 @@ class StocksModule:
                 market = 'UK' if ticker.endswith('.L') else 'US'
                 current_market_time = current_time.astimezone(self.market_timezones[market])
 
+                logging.info("Updating %s stock: %s", market, ticker)
+                logging.info("Current market time: %s", current_market_time)
+                logging.info("Market open: %s", self.is_market_open(current_market_time, market))
+
                 if not self.is_market_open(current_market_time, market):
-                    logging.info(f"Market is closed for {ticker}. Displaying last available data.")
+                    logging.info("Market is closed for %s. Displaying last available data.", ticker)
                     # Fetching last available data (closing prices from the previous session)
                     stock = yf.Ticker(ticker)
                     data = stock.history(period="1d")
@@ -76,7 +81,7 @@ class StocksModule:
                     current_price = data['Close'].iloc[-1]  # Current price or last close
                     percent_change = ((current_price - last_close) / last_close) * 100
                     volume = data['Volume'].iloc[-1]
-                    day_range = f"{data['Low'].min():.2f} - {data['High'].max():.2f}"
+                    day_range = "{:.2f} - {:.2f}".format(data['Low'].min(), data['High'].max())
                     self.stock_data[ticker] = {
                         'price': current_price,
                         'percent_change': percent_change,
@@ -90,10 +95,11 @@ class StocksModule:
                         'volume': 'N/A',
                         'day_range': 'N/A'
                     }
+                logging.info("Updated data for %s: %s", ticker, self.stock_data[ticker])
             self.last_update = current_time
             logging.info("Stock data updated successfully")
         except Exception as e:
-            logging.error(f"Error updating stock data: {e}")
+            logging.error("Error updating stock data: %s", e)
 
     def draw(self, screen, position):
         try:
@@ -108,8 +114,8 @@ class StocksModule:
             markets_text = self.markets_font.render("Markets:", True, COLOR_FONT_DEFAULT)
             us_status = "Open" if us_open else "Closed"
             uk_status = "Open" if uk_open else "Closed"
-            us_text = self.status_font.render(f"US: {us_status}", True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
-            uk_text = self.status_font.render(f"UK: {uk_status}", True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
+            us_text = self.status_font.render("US: {}".format(us_status), True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
+            uk_text = self.status_font.render("UK: {}".format(uk_status), True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
 
             # Set transparency
             markets_text.set_alpha(TRANSPARENCY)
@@ -142,9 +148,9 @@ class StocksModule:
                     currency_symbol = '£' if ticker.endswith('.L') else '$'
 
                     if percent_change != 'N/A':
-                        text = f"{ticker}: {currency_symbol}{price:.2f} ({percent_change:+.2f}%)"
+                        text = "{}: {}{:.2f} ({:+.2f}%)".format(ticker, currency_symbol, price, percent_change)
                     else:
-                        text = f"{ticker}: {currency_symbol}{price:.2f}"
+                        text = "{}: {}{:.2f}".format(ticker, currency_symbol, price)
 
                     text_surface = self.font.render(text, True, color)
                     text_surface.set_alpha(TRANSPARENCY)
@@ -160,7 +166,7 @@ class StocksModule:
             self.draw_scrolling_ticker(screen)
 
         except Exception as e:
-            logging.error(f"Error drawing stock data: {e}")
+            logging.error("Error drawing stock data: %s", e)
 
     def draw_scrolling_ticker(self, screen):
         ticker_height = 30
@@ -177,9 +183,9 @@ class StocksModule:
             arrow = "▲" if isinstance(percent_change, float) and percent_change > 0 else "▼" if isinstance(percent_change, float) and percent_change < 0 else ""
 
             if percent_change != 'N/A':
-                text = f"{ticker}: {currency_symbol}{price:.2f} {arrow} ({percent_change:+.2f}%)   "
+                text = "{}: {}{:.2f} {} ({:+.2f}%)   ".format(ticker, currency_symbol, price, arrow, percent_change)
             else:
-                text = f"{ticker}: {currency_symbol}{price:.2f}   "
+                text = "{}: {}{:.2f}   ".format(ticker, currency_symbol, price)
 
             text_surface = self.ticker_font.render(text, True, color)
             text_surface.set_alpha(TRANSPARENCY)
@@ -202,11 +208,11 @@ class StocksModule:
                 self.alerts.append((ticker, percent_change))
 
         if self.alerts:
-            logging.info(f"Displaying {len(self.alerts)} stock alerts")
+            logging.info("Displaying %d stock alerts", len(self.alerts))
             alert_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE, bold=True)  # Use the same size as regular font, but bold
             for ticker, percent_change in self.alerts:
                 color = COLOR_PASTEL_GREEN if percent_change > 0 else COLOR_PASTEL_RED
-                text = f"{ticker} {percent_change:+.2f}%"
+                text = "{} {:+.2f}%".format(ticker, percent_change)
                 text_surface = alert_font.render(text, True, color)
                 text_surface.set_alpha(TRANSPARENCY)
                 screen.blit(text_surface, (x, y))

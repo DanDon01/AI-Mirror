@@ -30,9 +30,10 @@ COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
 TRANSPARENCY = 215
 
 # Construct paths for asset directories
-assets_dir = os.path.join(current_dir, 'assets')
+assets_dir = os.path.join(current_dir, '..', 'assets')
 retro_icons_path = os.path.join(assets_dir, 'retro_icons')
 weather_icons_path = os.path.join(assets_dir, 'weather_icons')  # Add this if you're using weather icons
+sound_effects_path = os.path.join(assets_dir, 'sound-effects')
 
 CONFIG = {
     'screen': {
@@ -133,6 +134,7 @@ CONFIG = {
             }
         }
     },
+    'sound_effects_path': sound_effects_path,  # Add this line
     'audio': {
         'mic_energy_threshold': 500,  # Adjust this value to increase/decrease mic sensitivity
         'tts_volume': 0.8,  # Adjust this value between 0.0 and 1.0 for TTS volume

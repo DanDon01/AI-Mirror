@@ -58,7 +58,7 @@ class FitbitModule:
     def update(self):
         logging.debug("Entering update method")
         if not self.should_update():
-            logging.debug("Update not needed")
+            logging.debug("Skipping Fitbit update: Not enough time has passed since last update")  # Changed to debug
             return
 
         try:
@@ -185,10 +185,15 @@ class FitbitModule:
             # Save the new tokens
             self.save_tokens()
             logging.info("Fitbit access token refreshed successfully")
+        except KeyError as e:
+            logging.error(f"KeyError in refresh_access_token: {e}")
+            logging.error(f"Tokens received: {tokens}")
         except Exception as e:
             logging.error(f"Error refreshing Fitbit access token: {e}")
-            logging.error(traceback.format_exc())
-            raise
+            logging.error(f"Full exception: {traceback.format_exc()}")
+
+        if not self.access_token or not self.refresh_token:
+            raise Exception("Failed to refresh access token")
 
     def save_tokens(self):
         # Update the tokens in the environment file

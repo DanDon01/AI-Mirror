@@ -22,6 +22,7 @@ class WeatherModule:
     def update(self):
         current_time = datetime.now()
         if current_time - self.last_update < self.update_interval:
+            logging.debug("Skipping weather update: Not enough time has passed since last update")  # Changed to debug
             return
 
         try:
