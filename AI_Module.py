@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from gpiozero import Button, LED
 import logging
 from openai import OpenAI
+from config import CONFIG
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TOKENS = 250
