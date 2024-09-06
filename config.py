@@ -127,5 +127,10 @@ CONFIG = {
                 }
             }
         }
+    },
+    'audio': {
+        'mic_energy_threshold': 500,  # Adjust this value to increase/decrease mic sensitivity
+        'tts_volume': 0.8,  # Adjust this value between 0.0 and 1.0 for TTS volume
+        'wav_volume': 0.5,  # Adjust this value between 0.0 and 1.0 for WAV file volume
     }
 }

@@ -18,6 +18,8 @@ class AIInteractionModule:
         self.openai_model = config['openai'].get('model', 'text-davinci-003')
         openai.api_key = self.api_key
         self.recognizer = sr.Recognizer()
+        self.recognizer.energy_threshold = config['audio'].get('mic_energy_threshold', 300)
+        self.recognizer.dynamic_energy_threshold = False
 
         # Set the correct device index for the VoiceHAT microphone (card 2, device 0)
         self.microphone = sr.Microphone(device_index=2)  # Use device_index=2 for Google VoiceHAT
@@ -179,6 +181,7 @@ class AIInteractionModule:
             tts.save("response.mp3")
             self.logger.info("TTS file saved successfully")
             pygame.mixer.music.load("response.mp3")
+            pygame.mixer.music.set_volume(self.config['audio'].get('tts_volume', 1.0))
             pygame.mixer.music.play()
             self.logger.info("Started playing TTS audio")
             while pygame.mixer.music.get_busy():
