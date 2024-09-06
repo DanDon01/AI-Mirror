@@ -133,19 +133,23 @@ class AIInteractionModule:
                 self.logger.error(f"An unexpected error occurred: {e}")
                 self.status = "Error occurred"
 
-    def ask_openai(self, prompt, model=DEFAULT_MODEL, max_tokens=DEFAULT_MAX_TOKENS):
+    def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         """Send the prompt to OpenAI and return the response."""
-        self.logger.info(f"Sending prompt to OpenAI: {prompt}")
+        formatted_prompt = f"You are a magic mirror, someone is looking at you and says this: '{prompt}' reply to this query as an all-knowing benevolent leader, with facts and humor"
+        self.logger.info(f"Sending formatted prompt to OpenAI: {formatted_prompt}")
         try:
-            response = self.client.completions.create(
-                model=model,
-                prompt=prompt,
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",  # Always use gpt-4o-mini
+                messages=[
+                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with facts and humor."},
+                    {"role": "user", "content": formatted_prompt}
+                ],
                 max_tokens=max_tokens,
                 n=1,
                 stop=None,
                 temperature=0.7,
             )
-            answer = response.choices[0].text.strip()
+            answer = response.choices[0].message.content.strip()
             self.logger.info(f"OpenAI response: {answer}")
             return answer
         except Exception as e:
