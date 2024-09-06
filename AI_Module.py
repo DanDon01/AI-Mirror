@@ -13,6 +13,13 @@ from config import CONFIG
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TOKENS = 250
 
+try:
+    from gpiozero import Button, LED
+    gpio_available = True
+except RuntimeError:
+    gpio_available = False
+    print("GPIO is not available. Running in simulation mode.")
+
 class AIInteractionModule:
     def __init__(self, config):
         self.config = config  # Store the entire config
@@ -46,12 +53,21 @@ class AIInteractionModule:
                 print(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
                 self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
 
-        # Set up GPIO for button press and LED control
-        self.button = Button(23, pull_up=False)
-        self.led = LED(25)
-        self.button.when_pressed = self.on_button_press
-        self.button.when_released = self.on_button_release
-        print("Button and LED initialized")
+        if gpio_available:
+            try:
+                self.button = Button(23, pull_up=False)
+                self.led = LED(25)
+                self.button.when_pressed = self.on_button_press
+                self.button.when_released = self.on_button_release
+                print("Button and LED initialized")
+            except Exception as e:
+                print(f"Error initializing GPIO: {e}")
+                self.button = None
+                self.led = None
+        else:
+            self.button = None
+            self.led = None
+            print("GPIO not available. Button and LED functionality disabled.")
 
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(__name__)
@@ -66,6 +82,8 @@ class AIInteractionModule:
             self.logger.error(f"Error playing sound effect '{sound_name}': {e}")
 
     def on_button_press(self):
+        if self.button is None:
+            return
         self.logger.info("Button press detected")
         print("Button pressed. Listening for speech...")
         self.led.on()
@@ -74,6 +92,8 @@ class AIInteractionModule:
         self.status = "Listening..."
 
     def on_button_release(self):
+        if self.button is None:
+            return
         self.logger.info("Button release detected")
         print("Button released.")
         if self.listening:

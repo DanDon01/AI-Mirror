@@ -16,6 +16,9 @@ from clock_module import ClockModule  # Add this import
 from retrocharacters_module import RetroCharactersModule  # Add this import
 from AI_Module import AIInteractionModule  # Add this import at the top
 
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" # Hide ALSA errors
+
 # Import other modules as needed again
 
 class MagicMirror:

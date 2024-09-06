@@ -40,13 +40,15 @@ class StocksModule:
         self.alerts = []
 
         self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
-        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 10)
+        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 6)
 
     def update(self):
         current_time = datetime.now(timezone('UTC'))
         
         if current_time - self.last_update < self.update_interval:
-            logging.debug("Skipping stock update: Not enough time has passed since last update")
+            if not hasattr(self, 'last_skip_log') or current_time - self.last_skip_log > timedelta(minutes=5):
+                logging.debug("Skipping stock update: Not enough time has passed since last update")
+                self.last_skip_log = current_time
             return  # Skip update if not enough time has passed
 
         try:
@@ -143,12 +145,12 @@ class StocksModule:
                     price = data['price']
                     percent_change = data['percent_change']
 
-                    color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
+                    color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else COLOR_FONT_DEFAULT
 
                     currency_symbol = '£' if ticker.endswith('.L') else '$'
 
-                    if percent_change != 'N/A' and price != 'N/A':
-                        text = "{}: {}{:.2f} ({:+.2f}%)".format(ticker, currency_symbol, float(price), float(percent_change))
+                    if isinstance(price, (float, int)) and isinstance(percent_change, (float, int)):
+                        text = "{}: {}{:.2f} ({:+.2f}%)".format(ticker, currency_symbol, price, percent_change)
                     else:
                         text = "{}: {}".format(ticker, "N/A")
 
@@ -166,7 +168,7 @@ class StocksModule:
             self.draw_scrolling_ticker(screen)
 
         except Exception as e:
-            logging.error("Error drawing stock data: %s", e)
+            logging.error("Error drawing stock data: %s", str(e))
 
     def draw_scrolling_ticker(self, screen):
         ticker_height = 30
