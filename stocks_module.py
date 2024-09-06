@@ -40,7 +40,7 @@ class StocksModule:
         self.alerts = []
 
         self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
-        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 16)
+        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 10)
 
     def update(self):
         current_time = datetime.now(timezone('UTC'))
@@ -77,11 +77,11 @@ class StocksModule:
                 stock = yf.Ticker(ticker)
                 data = stock.history(period="1d", interval="1m")
                 if not data.empty:
-                    last_close = data['Close'].iloc[0]  # Last session's close
-                    current_price = data['Close'].iloc[-1]  # Current price or last close
+                    last_close = float(data['Close'].iloc[0])  # Last session's close
+                    current_price = float(data['Close'].iloc[-1])  # Current price or last close
                     percent_change = ((current_price - last_close) / last_close) * 100
-                    volume = data['Volume'].iloc[-1]
-                    day_range = "{:.2f} - {:.2f}".format(data['Low'].min(), data['High'].max())
+                    volume = int(data['Volume'].iloc[-1])
+                    day_range = "{:.2f} - {:.2f}".format(float(data['Low'].min()), float(data['High'].max()))
                     self.stock_data[ticker] = {
                         'price': current_price,
                         'percent_change': percent_change,
@@ -147,10 +147,10 @@ class StocksModule:
 
                     currency_symbol = '£' if ticker.endswith('.L') else '$'
 
-                    if percent_change != 'N/A':
-                        text = "{}: {}{:.2f} ({:+.2f}%)".format(ticker, currency_symbol, price, percent_change)
+                    if percent_change != 'N/A' and price != 'N/A':
+                        text = "{}: {}{:.2f} ({:+.2f}%)".format(ticker, currency_symbol, float(price), float(percent_change))
                     else:
-                        text = "{}: {}{:.2f}".format(ticker, currency_symbol, price)
+                        text = "{}: {}".format(ticker, "N/A")
 
                     text_surface = self.font.render(text, True, color)
                     text_surface.set_alpha(TRANSPARENCY)

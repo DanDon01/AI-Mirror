@@ -39,7 +39,8 @@ class FitbitModule:
         self.backoff_time = 1  # Start with 1 second backoff
         self.font = None
         self.step_goal = 10000  # Set the step goal
-
+        self.last_skip_log = 0
+        
     def initialize_client(self):
         try:
             self.client = fitbit.Fitbit(
@@ -57,8 +58,11 @@ class FitbitModule:
 
     def update(self):
         logging.debug("Entering update method")
+        current_time = time.time()
         if not self.should_update():
-            logging.debug("Skipping Fitbit update: Not enough time has passed since last update")  # Changed to debug
+            if current_time - self.last_skip_log > 60:  # Log only once per minute
+                logging.debug("Skipping Fitbit update: Not enough time has passed since last update")
+                self.last_skip_log = current_time
             return
 
         try:

@@ -22,7 +22,9 @@ class WeatherModule:
     def update(self):
         current_time = datetime.now()
         if current_time - self.last_update < self.update_interval:
-            logging.debug("Skipping weather update: Not enough time has passed since last update")  # Changed to debug
+            if not hasattr(self, 'last_skip_log') or current_time.timestamp() - self.last_skip_log > 60:
+                logging.debug("Skipping weather update: Not enough time has passed since last update")
+                self.last_skip_log = current_time.timestamp()
             return
 
         try:
