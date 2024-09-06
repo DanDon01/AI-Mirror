@@ -7,6 +7,7 @@ import time
 from dotenv import load_dotenv
 from gpiozero import Button, LED
 import logging
+from openai import OpenAI
 
 class AIInteractionModule:
     def __init__(self, config):
@@ -48,6 +49,8 @@ class AIInteractionModule:
 
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(__name__)
+
+        self.client = OpenAI(api_key=self.api_key)
 
     def on_button_press(self):
         self.logger.info("Button press detected")
@@ -131,16 +134,18 @@ class AIInteractionModule:
         """Send the prompt to OpenAI and return the response."""
         self.logger.info(f"Sending prompt to OpenAI: {prompt}")
         try:
-            response = openai.Completion.create(
-                engine=self.openai_model,
-                prompt=prompt,
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt}
+                ],
                 max_tokens=150,
+                n=1,
+                stop=None,
                 temperature=0.7,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0
             )
-            answer = response.choices[0].text.strip()
+            answer = response.choices[0].message.content.strip()
             self.logger.info(f"OpenAI response: {answer}")
             return answer
         except Exception as e:
