@@ -9,6 +9,9 @@ from gpiozero import Button, LED
 import logging
 from openai import OpenAI
 
+DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MAX_TOKENS = 250
+
 class AIInteractionModule:
     def __init__(self, config):
         self.api_key = config['openai']['api_key']
@@ -130,22 +133,19 @@ class AIInteractionModule:
                 self.logger.error(f"An unexpected error occurred: {e}")
                 self.status = "Error occurred"
 
-    def ask_openai(self, prompt):
+    def ask_openai(self, prompt, model=DEFAULT_MODEL, max_tokens=DEFAULT_MAX_TOKENS):
         """Send the prompt to OpenAI and return the response."""
         self.logger.info(f"Sending prompt to OpenAI: {prompt}")
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=150,
+            response = self.client.completions.create(
+                model=model,
+                prompt=prompt,
+                max_tokens=max_tokens,
                 n=1,
                 stop=None,
                 temperature=0.7,
             )
-            answer = response.choices[0].message.content.strip()
+            answer = response.choices[0].text.strip()
             self.logger.info(f"OpenAI response: {answer}")
             return answer
         except Exception as e:
