@@ -47,7 +47,7 @@ class AIInteractionModule:
                 self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
 
         # Initialize GPIO for button and LED
-        self.button = Button(23, pull_down=True)  # Set to pull_down
+        self.button = Button(23, pull_up=False)  # Change pull_down=True to pull_up=False
         self.led = LED(25)
 
         # Set button press/release actions
