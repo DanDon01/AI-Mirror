@@ -49,11 +49,8 @@ class AIInteractionModule:
         # Set up GPIO for button press and LED control
         self.button = Button(23, pull_up=False)
         self.led = LED(25)
-
-        # Bind button press event to start listening
         self.button.when_pressed = self.on_button_press
         self.button.when_released = self.on_button_release
-
         print("Button and LED initialized")
 
         logging.basicConfig(level=logging.DEBUG)
@@ -70,7 +67,6 @@ class AIInteractionModule:
 
     def on_button_press(self):
         self.logger.info("Button press detected")
-        """Triggered when the button is pressed."""
         print("Button pressed. Listening for speech...")
         self.led.on()
         self.play_sound_effect('mirror_listening')
@@ -79,7 +75,6 @@ class AIInteractionModule:
 
     def on_button_release(self):
         self.logger.info("Button release detected")
-        """Triggered when the button is released."""
         print("Button released.")
         if self.listening:
             self.listen_and_respond()

@@ -30,7 +30,7 @@ COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
 TRANSPARENCY = 215
 
 # Construct paths for asset directories
-assets_dir = os.path.join(current_dir, '..', 'assets')
+assets_dir = os.path.join(current_dir, 'assets')  # Remove '..'
 retro_icons_path = os.path.join(assets_dir, 'retro_icons')
 weather_icons_path = os.path.join(assets_dir, 'weather_icons')  # Add this if you're using weather icons
 sound_effects_path = os.path.join(assets_dir, 'sound-effects')
