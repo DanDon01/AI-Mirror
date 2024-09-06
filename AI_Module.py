@@ -6,21 +6,12 @@ import os
 import time
 from dotenv import load_dotenv
 from gpiozero import Button, LED
-from gpiozero.pins.mock import MockFactory
-from gpiozero.exc import GPIOZeroError
 import logging
 from openai import OpenAI
 from config import CONFIG
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TOKENS = 250
-
-try:
-    from gpiozero import Button, LED
-    gpio_available = True
-except RuntimeError:
-    gpio_available = False
-    print("GPIO is not available. Running in simulation mode.")
 
 class AIInteractionModule:
     def __init__(self, config):
@@ -33,9 +24,9 @@ class AIInteractionModule:
         self.recognizer.dynamic_energy_threshold = False
 
         # Set the correct device index for the VoiceHAT microphone (card 2, device 0)
-        self.microphone = sr.Microphone(device_index=2)  # Use device_index=2 for Google VoiceHAT
+        self.microphone = sr.Microphone(device_index=2)
 
-        # Set up Pygame for sound playback (Google VoiceHAT should be default playback device)
+        # Set up Pygame for sound playback
         pygame.mixer.init()
         self.listening = False
         self.status = "Idle"
@@ -53,29 +44,15 @@ class AIInteractionModule:
                     self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
             except pygame.error as e:
                 print(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
-                self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
+                self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
 
-        try:
-            from gpiozero import Device
-            Device.pin_factory = None  # Use default pin factory
-            self.button = Button(23, pull_up=True)  # Changed to pull_up=True
-            self.led = LED(25)
-            self.button.when_pressed = self.on_button_press
-            self.button.when_released = self.on_button_release
-            print("Button and LED initialized using gpiozero")
-            self.test_button()  # Add this line to test the button
-        except GPIOZeroError as e:
-            print(f"Error initializing GPIO: {e}")
-            print("Falling back to mock GPIO")
-            Device.pin_factory = MockFactory()
-            self.button = Button(23, pull_up=True)
-            self.led = LED(25)
-            self.button.when_pressed = self.on_button_press
-            self.button.when_released = self.on_button_release
-        else:
-            self.button = None
-            self.led = None
-            print("GPIO not available. Button and LED functionality disabled.")
+        # Initialize GPIO for button and LED
+        self.button = Button(23, pull_down=True)  # Set to pull_down
+        self.led = LED(25)
+
+        # Set button press/release actions
+        self.button.when_pressed = self.on_button_press
+        self.button.when_released = self.on_button_release
 
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(__name__)
@@ -90,8 +67,7 @@ class AIInteractionModule:
             self.logger.error(f"Error playing sound effect '{sound_name}': {e}")
 
     def on_button_press(self):
-        if self.button is None:
-            return
+        """Handle button press"""
         self.logger.info("Button press detected")
         print("Button pressed. Listening for speech...")
         self.led.on()
@@ -100,8 +76,7 @@ class AIInteractionModule:
         self.status = "Listening..."
 
     def on_button_release(self):
-        if self.button is None:
-            return
+        """Handle button release"""
         self.logger.info("Button release detected")
         print("Button released.")
         if self.listening:
@@ -128,7 +103,6 @@ class AIInteractionModule:
                 self.logger.info("Adjusting for ambient noise...")
                 self.recognizer.adjust_for_ambient_noise(source, duration=1)
                 self.logger.info("Please say your question...")
-                self.logger.info("Listening for audio...")
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
                 self.logger.info("Audio captured successfully")
                 
@@ -179,14 +153,13 @@ class AIInteractionModule:
         self.logger.info("Sending formatted prompt to OpenAI: {}".format(formatted_prompt))
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",  # Always use gpt-4o-mini
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorous answers."},
                     {"role": "user", "content": formatted_prompt}
                 ],
                 max_tokens=max_tokens,
                 n=1,
-                stop=None,
                 temperature=0.7,
             )
             answer = response.choices[0].message.content.strip()
@@ -203,39 +176,18 @@ class AIInteractionModule:
         try:
             tts = gTTS(text)
             tts.save("response.mp3")
-            self.logger.info("TTS file saved successfully")
             pygame.mixer.music.load("response.mp3")
             pygame.mixer.music.set_volume(self.config.get('audio', {}).get('tts_volume', 1.0))
             pygame.mixer.music.play()
-            self.logger.info("Started playing TTS audio")
             while pygame.mixer.music.get_busy():
                 pygame.time.wait(100)
-            self.logger.info("Finished playing TTS audio")
             os.remove("response.mp3")
-            self.logger.info("Removed TTS audio file")
         except Exception as e:
             self.logger.error(f"Error in TTS or playback: {e}")
         finally:
             self.status = "Idle"
-            self.logger.info("Speech response completed")
 
     def cleanup(self):
         """This method is called when shutting down the module."""
         pygame.mixer.quit()
         print("AI Interaction module has been cleaned up.")
-
-    def test_button(self):
-        print("Testing button. Press the button within the next 10 seconds...")
-        start_time = time.time()
-        button_pressed = False
-        while time.time() - start_time < 10:
-            if self.button.is_pressed:
-                print("Button is pressed")
-                button_pressed = True
-                break
-            time.sleep(0.1)
-        
-        if not button_pressed:
-            print("No button press detected in 10 seconds.")
-        else:
-            print("Button test successful!")
