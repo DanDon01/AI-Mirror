@@ -6,6 +6,7 @@ import os
 import time
 from dotenv import load_dotenv
 from gpiozero import Button, LED
+import logging
 
 class AIInteractionModule:
     def __init__(self, config):
@@ -45,8 +46,11 @@ class AIInteractionModule:
 
         print("Button and LED initialized")
 
+        logging.basicConfig(level=logging.DEBUG)
+        self.logger = logging.getLogger(__name__)
+
     def on_button_press(self):
-        print("Button press detected")
+        self.logger.info("Button press detected")
         """Triggered when the button is pressed."""
         print("Button pressed. Listening for speech...")
         self.led.on()
@@ -58,7 +62,7 @@ class AIInteractionModule:
         self.status = "Listening..."
 
     def on_button_release(self):
-        print("Button release detected")
+        self.logger.info("Button release detected")
         """Triggered when the button is released."""
         print("Button released.")
         if self.listening:
@@ -79,38 +83,50 @@ class AIInteractionModule:
 
     def listen_and_respond(self):
         """Listen to the user's question and respond using OpenAI API."""
+        self.logger.info("Starting listen_and_respond method")
         with self.microphone as source:
-            print("Adjusting for ambient noise...")
+            self.logger.info("Adjusting for ambient noise...")
             self.recognizer.adjust_for_ambient_noise(source, duration=1)
-            print("Please say your question...")
+            self.logger.info("Please say your question...")
             try:
+                self.logger.info("Listening for audio...")
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                self.logger.info("Audio captured successfully")
+                
                 try:
                     self.end_sound.play()
-                except pygame.error:
-                    print("Warning: Could not play end sound.")
+                    self.logger.info("End sound played successfully")
+                except pygame.error as e:
+                    self.logger.error(f"Warning: Could not play end sound. Error: {e}")
+                
                 self.status = "Processing..."
                 
+                self.logger.info("Recognizing speech...")
                 prompt = self.recognizer.recognize_google(audio)
-                print(f"You said: {prompt}")
+                self.logger.info(f"Speech recognized: {prompt}")
+                
+                self.logger.info("Sending prompt to OpenAI...")
                 response = self.ask_openai(prompt)
+                self.logger.info(f"OpenAI response received: {response}")
+                
+                self.logger.info("Speaking response...")
                 self.speak_response(response)
             except sr.WaitTimeoutError:
-                print("No speech detected")
+                self.logger.warning("No speech detected")
                 self.status = "No speech detected"
             except sr.UnknownValueError:
-                print("Could not understand audio")
+                self.logger.warning("Could not understand audio")
                 self.status = "Speech not understood"
             except sr.RequestError as e:
-                print(f"Could not request results; {e}")
+                self.logger.error(f"Could not request results; {e}")
                 self.status = "Speech recognition error"
             except Exception as e:
-                print(f"An error occurred: {e}")
+                self.logger.error(f"An error occurred: {e}")
                 self.status = "Error occurred"
 
     def ask_openai(self, prompt):
         """Send the prompt to OpenAI and return the response."""
-        print("Sending prompt to OpenAI...")
+        self.logger.info(f"Sending prompt to OpenAI: {prompt}")
         try:
             response = openai.Completion.create(
                 engine=self.openai_model,
@@ -122,27 +138,33 @@ class AIInteractionModule:
                 presence_penalty=0
             )
             answer = response.choices[0].text.strip()
-            print(f"OpenAI response: {answer}")
+            self.logger.info(f"OpenAI response: {answer}")
             return answer
         except Exception as e:
-            print(f"Error with OpenAI API call: {e}")
+            self.logger.error(f"Error with OpenAI API call: {e}")
             return "Sorry, there was an issue contacting the OpenAI service."
 
     def speak_response(self, text):
         """Convert text response to speech and play it."""
+        self.logger.info(f"Converting text to speech: {text}")
         self.status = "Speaking..."
         try:
             tts = gTTS(text)
             tts.save("response.mp3")
+            self.logger.info("TTS file saved successfully")
             pygame.mixer.music.load("response.mp3")
             pygame.mixer.music.play()
+            self.logger.info("Started playing TTS audio")
             while pygame.mixer.music.get_busy():
                 pygame.time.wait(100)
-            os.remove("response.mp3")  # Clean up the audio file after playback
+            self.logger.info("Finished playing TTS audio")
+            os.remove("response.mp3")
+            self.logger.info("Removed TTS audio file")
         except Exception as e:
-            print(f"Error in TTS or playback: {e}")
+            self.logger.error(f"Error in TTS or playback: {e}")
         finally:
             self.status = "Idle"
+            self.logger.info("Speech response completed")
 
     def cleanup(self):
         """This method is called when shutting down the module."""
