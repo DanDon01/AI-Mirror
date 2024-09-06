@@ -102,8 +102,17 @@ class AIInteractionModule:
                 self.status = "Processing..."
                 
                 self.logger.info("Recognizing speech...")
-                prompt = self.recognizer.recognize_google(audio)
-                self.logger.info(f"Speech recognized: {prompt}")
+                try:
+                    prompt = self.recognizer.recognize_google(audio)
+                    self.logger.info(f"Speech recognized: {prompt}")
+                except sr.UnknownValueError:
+                    self.logger.warning("Google Speech Recognition could not understand audio")
+                    self.status = "Speech not understood"
+                    return
+                except sr.RequestError as e:
+                    self.logger.error(f"Could not request results from Google Speech Recognition service; {e}")
+                    self.status = "Speech recognition error"
+                    return
                 
                 self.logger.info("Sending prompt to OpenAI...")
                 response = self.ask_openai(prompt)
@@ -112,16 +121,10 @@ class AIInteractionModule:
                 self.logger.info("Speaking response...")
                 self.speak_response(response)
             except sr.WaitTimeoutError:
-                self.logger.warning("No speech detected")
+                self.logger.warning("No speech detected within the timeout period")
                 self.status = "No speech detected"
-            except sr.UnknownValueError:
-                self.logger.warning("Could not understand audio")
-                self.status = "Speech not understood"
-            except sr.RequestError as e:
-                self.logger.error(f"Could not request results; {e}")
-                self.status = "Speech recognition error"
             except Exception as e:
-                self.logger.error(f"An error occurred: {e}")
+                self.logger.error(f"An unexpected error occurred: {e}")
                 self.status = "Error occurred"
 
     def ask_openai(self, prompt):
