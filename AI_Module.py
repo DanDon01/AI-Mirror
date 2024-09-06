@@ -6,6 +6,8 @@ import os
 import time
 from dotenv import load_dotenv
 from gpiozero import Button, LED
+from gpiozero.pins.mock import MockFactory
+from gpiozero.exc import GPIOZeroError
 import logging
 from openai import OpenAI
 from config import CONFIG
@@ -53,17 +55,23 @@ class AIInteractionModule:
                 print(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
                 self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
 
-        if gpio_available:
-            try:
-                self.button = Button(23, pull_up=False)
-                self.led = LED(25)
-                self.button.when_pressed = self.on_button_press
-                self.button.when_released = self.on_button_release
-                print("Button and LED initialized")
-            except Exception as e:
-                print(f"Error initializing GPIO: {e}")
-                self.button = None
-                self.led = None
+        try:
+            from gpiozero import Device
+            Device.pin_factory = None  # Use default pin factory
+            self.button = Button(23, pull_up=True)  # Changed to pull_up=True
+            self.led = LED(25)
+            self.button.when_pressed = self.on_button_press
+            self.button.when_released = self.on_button_release
+            print("Button and LED initialized using gpiozero")
+            self.test_button()  # Add this line to test the button
+        except GPIOZeroError as e:
+            print(f"Error initializing GPIO: {e}")
+            print("Falling back to mock GPIO")
+            Device.pin_factory = MockFactory()
+            self.button = Button(23, pull_up=True)
+            self.led = LED(25)
+            self.button.when_pressed = self.on_button_press
+            self.button.when_released = self.on_button_release
         else:
             self.button = None
             self.led = None
@@ -215,3 +223,19 @@ class AIInteractionModule:
         """This method is called when shutting down the module."""
         pygame.mixer.quit()
         print("AI Interaction module has been cleaned up.")
+
+    def test_button(self):
+        print("Testing button. Press the button within the next 10 seconds...")
+        start_time = time.time()
+        button_pressed = False
+        while time.time() - start_time < 10:
+            if self.button.is_pressed:
+                print("Button is pressed")
+                button_pressed = True
+                break
+            time.sleep(0.1)
+        
+        if not button_pressed:
+            print("No button press detected in 10 seconds.")
+        else:
+            print("Button test successful!")
