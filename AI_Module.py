@@ -32,17 +32,14 @@ class AIInteractionModule:
         self.status = "Idle"
         
         # Load sound effects
-        try:
-            self.start_sound = pygame.mixer.Sound("start_listening.wav")
-        except pygame.error:
-            print("Warning: 'start_listening.wav' not found. Using silent sound.")
-            self.start_sound = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
-
-        try:
-            self.end_sound = pygame.mixer.Sound("end_listening.wav")
-        except pygame.error:
-            print("Warning: 'end_listening.wav' not found. Using silent sound.")
-            self.end_sound = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
+        self.sound_effects = {}
+        sound_effects_path = os.path.join('assets', 'sound-effects')
+        for sound_name in ['mirror_listening', 'start_speaking', 'finished_speaking', 'error']:
+            try:
+                self.sound_effects[sound_name] = pygame.mixer.Sound(os.path.join(sound_effects_path, f"{sound_name}.mp3"))
+            except pygame.error:
+                print(f"Warning: '{sound_name}.mp3' not found. Using silent sound.")
+                self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')  # 1 sample of silence
 
         # Set up GPIO for button press and LED control
         self.button = Button(23, pull_up=False)
@@ -59,15 +56,19 @@ class AIInteractionModule:
 
         self.client = OpenAI(api_key=self.api_key)
 
+    def play_sound_effect(self, sound_name):
+        try:
+            self.sound_effects[sound_name].set_volume(self.config.get('audio', {}).get('wav_volume', 0.7))
+            self.sound_effects[sound_name].play()
+        except pygame.error as e:
+            self.logger.error(f"Error playing sound effect '{sound_name}': {e}")
+
     def on_button_press(self):
         self.logger.info("Button press detected")
         """Triggered when the button is pressed."""
         print("Button pressed. Listening for speech...")
         self.led.on()
-        try:
-            self.start_sound.play()
-        except pygame.error:
-            print("Warning: Could not play start sound.")
+        self.play_sound_effect('mirror_listening')
         self.listening = True
         self.status = "Listening..."
 
@@ -103,12 +104,7 @@ class AIInteractionModule:
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
                 self.logger.info("Audio captured successfully")
                 
-                try:
-                    self.end_sound.play()
-                    self.logger.info("End sound played successfully")
-                except pygame.error as e:
-                    self.logger.error(f"Warning: Could not play end sound. Error: {e}")
-                
+                self.play_sound_effect('start_speaking')
                 self.status = "Processing..."
                 
                 self.logger.info("Recognizing speech...")
@@ -119,22 +115,29 @@ class AIInteractionModule:
                 if response != "Sorry, there was an issue contacting the OpenAI service.":
                     self.logger.info("Speaking response...")
                     self.speak_response(response)
+                    self.play_sound_effect('finished_speaking')
                 else:
                     self.logger.warning("OpenAI service issue, not speaking response")
                     self.status = "OpenAI service issue"
+                    self.play_sound_effect('error')
+                    self.speak_response("Sorry, there was an issue contacting the OpenAI service.")
             except sr.WaitTimeoutError:
+                self.play_sound_effect('error')
                 self.logger.warning("No speech detected within the timeout period")
                 self.status = "No speech detected"
                 self.speak_response("I didn't hear anything. Could you please try again?")
             except sr.UnknownValueError:
+                self.play_sound_effect('error')
                 self.logger.warning("Google Speech Recognition could not understand audio")
                 self.status = "Speech not understood"
                 self.speak_response("I'm sorry, I couldn't understand that. Could you please repeat?")
             except sr.RequestError as e:
+                self.play_sound_effect('error')
                 self.logger.error(f"Could not request results from Google Speech Recognition service; {e}")
                 self.status = "Speech recognition error"
                 self.speak_response("There was an issue with the speech recognition service. Please try again later.")
             except Exception as e:
+                self.play_sound_effect('error')
                 self.logger.error(f"An unexpected error occurred: {e}")
                 self.status = "Error occurred"
                 self.speak_response("An unexpected error occurred. Please try again.")
@@ -144,13 +147,13 @@ class AIInteractionModule:
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         """Send the prompt to OpenAI and return the response."""
-        formatted_prompt = f"You are a magic mirror, someone is looking at you and says this: '{prompt}' reply to this query as an all-knowing benevolent leader, with facts and humor"
+        formatted_prompt = f"You are a magic mirror, someone is looking at you and says this: '{prompt}' reply to this query as an all-knowing benevolent leader, with facts and humor, short but banterful answer, give sass and poke fun at them"
         self.logger.info(f"Sending formatted prompt to OpenAI: {formatted_prompt}")
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",  # Always use gpt-4o-mini
                 messages=[
-                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with facts and humor."},
+                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorious answers."},
                     {"role": "user", "content": formatted_prompt}
                 ],
                 max_tokens=max_tokens,

@@ -124,6 +124,11 @@ CONFIG = {
                 'openai': {
                     'api_key': os.getenv('OPENAI_API_KEY'),
                     'model': 'text-davinci-003'
+                },
+                'audio': {
+                    'mic_energy_threshold': 600,
+                    'tts_volume': 0.8,
+                    'wav_volume': 0.7,
                 }
             }
         }
