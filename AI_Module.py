@@ -9,7 +9,6 @@ from gpiozero import Button, LED
 import logging
 from openai import OpenAI
 from config import CONFIG
-import RPi.GPIO as GPIO
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TOKENS = 250
@@ -47,14 +46,13 @@ class AIInteractionModule:
                 print(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
                 self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
 
-        # Initialize GPIO for button and LED
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(23, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        GPIO.setup(25, GPIO.OUT)
-        
-        # Set up event detection for the button
-        GPIO.add_event_detect(23, GPIO.RISING, callback=self.on_button_press, bouncetime=200)
-        GPIO.add_event_detect(23, GPIO.FALLING, callback=self.on_button_release, bouncetime=200)
+        # Initialize GPIO for button and LED using gpiozero
+        self.button = Button(23, pull_up=False)
+        self.led = LED(25)
+
+        # Set up button press and release actions
+        self.button.when_pressed = self.on_button_press
+        self.button.when_released = self.on_button_release
 
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(__name__)
@@ -68,7 +66,7 @@ class AIInteractionModule:
         except pygame.error as e:
             self.logger.error(f"Error playing sound effect '{sound_name}': {e}")
 
-    def on_button_press(self, channel):
+    def on_button_press(self):
         """Handle button press"""
         self.logger.info("Button press detected")
         print("Button pressed. Listening for speech...")
@@ -77,7 +75,7 @@ class AIInteractionModule:
         self.listening = True
         self.status = "Listening..."
 
-    def on_button_release(self, channel):
+    def on_button_release(self):
         """Handle button release"""
         self.logger.info("Button release detected")
         print("Button released.")
@@ -88,7 +86,6 @@ class AIInteractionModule:
 
     def update(self):
         """This method is called by the main loop."""
-        # Remove the listening check from here
         pass
 
     def draw(self, screen, position):
@@ -192,5 +189,6 @@ class AIInteractionModule:
     def cleanup(self):
         """This method is called when shutting down the module."""
         pygame.mixer.quit()
-        GPIO.cleanup()
+        self.led.close()
+        self.button.close()
         print("AI Interaction module has been cleaned up.")
