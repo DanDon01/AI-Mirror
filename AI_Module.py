@@ -51,7 +51,7 @@ class AIInteractionModule:
         self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 300)
         self.recognizer.dynamic_energy_threshold = False
 
-        self.microphone = sr.Microphone(device_index=2)
+        self.microphone = sr.Microphone(device_index=0)
 
         pygame.mixer.init()
         self.listening = False
