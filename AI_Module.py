@@ -5,7 +5,8 @@ import pygame
 import os
 import time
 from dotenv import load_dotenv
-import pigpio
+from gpiozero import Button, LED
+from gpiozero.pins.pigpio import PiGPIOFactory
 import logging
 from openai import OpenAI
 from config import CONFIG
@@ -43,19 +44,14 @@ class AIInteractionModule:
                 print(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
                 self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
 
-        # Initialize GPIO using pigpio
-        self.pi = pigpio.pi()
-        if not self.pi.connected:
-            raise RuntimeError("Failed to connect to pigpio daemon")
-        
-        self.BUTTON_PIN = 23
-        self.LED_PIN = 25
-        self.pi.set_mode(self.BUTTON_PIN, pigpio.INPUT)
-        self.pi.set_pull_up_down(self.BUTTON_PIN, pigpio.PUD_DOWN)
-        self.pi.set_mode(self.LED_PIN, pigpio.OUTPUT)
+        # Initialize GPIO using gpiozero with PiGPIOFactory
+        self.pin_factory = PiGPIOFactory()
+        self.button = Button(23, pull_up=False, pin_factory=self.pin_factory)  # GPIO 23 for button, pull-down
+        self.led = LED(25, pin_factory=self.pin_factory)  # GPIO 25 for LED
 
-        # Set up callback for button press and release
-        self.pi.callback(self.BUTTON_PIN, pigpio.EITHER_EDGE, self.button_callback)
+        # Set up button press and release actions
+        self.button.when_pressed = self.on_button_press
+        self.button.when_released = self.on_button_release
 
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(__name__)
@@ -69,21 +65,21 @@ class AIInteractionModule:
         except pygame.error as e:
             self.logger.error(f"Error playing sound effect '{sound_name}': {e}")
 
-    def button_callback(self, gpio, level, tick):
-        if level == 1:  # Button pressed
-            self.logger.info("Button press detected")
-            print("Button pressed. Listening for speech...")
-            self.pi.write(self.LED_PIN, 1)
-            self.play_sound_effect('mirror_listening')
-            self.listening = True
-            self.status = "Listening..."
-        else:  # Button released
-            self.logger.info("Button release detected")
-            print("Button released.")
-            if self.listening:
-                self.listen_and_respond()
-                self.listening = False
-                self.pi.write(self.LED_PIN, 0)
+    def on_button_press(self):
+        self.logger.info("Button press detected")
+        print("Button pressed. Listening for speech...")
+        self.led.on()
+        self.play_sound_effect('mirror_listening')
+        self.listening = True
+        self.status = "Listening..."
+
+    def on_button_release(self):
+        self.logger.info("Button release detected")
+        print("Button released.")
+        if self.listening:
+            self.listen_and_respond()
+            self.listening = False
+            self.led.off()
 
     def update(self):
         pass
@@ -143,7 +139,7 @@ class AIInteractionModule:
                 self.speak_response("An unexpected error occurred. Please try again.")
             finally:
                 self.listening = False
-                self.pi.write(self.LED_PIN, 0)
+                self.led.off()
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         """Send the prompt to OpenAI and return the response."""
@@ -188,5 +184,7 @@ class AIInteractionModule:
     def cleanup(self):
         """This method is called when shutting down the module."""
         pygame.mixer.quit()
-        self.pi.stop()
+        self.led.close()
+        self.button.close()
+        self.pin_factory.close()
         print("AI Interaction module has been cleaned up.")
