@@ -1,6 +1,7 @@
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 import datetime
 import logging
 import pygame
@@ -24,54 +25,10 @@ class CalendarModule:
 
     def load_tokens(self):
         load_dotenv(self.env_file)
+        self.config['client_id'] = os.getenv('GOOGLE_CLIENT_ID')
+        self.config['client_secret'] = os.getenv('GOOGLE_CLIENT_SECRET')
         self.config['access_token'] = os.getenv('GOOGLE_ACCESS_TOKEN')
         self.config['refresh_token'] = os.getenv('GOOGLE_REFRESH_TOKEN')
-
-    def authenticate(self):
-        self.load_tokens()  # Ensure we have the latest tokens
-        creds = Credentials(
-            token=self.config.get('access_token'),
-            refresh_token=self.config.get('refresh_token'),
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=self.config.get('client_id'),
-            client_secret=self.config.get('client_secret'),
-            scopes=self.SCOPES
-        )
-
-        if not creds.valid:
-            logging.info("Credentials are not valid.")
-            if creds.expired and creds.refresh_token:
-                try:
-                    logging.info("Refreshing expired token...")
-                    creds.refresh(Request())
-                    logging.info("Token successfully refreshed.")
-                except Exception as e:
-                    logging.error(f"Error refreshing token: {e}")
-                    logging.info("Attempting re-authentication...")
-                    creds = self.reauth()
-            else:
-                logging.info("Credentials are invalid or refresh token not available. Re-authenticating...")
-                creds = self.reauth()
-
-        self.save_tokens(creds)
-        return creds
-
-    def reauth(self):
-        flow = Flow.from_client_config(
-            {
-                "web": {
-                    "client_id": self.config.get('client_id'),
-                    "client_secret": self.config.get('client_secret'),
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token"
-                }
-            },
-            scopes=self.SCOPES
-        )
-        flow.run_local_server(port=0)
-        creds = flow.credentials
-        self.save_tokens(creds)
-        return creds
 
     def save_tokens(self, creds):
         self.config['access_token'] = creds.token
@@ -91,37 +48,57 @@ class CalendarModule:
 
         logging.info("Google Calendar tokens have been saved to environment file")
 
+    def get_credentials(self):
+        creds = Credentials(
+            token=self.config.get('access_token'),
+            refresh_token=self.config.get('refresh_token'),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=self.config.get('client_id'),
+            client_secret=self.config.get('client_secret'),
+            scopes=self.SCOPES
+        )
+
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    self.save_tokens(creds)
+                    logging.info("Credentials refreshed successfully")
+                except RefreshError:
+                    logging.error("Failed to refresh token. Manual re-authentication may be required.")
+                    return None
+            else:
+                logging.error("Credentials are invalid and cannot be refreshed. Manual re-authentication is required.")
+                return None
+
+        return creds
+
     def build_service(self):
         if not self.service:
-            creds = self.authenticate()
-            self.service = build('calendar', 'v3', credentials=creds)
-            logging.info("Google Calendar service built successfully.")
+            creds = self.get_credentials()
+            if creds:
+                self.service = build('calendar', 'v3', credentials=creds)
+                logging.info("Google Calendar service built successfully.")
+            else:
+                logging.error("Failed to build Google Calendar service due to invalid credentials.")
 
     def update(self):
-        current_time = datetime.datetime.now()
-        if current_time - self.last_update < self.update_interval:
-            logging.info("Skipping update: Not enough time has passed since last update.")
-            return  # Skip update if not enough time has passed
-
         try:
             self.build_service()
-            now = current_time.isoformat() + 'Z'  # 'Z' indicates UTC time
-            logging.debug(f"Requesting events starting from: {now}")
-            
-            # Fetch calendar color information
-            colors = self.service.colors().get().execute()
-            self.color_map = colors['event']
+            if not self.service:
+                logging.error("Calendar service is not available. Skipping update.")
+                self.events = None
+                return
 
+            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
             events_result = self.service.events().list(calendarId='primary', timeMin=now,
                                                        maxResults=10, singleEvents=True,
                                                        orderBy='startTime').execute()
             self.events = events_result.get('items', [])
-            self.last_update = current_time
             logging.info(f"Successfully updated calendar events. Number of events fetched: {len(self.events)}")
         except Exception as e:
             logging.error(f"Error updating Calendar data: {e}")
-            logging.error(traceback.format_exc())
-            self.events = None  # Indicate that an error occurred
+            self.events = None
 
     def draw(self, screen, position):
         if self.font is None:
