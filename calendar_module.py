@@ -91,6 +91,11 @@ class CalendarModule:
                 return
 
             now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+            
+            # Fetch calendar color information
+            colors = self.service.colors().get().execute()
+            self.color_map = colors['event']
+
             events_result = self.service.events().list(calendarId='primary', timeMin=now,
                                                        maxResults=10, singleEvents=True,
                                                        orderBy='startTime').execute()
@@ -98,6 +103,7 @@ class CalendarModule:
             logging.info(f"Successfully updated calendar events. Number of events fetched: {len(self.events)}")
         except Exception as e:
             logging.error(f"Error updating Calendar data: {e}")
+            logging.error(traceback.format_exc())
             self.events = None
 
     def draw(self, screen, position):
@@ -143,7 +149,7 @@ class CalendarModule:
 
             # Get event color
             color_id = event.get('colorId')
-            if color_id and color_id in self.color_map:
+            if color_id and hasattr(self, 'color_map') and color_id in self.color_map:
                 color = self.color_map[color_id]['background']
                 event_color = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))  # Convert hex to RGB
             else:
