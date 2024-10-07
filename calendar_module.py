@@ -18,7 +18,7 @@ class CalendarModule:
         self.events = []
         self.font = None
         self.last_update = datetime.datetime.min
-        self.update_interval = datetime.timedelta(hours=24)  # Update daily
+        self.update_interval = datetime.timedelta(hours=1)  # Update every hour
         self.service = None
         self.env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
         self.load_tokens()
@@ -83,6 +83,10 @@ class CalendarModule:
                 logging.error("Failed to build Google Calendar service due to invalid credentials.")
 
     def update(self):
+        current_time = datetime.datetime.now()
+        if current_time - self.last_update < self.update_interval:
+            return  # Skip update if not enough time has passed
+
         try:
             self.build_service()
             if not self.service:
@@ -101,12 +105,16 @@ class CalendarModule:
                                                        orderBy='startTime').execute()
             self.events = events_result.get('items', [])
             logging.info(f"Successfully updated calendar events. Number of events fetched: {len(self.events)}")
+            self.last_update = current_time
         except Exception as e:
             logging.error(f"Error updating Calendar data: {e}")
             logging.error(traceback.format_exc())
             self.events = None
 
     def draw(self, screen, position):
+        # Call update at the beginning of draw method
+        self.update()
+        
         if self.font is None:
             try:
                 self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
