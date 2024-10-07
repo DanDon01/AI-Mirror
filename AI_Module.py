@@ -7,6 +7,9 @@ import time
 from dotenv import load_dotenv
 import gpiod
 import logging
+import threading
+import sounddevice as sd
+import numpy as np
 from openai import OpenAI
 from config import CONFIG
 
@@ -45,13 +48,11 @@ class AIInteractionModule:
     def __init__(self, config):
         self.config = config
         self.api_key = config['openai']['api_key']
-        self.openai_model = config['openai'].get('model', 'text-davinci-003')
+        self.openai_model = config['openai'].get('model', DEFAULT_MODEL)
         openai.api_key = self.api_key
         self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)  # Increased threshold
-        self.recognizer.dynamic_energy_threshold = True  # Enable dynamic threshold
-
-        self.microphone = sr.Microphone(device_index=0)
+        self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
+        self.recognizer.dynamic_energy_threshold = True
 
         pygame.mixer.init()
         self.listening = False
@@ -59,7 +60,7 @@ class AIInteractionModule:
         self.status_message = ""
         self.last_status_update = pygame.time.get_ticks()
         self.status_duration = 5000  # Display status for 5 seconds
-        
+
         self.sound_effects = {}
         sound_effects_path = CONFIG.get('sound_effects_path', os.path.join('assets', 'sound-effects'))
         for sound_name in ['mirror_listening', 'start_speaking', 'finished_speaking', 'error']:
@@ -68,13 +69,12 @@ class AIInteractionModule:
                 if os.path.exists(sound_file):
                     self.sound_effects[sound_name] = pygame.mixer.Sound(sound_file)
                 else:
-                    print(f"Warning: Sound file '{sound_file}' not found. Using silent sound.")
+                    logging.warning(f"Warning: Sound file '{sound_file}' not found. Using silent sound.")
                     self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
             except pygame.error as e:
-                print(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
+                logging.error(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
                 self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
 
-        # Initialize GPIO using the new Button class
         self.button = Button(pin=23)
         self.button.set_led(led_pin=25)
 
@@ -115,7 +115,7 @@ class AIInteractionModule:
         self.logger.info("Button release detected")
         print("Button released.")
         if self.listening:
-            self.listen_and_respond()
+            threading.Thread(target=self.listen_and_respond).start()
             self.listening = False
             self.button.turn_led_off()
 
@@ -123,7 +123,7 @@ class AIInteractionModule:
         self.status = status
         self.status_message = message
         self.last_status_update = pygame.time.get_ticks()
-        print(f"AI Status: {self.status} - {self.status_message}")  # Add this line for debugging
+        print(f"AI Status: {self.status} - {self.status_message}")
 
     def draw(self, screen, position):
         font = pygame.font.Font(None, 36)
@@ -135,49 +135,60 @@ class AIInteractionModule:
 
     def listen_and_respond(self):
         self.logger.info("Starting listen_and_respond method")
-        with self.microphone as source:
-            try:
-                self.set_status("Listening...", "Adjusting for ambient noise")
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                self.set_status("Listening...", "Speak now")
-                audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
-                self.logger.info("Audio captured successfully")
-                
-                self.set_status("Processing...", "Recognizing speech")
-                prompt = self.recognizer.recognize_google(audio)
-                self.logger.info(f"Speech recognized: {prompt}")
-                
-                self.set_status("Processing...", f"Recognized: {prompt[:30]}...")
-                response = self.ask_openai(prompt)
-                if response != "Sorry, there was an issue contacting the OpenAI service.":
-                    self.set_status("Responding...", "AI is speaking")
-                    self.speak_response(response)
-                else:
-                    self.set_status("Error", "OpenAI service issue")
-                    self.speak_response("Sorry, there was an issue contacting the OpenAI service.")
-            except sr.WaitTimeoutError:
-                self.set_status("Error", "No speech detected")
-                self.speak_response("I didn't hear anything. Could you please try again?")
-            except sr.UnknownValueError:
-                self.set_status("Error", "Speech not understood")
-                self.speak_response("I'm sorry, I couldn't understand that. Could you please repeat?")
-            except sr.RequestError as e:
-                self.set_status("Error", "Speech recognition service error")
-                self.speak_response("There was an issue with the speech recognition service. Please try again later.")
-            except Exception as e:
-                self.set_status("Error", "Unexpected error occurred")
-                self.speak_response("An unexpected error occurred. Please try again.")
-            finally:
-                self.listening = False
-                self.button.turn_led_off()
+        try:
+            self.set_status("Listening...", "Using real-time amplification")
+            
+            # Capture and amplify the audio in real-time
+            def callback(indata, frames, time, status):
+                if status:
+                    self.logger.error(f"Error in audio stream: {status}")
+                amplified_data = np.clip(indata * 10, -1.0, 1.0)  # Amplify by 10 times
+
+                try:
+                    audio_data = sr.AudioData(amplified_data.tobytes(), 16000, 2)
+                    prompt = self.recognizer.recognize_google(audio_data)
+                    self.logger.info(f"Speech recognized: {prompt}")
+                    self.respond_to_prompt(prompt)
+                except sr.UnknownValueError:
+                    self.set_status("Error", "Speech not understood")
+                    self.speak_response("I'm sorry, I couldn't understand that. Could you please repeat?")
+                except sr.RequestError as e:
+                    self.set_status("Error", "Speech recognition service error")
+                    self.speak_response("There was an issue with the speech recognition service. Please try again later.")
+                except Exception as e:
+                    self.set_status("Error", "Unexpected error occurred")
+                    self.speak_response("An unexpected error occurred. Please try again.")
+                    
+            with sd.InputStream(callback=callback, dtype='float32', channels=1, samplerate=16000):
+                self.logger.info("Listening for real-time commands...")
+                sd.sleep(5000)  # Listen for 5 seconds (adjust as needed)
+
+        except Exception as e:
+            self.logger.error(f"Unexpected error in listen_and_respond: {e}")
+            self.speak_response("An unexpected error occurred while trying to listen. Please try again.")
+        finally:
+            self.button.turn_led_off()
+            self.set_status("Idle", "")
+
+    def respond_to_prompt(self, prompt):
+        self.set_status("Processing...", f"Recognized: {prompt[:30]}...")
+        response = self.ask_openai(prompt)
+        if response != "Sorry, there was an issue contacting the OpenAI service.":
+            self.set_status("Responding...", "AI is speaking")
+            self.speak_response(response)
+        else:
+            self.set_status("Error", "OpenAI service issue")
+            self.speak_response("Sorry, there was an issue contacting the OpenAI service.")
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
-        """Send the prompt to OpenAI and return the response."""
-        formatted_prompt = "You are a magic mirror, someone is looking at you and says this: '{}' reply to this query as an all-knowing benevolent leader, with facts and humor, short but banterful answer, give sass and poke fun at them".format(prompt)
+        formatted_prompt = (
+            "You are a magic mirror, someone is looking at you and says this: '{}' reply to this query as an "
+            "all-knowing benevolent leader, with facts and humor, short but banterful answer, give sass and poke fun at them"
+        ).format(prompt)
         self.logger.info("Sending formatted prompt to OpenAI: {}".format(formatted_prompt))
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.openai_model,
                 messages=[
                     {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorous answers."},
                     {"role": "user", "content": formatted_prompt}
