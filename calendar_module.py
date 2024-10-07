@@ -20,10 +20,15 @@ class CalendarModule:
         self.update_interval = datetime.timedelta(hours=24)  # Update daily
         self.service = None
         self.env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
+        self.load_tokens()
+
+    def load_tokens(self):
         load_dotenv(self.env_file)
-        self.color_map = {}  # To store calendar color information
+        self.config['access_token'] = os.getenv('GOOGLE_ACCESS_TOKEN')
+        self.config['refresh_token'] = os.getenv('GOOGLE_REFRESH_TOKEN')
 
     def authenticate(self):
+        self.load_tokens()  # Ensure we have the latest tokens
         creds = Credentials(
             token=self.config.get('access_token'),
             refresh_token=self.config.get('refresh_token'),
@@ -72,11 +77,10 @@ class CalendarModule:
         self.config['access_token'] = creds.token
         self.config['refresh_token'] = creds.refresh_token
         
-        env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
-        with open(env_file, 'r') as file:
+        with open(self.env_file, 'r') as file:
             lines = file.readlines()
         
-        with open(env_file, 'w') as file:
+        with open(self.env_file, 'w') as file:
             for line in lines:
                 if line.startswith('GOOGLE_ACCESS_TOKEN='):
                     file.write(f"GOOGLE_ACCESS_TOKEN={creds.token}\n")
