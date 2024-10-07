@@ -55,9 +55,11 @@ class AIInteractionModule:
         self.recognizer.dynamic_energy_threshold = True
 
         pygame.mixer.init()
-        self.recording = False
         self.status = "Idle"
         self.status_message = ""
+        self.recording = False
+        self.processing = False
+        self.button_light_on = False
         self.last_status_update = pygame.time.get_ticks()
         self.status_duration = 5000  # Display status for 5 seconds
 
@@ -95,37 +97,37 @@ class AIInteractionModule:
     def update(self):
         current_time = pygame.time.get_ticks()
         if current_time - self.last_status_update > self.status_duration:
-            self.status = "Idle"
-            self.status_message = ""
+            if not self.recording and not self.processing:
+                self.set_status("Idle", "Press button to speak")
 
         if self.button.read() == 0:  # Button is pressed (active low)
-            if not self.recording:
+            if not self.recording and not self.processing:
                 self.on_button_press()
         else:
             if self.recording:
                 self.on_button_release()
 
+        self.update_button_light()
+
     def on_button_press(self):
         self.logger.info("Button press detected")
-        print("Button pressed. Listening for speech...")
-        self.button.turn_led_on()
-        self.play_sound_effect('mirror_listening')
         self.recording = True
-        self.set_status("Listening...", "Speak now")
+        self.set_status("Listening", "Release button when done speaking")
+        self.play_sound_effect('mirror_listening')
         self.start_recording()
 
     def on_button_release(self):
         self.logger.info("Button release detected")
-        print("Button released. Processing speech...")
         self.recording = False
-        self.button.turn_led_off()
+        self.processing = True
+        self.set_status("Processing", "Recognizing speech...")
         self.stop_recording_and_process()
 
     def set_status(self, status, message):
         self.status = status
         self.status_message = message
         self.last_status_update = pygame.time.get_ticks()
-        print(f"AI Status: {self.status} - {self.status_message}")
+        self.logger.info(f"AI Status: {self.status} - {self.status_message}")
 
     def draw(self, screen, position):
         font = pygame.font.Font(None, 36)
@@ -135,13 +137,17 @@ class AIInteractionModule:
             message_text = font.render(self.status_message, True, (200, 200, 200))
             screen.blit(message_text, (position[0], position[1] + 40))
 
+        # Draw button indicator
+        button_color = (0, 255, 0) if self.button_light_on else (255, 0, 0)
+        pygame.draw.circle(screen, button_color, (position[0] + 20, position[1] + 100), 10)
+
     def start_recording(self):
         self.audio_data = []
         
         def audio_callback(indata, frames, time, status):
             if status:
                 self.logger.warning(f"Audio callback status: {status}")
-            self.audio_data.extend(indata[:, 0])  # Only take the first channel
+            self.audio_data.extend(indata[:, 0])
 
         self.stream = sd.InputStream(callback=audio_callback, channels=1, samplerate=16000)
         self.stream.start()
@@ -152,19 +158,18 @@ class AIInteractionModule:
             self.stream.close()
             self.stream = None
 
-        self.set_status("Processing...", "Recognizing speech")
-        
         try:
             audio_np = np.array(self.audio_data)
             audio_amplified = np.int16(audio_np * 32767 * 10)  # Amplify by 10
             
+            self.set_status("Processing", "Recognizing speech...")
             prompt = self.recognizer.recognize_google(audio_amplified.tobytes())
             self.logger.info(f"Speech recognized: {prompt}")
             
-            self.set_status("Processing...", f"Recognized: {prompt[:30]}...")
+            self.set_status("Processing", f"Recognized: {prompt[:30]}...")
             response = self.ask_openai(prompt)
             if response != "Sorry, there was an issue contacting the OpenAI service.":
-                self.set_status("Responding...", "AI is speaking")
+                self.set_status("Responding", "AI is speaking")
                 self.speak_response(response)
             else:
                 self.set_status("Error", "OpenAI service issue")
@@ -179,12 +184,14 @@ class AIInteractionModule:
             self.logger.error(f"Unexpected error in stop_recording_and_process: {e}")
             self.set_status("Error", "Unexpected error occurred")
             self.speak_response("An unexpected error occurred. Please try again.")
+        finally:
+            self.processing = False
 
     def respond_to_prompt(self, prompt):
-        self.set_status("Processing...", f"Recognized: {prompt[:30]}...")
+        self.set_status("Processing", f"Recognized: {prompt[:30]}...")
         response = self.ask_openai(prompt)
         if response != "Sorry, there was an issue contacting the OpenAI service.":
-            self.set_status("Responding...", "AI is speaking")
+            self.set_status("Responding", "AI is speaking")
             self.speak_response(response)
         else:
             self.set_status("Error", "OpenAI service issue")
@@ -215,14 +222,12 @@ class AIInteractionModule:
             return "I'm experiencing some technical difficulties. Please try again later."
 
     def speak_response(self, text):
-        """Convert text response to speech and play it."""
         self.logger.info(f"Converting text to speech: {text}")
-        self.status = "Speaking..."
         try:
             tts = gTTS(text)
             tts.save("response.mp3")
             pygame.mixer.music.load("response.mp3")
-            pygame.mixer.music.set_volume(self.config.get('audio', {}).get('tts_volume', 1.0))
+            pygame.mixer.music.set_volume(0.7)  # Adjust volume as needed
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
                 pygame.time.wait(100)
@@ -230,7 +235,17 @@ class AIInteractionModule:
         except Exception as e:
             self.logger.error(f"Error in TTS or playback: {e}")
         finally:
-            self.status = "Idle"
+            self.set_status("Idle", "Press button to speak")
+
+    def update_button_light(self):
+        if self.recording or self.processing:
+            if not self.button_light_on:
+                self.button.turn_led_on()
+                self.button_light_on = True
+        else:
+            if self.button_light_on:
+                self.button.turn_led_off()
+                self.button_light_on = False
 
     def cleanup(self):
         """This method is called when shutting down the module."""
