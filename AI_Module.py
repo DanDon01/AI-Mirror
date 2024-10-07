@@ -48,14 +48,15 @@ class AIInteractionModule:
         self.openai_model = config['openai'].get('model', 'text-davinci-003')
         openai.api_key = self.api_key
         self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 300)
-        self.recognizer.dynamic_energy_threshold = False
+        self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)  # Increased threshold
+        self.recognizer.dynamic_energy_threshold = True  # Enable dynamic threshold
 
         self.microphone = sr.Microphone(device_index=0)
 
         pygame.mixer.init()
         self.listening = False
         self.status = "Idle"
+        self.status_message = ""
         
         self.sound_effects = {}
         sound_effects_path = CONFIG.get('sound_effects_path', os.path.join('assets', 'sound-effects'))
@@ -115,58 +116,74 @@ class AIInteractionModule:
         font = pygame.font.Font(None, 36)
         text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
         screen.blit(text, position)
+        if self.status_message:
+            message_text = font.render(self.status_message, True, (200, 200, 200))
+            screen.blit(message_text, (position[0], position[1] + 40))
 
     def listen_and_respond(self):
-        """Listen to the user's question and respond using OpenAI API."""
         self.logger.info("Starting listen_and_respond method")
         with self.microphone as source:
             try:
                 self.logger.info("Adjusting for ambient noise...")
                 self.recognizer.adjust_for_ambient_noise(source, duration=1)
                 self.logger.info("Please say your question...")
-                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                self.status = "Listening..."
+                self.status_message = "Speak now..."
+                audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)  # Increased timeout
                 self.logger.info("Audio captured successfully")
                 
                 self.play_sound_effect('start_speaking')
                 self.status = "Processing..."
+                self.status_message = "Recognizing speech..."
                 
                 self.logger.info("Recognizing speech...")
                 prompt = self.recognizer.recognize_google(audio)
                 self.logger.info(f"Speech recognized: {prompt}")
                 
+                self.status_message = f"Recognized: {prompt[:30]}..."
                 response = self.ask_openai(prompt)
                 if response != "Sorry, there was an issue contacting the OpenAI service.":
                     self.logger.info("Speaking response...")
+                    self.status = "Responding..."
+                    self.status_message = "AI is speaking..."
                     self.speak_response(response)
                     self.play_sound_effect('finished_speaking')
                 else:
                     self.logger.warning("OpenAI service issue, not speaking response")
-                    self.status = "OpenAI service issue"
+                    self.status = "Error"
+                    self.status_message = "OpenAI service issue"
                     self.play_sound_effect('error')
                     self.speak_response("Sorry, there was an issue contacting the OpenAI service.")
             except sr.WaitTimeoutError:
                 self.play_sound_effect('error')
                 self.logger.warning("No speech detected within the timeout period")
                 self.status = "No speech detected"
+                self.status_message = "Please try again"
                 self.speak_response("I didn't hear anything. Could you please try again?")
             except sr.UnknownValueError:
                 self.play_sound_effect('error')
                 self.logger.warning("Google Speech Recognition could not understand audio")
                 self.status = "Speech not understood"
+                self.status_message = "Could not understand, please retry"
                 self.speak_response("I'm sorry, I couldn't understand that. Could you please repeat?")
             except sr.RequestError as e:
                 self.play_sound_effect('error')
                 self.logger.error(f"Could not request results from Google Speech Recognition service; {e}")
                 self.status = "Speech recognition error"
+                self.status_message = "Service error, please try later"
                 self.speak_response("There was an issue with the speech recognition service. Please try again later.")
             except Exception as e:
                 self.play_sound_effect('error')
                 self.logger.error(f"An unexpected error occurred: {e}")
                 self.status = "Error occurred"
+                self.status_message = "Unexpected error, please retry"
                 self.speak_response("An unexpected error occurred. Please try again.")
             finally:
                 self.listening = False
                 self.button.turn_led_off()
+                pygame.time.wait(3000)  # Wait for 3 seconds before resetting status
+                self.status = "Idle"
+                self.status_message = ""
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         """Send the prompt to OpenAI and return the response."""
