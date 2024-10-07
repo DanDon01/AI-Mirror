@@ -127,8 +127,8 @@ CONFIG = {
                     'model': 'text-davinci-003'
                 },
                 'audio': {
-                    'mic_energy_threshold': 600,
-                    'tts_volume': 0.8,
+                    'mic_energy_threshold': 1000,
+                    'tts_volume': 0.7,
                     'wav_volume': 0.7,
                 }
             }

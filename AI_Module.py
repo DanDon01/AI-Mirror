@@ -53,7 +53,7 @@ class AIInteractionModule:
         self.recognizer = sr.Recognizer()
         self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
         self.recognizer.dynamic_energy_threshold = True
-
+        self.microphone = sr.Microphone()
         pygame.mixer.init()
         self.status = "Idle"
         self.status_message = ""
@@ -163,7 +163,8 @@ class AIInteractionModule:
             audio_amplified = np.int16(audio_np * 32767 * 10)  # Amplify by 10
             
             self.set_status("Processing", "Recognizing speech...")
-            prompt = self.recognizer.recognize_google(audio_amplified.tobytes())
+            prompt = self.recognizer.recognize_google(audio=audio_amplified.tobytes(), 
+                                                      language="en-US")
             self.logger.info(f"Speech recognized: {prompt}")
             
             self.set_status("Processing", f"Recognized: {prompt[:30]}...")
