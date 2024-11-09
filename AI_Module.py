@@ -25,7 +25,7 @@ class Button:
         self.led_line = None
 
     def read(self):
-        return self.line.get_value()
+        return self.line.get_value()  # 1 is pressed, 0 is not pressed
 
     def set_led(self, led_pin):
         self.led_line = self.chip.get_line(led_pin)
@@ -99,8 +99,8 @@ class AIInteractionModule:
         self.logger.info("AI Module initialization complete")
 
     def update(self):
-        # Simple button check - if it's pressed (0) and we're not already processing
-        if self.button.read() == 0:
+        # If button is pressed (1) and we're not already processing
+        if self.button.read() == 1:
             if not self.recording and not self.processing:
                 self.on_button_press()
         else:
