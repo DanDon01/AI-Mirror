@@ -100,13 +100,24 @@ class AIInteractionModule:
             pygame.mixer.init()
 
     def update(self):
-        current_state = self.button.read()
+        current_button_state = self.button.read()
         
-        # Only trigger on button press if we're not already processing
-        if current_state == 0 and not self.recording and not self.processing and not self.listening:
-            self.on_button_press()
-        elif current_state == 1 and self.recording:  # Button released
-            self.on_button_release()
+        # Only detect button press on transition from 1 to 0
+        if current_button_state == 0 and self.last_button_state == 1:  # Button just pressed
+            if not self.recording and not self.processing and not self.listening:
+                self.on_button_press()
+        elif current_button_state == 1 and self.last_button_state == 0:  # Button just released
+            if self.recording:
+                self.on_button_release()
+        
+        # Update last button state
+        self.last_button_state = current_button_state
+        
+        # Check for completed responses
+        if not self.response_queue.empty():
+            response = self.response_queue.get()
+            if response:
+                self.speak_response(response)
 
     def set_status(self, status, message):
         self.status = status
@@ -136,13 +147,13 @@ class AIInteractionModule:
             self.play_sound_effect('mirror_listening')
             self.recording = True
             self.listening = True
-            self.set_status("Listening...", "Press button and speak")
+            self.set_status("Listening...", "Speak now")
 
     def on_button_release(self):
         if self.recording:
             self.logger.debug("Button release detected")
             self.recording = False
-            self.button.turn_led_off()
+            self.set_status("Processing", "Processing your speech...")
             if not self.processing:
                 self.processing = True
                 self.processing_thread = threading.Thread(target=self.process_audio_async)
@@ -152,37 +163,38 @@ class AIInteractionModule:
     def process_audio_async(self):
         try:
             with self.microphone as source:
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                self.logger.info("Listening for speech...")
+                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                
                 self.set_status("Processing", "Recognizing speech...")
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
-                
-                self.logger.info("Audio captured successfully")
                 prompt = self.recognizer.recognize_google(audio)
-                self.logger.info(f"Speech recognized: {prompt}")
+                self.logger.info(f"Recognized: {prompt}")
                 
-                self.set_status("Processing", f"Recognized: {prompt[:30]}...")
+                self.set_status("Processing", "Getting AI response...")
                 response = self.ask_openai(prompt)
                 
-                if response != "Sorry, there was an issue contacting the OpenAI service.":
-                    self.set_status("Responding", "AI is speaking")
+                if response:
+                    self.set_status("Responding", "AI is speaking...")
                     self.response_queue.put(response)
                 else:
-                    self.set_status("Error", "OpenAI service issue")
-                    self.response_queue.put("Sorry, there was an issue contacting the OpenAI service.")
-                
+                    self.set_status("Error", "No response from AI")
+                    
         except sr.UnknownValueError:
             self.set_status("Error", "Speech not understood")
-            self.response_queue.put("I'm sorry, I couldn't understand that. Could you please repeat?")
+            self.logger.info("Speech was not understood")
         except sr.RequestError as e:
-            self.set_status("Error", "Speech recognition service error")
-            self.response_queue.put("There was an issue with the speech recognition service. Please try again later.")
+            self.set_status("Error", "Speech recognition error")
+            self.logger.error(f"Could not request results: {e}")
         except Exception as e:
-            self.logger.error(f"Unexpected error in process_audio_async: {e}")
-            self.set_status("Error", "Unexpected error occurred")
-            self.response_queue.put("An unexpected error occurred. Please try again.")
+            self.set_status("Error", "An error occurred")
+            self.logger.error(f"Error in speech processing: {e}")
         finally:
+            self.processing = False
             self.listening = False
             self.button.turn_led_off()
+            if not self.recording:
+                self.set_status("Idle", "Press button to speak")
 
     def draw(self, screen, position):
         # Only draw if status is not Idle or if status was recently updated
