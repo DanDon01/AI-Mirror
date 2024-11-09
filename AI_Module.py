@@ -58,6 +58,15 @@ class AIInteractionModule:
         self.client = OpenAI(api_key=openai_config.get('api_key'))
         self.model = openai_config.get('model', 'gpt-4-mini')
         
+        # Initialize sound effects
+        self.sound_effects = {}
+        sound_effects_path = self.config.get('sound_effects_path', '')
+        if sound_effects_path:
+            try:
+                self.sound_effects['mirror_listening'] = pygame.mixer.Sound(os.path.join(sound_effects_path, 'mirror_listening.mp3'))
+            except Exception as e:
+                self.logger.error(f"Error loading sound effects: {e}")
+        
         # Initialize state variables
         self.status = "Idle"
         self.status_message = "Press button to speak"
