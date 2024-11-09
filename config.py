@@ -124,7 +124,7 @@ CONFIG = {
             'config': {
                 'openai': {
                     'api_key': os.getenv('OPENAI_API_KEY'),
-                    'model': 'text-davinci-003'
+                    'model': 'gpt-4o-mini-2024-07-18'
                 },
                 'audio': {
                     'mic_energy_threshold': 1000,

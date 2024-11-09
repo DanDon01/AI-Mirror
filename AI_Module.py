@@ -9,8 +9,10 @@ import numpy as np
 from openai import OpenAI
 from config import CONFIG
 import gpiod
+from queue import Queue
+import asyncio
 
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 DEFAULT_MAX_TOKENS = 250
 
 class Button:
@@ -81,6 +83,10 @@ class AIInteractionModule:
 
         self.client = OpenAI(api_key=self.api_key)
 
+        self.processing_thread = None
+        self.response_queue = Queue()
+        self.processing = False
+
     def play_sound_effect(self, sound_name):
         try:
             self.sound_effects[sound_name].set_volume(self.config.get('audio', {}).get('wav_volume', 0.7))
@@ -90,16 +96,26 @@ class AIInteractionModule:
 
     def update(self):
         current_time = pygame.time.get_ticks()
+        
+        # Check for completed responses
+        if not self.response_queue.empty():
+            response = self.response_queue.get_nowait()
+            if response:
+                self.speak_response(response)
+            self.processing = False
+            
         if current_time - self.last_status_update > self.status_duration:
-            if not self.listening:
+            if not self.recording and not self.processing:
                 self.set_status("Idle", "Press button to speak")
 
-        if self.button.read() == 0:  # Button is pressed (active low)
-            if not self.listening:
+        if self.button.read() == 0:  # Button is pressed
+            if not self.recording and not self.processing:
                 self.on_button_press()
         else:
-            if self.listening:
+            if self.recording:
                 self.on_button_release()
+
+        self.update_button_light()
 
     def on_button_press(self):
         self.logger.info("Button press detected")
@@ -111,11 +127,12 @@ class AIInteractionModule:
 
     def on_button_release(self):
         self.logger.info("Button release detected")
-        print("Button released.")
-        if self.listening:
-            threading.Thread(target=self.listen_and_respond).start()
-            self.listening = False
-            self.button.turn_led_off()
+        self.recording = False
+        if not self.processing:
+            self.processing = True
+            self.processing_thread = threading.Thread(target=self.process_audio_async)
+            self.processing_thread.daemon = True
+            self.processing_thread.start()
 
     def set_status(self, status, message):
         self.status = status
@@ -131,55 +148,51 @@ class AIInteractionModule:
             message_text = font.render(self.status_message, True, (200, 200, 200))
             screen.blit(message_text, (position[0], position[1] + 40))
 
-    def listen_and_respond(self):
-        self.logger.info("Starting listen_and_respond method")
-        with self.microphone as source:
-            try:
-                self.set_status("Listening...", "Adjusting for ambient noise")
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                self.set_status("Listening...", "Speak now")
-                audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
-                self.logger.info("Audio captured successfully")
-
-                self.set_status("Processing...", "Recognizing speech")
-                prompt = self.recognizer.recognize_google(audio)
-                self.logger.info(f"Speech recognized: {prompt}")
-
-                self.set_status("Processing...", f"Recognized: {prompt[:30]}...")
-                response = self.ask_openai(prompt)
-                if response != "Sorry, there was an issue contacting the OpenAI service.":
-                    self.set_status("Responding...", "AI is speaking")
-                    self.speak_response(response)
-                else:
-                    self.set_status("Error", "OpenAI service issue")
-                    self.speak_response("Sorry, there was an issue contacting the OpenAI service.")
-            except sr.WaitTimeoutError:
-                self.set_status("Error", "No speech detected")
-                self.speak_response("I didn't hear anything. Could you please try again?")
-            except sr.UnknownValueError:
-                self.set_status("Error", "Speech not understood")
-                self.speak_response("I'm sorry, I couldn't understand that. Could you please repeat?")
-            except sr.RequestError as e:
-                self.set_status("Error", "Speech recognition service error")
-                self.speak_response("There was an issue with the speech recognition service. Please try again later.")
-            except Exception as e:
-                self.set_status("Error", "Unexpected error occurred")
-                self.speak_response("An unexpected error occurred. Please try again.")
-            finally:
-                self.button.turn_led_off()
-                self.set_status("Idle", "")
+    def process_audio_async(self):
+        """Process audio in a separate thread"""
+        try:
+            self.set_status("Processing", "Recognizing speech...")
+            audio_np = np.array(self.audio_data)
+            audio_amplified = np.int16(audio_np * 32767 * 10)
+            
+            prompt = self.recognizer.recognize_google(
+                audio=audio_amplified.tobytes(),
+                language="en-US"
+            )
+            self.logger.info(f"Speech recognized: {prompt}")
+            
+            self.set_status("Processing", f"Recognized: {prompt[:30]}...")
+            response = self.ask_openai(prompt)
+            
+            if response != "Sorry, there was an issue contacting the OpenAI service.":
+                self.set_status("Responding", "AI is speaking")
+                self.response_queue.put(response)
+            else:
+                self.set_status("Error", "OpenAI service issue")
+                self.response_queue.put("Sorry, there was an issue contacting the OpenAI service.")
+                
+        except sr.UnknownValueError:
+            self.set_status("Error", "Speech not understood")
+            self.response_queue.put("I'm sorry, I couldn't understand that. Could you please repeat?")
+        except sr.RequestError as e:
+            self.set_status("Error", "Speech recognition service error")
+            self.response_queue.put("There was an issue with the speech recognition service. Please try again later.")
+        except Exception as e:
+            self.logger.error(f"Unexpected error in process_audio_async: {e}")
+            self.set_status("Error", "Unexpected error occurred")
+            self.response_queue.put("An unexpected error occurred. Please try again.")
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         formatted_prompt = (
             "You are a magic mirror, someone is looking at you and says this: '{}' reply to this query as an "
-            "all-knowing benevolent leader, with facts and humor, short but banterful answer, give sass and poke fun at them"
+            "all-knowing benevolent leader, with facts and humor, short but banterful answer, give a lot of sass and poke fun at them"
         ).format(prompt)
         self.logger.info("Sending formatted prompt to OpenAI: {}".format(formatted_prompt))
         try:
             response = self.client.chat.completions.create(
                 model=self.openai_model,
                 messages=[
-                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorous answers."},
+                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorous answers, give a lot of sass and poke fun at them"},
                     {"role": "user", "content": formatted_prompt}
                 ],
                 max_tokens=max_tokens,
@@ -196,23 +209,36 @@ class AIInteractionModule:
     def speak_response(self, text):
         """Convert text response to speech and play it."""
         self.logger.info(f"Converting text to speech: {text}")
-        self.status = "Speaking..."
         try:
-            tts = gTTS(text)
-            tts.save("response.mp3")
-            pygame.mixer.music.load("response.mp3")
-            pygame.mixer.music.set_volume(self.config.get('audio', {}).get('tts_volume', 1.0))
-            pygame.mixer.music.play()
-            while pygame.mixer.music.get_busy():
-                pygame.time.wait(100)
-            os.remove("response.mp3")
+            # Create and save audio file in a separate thread
+            def generate_and_play_audio():
+                try:
+                    tts = gTTS(text)
+                    tts.save("response.mp3")
+                    pygame.mixer.music.load("response.mp3")
+                    pygame.mixer.music.set_volume(0.7)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        pygame.time.wait(100)
+                    os.remove("response.mp3")
+                except Exception as e:
+                    self.logger.error(f"Error in TTS or playback: {e}")
+                finally:
+                    self.set_status("Idle", "Press button to speak")
+
+            audio_thread = threading.Thread(target=generate_and_play_audio)
+            audio_thread.daemon = True
+            audio_thread.start()
+            
         except Exception as e:
-            self.logger.error(f"Error in TTS or playback: {e}")
-        finally:
-            self.status = "Idle"
+            self.logger.error(f"Error initiating TTS: {e}")
+            self.set_status("Idle", "Press button to speak")
 
     def cleanup(self):
-        """This method is called when shutting down the module."""
+        """Cleanup method to handle shutdown"""
+        if self.processing_thread and self.processing_thread.is_alive():
+            self.processing = False
+            self.processing_thread.join(timeout=1.0)
+        if hasattr(self, 'button'):
+            self.button.cleanup()
         pygame.mixer.quit()
-        self.button.cleanup()
-        print("AI Interaction module has been cleaned up.")
