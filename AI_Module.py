@@ -1,4 +1,4 @@
-202import openai
+import openai
 import speech_recognition as sr
 from gtts import gTTS
 import pygame
