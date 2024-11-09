@@ -58,14 +58,24 @@ class AIInteractionModule:
         self.client = OpenAI(api_key=openai_config.get('api_key'))
         self.model = openai_config.get('model', 'gpt-4-mini')
         
-        # Initialize sound effects
+        # Initialize sound effects with absolute path
         self.sound_effects = {}
-        sound_effects_path = self.config.get('sound_effects_path', '')
+        sound_effects_path = config.get('sound_effects_path', '')
         if sound_effects_path:
             try:
-                self.sound_effects['mirror_listening'] = pygame.mixer.Sound(os.path.join(sound_effects_path, 'mirror_listening.mp3'))
+                # Get the directory of the main script
+                main_dir = os.path.dirname(os.path.abspath(__file__))
+                # Construct absolute path to sound effects
+                sound_file = os.path.join(main_dir, '..', 'assets', 'sound_effects', 'mirror_listening.mp3')
+                self.logger.info(f"Loading sound file from: {sound_file}")
+                if os.path.exists(sound_file):
+                    self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
+                    self.logger.info("Successfully loaded mirror_listening.mp3")
+                else:
+                    self.logger.error(f"Sound file not found at: {sound_file}")
             except Exception as e:
                 self.logger.error(f"Error loading sound effects: {e}")
+                self.logger.error(f"Current working directory: {os.getcwd()}")
         
         # Initialize state variables
         self.status = "Idle"
