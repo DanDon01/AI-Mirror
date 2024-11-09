@@ -12,6 +12,7 @@ import gpiod
 from queue import Queue
 import asyncio
 import time
+import traceback
 
 DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 DEFAULT_MAX_TOKENS = 250
@@ -104,25 +105,33 @@ class AIInteractionModule:
         self.logger.info("AI Module initialization complete")
 
     def update(self):
-        current_button_state = self.button.read()
-        
-        # Button press (transition from 1 to 0)
-        if current_button_state == 0 and self.last_button_state == 1:
-            if not self.recording and not self.processing and not self.listening:
-                self.on_button_press()
-        # Button release (transition from 0 to 1)
-        elif current_button_state == 1 and self.last_button_state == 0:
-            if self.recording:
-                self.on_button_release()
-        
-        # Update last button state
-        self.last_button_state = current_button_state
-        
-        # Check for completed responses
-        if not self.response_queue.empty():
-            response = self.response_queue.get()
-            if response:
-                self.speak_response(response)
+        try:
+            current_button_state = self.button.read()
+            self.logger.debug(f"Current button state: {current_button_state}, Last button state: {self.last_button_state}")  # Debug logging
+            
+            # Button is pressed (0)
+            if current_button_state == 0 and self.last_button_state == 1:
+                self.logger.info("Button press detected")
+                if not self.recording and not self.processing and not self.listening:
+                    self.on_button_press()
+            # Button is released (1)
+            elif current_button_state == 1 and self.last_button_state == 0:
+                self.logger.info("Button release detected")
+                if self.recording:
+                    self.on_button_release()
+            
+            # Update last button state
+            self.last_button_state = current_button_state
+            
+            # Check for completed responses
+            if not self.response_queue.empty():
+                response = self.response_queue.get()
+                if response:
+                    self.speak_response(response)
+                    
+        except Exception as e:
+            self.logger.error(f"Error in update: {e}")
+            self.logger.error(traceback.format_exc())
 
     def set_status(self, status, message):
         self.status = status
@@ -146,7 +155,7 @@ class AIInteractionModule:
             self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
 
     def on_button_press(self):
-        self.logger.info("Button press detected")
+        self.logger.info("Processing button press")
         if not self.recording and not self.processing:
             self.button.turn_led_on()
             self.button_light_on = True
@@ -156,7 +165,7 @@ class AIInteractionModule:
             self.set_status("Listening...", "Speak now")
 
     def on_button_release(self):
-        self.logger.info("Button release detected")
+        self.logger.info("Processing button release")
         if self.recording:
             self.recording = False
             self.button.turn_led_off()
