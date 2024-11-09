@@ -62,6 +62,8 @@ class MagicMirror:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
+                    pygame.quit()
+                    sys.exit()
                 elif event.key == pygame.K_s:
                     self.toggle_mode()
                 elif event.key == pygame.K_SPACE:
