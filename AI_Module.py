@@ -53,13 +53,16 @@ class AIInteractionModule:
         self.logger = logging.getLogger(__name__)
         self.config = config
         
-        # Initialize speech recognition with adjusted settings
+        # Initialize speech recognition with AIY-specific settings
         self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = 4000  # Set a higher threshold
-        self.recognizer.dynamic_energy_threshold = False  # Disable dynamic adjustment
-        self.recognizer.pause_threshold = 0.8
+        self.recognizer.energy_threshold = 300  # Lower for AIY mic
+        self.recognizer.dynamic_energy_threshold = True
+        self.recognizer.pause_threshold = 0.5
         self.recognizer.phrase_threshold = 0.3
-        self.microphone = sr.Microphone()
+        self.recognizer.non_speaking_duration = 0.3
+        
+        # Initialize microphone with specific sample rate for AIY
+        self.microphone = sr.Microphone(sample_rate=16000)  # AIY uses 16kHz
         
         # Adjust microphone on startup
         with self.microphone as source:
@@ -173,11 +176,8 @@ class AIInteractionModule:
                 self.logger.info("Listening for speech...")
                 self.logger.info(f"Current energy threshold: {self.recognizer.energy_threshold}")
                 
-                # Add debug logging for microphone
-                self.logger.info(f"Using microphone: {source.device_index}")
-                self.logger.info(f"Sample rate: {source.SAMPLE_RATE}")
-                
-                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                # Shorter timeout for AIY
+                audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=5)
                 
                 self.set_status("Processing", "Recognizing speech...")
                 prompt = self.recognizer.recognize_google(audio)
