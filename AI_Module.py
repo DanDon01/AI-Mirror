@@ -89,49 +89,40 @@ class AIInteractionModule:
         self.processing = False
         self.listening = False
         self.button_light_on = False
+        self.last_button_state = self.button.read()  # Initialize with actual state
         
-        # Initialize button state
-        self.last_button_state = 1  # Initialize to HIGH (not pressed)
+        # Threading components
+        self.processing_thread = None
+        self.response_queue = Queue()
         
-        # Add a small delay to let the GPIO settle
-        time.sleep(0.1)
-        
-        # Ensure button starts in correct state
-        self.button.turn_led_off()
-        
-        # Initialize error handling
-        self.max_retries = 3
-        self.retry_count = 0
-        self.retry_delay = 1  # seconds
-        
-        # Initialize conversation history
-        self.conversation_history = []
-        self.max_history_length = 10
+        # Initialize pygame mixer
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
         
         # These should be the last lines of __init__
-        self.last_button_state = self.button.read()  # Initialize with actual button state
         self.set_status("Idle", "Press button to speak")
         self.logger.info("AI Module initialization complete")
 
     def update(self):
-        try:
-            current_button_state = self.button.read()
-            
-            # Debug logging to see button states
-            if current_button_state != self.last_button_state:
-                self.logger.debug(f"Button state changed: {self.last_button_state} -> {current_button_state}")
-            
-            # Button is pressed (0 is pressed, 1 is not pressed)
-            if current_button_state == 0 and self.last_button_state == 1:
+        current_button_state = self.button.read()
+        
+        # Button press (transition from 1 to 0)
+        if current_button_state == 0 and self.last_button_state == 1:
+            if not self.recording and not self.processing and not self.listening:
                 self.on_button_press()
-            # Button is released
-            elif current_button_state == 1 and self.last_button_state == 0:
+        # Button release (transition from 0 to 1)
+        elif current_button_state == 1 and self.last_button_state == 0:
+            if self.recording:
                 self.on_button_release()
-            
-            self.last_button_state = current_button_state
-
-        except Exception as e:
-            self.logger.error(f"Error in update: {e}")
+        
+        # Update last button state
+        self.last_button_state = current_button_state
+        
+        # Check for completed responses
+        if not self.response_queue.empty():
+            response = self.response_queue.get()
+            if response:
+                self.speak_response(response)
 
     def set_status(self, status, message):
         self.status = status
@@ -214,12 +205,11 @@ class AIInteractionModule:
                 self.set_status("Idle", "Press button to speak")
 
     def draw(self, screen, position):
-        # Always draw the status
         font = pygame.font.Font(None, 36)
-        text = font.render(f"AI Status: {self.status}", True, self.text_color)
+        text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
         screen.blit(text, position)
         if self.status_message:
-            message_text = font.render(self.status_message, True, self.text_color)
+            message_text = font.render(self.status_message, True, (200, 200, 200))
             screen.blit(message_text, (position[0], position[1] + 40))
 
     def cleanup(self):
