@@ -58,62 +58,38 @@ class AIInteractionModule:
         self.client = OpenAI(api_key=openai_config.get('api_key'))
         self.model = openai_config.get('model', 'gpt-4-mini')
         
-        # Initialize sound effects with absolute path
+        # Initialize sound effects
         self.sound_effects = {}
-        sound_effects_path = config.get('sound_effects_path', '')
-        if sound_effects_path:
-            try:
-                # Get the directory of the main script
-                main_dir = os.path.dirname(os.path.abspath(__file__))
-                # Construct absolute path to sound effects
-                sound_file = os.path.join(main_dir, '..', 'assets', 'sound_effects', 'mirror_listening.mp3')
-                self.logger.info(f"Loading sound file from: {sound_file}")
-                if os.path.exists(sound_file):
-                    self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
-                    self.logger.info("Successfully loaded mirror_listening.mp3")
-                else:
-                    self.logger.error(f"Sound file not found at: {sound_file}")
-            except Exception as e:
-                self.logger.error(f"Error loading sound effects: {e}")
-                self.logger.error(f"Current working directory: {os.getcwd()}")
+        main_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        sound_file = os.path.join(main_dir, 'assets', 'sound_effects', 'mirror_listening.mp3')
+        self.logger.info(f"Loading sound file from: {sound_file}")
+        try:
+            if os.path.exists(sound_file):
+                self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
+                self.logger.info("Successfully loaded mirror_listening.mp3")
+            else:
+                self.logger.error(f"Sound file not found at: {sound_file}")
+        except Exception as e:
+            self.logger.error(f"Error loading sound effects: {e}")
         
-        # Initialize state variables
+        # Initialize all state variables
         self.status = "Idle"
         self.status_message = "Press button to speak"
         self.last_status_update = pygame.time.get_ticks()
-        self.status_duration = 5000  # 5 seconds
+        self.status_duration = 5000
         self.recording = False
         self.processing = False
+        self.listening = False
         self.button_light_on = False
         self.audio_data = []
-        self.listening = False
         
         # Threading components
         self.processing_thread = None
         self.response_queue = Queue()
         
-        # Initialize pygame mixer for audio
+        # Initialize pygame mixer for audio if not already initialized
         if not pygame.mixer.get_init():
             pygame.mixer.init()
-
-    def play_sound_effect(self, sound_name):
-        self.logger.info(f"Attempting to play sound effect: {sound_name}")
-        self.logger.info(f"Available sound effects: {list(self.sound_effects.keys())}")
-        try:
-            if sound_name in self.sound_effects:
-                self.logger.info(f"Found sound effect: {sound_name}")
-                volume = self.config.get('audio', {}).get('wav_volume', 0.7)
-                self.logger.info(f"Setting volume to: {volume}")
-                self.sound_effects[sound_name].set_volume(volume)
-                self.sound_effects[sound_name].play()
-                self.logger.info(f"Successfully played {sound_name}")
-            else:
-                self.logger.error(f"Sound effect '{sound_name}' not found in available effects")
-        except Exception as e:
-            self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
-            self.logger.error(f"Exception type: {type(e)}")
-            # Continue execution even if sound effect fails
-            pass
 
     def update(self):
         current_time = pygame.time.get_ticks()
@@ -138,14 +114,42 @@ class AIInteractionModule:
 
         self.update_button_light()
 
+    def update_button_light(self):
+        if self.recording or self.processing:
+            if not self.button_light_on:
+                self.button.turn_led_on()
+                self.button_light_on = True
+        else:
+            if self.button_light_on:
+                self.button.turn_led_off()
+                self.button_light_on = False
+
+    def set_status(self, status, message):
+        self.status = status
+        self.status_message = message
+        self.last_status_update = pygame.time.get_ticks()
+        self.logger.info(f"AI Status: {self.status} - {self.status_message}")
+
+    def play_sound_effect(self, sound_name):
+        self.logger.info(f"Attempting to play sound effect: {sound_name}")
+        self.logger.info(f"Available sound effects: {list(self.sound_effects.keys())}")
+        try:
+            if sound_name in self.sound_effects:
+                self.logger.info(f"Found sound effect: {sound_name}")
+                volume = self.config.get('audio', {}).get('wav_volume', 0.7)
+                self.sound_effects[sound_name].set_volume(volume)
+                self.sound_effects[sound_name].play()
+                self.logger.info(f"Successfully played {sound_name}")
+            else:
+                self.logger.error(f"Sound effect '{sound_name}' not found in available effects")
+        except Exception as e:
+            self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
+
     def on_button_press(self):
         self.logger.info("Button press detected")
         print("Button pressed. Listening for speech...")
         self.button.turn_led_on()
-        try:
-            self.play_sound_effect('mirror_listening')
-        except Exception as e:
-            self.logger.error(f"Error in on_button_press when playing sound: {str(e)}")
+        self.play_sound_effect('mirror_listening')
         self.listening = True
         self.recording = True
         self.set_status("Listening...", "Press button and speak")
@@ -159,22 +163,7 @@ class AIInteractionModule:
             self.processing_thread.daemon = True
             self.processing_thread.start()
 
-    def set_status(self, status, message):
-        self.status = status
-        self.status_message = message
-        self.last_status_update = pygame.time.get_ticks()
-        print(f"AI Status: {self.status} - {self.status_message}")
-
-    def draw(self, screen, position):
-        font = pygame.font.Font(None, 36)
-        text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
-        screen.blit(text, position)
-        if self.status_message:
-            message_text = font.render(self.status_message, True, (200, 200, 200))
-            screen.blit(message_text, (position[0], position[1] + 40))
-
     def process_audio_async(self):
-        """Process audio in a separate thread"""
         try:
             with self.microphone as source:
                 self.set_status("Processing", "Recognizing speech...")
@@ -209,63 +198,17 @@ class AIInteractionModule:
             self.listening = False
             self.button.turn_led_off()
 
-    def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
-        formatted_prompt = (
-            "You are a magic mirror, someone is looking at you and says this: '{}' reply to this query as an "
-            "all-knowing benevolent leader, with facts and humor, short but banterful answer, give a lot of sass and poke fun at them"
-        ).format(prompt)
-        self.logger.info("Sending formatted prompt to OpenAI: {}".format(formatted_prompt))
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorous answers, give a lot of sass and poke fun at them"},
-                    {"role": "user", "content": formatted_prompt}
-                ],
-                max_tokens=max_tokens,
-                n=1,
-                temperature=0.7,
-            )
-            answer = response.choices[0].message.content.strip()
-            self.logger.info("OpenAI response: {}".format(answer))
-            return answer
-        except Exception as e:
-            self.logger.error("Unexpected error with OpenAI API call: {}".format(e))
-            return "I'm experiencing some technical difficulties. Please try again later."
-
-    def speak_response(self, text):
-        """Convert text response to speech and play it."""
-        self.logger.info(f"Converting text to speech: {text}")
-        try:
-            # Create and save audio file in a separate thread
-            def generate_and_play_audio():
-                try:
-                    tts = gTTS(text)
-                    tts.save("response.mp3")
-                    pygame.mixer.music.load("response.mp3")
-                    pygame.mixer.music.set_volume(0.7)
-                    pygame.mixer.music.play()
-                    while pygame.mixer.music.get_busy():
-                        pygame.time.wait(100)
-                    os.remove("response.mp3")
-                except Exception as e:
-                    self.logger.error(f"Error in TTS or playback: {e}")
-                finally:
-                    self.set_status("Idle", "Press button to speak")
-
-            audio_thread = threading.Thread(target=generate_and_play_audio)
-            audio_thread.daemon = True
-            audio_thread.start()
-            
-        except Exception as e:
-            self.logger.error(f"Error initiating TTS: {e}")
-            self.set_status("Idle", "Press button to speak")
+    def draw(self, screen, position):
+        font = pygame.font.Font(None, 36)
+        text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
+        screen.blit(text, position)
+        if self.status_message:
+            message_text = font.render(self.status_message, True, (200, 200, 200))
+            screen.blit(message_text, (position[0], position[1] + 40))
 
     def cleanup(self):
-        """Cleanup method to handle shutdown"""
         if self.processing_thread and self.processing_thread.is_alive():
             self.processing = False
             self.processing_thread.join(timeout=1.0)
         if hasattr(self, 'button'):
             self.button.cleanup()
-        pygame.mixer.quit()
