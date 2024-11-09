@@ -22,7 +22,8 @@ class Button:
         self.logger = logging.getLogger(__name__)
         self.chip = gpiod.Chip(chip_name)
         self.line = self.chip.get_line(pin)
-        self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN)
+        # Set the line as input with pull-up
+        self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN | gpiod.LINE_REQ_FLAG_BIAS_PULL_UP)
         self.led_line = None
         self.logger.info(f"Button initialized on pin {pin}")
 
@@ -32,9 +33,15 @@ class Button:
         self.logger.info(f"LED initialized on pin {led_pin}")
 
     def read(self):
-        value = self.line.get_value()
-        self.logger.debug(f"Button read: {value}")
-        return value
+        try:
+            value = self.line.get_value()
+            if value != getattr(self, '_last_value', None):  # Only log when value changes
+                self.logger.info(f"Button state changed to: {value}")
+                self._last_value = value
+            return value
+        except Exception as e:
+            self.logger.error(f"Error reading button: {e}")
+            return 1  # Return not pressed on error
 
     def turn_led_on(self):
         if self.led_line:
