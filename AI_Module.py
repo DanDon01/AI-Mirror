@@ -143,24 +143,36 @@ class AIInteractionModule:
         self.logger.info("AI Module initialization complete")
 
     def update(self):
-        current_button_state = self.button.read()
-        
-        # Only detect button press on transition from 1 to 0
-        if current_button_state == 0 and self.last_button_state == 1:  # Button just pressed
-            if not self.recording and not self.processing and not self.listening:
-                self.on_button_press()
-        elif current_button_state == 1 and self.last_button_state == 0:  # Button just released
-            if self.recording:
-                self.on_button_release()
-        
-        # Update last button state
-        self.last_button_state = current_button_state
-        
-        # Check for completed responses
-        if not self.response_queue.empty():
-            response = self.response_queue.get()
-            if response:
-                self.speak_response(response)
+        try:
+            current_button_state = self.button.read()
+            
+            # Check for button press (transition from HIGH to LOW)
+            if current_button_state == 0 and self.last_button_state == 1:
+                if not self.recording and not self.processing and not self.listening:
+                    self.on_button_press()
+            # Check for button release (transition from LOW to HIGH)
+            elif current_button_state == 1 and self.last_button_state == 0:
+                if self.recording:
+                    self.on_button_release()
+            
+            # Update last button state
+            self.last_button_state = current_button_state
+            
+            # Check for completed responses
+            if not self.response_queue.empty():
+                response = self.response_queue.get()
+                if response:
+                    self.speak_response(response)
+            
+            # Update status message if needed
+            current_time = pygame.time.get_ticks()
+            if current_time - self.last_status_update > self.status_duration:
+                if not self.recording and not self.processing:
+                    self.set_status("Idle", "Press button to speak")
+                    
+        except Exception as e:
+            self.logger.error(f"Error in update: {e}")
+            self.set_status("Error", "System error occurred")
 
     def set_status(self, status, message):
         self.status = status
@@ -184,19 +196,22 @@ class AIInteractionModule:
             self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
 
     def on_button_press(self):
+        self.logger.debug("Button press detected")
         if not self.recording and not self.processing:
-            self.logger.debug("Button press detected")
             self.button.turn_led_on()
+            self.button_light_on = True
             self.play_sound_effect('mirror_listening')
             self.recording = True
             self.listening = True
             self.set_status("Listening...", "Speak now")
+            self.button_press_time = time.time()
 
     def on_button_release(self):
+        self.logger.debug("Button release detected")
         if self.recording:
-            self.logger.debug("Button release detected")
             self.recording = False
-            self.set_status("Processing", "Processing your speech...")
+            self.button.turn_led_off()
+            self.button_light_on = False
             if not self.processing:
                 self.processing = True
                 self.processing_thread = threading.Thread(target=self.process_audio_async)
