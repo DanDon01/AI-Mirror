@@ -140,6 +140,9 @@ class AIInteractionModule:
         self.conversation_history = []
         self.max_history_length = 10
         
+        # These should be the last lines of __init__
+        self.last_button_state = self.button.read()  # Initialize with actual button state
+        self.set_status("Idle", "Press button to speak")
         self.logger.info("AI Module initialization complete")
 
     def update(self):
