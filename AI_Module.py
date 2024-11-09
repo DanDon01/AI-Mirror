@@ -22,14 +22,11 @@ class Button:
         self.logger = logging.getLogger(__name__)
         self.chip = gpiod.Chip(chip_name)
         self.line = self.chip.get_line(pin)
-        # Configure as input with active low and pull-up
-        self.line.request(consumer="button", 
-                         type=gpiod.LINE_REQ_DIR_IN | 
-                              gpiod.LINE_REQ_FLAG_BIAS_PULL_UP | 
-                              gpiod.LINE_REQ_FLAG_ACTIVE_LOW)
+        # Simplified configuration
+        self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN)
         self.led_line = None
+        time.sleep(0.1)  # Let the GPIO settle
         self._last_value = 1  # Initialize as not pressed
-        time.sleep(0.1)  # Let the pull-up stabilize
         self.logger.info(f"Button initialized on pin {pin}")
 
     def set_led(self, led_pin):
@@ -40,24 +37,23 @@ class Button:
 
     def read(self):
         try:
-            value = self.line.get_value()
-            if value != self._last_value:  # Only log when value changes
+            # Invert the value (0 becomes 1, 1 becomes 0)
+            value = 1 - self.line.get_value()
+            if value != self._last_value:
                 self.logger.info(f"Button state changed to: {value}")
                 self._last_value = value
             return value
         except Exception as e:
             self.logger.error(f"Error reading button: {e}")
-            return 1  # Return not pressed on error
+            return 1
 
     def turn_led_on(self):
         if self.led_line:
             self.led_line.set_value(0)
-            self.logger.debug("LED turned on")
 
     def turn_led_off(self):
         if self.led_line:
             self.led_line.set_value(1)
-            self.logger.debug("LED turned off")
 
     def cleanup(self):
         if hasattr(self, 'line'):
@@ -130,15 +126,14 @@ class AIInteractionModule:
     def update(self):
         try:
             current_button_state = self.button.read()
-            self.logger.debug(f"Current button state: {current_button_state}, Last button state: {self.last_button_state}")  # Debug logging
             
-            # Button is pressed (0)
-            if current_button_state == 0 and self.last_button_state == 1:
+            # Button press (transition from not pressed to pressed)
+            if current_button_state == 1 and self.last_button_state == 0:
                 self.logger.info("Button press detected")
                 if not self.recording and not self.processing and not self.listening:
                     self.on_button_press()
-            # Button is released (1)
-            elif current_button_state == 1 and self.last_button_state == 0:
+            # Button release (transition from pressed to not pressed)
+            elif current_button_state == 0 and self.last_button_state == 1:
                 self.logger.info("Button release detected")
                 if self.recording:
                     self.on_button_release()
@@ -146,15 +141,8 @@ class AIInteractionModule:
             # Update last button state
             self.last_button_state = current_button_state
             
-            # Check for completed responses
-            if not self.response_queue.empty():
-                response = self.response_queue.get()
-                if response:
-                    self.speak_response(response)
-                    
         except Exception as e:
             self.logger.error(f"Error in update: {e}")
-            self.logger.error(traceback.format_exc())
 
     def set_status(self, status, message):
         self.status = status
