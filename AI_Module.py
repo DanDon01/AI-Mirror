@@ -62,12 +62,10 @@ class AIInteractionModule:
         self.client = OpenAI(api_key=openai_config.get('api_key'))
         self.model = openai_config.get('model', 'gpt-4-mini')
         
-        # Initialize sound effects
+        # Initialize sound effects with correct path
         self.sound_effects = {}
         try:
-            # Get the correct path to AI-Mirror project directory
-            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            sound_file = os.path.join(project_dir, 'assets', 'sound_effects', 'mirror_listening.mp3')
+            sound_file = '/home/Dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3'
             self.logger.info(f"Loading sound file from: {sound_file}")
             if os.path.exists(sound_file):
                 self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
@@ -90,7 +88,7 @@ class AIInteractionModule:
         # Add a small delay to let the GPIO settle
         time.sleep(0.1)
         
-        # Ensure button is initialized in the correct state
+        # Ensure button starts in correct state
         self.button.turn_led_off()
         
         # Threading components
