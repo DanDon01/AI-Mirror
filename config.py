@@ -61,8 +61,7 @@ CONFIG = {
     'stocks': {
        'class': 'StocksModule',
        'params': {
-            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L'],
-            'log_frequency': 300  # Only log every 5 minutes
+            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L']
        }
     },
     'weather': {

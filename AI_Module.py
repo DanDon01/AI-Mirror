@@ -11,6 +11,7 @@ from config import CONFIG
 import gpiod
 from queue import Queue
 import asyncio
+import time
 
 DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 DEFAULT_MAX_TOKENS = 250
@@ -64,8 +65,9 @@ class AIInteractionModule:
         # Initialize sound effects
         self.sound_effects = {}
         try:
-            sound_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-                                    'assets', 'sound_effects', 'mirror_listening.mp3')
+            # Get the correct path to AI-Mirror project directory
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            sound_file = os.path.join(project_dir, 'assets', 'sound_effects', 'mirror_listening.mp3')
             self.logger.info(f"Loading sound file from: {sound_file}")
             if os.path.exists(sound_file):
                 self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
@@ -85,6 +87,12 @@ class AIInteractionModule:
         self.listening = False
         self.button_light_on = False
         
+        # Add a small delay to let the GPIO settle
+        time.sleep(0.1)
+        
+        # Ensure button is initialized in the correct state
+        self.button.turn_led_off()
+        
         # Threading components
         self.processing_thread = None
         self.response_queue = Queue()
@@ -94,12 +102,13 @@ class AIInteractionModule:
             pygame.mixer.init()
 
     def update(self):
-        if self.button.read() == 0:  # Button is pressed
-            if not self.recording and not self.processing and not self.listening:
-                self.on_button_press()
-        else:  # Button is released
-            if self.recording:
-                self.on_button_release()
+        current_state = self.button.read()
+        
+        # Only trigger on button press if we're not already processing
+        if current_state == 0 and not self.recording and not self.processing and not self.listening:
+            self.on_button_press()
+        elif current_state == 1 and self.recording:  # Button released
+            self.on_button_release()
 
     def set_status(self, status, message):
         self.status = status
@@ -124,7 +133,7 @@ class AIInteractionModule:
 
     def on_button_press(self):
         if not self.recording and not self.processing:
-            self.logger.info("Button press detected")
+            self.logger.debug("Button press detected")
             self.button.turn_led_on()
             self.play_sound_effect('mirror_listening')
             self.recording = True
@@ -133,7 +142,7 @@ class AIInteractionModule:
 
     def on_button_release(self):
         if self.recording:
-            self.logger.info("Button release detected")
+            self.logger.debug("Button release detected")
             self.recording = False
             self.button.turn_led_off()
             if not self.processing:
