@@ -45,47 +45,36 @@ class Button:
 
 class AIInteractionModule:
     def __init__(self, config):
+        self.logger = logging.getLogger(__name__)
         self.config = config
-        self.api_key = config['openai']['api_key']
-        self.openai_model = config['openai'].get('model', DEFAULT_MODEL)
-        openai.api_key = self.api_key
         self.recognizer = sr.Recognizer()
         self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
         self.recognizer.dynamic_energy_threshold = True
         self.microphone = sr.Microphone()
-
-        pygame.mixer.init()
-        self.listening = False
+        self.button = Button(17)  # Assuming you're using GPIO pin 17
+        
+        # Initialize OpenAI client
+        openai_config = config.get('openai', {})
+        self.client = OpenAI(api_key=openai_config.get('api_key'))
+        self.model = openai_config.get('model', 'gpt-4-mini')
+        
+        # Initialize state variables
         self.status = "Idle"
-        self.status_message = ""
+        self.status_message = "Press button to speak"
         self.last_status_update = pygame.time.get_ticks()
-        self.status_duration = 5000  # Display status for 5 seconds
-
-        self.sound_effects = {}
-        sound_effects_path = CONFIG.get('sound_effects_path', os.path.join('assets', 'sound-effects'))
-        for sound_name in ['mirror_listening', 'start_speaking', 'finished_speaking', 'error']:
-            try:
-                sound_file = os.path.join(sound_effects_path, f"{sound_name}.mp3")
-                if os.path.exists(sound_file):
-                    self.sound_effects[sound_name] = pygame.mixer.Sound(sound_file)
-                else:
-                    logging.warning(f"Warning: Sound file '{sound_file}' not found. Using silent sound.")
-                    self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
-            except pygame.error as e:
-                logging.error(f"Error loading sound '{sound_name}': {e}. Using silent sound.")
-                self.sound_effects[sound_name] = pygame.mixer.Sound(buffer=b'\x00')
-
-        self.button = Button(pin=23)
-        self.button.set_led(led_pin=25)
-
-        logging.basicConfig(level=logging.DEBUG)
-        self.logger = logging.getLogger(__name__)
-
-        self.client = OpenAI(api_key=self.api_key)
-
+        self.status_duration = 5000  # 5 seconds
+        self.recording = False
+        self.processing = False
+        self.button_light_on = False
+        self.audio_data = []
+        
+        # Threading components
         self.processing_thread = None
         self.response_queue = Queue()
-        self.processing = False
+        
+        # Initialize pygame mixer for audio
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
 
     def play_sound_effect(self, sound_name):
         try:
@@ -190,7 +179,7 @@ class AIInteractionModule:
         self.logger.info("Sending formatted prompt to OpenAI: {}".format(formatted_prompt))
         try:
             response = self.client.chat.completions.create(
-                model=self.openai_model,
+                model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a magic mirror, an all-knowing benevolent leader who responds with short humorous answers, give a lot of sass and poke fun at them"},
                     {"role": "user", "content": formatted_prompt}
