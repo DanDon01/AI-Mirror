@@ -51,7 +51,7 @@ class AIInteractionModule:
         self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
         self.recognizer.dynamic_energy_threshold = True
         self.microphone = sr.Microphone()
-        self.button = Button("/dev/gpiochip0", 17)  # Corrected button initialization
+        self.button = Button("/dev/gpiochip0", 17)
         
         # Initialize OpenAI client
         openai_config = config.get('openai', {})
@@ -67,6 +67,7 @@ class AIInteractionModule:
         self.processing = False
         self.button_light_on = False
         self.audio_data = []
+        self.listening = False
         
         # Threading components
         self.processing_thread = None
@@ -112,6 +113,7 @@ class AIInteractionModule:
         self.button.turn_led_on()
         self.play_sound_effect('mirror_listening')
         self.listening = True
+        self.recording = True
         self.set_status("Listening...", "Press button and speak")
 
     def on_button_release(self):
@@ -140,25 +142,24 @@ class AIInteractionModule:
     def process_audio_async(self):
         """Process audio in a separate thread"""
         try:
-            self.set_status("Processing", "Recognizing speech...")
-            audio_np = np.array(self.audio_data)
-            audio_amplified = np.int16(audio_np * 32767 * 10)
-            
-            prompt = self.recognizer.recognize_google(
-                audio=audio_amplified.tobytes(),
-                language="en-US"
-            )
-            self.logger.info(f"Speech recognized: {prompt}")
-            
-            self.set_status("Processing", f"Recognized: {prompt[:30]}...")
-            response = self.ask_openai(prompt)
-            
-            if response != "Sorry, there was an issue contacting the OpenAI service.":
-                self.set_status("Responding", "AI is speaking")
-                self.response_queue.put(response)
-            else:
-                self.set_status("Error", "OpenAI service issue")
-                self.response_queue.put("Sorry, there was an issue contacting the OpenAI service.")
+            with self.microphone as source:
+                self.set_status("Processing", "Recognizing speech...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
+                
+                self.logger.info("Audio captured successfully")
+                prompt = self.recognizer.recognize_google(audio)
+                self.logger.info(f"Speech recognized: {prompt}")
+                
+                self.set_status("Processing", f"Recognized: {prompt[:30]}...")
+                response = self.ask_openai(prompt)
+                
+                if response != "Sorry, there was an issue contacting the OpenAI service.":
+                    self.set_status("Responding", "AI is speaking")
+                    self.response_queue.put(response)
+                else:
+                    self.set_status("Error", "OpenAI service issue")
+                    self.response_queue.put("Sorry, there was an issue contacting the OpenAI service.")
                 
         except sr.UnknownValueError:
             self.set_status("Error", "Speech not understood")
@@ -170,6 +171,9 @@ class AIInteractionModule:
             self.logger.error(f"Unexpected error in process_audio_async: {e}")
             self.set_status("Error", "Unexpected error occurred")
             self.response_queue.put("An unexpected error occurred. Please try again.")
+        finally:
+            self.listening = False
+            self.button.turn_led_off()
 
     def ask_openai(self, prompt, max_tokens=DEFAULT_MAX_TOKENS):
         formatted_prompt = (
