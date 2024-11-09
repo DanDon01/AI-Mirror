@@ -46,23 +46,28 @@ class Button:
 
 class AIInteractionModule:
     def __init__(self, config):
+        # Initialize logging
         self.logger = logging.getLogger(__name__)
         self.config = config
+        
+        # Initialize speech recognition
         self.recognizer = sr.Recognizer()
         self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
         self.recognizer.dynamic_energy_threshold = True
         self.microphone = sr.Microphone()
         
-        # Initialize button with correct pins
+        # Initialize button and LED
         self.button = Button(chip_name="/dev/gpiochip0", pin=17)
         self.button.set_led(24)
+        self.button_light_on = False
+        self.last_button_state = 1
         
         # Initialize OpenAI client
         openai_config = config.get('openai', {})
         self.client = OpenAI(api_key=openai_config.get('api_key'))
         self.model = openai_config.get('model', 'gpt-4-mini')
         
-        # Initialize sound effects with correct path
+        # Initialize sound effects
         self.sound_effects = {}
         try:
             sound_file = '/home/Dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3'
@@ -83,7 +88,42 @@ class AIInteractionModule:
         self.recording = False
         self.processing = False
         self.listening = False
-        self.button_light_on = False
+        self.speaking = False
+        self.error_state = False
+        
+        # Initialize audio processing variables
+        self.audio_data = None
+        self.current_prompt = None
+        self.current_response = None
+        self.last_error = None
+        
+        # Initialize timing variables
+        self.button_press_time = 0
+        self.last_process_time = 0
+        self.min_button_hold_time = 0.1  # seconds
+        self.max_recording_time = 30  # seconds
+        self.timeout_duration = 10  # seconds
+        
+        # Initialize display variables
+        self.font_size = 36
+        self.text_color = (200, 200, 200)
+        self.error_color = (255, 0, 0)
+        self.success_color = (0, 255, 0)
+        
+        # Initialize threading components
+        self.processing_thread = None
+        self.response_queue = Queue()
+        self.audio_queue = Queue()
+        self.should_stop = False
+        
+        # Initialize audio settings
+        self.audio_volume = config.get('audio', {}).get('wav_volume', 0.7)
+        self.tts_volume = config.get('audio', {}).get('tts_volume', 0.7)
+        self.mic_energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
+        
+        # Initialize pygame mixer for audio if not already initialized
+        if not pygame.mixer.get_init():
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
         
         # Add a small delay to let the GPIO settle
         time.sleep(0.1)
@@ -91,13 +131,16 @@ class AIInteractionModule:
         # Ensure button starts in correct state
         self.button.turn_led_off()
         
-        # Threading components
-        self.processing_thread = None
-        self.response_queue = Queue()
+        # Initialize error handling
+        self.max_retries = 3
+        self.retry_count = 0
+        self.retry_delay = 1  # seconds
         
-        # Initialize pygame mixer for audio
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
+        # Initialize conversation history
+        self.conversation_history = []
+        self.max_history_length = 10
+        
+        self.logger.info("AI Module initialization complete")
 
     def update(self):
         current_button_state = self.button.read()
