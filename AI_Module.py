@@ -18,14 +18,14 @@ DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 DEFAULT_MAX_TOKENS = 250
 
 class Button:
-    def __init__(self, chip_name="/dev/gpiochip0", pin=17):
+    def __init__(self, chip_name="/dev/gpiochip0", pin=23):
         self.chip = gpiod.Chip(chip_name)
         self.line = self.chip.get_line(pin)
         self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN)
         self.led_line = None
 
     def read(self):
-        return self.line.get_value()  # 1 is pressed, 0 is not pressed
+        return self.line.get_value()  # 0 is pressed, 1 is not pressed
 
     def set_led(self, led_pin):
         self.led_line = self.chip.get_line(led_pin)
@@ -52,8 +52,8 @@ class AIInteractionModule:
         self.microphone = sr.Microphone()
         
         # Initialize button and LED
-        self.button = Button(chip_name="/dev/gpiochip0", pin=17)
-        self.button.set_led(24)
+        self.button = Button(chip_name="/dev/gpiochip0", pin=23)
+        self.button.set_led(25)
         self.button_light_on = False
         self.last_button_state = 1
         
@@ -99,8 +99,8 @@ class AIInteractionModule:
         self.logger.info("AI Module initialization complete")
 
     def update(self):
-        # If button is pressed (1) and we're not already processing
-        if self.button.read() == 1:
+        # Button is pressed (0) and we're not already processing
+        if self.button.read() == 0:
             if not self.recording and not self.processing:
                 self.on_button_press()
         else:
