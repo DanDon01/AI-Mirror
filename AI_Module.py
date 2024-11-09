@@ -51,7 +51,7 @@ class AIInteractionModule:
         self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
         self.recognizer.dynamic_energy_threshold = True
         self.microphone = sr.Microphone()
-        self.button = Button(17)  # Assuming you're using GPIO pin 17
+        self.button = Button("/dev/gpiochip0", 17)  # Corrected button initialization
         
         # Initialize OpenAI client
         openai_config = config.get('openai', {})
