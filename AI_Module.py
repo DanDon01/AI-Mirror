@@ -97,11 +97,23 @@ class AIInteractionModule:
             pygame.mixer.init()
 
     def play_sound_effect(self, sound_name):
+        self.logger.info(f"Attempting to play sound effect: {sound_name}")
+        self.logger.info(f"Available sound effects: {list(self.sound_effects.keys())}")
         try:
-            self.sound_effects[sound_name].set_volume(self.config.get('audio', {}).get('wav_volume', 0.7))
-            self.sound_effects[sound_name].play()
-        except pygame.error as e:
-            self.logger.error(f"Error playing sound effect '{sound_name}': {e}")
+            if sound_name in self.sound_effects:
+                self.logger.info(f"Found sound effect: {sound_name}")
+                volume = self.config.get('audio', {}).get('wav_volume', 0.7)
+                self.logger.info(f"Setting volume to: {volume}")
+                self.sound_effects[sound_name].set_volume(volume)
+                self.sound_effects[sound_name].play()
+                self.logger.info(f"Successfully played {sound_name}")
+            else:
+                self.logger.error(f"Sound effect '{sound_name}' not found in available effects")
+        except Exception as e:
+            self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
+            self.logger.error(f"Exception type: {type(e)}")
+            # Continue execution even if sound effect fails
+            pass
 
     def update(self):
         current_time = pygame.time.get_ticks()
@@ -130,7 +142,10 @@ class AIInteractionModule:
         self.logger.info("Button press detected")
         print("Button pressed. Listening for speech...")
         self.button.turn_led_on()
-        self.play_sound_effect('mirror_listening')
+        try:
+            self.play_sound_effect('mirror_listening')
+        except Exception as e:
+            self.logger.error(f"Error in on_button_press when playing sound: {str(e)}")
         self.listening = True
         self.recording = True
         self.set_status("Listening...", "Press button and speak")
