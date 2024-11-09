@@ -88,42 +88,10 @@ class AIInteractionModule:
         self.recording = False
         self.processing = False
         self.listening = False
-        self.speaking = False
-        self.error_state = False
+        self.button_light_on = False
         
-        # Initialize audio processing variables
-        self.audio_data = None
-        self.current_prompt = None
-        self.current_response = None
-        self.last_error = None
-        
-        # Initialize timing variables
-        self.button_press_time = 0
-        self.last_process_time = 0
-        self.min_button_hold_time = 0.1  # seconds
-        self.max_recording_time = 30  # seconds
-        self.timeout_duration = 10  # seconds
-        
-        # Initialize display variables
-        self.font_size = 36
-        self.text_color = (200, 200, 200)
-        self.error_color = (255, 0, 0)
-        self.success_color = (0, 255, 0)
-        
-        # Initialize threading components
-        self.processing_thread = None
-        self.response_queue = Queue()
-        self.audio_queue = Queue()
-        self.should_stop = False
-        
-        # Initialize audio settings
-        self.audio_volume = config.get('audio', {}).get('wav_volume', 0.7)
-        self.tts_volume = config.get('audio', {}).get('tts_volume', 0.7)
-        self.mic_energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
-        
-        # Initialize pygame mixer for audio if not already initialized
-        if not pygame.mixer.get_init():
-            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+        # Initialize button state
+        self.last_button_state = 1  # Initialize to HIGH (not pressed)
         
         # Add a small delay to let the GPIO settle
         time.sleep(0.1)
@@ -149,39 +117,27 @@ class AIInteractionModule:
         try:
             current_button_state = self.button.read()
             
-            # Check for button press (transition from HIGH to LOW)
+            # Debug logging to see button states
+            if current_button_state != self.last_button_state:
+                self.logger.debug(f"Button state changed: {self.last_button_state} -> {current_button_state}")
+            
+            # Button is pressed (0 is pressed, 1 is not pressed)
             if current_button_state == 0 and self.last_button_state == 1:
-                if not self.recording and not self.processing and not self.listening:
-                    self.on_button_press()
-            # Check for button release (transition from LOW to HIGH)
+                self.on_button_press()
+            # Button is released
             elif current_button_state == 1 and self.last_button_state == 0:
-                if self.recording:
-                    self.on_button_release()
+                self.on_button_release()
             
-            # Update last button state
             self.last_button_state = current_button_state
-            
-            # Check for completed responses
-            if not self.response_queue.empty():
-                response = self.response_queue.get()
-                if response:
-                    self.speak_response(response)
-            
-            # Update status message if needed
-            current_time = pygame.time.get_ticks()
-            if current_time - self.last_status_update > self.status_duration:
-                if not self.recording and not self.processing:
-                    self.set_status("Idle", "Press button to speak")
-                    
+
         except Exception as e:
             self.logger.error(f"Error in update: {e}")
-            self.set_status("Error", "System error occurred")
 
     def set_status(self, status, message):
         self.status = status
         self.status_message = message
         self.last_status_update = pygame.time.get_ticks()
-        self.logger.info(f"AI Status: {self.status} - {self.status_message}")
+        self.logger.debug(f"Status set to: {status} - {message}")
 
     def play_sound_effect(self, sound_name):
         self.logger.info(f"Attempting to play sound effect: {sound_name}")
@@ -199,7 +155,7 @@ class AIInteractionModule:
             self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
 
     def on_button_press(self):
-        self.logger.debug("Button press detected")
+        self.logger.info("Button press detected")
         if not self.recording and not self.processing:
             self.button.turn_led_on()
             self.button_light_on = True
@@ -207,16 +163,16 @@ class AIInteractionModule:
             self.recording = True
             self.listening = True
             self.set_status("Listening...", "Speak now")
-            self.button_press_time = time.time()
 
     def on_button_release(self):
-        self.logger.debug("Button release detected")
+        self.logger.info("Button release detected")
         if self.recording:
             self.recording = False
             self.button.turn_led_off()
             self.button_light_on = False
             if not self.processing:
                 self.processing = True
+                self.set_status("Processing", "Processing your speech...")
                 self.processing_thread = threading.Thread(target=self.process_audio_async)
                 self.processing_thread.daemon = True
                 self.processing_thread.start()
@@ -258,16 +214,13 @@ class AIInteractionModule:
                 self.set_status("Idle", "Press button to speak")
 
     def draw(self, screen, position):
-        # Only draw if status is not Idle or if status was recently updated
-        current_time = pygame.time.get_ticks()
-        if (self.status != "Idle" or 
-            current_time - self.last_status_update < 1000):
-            font = pygame.font.Font(None, 36)
-            text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
-            screen.blit(text, position)
-            if self.status_message:
-                message_text = font.render(self.status_message, True, (200, 200, 200))
-                screen.blit(message_text, (position[0], position[1] + 40))
+        # Always draw the status
+        font = pygame.font.Font(None, 36)
+        text = font.render(f"AI Status: {self.status}", True, self.text_color)
+        screen.blit(text, position)
+        if self.status_message:
+            message_text = font.render(self.status_message, True, self.text_color)
+            screen.blit(message_text, (position[0], position[1] + 40))
 
     def cleanup(self):
         if self.processing_thread and self.processing_thread.is_alive():
