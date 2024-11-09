@@ -39,17 +39,33 @@ class Button:
         if self.led_line:
             self.led_line.set_value(1)
 
+    def cleanup(self):
+        if hasattr(self, 'line'):
+            self.line.release()
+        if hasattr(self, 'led_line') and self.led_line:
+            self.led_line.release()
+        if hasattr(self, 'chip'):
+            self.chip.close()
+
 class AIInteractionModule:
     def __init__(self, config):
         # Initialize logging
         self.logger = logging.getLogger(__name__)
         self.config = config
         
-        # Initialize speech recognition
+        # Initialize speech recognition with adjusted settings
         self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
+        self.recognizer.energy_threshold = 500  # Even lower threshold
         self.recognizer.dynamic_energy_threshold = True
+        self.recognizer.pause_threshold = 1.0  # Slightly longer pause
+        self.recognizer.phrase_threshold = 0.3
         self.microphone = sr.Microphone()
+        
+        # Adjust microphone on startup
+        with self.microphone as source:
+            self.logger.info("Adjusting for ambient noise...")
+            self.recognizer.adjust_for_ambient_noise(source, duration=2)
+            self.logger.info(f"Microphone energy threshold: {self.recognizer.energy_threshold}")
         
         # Initialize button and LED
         self.button = Button(chip_name="/dev/gpiochip0", pin=23)
@@ -154,8 +170,8 @@ class AIInteractionModule:
     def process_audio_async(self):
         try:
             with self.microphone as source:
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 self.logger.info("Listening for speech...")
+                self.logger.info(f"Current energy threshold: {self.recognizer.energy_threshold}")
                 audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
                 
                 self.set_status("Processing", "Recognizing speech...")
