@@ -18,32 +18,40 @@ DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 DEFAULT_MAX_TOKENS = 250
 
 class Button:
-    def __init__(self, chip_name="/dev/gpiochip0", pin=23):
+    def __init__(self, chip_name="/dev/gpiochip0", pin=17):
+        self.logger = logging.getLogger(__name__)
         self.chip = gpiod.Chip(chip_name)
         self.line = self.chip.get_line(pin)
         self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN)
         self.led_line = None
+        self.logger.info(f"Button initialized on pin {pin}")
 
     def set_led(self, led_pin):
         self.led_line = self.chip.get_line(led_pin)
-        self.led_line.request(consumer="led", type=gpiod.LINE_REQ_DIR_OUT, default_vals=[1])
+        self.led_line.request(consumer="led", type=gpiod.LINE_REQ_DIR_OUT)
+        self.logger.info(f"LED initialized on pin {led_pin}")
 
     def read(self):
-        return self.line.get_value()
+        value = self.line.get_value()
+        self.logger.debug(f"Button read: {value}")
+        return value
 
     def turn_led_on(self):
         if self.led_line:
             self.led_line.set_value(0)
+            self.logger.debug("LED turned on")
 
     def turn_led_off(self):
         if self.led_line:
             self.led_line.set_value(1)
+            self.logger.debug("LED turned off")
 
     def cleanup(self):
         self.line.release()
         if self.led_line:
             self.led_line.release()
         self.chip.close()
+        self.logger.info("Button cleaned up")
 
 class AIInteractionModule:
     def __init__(self, config):
