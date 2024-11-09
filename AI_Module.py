@@ -51,63 +51,55 @@ class AIInteractionModule:
         self.recognizer.energy_threshold = config.get('audio', {}).get('mic_energy_threshold', 1000)
         self.recognizer.dynamic_energy_threshold = True
         self.microphone = sr.Microphone()
-        self.button = Button("/dev/gpiochip0", 17)
+        
+        # Initialize button with correct pins
+        self.button = Button(chip_name="/dev/gpiochip0", pin=17)
+        self.button.set_led(24)
         
         # Initialize OpenAI client
         openai_config = config.get('openai', {})
         self.client = OpenAI(api_key=openai_config.get('api_key'))
         self.model = openai_config.get('model', 'gpt-4-mini')
         
-        # Fix sound effects path
+        # Initialize sound effects
         self.sound_effects = {}
-        sound_effects_path = config.get('config', {}).get('sound_effects_path', '')
-        if not sound_effects_path:
-            sound_effects_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'sound_effects')
-        
         try:
-            sound_file = os.path.join(sound_effects_path, 'mirror_listening.mp3')
+            sound_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                                    'assets', 'sound_effects', 'mirror_listening.mp3')
+            self.logger.info(f"Loading sound file from: {sound_file}")
             if os.path.exists(sound_file):
                 self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
+                self.logger.info("Successfully loaded mirror_listening.mp3")
             else:
-                self.logger.error(f"Sound file not found: {sound_file}")
+                self.logger.error(f"Sound file not found at: {sound_file}")
         except Exception as e:
             self.logger.error(f"Error loading sound: {e}")
-
-        # Initialize button LED
-        self.button.set_led(24)  # Set LED pin
-        self.button_light_on = False
-        self.recording = False
-        self.processing = False
-        self.listening = False
-
-        # Initialize all state variables
+        
+        # Initialize state variables
         self.status = "Idle"
         self.status_message = "Press button to speak"
         self.last_status_update = pygame.time.get_ticks()
         self.status_duration = 5000
-
+        self.recording = False
+        self.processing = False
+        self.listening = False
+        self.button_light_on = False
+        
         # Threading components
         self.processing_thread = None
         self.response_queue = Queue()
         
-        # Initialize pygame mixer for audio if not already initialized
+        # Initialize pygame mixer for audio
         if not pygame.mixer.get_init():
             pygame.mixer.init()
 
     def update(self):
-        # Only check for button press if not already recording or processing
-        if not self.recording and not self.processing:
-            if self.button.read() == 0:  # Button pressed
+        if self.button.read() == 0:  # Button is pressed
+            if not self.recording and not self.processing and not self.listening:
                 self.on_button_press()
-            elif self.listening:  # Button was released
+        else:  # Button is released
+            if self.recording:
                 self.on_button_release()
-                self.listening = False
-
-        # Update status less frequently
-        current_time = pygame.time.get_ticks()
-        if current_time - self.last_status_update > self.status_duration:
-            if not self.recording and not self.processing:
-                self.set_status("Idle", "Press button to speak")
 
     def set_status(self, status, message):
         self.status = status
@@ -131,22 +123,24 @@ class AIInteractionModule:
             self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
 
     def on_button_press(self):
-        self.logger.info("Button press detected")
-        print("Button pressed. Listening for speech...")
-        self.button.turn_led_on()
-        self.play_sound_effect('mirror_listening')
-        self.listening = True
-        self.recording = True
-        self.set_status("Listening...", "Press button and speak")
+        if not self.recording and not self.processing:
+            self.logger.info("Button press detected")
+            self.button.turn_led_on()
+            self.play_sound_effect('mirror_listening')
+            self.recording = True
+            self.listening = True
+            self.set_status("Listening...", "Press button and speak")
 
     def on_button_release(self):
-        self.logger.info("Button release detected")
-        self.recording = False
-        if not self.processing:
-            self.processing = True
-            self.processing_thread = threading.Thread(target=self.process_audio_async)
-            self.processing_thread.daemon = True
-            self.processing_thread.start()
+        if self.recording:
+            self.logger.info("Button release detected")
+            self.recording = False
+            self.button.turn_led_off()
+            if not self.processing:
+                self.processing = True
+                self.processing_thread = threading.Thread(target=self.process_audio_async)
+                self.processing_thread.daemon = True
+                self.processing_thread.start()
 
     def process_audio_async(self):
         try:
@@ -184,8 +178,10 @@ class AIInteractionModule:
             self.button.turn_led_off()
 
     def draw(self, screen, position):
-        # Only draw if there's a status change
-        if self.status != "Idle" or pygame.time.get_ticks() - self.last_status_update < 1000:
+        # Only draw if status is not Idle or if status was recently updated
+        current_time = pygame.time.get_ticks()
+        if (self.status != "Idle" or 
+            current_time - self.last_status_update < 1000):
             font = pygame.font.Font(None, 36)
             text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
             screen.blit(text, position)
