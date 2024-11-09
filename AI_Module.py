@@ -58,31 +58,34 @@ class AIInteractionModule:
         self.client = OpenAI(api_key=openai_config.get('api_key'))
         self.model = openai_config.get('model', 'gpt-4-mini')
         
-        # Initialize sound effects
+        # Fix sound effects path
         self.sound_effects = {}
-        main_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        sound_file = os.path.join(main_dir, 'assets', 'sound_effects', 'mirror_listening.mp3')
-        self.logger.info(f"Loading sound file from: {sound_file}")
+        sound_effects_path = config.get('config', {}).get('sound_effects_path', '')
+        if not sound_effects_path:
+            sound_effects_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'sound_effects')
+        
         try:
+            sound_file = os.path.join(sound_effects_path, 'mirror_listening.mp3')
             if os.path.exists(sound_file):
                 self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
-                self.logger.info("Successfully loaded mirror_listening.mp3")
             else:
-                self.logger.error(f"Sound file not found at: {sound_file}")
+                self.logger.error(f"Sound file not found: {sound_file}")
         except Exception as e:
-            self.logger.error(f"Error loading sound effects: {e}")
-        
+            self.logger.error(f"Error loading sound: {e}")
+
+        # Initialize button LED
+        self.button.set_led(24)  # Set LED pin
+        self.button_light_on = False
+        self.recording = False
+        self.processing = False
+        self.listening = False
+
         # Initialize all state variables
         self.status = "Idle"
         self.status_message = "Press button to speak"
         self.last_status_update = pygame.time.get_ticks()
         self.status_duration = 5000
-        self.recording = False
-        self.processing = False
-        self.listening = False
-        self.button_light_on = False
-        self.audio_data = []
-        
+
         # Threading components
         self.processing_thread = None
         self.response_queue = Queue()
@@ -92,37 +95,19 @@ class AIInteractionModule:
             pygame.mixer.init()
 
     def update(self):
+        # Only check for button press if not already recording or processing
+        if not self.recording and not self.processing:
+            if self.button.read() == 0:  # Button pressed
+                self.on_button_press()
+            elif self.listening:  # Button was released
+                self.on_button_release()
+                self.listening = False
+
+        # Update status less frequently
         current_time = pygame.time.get_ticks()
-        
-        # Check for completed responses
-        if not self.response_queue.empty():
-            response = self.response_queue.get_nowait()
-            if response:
-                self.speak_response(response)
-            self.processing = False
-            
         if current_time - self.last_status_update > self.status_duration:
             if not self.recording and not self.processing:
                 self.set_status("Idle", "Press button to speak")
-
-        if self.button.read() == 0:  # Button is pressed
-            if not self.recording and not self.processing:
-                self.on_button_press()
-        else:
-            if self.recording:
-                self.on_button_release()
-
-        self.update_button_light()
-
-    def update_button_light(self):
-        if self.recording or self.processing:
-            if not self.button_light_on:
-                self.button.turn_led_on()
-                self.button_light_on = True
-        else:
-            if self.button_light_on:
-                self.button.turn_led_off()
-                self.button_light_on = False
 
     def set_status(self, status, message):
         self.status = status
@@ -199,12 +184,14 @@ class AIInteractionModule:
             self.button.turn_led_off()
 
     def draw(self, screen, position):
-        font = pygame.font.Font(None, 36)
-        text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
-        screen.blit(text, position)
-        if self.status_message:
-            message_text = font.render(self.status_message, True, (200, 200, 200))
-            screen.blit(message_text, (position[0], position[1] + 40))
+        # Only draw if there's a status change
+        if self.status != "Idle" or pygame.time.get_ticks() - self.last_status_update < 1000:
+            font = pygame.font.Font(None, 36)
+            text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
+            screen.blit(text, position)
+            if self.status_message:
+                message_text = font.render(self.status_message, True, (200, 200, 200))
+                screen.blit(message_text, (position[0], position[1] + 40))
 
     def cleanup(self):
         if self.processing_thread and self.processing_thread.is_alive():

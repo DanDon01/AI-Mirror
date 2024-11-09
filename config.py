@@ -130,7 +130,8 @@ CONFIG = {
                     'mic_energy_threshold': 1000,
                     'tts_volume': 0.7,
                     'wav_volume': 0.7,
-                }
+                },
+                'sound_effects_path': sound_effects_path  # Add this here
             }
         }
     },
