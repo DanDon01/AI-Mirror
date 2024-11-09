@@ -22,20 +22,26 @@ class Button:
         self.logger = logging.getLogger(__name__)
         self.chip = gpiod.Chip(chip_name)
         self.line = self.chip.get_line(pin)
-        # Set the line as input with pull-up
-        self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN | gpiod.LINE_REQ_FLAG_BIAS_PULL_UP)
+        # Configure as input with active low and pull-up
+        self.line.request(consumer="button", 
+                         type=gpiod.LINE_REQ_DIR_IN | 
+                              gpiod.LINE_REQ_FLAG_BIAS_PULL_UP | 
+                              gpiod.LINE_REQ_FLAG_ACTIVE_LOW)
         self.led_line = None
+        self._last_value = 1  # Initialize as not pressed
+        time.sleep(0.1)  # Let the pull-up stabilize
         self.logger.info(f"Button initialized on pin {pin}")
 
     def set_led(self, led_pin):
         self.led_line = self.chip.get_line(led_pin)
         self.led_line.request(consumer="led", type=gpiod.LINE_REQ_DIR_OUT)
+        self.led_line.set_value(1)  # Initialize LED as off
         self.logger.info(f"LED initialized on pin {led_pin}")
 
     def read(self):
         try:
             value = self.line.get_value()
-            if value != getattr(self, '_last_value', None):  # Only log when value changes
+            if value != self._last_value:  # Only log when value changes
                 self.logger.info(f"Button state changed to: {value}")
                 self._last_value = value
             return value
@@ -54,10 +60,12 @@ class Button:
             self.logger.debug("LED turned off")
 
     def cleanup(self):
-        self.line.release()
-        if self.led_line:
+        if hasattr(self, 'line'):
+            self.line.release()
+        if hasattr(self, 'led_line') and self.led_line:
             self.led_line.release()
-        self.chip.close()
+        if hasattr(self, 'chip'):
+            self.chip.close()
         self.logger.info("Button cleaned up")
 
 class AIInteractionModule:
