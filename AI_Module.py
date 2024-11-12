@@ -19,32 +19,17 @@ DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 DEFAULT_MAX_TOKENS = 250
 
 class Button:
-    def __init__(self, chip_name="/dev/gpiochip0", pin=23):
+    def __init__(self, chip_name="/dev/gpiochip0", pin=17):
         self.chip = gpiod.Chip(chip_name)
         self.line = self.chip.get_line(pin)
         self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN)
-        self.led_line = None
 
     def read(self):
         return self.line.get_value()  # 0 is pressed, 1 is not pressed
 
-    def set_led(self, led_pin):
-        self.led_line = self.chip.get_line(led_pin)
-        self.led_line.request(consumer="led", type=gpiod.LINE_REQ_DIR_OUT)
-
-    def turn_led_on(self):
-        if self.led_line:
-            self.led_line.set_value(0)
-
-    def turn_led_off(self):
-        if self.led_line:
-            self.led_line.set_value(1)
-
     def cleanup(self):
         if hasattr(self, 'line'):
             self.line.release()
-        if hasattr(self, 'led_line') and self.led_line:
-            self.led_line.release()
         if hasattr(self, 'chip'):
             self.chip.close()
 
@@ -68,32 +53,38 @@ class AIInteractionModule:
             mics = sr.Microphone.list_microphone_names()
             self.logger.info(f"Available microphones: {mics}")
             
-            # Look for Google Voice HAT
+            # Look for Adafruit Voice Bonnet instead of Google Voice HAT
             device_index = None
             for index, name in enumerate(mics):
-                if 'sndrpigooglevoi' in name.lower():
+                # The exact name will depend on how the bonnet identifies itself
+                if 'adafruit' in name.lower() or 'voice bonnet' in name.lower():
                     device_index = index
-                    self.logger.info(f"Found Google Voice HAT at index {index}: {name}")
+                    self.logger.info(f"Found Adafruit Voice Bonnet at index {index}: {name}")
                     break
             
             if device_index is None:
-                self.logger.warning("Google Voice HAT not found by name, using card 2")
-                device_index = 2
+                self.logger.warning("Voice Bonnet not found by name, using default")
+                device_index = None  # Let it use system default
             
             self.microphone = sr.Microphone(
                 device_index=device_index,
-                sample_rate=48000,  # Google Voice HAT supports 48kHz
+                sample_rate=48000,
                 chunk_size=4096
             )
             
-            # Configure recognizer with values that worked before
-            self.recognizer.energy_threshold = 300
+            # Configure recognizer with much higher sensitivity
+            self.recognizer = sr.Recognizer()
+            self.recognizer.energy_threshold = 300    # Lowered to detect quieter sounds
             self.recognizer.dynamic_energy_threshold = True
+            self.recognizer.dynamic_energy_adjustment_damping = 0.15
+            self.recognizer.dynamic_energy_ratio = 1.5
             self.recognizer.pause_threshold = 0.8
-            self.recognizer.phrase_threshold = 0.5
+            self.recognizer.phrase_threshold = 0.3
+            self.recognizer.non_speaking_duration = 0.5
             
             with self.microphone as source:
                 self.logger.info("Adjusting for ambient noise...")
+                source.gain = 20.0  # Increase microphone gain
                 self.recognizer.adjust_for_ambient_noise(source, duration=2)
                 self.logger.info(f"Microphone energy threshold set to: {self.recognizer.energy_threshold}")
                 
@@ -101,11 +92,8 @@ class AIInteractionModule:
             self.logger.error(f"Error initializing microphone: {str(e)}")
             self.logger.error(traceback.format_exc())
         
-        # Initialize button and LED
-        self.button = Button(chip_name="/dev/gpiochip0", pin=23)
-        self.button.set_led(25)
-        self.button_light_on = False
-        self.last_button_state = 1
+        # Initialize button
+        self.button = Button(chip_name="/dev/gpiochip0", pin=17)
         
         # Initialize OpenAI client
         openai_config = config.get('openai', {})
@@ -133,7 +121,6 @@ class AIInteractionModule:
         self.recording = False
         self.processing = False
         self.listening = False
-        self.button_light_on = False
         self.last_button_state = self.button.read()
         
         # Threading components
