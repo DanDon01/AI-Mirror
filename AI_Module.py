@@ -13,6 +13,7 @@ from queue import Queue
 import asyncio
 import time
 import traceback
+from voice_commands import ModuleCommand
 
 DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 DEFAULT_MAX_TOKENS = 250
@@ -117,6 +118,8 @@ class AIInteractionModule:
         self.set_status("Idle", "Press button to speak")
         self.logger.info("AI Module initialization complete")
 
+        self.command_parser = ModuleCommand()
+
     def update(self):
         # Button is pressed (0) and we're not already processing
         if self.button.read() == 0:
@@ -173,25 +176,21 @@ class AIInteractionModule:
     def process_audio_async(self):
         try:
             with self.microphone as source:
-                self.logger.info("Listening for speech...")
-                self.logger.info(f"Current energy threshold: {self.recognizer.energy_threshold}")
-                
-                # Shorter timeout for AIY
                 audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=5)
-                
-                self.set_status("Processing", "Recognizing speech...")
-                prompt = self.recognizer.recognize_google(audio)
-                self.logger.info(f"Recognized: {prompt}")
-                
-                self.set_status("Processing", "Getting AI response...")
-                response = self.ask_openai(prompt)
-                
-                if response:
-                    self.set_status("Responding", "AI is speaking...")
-                    self.response_queue.put(response)
+                text = self.recognizer.recognize_google(audio)
+                self.logger.info(f"Recognized: {text}")
+
+                # Check for module commands
+                command = self.command_parser.parse_command(text)
+                if command:
+                    self.logger.info(f"Executing command: {command}")
+                    self.response_queue.put(('command', command))
+                    self.set_status("Command", f"{command['action']}ing {command['module']}")
                 else:
-                    self.set_status("Error", "No response from AI")
-                    
+                    # Process as normal AI conversation
+                    response = self.ask_openai(text)
+                    self.response_queue.put(('speech', response))
+
         except sr.UnknownValueError:
             self.set_status("Error", "Speech not understood")
             self.logger.info("Speech was not understood")
@@ -222,3 +221,19 @@ class AIInteractionModule:
             self.processing_thread.join(timeout=1.0)
         if hasattr(self, 'button'):
             self.button.cleanup()
+
+    def ask_openai(self, text):
+        """Process text through OpenAI API"""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
+                    {"role": "user", "content": text}
+                ],
+                max_tokens=DEFAULT_MAX_TOKENS
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            self.logger.error(f"OpenAI API error: {str(e)}")
+            return None
