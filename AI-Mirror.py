@@ -19,8 +19,8 @@ from module_manager import ModuleManager  # Add this import
 
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" # Hide ALSA errors
-
-# Import other modules as needed again
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 class SpeechLogger:
     def __init__(self):
@@ -58,9 +58,11 @@ class SpeechLogger:
 
 class MagicMirror:
     def __init__(self):
-        pygame.init()
+        # Set up logging first, before anything else
         self.setup_logging()
-        self.speech_logger = SpeechLogger()  # Add speech logger
+        
+        pygame.init()
+        self.speech_logger = SpeechLogger()
         logging.info("Initializing MagicMirror")
         self.screen = pygame.display.set_mode(CONFIG['screen']['size'], pygame.FULLSCREEN)
         self.clock = pygame.time.Clock()
@@ -73,20 +75,36 @@ class MagicMirror:
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
     def setup_logging(self):
-        # Set up system logger
-        handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
+        """Set up logging configuration"""
+        # Remove all existing handlers
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
         
-        # Configure root logger
+        # Create main log file handler
+        file_handler = RotatingFileHandler(
+            'magic_mirror.log',
+            maxBytes=1000000,
+            backupCount=5
+        )
+        
+        # Create console handler
+        console_handler = logging.StreamHandler()
+        
+        # Create formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        
+        # Get root logger
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
-        root_logger.addHandler(handler)
         
-        # Prevent duplicate logs
-        for existing_handler in root_logger.handlers[:]:
-            if isinstance(existing_handler, logging.StreamHandler):
-                root_logger.removeHandler(existing_handler)
+        # Add handlers
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
+        
+        # Prevent propagation of logs to prevent duplicates
+        logging.getLogger('speech_logger').propagate = False
 
     def initialize_modules(self):
         modules = {}
