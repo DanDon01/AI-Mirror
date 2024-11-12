@@ -22,7 +22,6 @@ class ClockModule:
         self.scroll_position -= self.scroll_speed
         if self.total_width > 0 and self.scroll_position < -self.total_width:
             self.scroll_position = self.screen_width
-            logging.info("Clock reset position")
 
     def draw(self, screen, position):
         try:

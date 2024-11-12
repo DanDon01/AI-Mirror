@@ -54,22 +54,23 @@ class AIInteractionModule:
         self.logger = logging.getLogger(__name__)
         self.config = config
         
-        # Initialize speech recognition with AIY-specific settings
+        # Initialize speech recognition with adjusted settings
         self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = 300  # Lower for AIY mic
+        self.recognizer.energy_threshold = 1000  # Increased from 300
         self.recognizer.dynamic_energy_threshold = True
-        self.recognizer.pause_threshold = 0.5
-        self.recognizer.phrase_threshold = 0.3
-        self.recognizer.non_speaking_duration = 0.3
+        self.recognizer.pause_threshold = 0.8    # Increased from 0.5
+        self.recognizer.phrase_threshold = 0.5   # Increased from 0.3
+        self.recognizer.non_speaking_duration = 0.5  # Increased from 0.3
         
-        # Initialize microphone with specific sample rate for AIY
-        self.microphone = sr.Microphone(sample_rate=16000)  # AIY uses 16kHz
-        
-        # Adjust microphone on startup
-        with self.microphone as source:
-            self.logger.info("Adjusting for ambient noise...")
-            self.recognizer.adjust_for_ambient_noise(source, duration=1)
-            self.logger.info(f"Initial microphone energy threshold: {self.recognizer.energy_threshold}")
+        # Initialize microphone with debug logging
+        try:
+            self.microphone = sr.Microphone(sample_rate=16000)
+            with self.microphone as source:
+                self.logger.info("Adjusting for ambient noise...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=2)  # Increased from 1
+                self.logger.info(f"Microphone energy threshold set to: {self.recognizer.energy_threshold}")
+        except Exception as e:
+            self.logger.error(f"Error initializing microphone: {e}")
         
         # Initialize button and LED
         self.button = Button(chip_name="/dev/gpiochip0", pin=23)
@@ -179,9 +180,14 @@ class AIInteractionModule:
     def process_audio_async(self):
         try:
             with self.microphone as source:
-                audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=5)
+                self.logger.info("Listening for speech...")
+                self.logger.info(f"Current energy threshold: {self.recognizer.energy_threshold}")
+                
+                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)  # Increased timeouts
+                
+                self.set_status("Processing", "Recognizing speech...")
                 text = self.recognizer.recognize_google(audio)
-                self.logger.debug(f"Recognized: {text}")
+                self.logger.info(f"Recognized: {text}")
 
                 # Check for module commands
                 command = self.command_parser.parse_command(text)
