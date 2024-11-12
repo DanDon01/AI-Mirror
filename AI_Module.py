@@ -62,15 +62,44 @@ class AIInteractionModule:
         self.recognizer.phrase_threshold = 0.5   # Increased from 0.3
         self.recognizer.non_speaking_duration = 0.5  # Increased from 0.3
         
-        # Initialize microphone with debug logging
+        # Initialize microphone with Google Voice HAT
         try:
-            self.microphone = sr.Microphone(sample_rate=16000)
+            # List available microphones
+            mics = sr.Microphone.list_microphone_names()
+            self.logger.info(f"Available microphones: {mics}")
+            
+            # Look for Google Voice HAT
+            device_index = None
+            for index, name in enumerate(mics):
+                if 'sndrpigooglevoi' in name.lower():
+                    device_index = index
+                    self.logger.info(f"Found Google Voice HAT at index {index}: {name}")
+                    break
+            
+            if device_index is None:
+                self.logger.warning("Google Voice HAT not found by name, using card 2")
+                device_index = 2
+            
+            self.microphone = sr.Microphone(
+                device_index=device_index,
+                sample_rate=48000,  # Google Voice HAT supports 48kHz
+                chunk_size=4096
+            )
+            
+            # Configure recognizer with values that worked before
+            self.recognizer.energy_threshold = 300
+            self.recognizer.dynamic_energy_threshold = True
+            self.recognizer.pause_threshold = 0.8
+            self.recognizer.phrase_threshold = 0.5
+            
             with self.microphone as source:
                 self.logger.info("Adjusting for ambient noise...")
-                self.recognizer.adjust_for_ambient_noise(source, duration=2)  # Increased from 1
+                self.recognizer.adjust_for_ambient_noise(source, duration=2)
                 self.logger.info(f"Microphone energy threshold set to: {self.recognizer.energy_threshold}")
+                
         except Exception as e:
-            self.logger.error(f"Error initializing microphone: {e}")
+            self.logger.error(f"Error initializing microphone: {str(e)}")
+            self.logger.error(traceback.format_exc())
         
         # Initialize button and LED
         self.button = Button(chip_name="/dev/gpiochip0", pin=23)
