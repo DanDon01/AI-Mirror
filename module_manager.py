@@ -5,6 +5,7 @@ class ModuleManager:
     def __init__(self):
         self.module_visibility = CONFIG.get('module_visibility', {})
         self.logger = logging.getLogger(__name__)
+        self.logger.info(f"ModuleManager initialized with visibility states: {self.module_visibility}")
 
     def handle_command(self, command):
         """Handle show/hide commands for modules"""
@@ -21,7 +22,9 @@ class ModuleManager:
 
     def is_module_visible(self, module_name):
         """Check if a module should be visible"""
-        return self.module_visibility.get(module_name, True)
+        is_visible = self.module_visibility.get(module_name, True)
+        self.logger.debug(f"Checking visibility for {module_name}: {is_visible}")
+        return is_visible
 
     def get_visible_modules(self):
         """Get list of currently visible modules"""

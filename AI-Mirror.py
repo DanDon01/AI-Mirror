@@ -153,19 +153,28 @@ class MagicMirror:
 
     def draw_modules(self):
         try:
-            self.screen.fill((0, 0, 0))
+            self.screen.fill((0, 0, 0))  # Black background
+            
+            # Add debug logging
+            logging.info("Drawing modules:")
+            logging.info(f"Available modules: {list(self.modules.keys())}")
+            logging.info(f"Module visibility states: {self.module_manager.module_visibility}")
             
             # Draw only visible modules
             for module_name, module in self.modules.items():
+                logging.info(f"Attempting to draw {module_name}")
                 if self.module_manager.is_module_visible(module_name):
                     if module_name in CONFIG['positions']:
-                        module.draw(self.screen, CONFIG['positions'][module_name])
+                        position = CONFIG['positions'][module_name]
+                        logging.info(f"Drawing {module_name} at position {position}")
+                        module.draw(self.screen, position)
                     else:
                         logging.warning(f"No position defined for {module_name} in CONFIG")
             
             pygame.display.flip()
         except Exception as e:
             logging.error(f"Error in draw_modules: {e}")
+            logging.error(traceback.format_exc())  # Add full traceback
 
     def run(self):
         try:
