@@ -58,9 +58,8 @@ class SpeechLogger:
 
 class MagicMirror:
     def __init__(self):
-        # Set up logging first, before anything else
+        self.debug_mode = CONFIG.get('debug', {}).get('enabled', False)
         self.setup_logging()
-        
         pygame.init()
         self.speech_logger = SpeechLogger()
         logging.info("Initializing MagicMirror")
@@ -95,9 +94,10 @@ class MagicMirror:
         file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
         
-        # Get root logger
+        # Get root logger and set level based on config
         root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
+        log_level = CONFIG.get('debug', {}).get('log_level', 'INFO')
+        root_logger.setLevel(getattr(logging, log_level))
         
         # Add handlers
         root_logger.addHandler(file_handler)
@@ -105,6 +105,11 @@ class MagicMirror:
         
         # Prevent propagation of logs to prevent duplicates
         logging.getLogger('speech_logger').propagate = False
+
+    def debug_log(self, message):
+        """Helper method for debug logging"""
+        if self.debug_mode:
+            logging.debug(message)
 
     def initialize_modules(self):
         modules = {}
@@ -131,6 +136,8 @@ class MagicMirror:
                     sys.exit()
                 elif event.key == pygame.K_s:
                     self.toggle_mode()
+                elif event.key == pygame.K_d:
+                    self.toggle_debug()
                 elif event.key == pygame.K_SPACE:
                     if 'ai_interaction' in self.modules:
                         self.modules['ai_interaction'].handle_event(event)
@@ -149,11 +156,18 @@ class MagicMirror:
         try:
             self.screen.fill((0, 0, 0))  # Black background
             
+            # Debug logging only when debug mode is enabled
+            self.debug_log("Drawing modules:")
+            self.debug_log(f"Available modules: {list(self.modules.keys())}")
+            self.debug_log(f"Module visibility states: {self.module_manager.module_visibility}")
+            
             # Draw only visible modules
             for module_name, module in self.modules.items():
+                self.debug_log(f"Attempting to draw {module_name}")
                 if self.module_manager.is_module_visible(module_name):
                     if module_name in CONFIG['positions']:
                         position = CONFIG['positions'][module_name]
+                        self.debug_log(f"Drawing {module_name} at position {position}")
                         module.draw(self.screen, position)
                     else:
                         logging.warning(f"No position defined for {module_name} in CONFIG")
@@ -163,23 +177,10 @@ class MagicMirror:
             logging.error(f"Error in draw_modules: {e}")
             logging.error(traceback.format_exc())
 
-    def draw_modules(self):
-        try:
-            self.screen.fill((0, 0, 0))  # Black background
-            
-            # Draw only visible modules
-            for module_name, module in self.modules.items():
-                if self.module_manager.is_module_visible(module_name):
-                    if module_name in CONFIG['positions']:
-                        position = CONFIG['positions'][module_name]
-                        module.draw(self.screen, position)
-                    else:
-                        logging.warning(f"No position defined for {module_name} in CONFIG")
-            
-            pygame.display.flip()
-        except Exception as e:
-            logging.error(f"Error in draw_modules: {e}")
-            logging.error(traceback.format_exc())
+    def toggle_debug(self):
+        """Toggle debug mode on/off"""
+        self.debug_mode = not self.debug_mode
+        logging.info(f"Debug mode {'enabled' if self.debug_mode else 'disabled'}")
 
     def update_modules(self):
         # Check for AI commands first
@@ -205,31 +206,6 @@ class MagicMirror:
                         module.update()
                 except Exception as e:
                     logging.error(f"Error updating {module_name}: {e}")
-
-    def draw_modules(self):
-        try:
-            self.screen.fill((0, 0, 0))  # Black background
-            
-            # Add debug logging
-            logging.info("Drawing modules:")
-            logging.info(f"Available modules: {list(self.modules.keys())}")
-            logging.info(f"Module visibility states: {self.module_manager.module_visibility}")
-            
-            # Draw only visible modules
-            for module_name, module in self.modules.items():
-                logging.info(f"Attempting to draw {module_name}")
-                if self.module_manager.is_module_visible(module_name):
-                    if module_name in CONFIG['positions']:
-                        position = CONFIG['positions'][module_name]
-                        logging.info(f"Drawing {module_name} at position {position}")
-                        module.draw(self.screen, position)
-                    else:
-                        logging.warning(f"No position defined for {module_name} in CONFIG")
-            
-            pygame.display.flip()
-        except Exception as e:
-            logging.error(f"Error in draw_modules: {e}")
-            logging.error(traceback.format_exc())  # Add full traceback
 
     def run(self):
         try:

@@ -149,5 +149,9 @@ CONFIG = {
         'fitbit': True,
         'retro_characters': True,
         'ai_interaction': True
+    },
+    'debug': {
+        'enabled': False,  # Set to True when you need detailed logging
+        'log_level': 'INFO'  # Can be 'DEBUG', 'INFO', 'WARNING', 'ERROR'
     }
 }
