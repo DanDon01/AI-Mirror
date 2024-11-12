@@ -55,7 +55,11 @@ class RetroCharactersModule:
         if len(self.active_icons) > 0:
             logging.debug(f"Active icons: {len(self.active_icons)}")
 
-    def draw(self, screen):
+    def draw(self, screen, position=None):
+        """
+        Draw method for retro characters. Position parameter is ignored since this
+        module covers the whole screen, but included for compatibility with other modules.
+        """
         for icon, x, y, angle, direction in self.active_icons:
             # Rotate the icon
             rotated_icon = pygame.transform.rotate(icon, angle)
