@@ -145,20 +145,57 @@ class MagicMirror:
             self.state = "active"
         logging.info(f"Mirror state changed to: {self.state}")
 
+    def draw_modules(self):
+        try:
+            self.screen.fill((0, 0, 0))  # Black background
+            
+            # Draw only visible modules
+            for module_name, module in self.modules.items():
+                if self.module_manager.is_module_visible(module_name):
+                    if module_name in CONFIG['positions']:
+                        position = CONFIG['positions'][module_name]
+                        module.draw(self.screen, position)
+                    else:
+                        logging.warning(f"No position defined for {module_name} in CONFIG")
+            
+            pygame.display.flip()
+        except Exception as e:
+            logging.error(f"Error in draw_modules: {e}")
+            logging.error(traceback.format_exc())
+
+    def draw_modules(self):
+        try:
+            self.screen.fill((0, 0, 0))  # Black background
+            
+            # Draw only visible modules
+            for module_name, module in self.modules.items():
+                if self.module_manager.is_module_visible(module_name):
+                    if module_name in CONFIG['positions']:
+                        position = CONFIG['positions'][module_name]
+                        module.draw(self.screen, position)
+                    else:
+                        logging.warning(f"No position defined for {module_name} in CONFIG")
+            
+            pygame.display.flip()
+        except Exception as e:
+            logging.error(f"Error in draw_modules: {e}")
+            logging.error(traceback.format_exc())
+
     def update_modules(self):
         # Check for AI commands first
         if 'ai_interaction' in self.modules:
             while not self.modules['ai_interaction'].response_queue.empty():
                 msg_type, content = self.modules['ai_interaction'].response_queue.get()
                 if msg_type == 'command':
-                    self.module_manager.handle_command(content['command'])
+                    logging.info(f"Processing command: {content}")
+                    self.module_manager.handle_command(content)
                     self.speech_logger.log_user_speech(content['text'], was_command=True)
                 elif msg_type == 'speech':
                     self.speech_logger.log_user_speech(content['user_text'])
                     if content['ai_response']:
                         self.speech_logger.log_ai_response(content['ai_response'])
         
-        # Rest of update_modules remains the same
+        # Update visible modules
         for module_name, module in self.modules.items():
             if self.module_manager.is_module_visible(module_name):
                 try:
