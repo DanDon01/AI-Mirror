@@ -15,31 +15,78 @@ from stocks_module import StocksModule  # Add this import at the top
 from clock_module import ClockModule  # Add this import
 from retrocharacters_module import RetroCharactersModule  # Add this import
 from AI_Module import AIInteractionModule  # Add this import at the top
+from module_manager import ModuleManager  # Add this import
 
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" # Hide ALSA errors
 
 # Import other modules as needed again
 
+class SpeechLogger:
+    def __init__(self):
+        # Set up speech logger
+        self.speech_logger = logging.getLogger('speech_logger')
+        self.speech_logger.setLevel(logging.INFO)
+        
+        # Create rotating file handler for speech log
+        speech_handler = RotatingFileHandler(
+            'speech_history.log',
+            maxBytes=1000000,
+            backupCount=5
+        )
+        
+        # Create formatter
+        formatter = logging.Formatter('%(asctime)s - %(message)s')
+        speech_handler.setFormatter(formatter)
+        
+        # Prevent duplicate logs
+        self.speech_logger.propagate = False
+        
+        # Add handler to logger
+        self.speech_logger.addHandler(speech_handler)
+    
+    def log_user_speech(self, text, was_command=False):
+        """Log what the user said"""
+        if was_command:
+            self.speech_logger.info(f"USER COMMAND: {text}")
+        else:
+            self.speech_logger.info(f"USER: {text}")
+    
+    def log_ai_response(self, text):
+        """Log what the AI responded"""
+        self.speech_logger.info(f"AI: {text}")
+
 class MagicMirror:
     def __init__(self):
         pygame.init()
         self.setup_logging()
+        self.speech_logger = SpeechLogger()  # Add speech logger
         logging.info("Initializing MagicMirror")
         self.screen = pygame.display.set_mode(CONFIG['screen']['size'], pygame.FULLSCREEN)
         self.clock = pygame.time.Clock()
         self.modules = self.initialize_modules()
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
-        self.state = "active"  # Can be "active", "sleep", or "screensaver"
-        self.font = pygame.font.Font(None, 48)  # Larger font for the clock
+        self.state = "active"
+        self.font = pygame.font.Font(None, 48)
+        self.module_manager = ModuleManager()
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
     def setup_logging(self):
+        # Set up system logger
         handler = RotatingFileHandler('magic_mirror.log', maxBytes=1000000, backupCount=3)
-        logging.basicConfig(level=logging.INFO, handlers=[handler],
-                            format='%(asctime)s - %(levelname)s - %(message)s')
-        logging.info("Magic Mirror started")
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        
+        # Configure root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(handler)
+        
+        # Prevent duplicate logs
+        for existing_handler in root_logger.handlers[:]:
+            if isinstance(existing_handler, logging.StreamHandler):
+                root_logger.removeHandler(existing_handler)
 
     def initialize_modules(self):
         modules = {}
@@ -81,47 +128,44 @@ class MagicMirror:
         logging.info(f"Mirror state changed to: {self.state}")
 
     def update_modules(self):
+        # Check for AI commands first
+        if 'ai_interaction' in self.modules:
+            while not self.modules['ai_interaction'].response_queue.empty():
+                msg_type, content = self.modules['ai_interaction'].response_queue.get()
+                if msg_type == 'command':
+                    self.module_manager.handle_command(content['command'])
+                    self.speech_logger.log_user_speech(content['text'], was_command=True)
+                elif msg_type == 'speech':
+                    self.speech_logger.log_user_speech(content['user_text'])
+                    if content['ai_response']:
+                        self.speech_logger.log_ai_response(content['ai_response'])
+        
+        # Rest of update_modules remains the same
         for module_name, module in self.modules.items():
-            try:
-                if hasattr(module, 'update'):
-                    if self.state == "screensaver" and module_name != 'retro_characters':
-                        continue  # Skip updating other modules in screensaver mode
-                    module.update()
-            except Exception as e:
-                logging.error(f"Error updating {module_name}: {e}")
+            if self.module_manager.is_module_visible(module_name):
+                try:
+                    if hasattr(module, 'update'):
+                        if self.state == "screensaver" and module_name != 'retro_characters':
+                            continue
+                        module.update()
+                except Exception as e:
+                    logging.error(f"Error updating {module_name}: {e}")
 
     def draw_modules(self):
         try:
-            self.screen.fill((0, 0, 0))  # Clear screen with black
+            self.screen.fill((0, 0, 0))
             
-            # Always draw RetroCharactersModule
-            if 'retro_characters' in self.modules:
-                self.modules['retro_characters'].draw(self.screen)
-
-            if self.state == "active":
-                for module_name, module in self.modules.items():
-                    if module_name != 'retro_characters':  # Skip retro_characters as we've already drawn it
-                        try:
-                            if module_name in CONFIG['positions']:
-                                module.draw(self.screen, CONFIG['positions'][module_name])
-                            else:
-                                logging.warning(f"No position defined for {module_name} in CONFIG")
-                        except Exception as e:
-                            logging.error(f"Error drawing {module_name}: {e}")
-                            logging.error(traceback.format_exc())
-                            error_font = pygame.font.Font(None, 24)
-                            error_text = error_font.render(f"Error in {module_name}", True, (255, 0, 0))
-                            self.screen.blit(error_text, (10, 10))  # Fallback position
-            elif self.state == "sleep":
-                # Draw sleep mode screen (e.g., just the time)
-                self.modules['clock'].draw(self.screen, (0, self.screen.get_height() // 2 - 30))
-            # No need for an "elif self.state == "screensaver":" block, as we're always drawing RetroCharactersModule
+            # Draw only visible modules
+            for module_name, module in self.modules.items():
+                if self.module_manager.is_module_visible(module_name):
+                    if module_name in CONFIG['positions']:
+                        module.draw(self.screen, CONFIG['positions'][module_name])
+                    else:
+                        logging.warning(f"No position defined for {module_name} in CONFIG")
             
             pygame.display.flip()
-            logging.debug("Updated display")
         except Exception as e:
             logging.error(f"Error in draw_modules: {e}")
-            logging.error(traceback.format_exc())
 
     def run(self):
         try:

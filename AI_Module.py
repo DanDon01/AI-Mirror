@@ -104,11 +104,16 @@ class AIInteractionModule:
         self.processing = False
         self.listening = False
         self.button_light_on = False
-        self.last_button_state = self.button.read()  # Initialize with actual state
+        self.last_button_state = self.button.read()
         
         # Threading components
         self.processing_thread = None
         self.response_queue = Queue()
+        
+        # Initialize command parser
+        self.command_parser = ModuleCommand()
+        
+        # Remove any speech logger initialization here as it's now handled by MagicMirror
         
         # Initialize pygame mixer
         if not pygame.mixer.get_init():
@@ -117,8 +122,6 @@ class AIInteractionModule:
         # These should be the last lines of __init__
         self.set_status("Idle", "Press button to speak")
         self.logger.info("AI Module initialization complete")
-
-        self.command_parser = ModuleCommand()
 
     def update(self):
         # Button is pressed (0) and we're not already processing
@@ -178,18 +181,18 @@ class AIInteractionModule:
             with self.microphone as source:
                 audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=5)
                 text = self.recognizer.recognize_google(audio)
-                self.logger.info(f"Recognized: {text}")
+                self.logger.debug(f"Recognized: {text}")
 
                 # Check for module commands
                 command = self.command_parser.parse_command(text)
                 if command:
-                    self.logger.info(f"Executing command: {command}")
-                    self.response_queue.put(('command', command))
+                    self.logger.debug(f"Executing command: {command}")
+                    self.response_queue.put(('command', {'text': text, 'command': command}))
                     self.set_status("Command", f"{command['action']}ing {command['module']}")
                 else:
                     # Process as normal AI conversation
                     response = self.ask_openai(text)
-                    self.response_queue.put(('speech', response))
+                    self.response_queue.put(('speech', {'user_text': text, 'ai_response': response}))
 
         except sr.UnknownValueError:
             self.set_status("Error", "Speech not understood")
