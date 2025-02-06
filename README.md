@@ -1,106 +1,153 @@
-AI-Mirror
+# AI-Mirror 🪞
 
-AI-Mirror is a smart mirror project built using a Raspberry Pi 5, designed to display useful information and interact with users through gesture control and voice commands.
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.x-green.svg)
+![Status](https://img.shields.io/badge/status-in%20development-yellow)
+[![Made with RPi](https://img.shields.io/badge/Made%20with-Raspberry%20Pi-red.svg)](https://www.raspberrypi.org)
 
-Features
+> Transform any monitor into an interactive AI-powered smart mirror! This project combines a Raspberry Pi 5 mounted behind a portrait-oriented display, covered with two-way mirror acrylic and framed to create a seamless mirror appearance. Interact with your AI assistant through voice commands while getting real-time information about your day - all while looking like a normal mirror on your wall!
 
-Display of current time and date
-Weather information
-Fitbit data integration
-Stock market updates
-Package tracking
-Gesture control for interface navigation
-Text-to-speech notifications
+## ✨ Key Features
 
-Hardware Requirements
+- 🕒 **Smart Display**
+  - Real-time clock and calendar
+  - Local weather updates and forecasts
+  - Fitbit health data integration
+  - Stock market ticker
+  - Package delivery tracking
+  
+- 🤖 **AI Integration**
+  - Voice command recognition
+  - Natural language interactions
+  - Personalized responses
+  - Context-aware suggestions
+  
+- 👋 **Interactive Controls**
+  - Gesture recognition for hands-free control
+  - Voice-activated commands
+  - Customizable interface layout
+  - Motion detection for power saving
 
-Raspberry Pi 5
-Monitor (preferably with built-in speakers for audio output)
-Two-way mirror or acrylic sheet
-Pi Camera module (for gesture control)
-Power supply
-Frame for mounting
+- 🏠 **Smart Home Integration**
+  - Compatible with major smart home platforms
+  - Control lights, thermostats, and other IoT devices
+  - Scene automation support
+  - Status monitoring
 
-Software Dependencies
+## 🔧 Installation Overview
 
+1. **Hardware Assembly**
+   - Mount the monitor in portrait orientation
+   - Attach Raspberry Pi 5 to back of monitor
+   - Connect USB microphone for voice input
+   - Apply two-way mirror acrylic sheet to monitor surface
+   - Install custom frame around assembly
+   - Mount final assembly on wall with appropriate anchors
+
+2. **Mirror Setup**
+   - Position at eye level for optimal interaction
+   - Ensure proper ventilation around Pi
+   - Route power cables through wall (optional)
+   - Connect to home WiFi network
+   - Calibrate microphone and camera positions
+
+## 🛠️ Hardware Requirements
+
+- Raspberry Pi 5 (8GB RAM recommended)
+- 24" Monitor or larger (with built-in speakers)
+- Two-way mirror or acrylic sheet with mirror film
+- Raspberry Pi Camera Module v3
+- 5V/4A Power Supply
+- Custom frame for mounting
+
+## 📦 Software Dependencies
+
+```bash
 Python 3.x
 Pygame
-OpenCV
+OpenCV-Python
 pyttsx3
-Fitbit API
-(Add other libraries as you implement features)
+FitbitAPI
+PyAudio
+TensorFlow Lite
+```
 
-Installation
+## 🚀 Quick Start
 
-Clone this repository:
-Copygit clone https://github.com/DanDon01/AI-Mirror.git
+1. **Clone the repository:**
+```bash
+git clone https://github.com/DanDon01/AI-Mirror.git
+cd AI-Mirror
+```
 
-Navigate to the project directory:
-Copycd AI-Mirror
+2. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+```
 
-Install required Python packages:
-Copypip install -r requirements.txt
+3. **Configure API credentials:**
+Create `Variables.env` with your API keys:
+```bash
+# Fitbit API
+FITBIT_CLIENT_ID=your_id
+FITBIT_CLIENT_SECRET=your_secret
 
-Setup environment variables:
-Create a file named Variables.env in the project directory and add your environment variables in the following format:
+# Weather API
+OPENWEATHERMAP_API_KEY=your_key
 
-VARIABLE_NAME=value
+# OpenAI API
+OPENAI_API_KEY=your_key
+```
 
-Fitbit API Credentials
-FITBIT_CLIENT_ID=your_fitbit_client_id FITBIT_CLIENT_SECRET=your_fitbit_client_secret FITBIT_ACCESS_TOKEN=your_fitbit_access_token FITBIT_REFRESH_TOKEN=your_fitbit_refresh_token
+4. **Run the application:**
+```bash
+python magic_mirror.py
+```
 
-Google Calendar API Credentials
-GOOGLE_CLIENT_ID=your_google_client_id GOOGLE_CLIENT_SECRET=your_google_client_secret GOOGLE_ACCESS_TOKEN=your_google_access_token GOOGLE_REFRESH_TOKEN=your_google_refresh_token
+## 🎯 Core Functionalities
 
-OpenWeatherMap API Key
-OPENWEATHERMAP_API_KEY=your_openweathermap_api_key
+### AI Assistant
+- Natural language processing for conversational interaction
+- Context-aware responses and reminders
+- Voice-activated commands and queries
+- Personalized user profiles and preferences
 
-OpenAI API Key
-OPENAI_API_KEY=your_openai_api_key
+### Smart Display
+- Modular widget system for customizable layouts
+- Automatic brightness adjustment based on ambient light
+- Energy-efficient screen management
+- Smooth transitions and animations
 
-To obtain the necessary credentials:
+### Data Integration
+- Real-time weather updates and forecasts
+- Calendar synchronization
+- Health metrics visualization
+- Stock market data tracking
+- Package delivery status
 
-1. Fitbit API:
-   - Go to https://dev.fitbit.com/
-   - Create a new application
-   - Use OAuth 2.0 flow to get access and refresh tokens
+## 🤝 Contributing
 
-2. Google Calendar API:
-   - Visit Google Cloud Console
-   - Create a new project
-   - Enable Calendar API
-   - Create OAuth 2.0 credentials
-   - Complete OAuth flow to get tokens
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
-3. OpenWeatherMap:
-   - Register at https://openweathermap.org/api
-   - Get your API key from your account
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-4. OpenAI:
-   - Sign up at https://platform.openai.com/
-   - Get your API key from account settings
+## 📄 License
 
-Usage
+This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details.
 
-Configure your API keys and tokens in a config.py file (see config_example.py for template).
-Run the main script:
-Copypython magic_mirror.py
+## 🙏 Acknowledgments
 
-Project Structure
+- Fitbit for their comprehensive API
+- OpenWeatherMap for reliable weather data
+- OpenAI for AI capabilities
+- The Raspberry Pi Foundation
+- Contributors and the open-source community
 
-magic_mirror.py: Main script that runs the mirror interface
-fitbit_module.py: Module for Fitbit data integration
-stocks_module.py: Module for stock market updates
-weather_module.py: Module for weather information
-package_tracking_module.py: Module for package tracking
-gesture_control.py: Module for gesture recognition
-config.py: Configuration file for API keys and settings
-
-Contributing
-Contributions to AI-Mirror are welcome! Please feel free to submit a Pull Request.
-License
-This project is licensed under the MIT License - see the LICENSE.md file for details.
-Acknowledgments
-
-Fitbit for their API
-OpenWeatherMap for weather data
+---
+<div align="center">
+Made with ❤️ by DanDon01
+</div>

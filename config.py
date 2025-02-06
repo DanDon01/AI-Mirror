@@ -35,10 +35,96 @@ retro_icons_path = os.path.join(assets_dir, 'retro_icons')
 weather_icons_path = os.path.join(assets_dir, 'weather_icons')
 sound_effects_path = os.path.join(assets_dir, 'sound_effects')  # Changed from 'sound-effects' to 'sound_effects'
 
+# Screen Layout Configuration
+SCREEN_PADDING = 20  # Padding from screen edges
+MODULE_SPACING = 10  # Spacing between modules
+
+# Screen configurations for different monitor sizes
+MONITOR_CONFIGS = {
+    '27_portrait': {
+        'resolution': (1440, 2560),  # 27" 1440p monitor in portrait
+        'module_scale': 1.0,         # Base scale
+        'font_scale': 1.0           # Base font scale
+    },
+    '24_portrait': {
+        'resolution': (1200, 1920),  # 24" 1200p monitor in portrait
+        'module_scale': 0.833,       # Scale factor relative to 27"
+        'font_scale': 0.9           # Slightly smaller fonts
+    },
+    '21_portrait': {
+        'resolution': (768, 1024),   # 21" monitor in portrait
+        'module_scale': 0.533,       # Scale factor relative to 27"
+        'font_scale': 0.8           # Even smaller fonts
+    }
+}
+
+# Default to 27" portrait monitor
+CURRENT_MONITOR = MONITOR_CONFIGS['27_portrait']
+
+# Update LAYOUT with monitor-specific scaling
+LAYOUT = {
+    # Screen and general layout
+    'screen_padding': int(30 * CURRENT_MONITOR['module_scale']),
+    'module_spacing': int(15 * CURRENT_MONITOR['module_scale']),
+    
+    # Module dimensions (as percentage of screen)
+    'module_sizes': {
+        'standard': {
+            'width': 25,   # percent of screen width
+            'height': 15   # percent of screen height
+        },
+        'large': {
+            'width': 25,
+            'height': 30
+        }
+    },
+    
+    # Module positions (as percentage of screen height)
+    'sections': {
+        'top': 5,      # Clock
+        'upper': 20,   # Weather & Stocks
+        'bottom': 70   # Calendar & Fitbit
+    },
+    
+    # Visual styling with monitor-specific font scaling
+    'fonts': {
+        'title': {
+            'size': int(36 * CURRENT_MONITOR['font_scale']),
+            'color': (255, 255, 255)
+        },
+        'subtitle': {
+            'size': int(28 * CURRENT_MONITOR['font_scale']),
+            'color': (200, 200, 200)
+        },
+        'body': {
+            'size': int(24 * CURRENT_MONITOR['font_scale']),
+            'color': (180, 180, 180)
+        },
+        'small': {
+            'size': int(18 * CURRENT_MONITOR['font_scale']),
+            'color': (160, 160, 160)
+        }
+    },
+    
+    # Module backgrounds
+    'backgrounds': {
+        'title': {
+            'color': (0, 0, 0),
+            'alpha': 180
+        },
+        'content': {
+            'color': (0, 0, 0),
+            'alpha': 120
+        }
+    }
+}
+
 CONFIG = {
     'screen': {
-        'size': (768, 1024)  # Portrait mode 21-inch monitor
+        'size': CURRENT_MONITOR['resolution'],
+        'scale': CURRENT_MONITOR['module_scale']
     },
+    'layout': LAYOUT,
     'update_schedule': {
         'time': time(5, 30),  # Update at 5:30 AM
         'frequency': 'daily'
@@ -84,16 +170,6 @@ CONFIG = {
                 'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
             }
         }
-    },
-    'positions': {
-        'clock': (5, 5),  # Position for the clock at the top of the screen
-        'weather': (20, 100),  # Below clock in top-left
-        'fitbit': (20, 280),  # Bottom-left corner
-        'smart_home': (20, 0),  # Above fitbit in bottom-left
-        'calendar': (20, 500),  # Top-right corner
-        'stocks': (550, 140),  # Bottom-right corner
-        'retro_characters': (0, 0),  # This module doesn't need a specific position as it covers the whole screen
-        'ai_interaction': (20, 900),  # Adjust this position as needed
     },
     'clock': {
         'class': 'ClockModule',

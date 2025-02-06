@@ -23,38 +23,32 @@ class ClockModule:
         if self.total_width > 0 and self.scroll_position < -self.total_width:
             self.scroll_position = self.screen_width
 
-    def draw(self, screen, position):
+    def draw(self, screen, layout_manager):
         try:
-            x, y = position
-            self.screen_width = screen.get_width()  # Set the screen width
+            pos = layout_manager.get_module_position('clock')
+            if not pos:
+                return
+
+            start_pos = layout_manager.draw_module_background(screen, 'clock', 'Time & Date')
+            if not start_pos:
+                return
+
+            x, y = start_pos
             current_time = datetime.now(self.tz) if self.tz else datetime.now()
 
-            # Render time and date
-            time_surface = self.time_font.render(current_time.strftime(self.time_format), True, self.color)
+            # Draw time with larger font
+            time_surface = self.time_font.render(current_time.strftime(self.time_format), True, COLOR_TITLE)
+            time_x = x + (pos['width'] - time_surface.get_width()) // 2
+            screen.blit(time_surface, (time_x, y + 10))
+
+            # Draw date with smaller font
             date_str = self.format_date(current_time)
-            date_surface = self.date_font.render(date_str, True, self.color)
-
-            # Calculate total width (use the wider of the two surfaces)
-            self.total_width = max(time_surface.get_width(), date_surface.get_width())
-
-            # Reset scroll position if it's off-screen
-            if self.scroll_position < -self.total_width:
-                self.scroll_position = self.screen_width
-
-            # Calculate centered positions for time and date
-            time_x = self.scroll_position + (self.total_width - time_surface.get_width()) // 2
-            date_x = self.scroll_position + (self.total_width - date_surface.get_width()) // 2
-
-            # Draw time
-            screen.blit(time_surface, (time_x, y))
-
-            # Draw date underneath time
-            screen.blit(date_surface, (date_x, y + time_surface.get_height() + 5))
+            date_surface = self.date_font.render(date_str, True, COLOR_SUBTITLE)
+            date_x = x + (pos['width'] - date_surface.get_width()) // 2
+            screen.blit(date_surface, (time_x, y + time_surface.get_height() + 5))
 
         except Exception as e:
-            logging.error(f"Error drawing clock data: {e}")
-            error_surface = self.time_font.render("Clock data unavailable", True, (255, 0, 0))
-            screen.blit(error_surface, position)
+            logging.error(f"Error drawing clock: {e}")
 
     def format_date(self, date):
         # Custom date formatting to match "Tues, Sept 03, 2024" format
