@@ -161,21 +161,44 @@ class FitbitModule:
 
     def refresh_access_token(self):
         try:
+            # Log the current state
+            logging.info("Starting token refresh process")
+            logging.debug(f"Client ID: {self.client_id[:5]}...")  # Log only first 5 chars for security
+            
             # Prepare the token refresh request
             token_url = "https://api.fitbit.com/oauth2/token"
+            auth_string = f"{self.client_id}:{self.client_secret}"
+            auth_header = base64.b64encode(auth_string.encode()).decode()
+            
             headers = {
-                "Authorization": "Basic " + base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode(),
+                "Authorization": f"Basic {auth_header}",
                 "Content-Type": "application/x-www-form-urlencoded"
             }
+            
             data = {
                 "grant_type": "refresh_token",
                 "refresh_token": self.refresh_token
             }
 
             # Make the token refresh request
+            logging.debug("Sending refresh token request")
             response = requests.post(token_url, headers=headers, data=data)
-            response.raise_for_status()  # Raise an exception for bad responses
+            
+            # Log the response status
+            logging.debug(f"Refresh token response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                logging.error(f"Token refresh failed with status {response.status_code}")
+                logging.error(f"Response content: {response.text}")
+                raise Exception(f"Token refresh failed: {response.text}")
+
             tokens = response.json()
+            
+            # Validate the response contains required tokens
+            if 'access_token' not in tokens or 'refresh_token' not in tokens:
+                logging.error("Invalid token response format")
+                logging.error(f"Received tokens keys: {tokens.keys()}")
+                raise KeyError("Missing required tokens in response")
 
             # Update tokens
             self.access_token = tokens['access_token']
@@ -183,21 +206,26 @@ class FitbitModule:
             self.config['access_token'] = self.access_token
             self.config['refresh_token'] = self.refresh_token
 
-            # Reinitialize the Fitbit client with new tokens
-            self.initialize_client()
-
             # Save the new tokens
             self.save_tokens()
-            logging.info("Fitbit access token refreshed successfully")
+            
+            # Reinitialize the client with new tokens
+            self.initialize_client()
+            
+            logging.info("Token refresh completed successfully")
+            return True
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error during token refresh: {e}")
+            return False
         except KeyError as e:
             logging.error(f"KeyError in refresh_access_token: {e}")
             logging.error(f"Tokens received: {tokens}")
+            return False
         except Exception as e:
             logging.error(f"Error refreshing Fitbit access token: {e}")
             logging.error(f"Full exception: {traceback.format_exc()}")
-
-        if not self.access_token or not self.refresh_token:
-            raise Exception("Failed to refresh access token")
+            return False
 
     def save_tokens(self):
         # Update the tokens in the environment file
