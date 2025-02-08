@@ -1,0 +1,24 @@
+{
+    "greeting": {
+        "patterns": ["hello", "hi", "hey"],
+        "responses": [
+            "Hello! I'm your mirror assistant.",
+            "Hi there! How can I help you today?",
+            "Welcome back!"
+        ]
+    },
+    "weather": {
+        "patterns": ["weather", "temperature", "forecast"],
+        "responses": [
+            "You can check the weather module for current conditions.",
+            "The weather information is displayed on the left side of the mirror."
+        ]
+    },
+    "time": {
+        "patterns": ["time", "date", "clock"],
+        "responses": [
+            "The current time is shown at the top of the mirror.",
+            "Check the clock module for the exact time and date."
+        ]
+    }
+}

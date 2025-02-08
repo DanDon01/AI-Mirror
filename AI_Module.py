@@ -42,14 +42,38 @@ class AIInteractionModule:
         self.logger = logging.getLogger(__name__)
         self.config = config
         
-        # Initialize speech recognition with adjusted settings
-        self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = 1000  # Increased from 300
-        self.recognizer.dynamic_energy_threshold = True
-        self.recognizer.pause_threshold = 0.8    # Increased from 0.5
-        self.recognizer.phrase_threshold = 0.5   # Increased from 0.3
-        self.recognizer.non_speaking_duration = 0.5  # Increased from 0.3
+        # Get configuration from CONFIG object
+        ai_config = CONFIG.get('ai_interaction', {}).get('params', {}).get('config', {})
         
+        # Initialize OpenAI with credentials check
+        self.has_openai_access = False
+        self.openai_config = ai_config.get('openai', {})
+        if self.openai_config.get('api_key'):
+            try:
+                self.client = OpenAI(api_key=self.openai_config['api_key'])
+                self.model = self.openai_config.get('model', 'gpt-4-1106-preview')
+                # Test the connection
+                response = self.client.models.list()
+                self.has_openai_access = True
+                self.logger.info("OpenAI API access confirmed")
+            except Exception as e:
+                self.logger.warning(f"OpenAI API access failed: {e}")
+                self.has_openai_access = False
+        
+        # Audio configuration from config
+        audio_config = ai_config.get('audio', {})
+        self.mic_energy_threshold = audio_config.get('mic_energy_threshold', 1000)
+        self.tts_volume = audio_config.get('tts_volume', 0.7)
+        self.wav_volume = audio_config.get('wav_volume', 0.7)
+        
+        # Initialize speech recognition with configured settings
+        self.recognizer = sr.Recognizer()
+        self.recognizer.energy_threshold = self.mic_energy_threshold
+        self.recognizer.dynamic_energy_threshold = True
+        self.recognizer.pause_threshold = 0.8
+        self.recognizer.phrase_threshold = 0.5
+        self.recognizer.non_speaking_duration = 0.5
+
         # Initialize microphone with Google Voice HAT
         try:
             # List available microphones
@@ -94,6 +118,11 @@ class AIInteractionModule:
         except Exception as e:
             self.logger.error(f"Error initializing microphone: {str(e)}")
             self.logger.error(traceback.format_exc())
+
+        # Load fallback responses if configured
+        self.fallback_config = ai_config.get('fallback_responses', {})
+        if self.fallback_config.get('enabled'):
+            self.load_fallback_responses()
         
         # Initialize button
         self.button = Button(chip_name="/dev/gpiochip0", pin=17)
@@ -154,6 +183,21 @@ class AIInteractionModule:
         # These should be the last lines of __init__
         self.set_status("Idle", "Press button to speak")
         self.logger.info("AI Module initialization complete")
+
+    def load_fallback_responses(self):
+        """Load fallback responses from configured file"""
+        try:
+            response_file = self.fallback_config.get('response_file')
+            if response_file and os.path.exists(response_file):
+                with open(response_file, 'r') as f:
+                    self.fallback_responses = json.load(f)
+                self.logger.info("Loaded fallback responses successfully")
+            else:
+                self.logger.warning("Fallback responses file not found")
+                self.fallback_responses = {}
+        except Exception as e:
+            self.logger.error(f"Error loading fallback responses: {e}")
+            self.fallback_responses = {}
 
     def update(self):
         # Button is pressed (0) and we're not already processing
@@ -240,6 +284,9 @@ class AIInteractionModule:
     async def process_with_openai(self, text):
         """Process text using OpenAI's streaming API"""
         try:
+            if not self.has_openai_access:
+                return self.process_with_fallback(text)
+
             stream = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
