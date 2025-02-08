@@ -6,7 +6,7 @@ import os
 import logging
 import threading
 import numpy as np
-from openai import OpenAI
+from openai import OpenAI, Stream
 from config import CONFIG
 import gpiod
 from queue import Queue
@@ -14,8 +14,11 @@ import asyncio
 import time
 import traceback
 from voice_commands import ModuleCommand
+import json
+import websockets  # New import for websocket connections
+from typing import Iterator
 
-DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
+DEFAULT_MODEL = "gpt-4-1106-preview"
 DEFAULT_MAX_TOKENS = 250
 
 class Button:
@@ -95,10 +98,24 @@ class AIInteractionModule:
         # Initialize button
         self.button = Button(chip_name="/dev/gpiochip0", pin=17)
         
-        # Initialize OpenAI client
+        # Initialize OpenAI client with credential check
+        self.has_openai_access = False
         openai_config = config.get('openai', {})
-        self.client = OpenAI(api_key=openai_config.get('api_key'))
-        self.model = openai_config.get('model', 'gpt-4-mini')
+        if openai_config.get('api_key'):
+            try:
+                self.client = OpenAI(api_key=openai_config.get('api_key'))
+                self.model = openai_config.get('model', DEFAULT_MODEL)
+                # Test the connection
+                response = self.client.models.list()
+                self.has_openai_access = True
+                self.logger.info("OpenAI API access confirmed")
+            except Exception as e:
+                self.logger.warning(f"OpenAI API access failed: {e}")
+                self.has_openai_access = False
+        
+        # Initialize basic text-to-speech as fallback
+        self.tts_engine = gTTS
+        self.logger.info(f"AI Module initialized with OpenAI access: {self.has_openai_access}")
         
         # Initialize sound effects
         self.sound_effects = {}
@@ -129,9 +146,7 @@ class AIInteractionModule:
         
         # Initialize command parser
         self.command_parser = ModuleCommand()
-        
-        # Remove any speech logger initialization here as it's now handled by MagicMirror
-        
+              
         # Initialize pygame mixer
         if not pygame.mixer.get_init():
             pygame.mixer.init()
@@ -193,6 +208,78 @@ class AIInteractionModule:
                 self.processing_thread.daemon = True
                 self.processing_thread.start()
 
+    async def stream_response(self, text: str) -> Iterator[str]:
+        """Stream the AI response in real-time"""
+        try:
+            stream = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
+                    {"role": "user", "content": text}
+                ],
+                stream=True  # Enable streaming
+            )
+            
+            self.set_status("Responding", "AI is thinking...")
+            response_text = ""
+            
+            async for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    delta = chunk.choices[0].delta.content
+                    response_text += delta
+                    # Update the display with the partial response
+                    self.status_message = response_text[-50:]  # Show last 50 chars
+                    yield delta
+            
+            return response_text
+            
+        except Exception as e:
+            self.logger.error(f"Streaming error: {str(e)}")
+            return None
+
+    async def process_with_openai(self, text):
+        """Process text using OpenAI's streaming API"""
+        try:
+            stream = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
+                    {"role": "user", "content": text}
+                ],
+                stream=True
+            )
+            
+            full_response = ""
+            async for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    delta = chunk.choices[0].delta.content
+                    full_response += delta
+                    yield ('chunk', delta)
+            
+            yield ('complete', full_response)
+            
+        except Exception as e:
+            self.logger.error(f"OpenAI streaming error: {str(e)}")
+            yield ('error', str(e))
+
+    def process_with_fallback(self, text):
+        """Process text using basic response templates"""
+        responses = {
+            "hello": "Hello! How can I help you today?",
+            "time": "I can show you the time on the clock module.",
+            "weather": "You can check the weather module for current conditions.",
+            "help": "I can help you with basic mirror functions and information.",
+        }
+        
+        # Simple keyword matching
+        response = "I'm sorry, I can only help with basic functions at the moment."
+        for key in responses:
+            if key in text.lower():
+                response = responses[key]
+                break
+                
+        return response
+
     def process_audio_async(self):
         try:
             with self.microphone as source:
@@ -212,9 +299,24 @@ class AIInteractionModule:
                     self.response_queue.put(('command', {'text': text, 'command': command}))
                     self.set_status("Command", f"{command['action']}ing {command['module']}")
                 else:
-                    # Process as normal AI conversation
-                    response = self.ask_openai(text)
-                    self.response_queue.put(('speech', {'user_text': text, 'ai_response': response}))
+                    # Choose processing method based on API access
+                    if self.has_openai_access:
+                        async_response = asyncio.run(self.process_with_openai(text))
+                        full_response = ""
+                        async for response_type, content in async_response:
+                            if response_type == 'chunk':
+                                full_response += content
+                                self.status_message = full_response[-50:]
+                            elif response_type == 'error':
+                                self.logger.error(f"Falling back to basic response due to: {content}")
+                                full_response = self.process_with_fallback(text)
+                    else:
+                        full_response = self.process_with_fallback(text)
+                    
+                    self.response_queue.put(('speech', {
+                        'user_text': text,
+                        'ai_response': full_response
+                    }))
 
         except sr.UnknownValueError:
             self.set_status("Error", "Speech not understood")
@@ -232,6 +334,22 @@ class AIInteractionModule:
             if not self.recording:
                 self.set_status("Idle", "Press button to speak")
 
+    def speak_chunk(self, text_chunk):
+        """Optional: Implement real-time text-to-speech for response chunks"""
+        if len(text_chunk.strip()) > 0:  # Only process non-empty chunks
+            try:
+                tts = gTTS(text=text_chunk, lang='en', slow=False)
+                # Save to temporary file
+                temp_file = "temp_chunk.mp3"
+                tts.save(temp_file)
+                # Play the chunk
+                pygame.mixer.music.load(temp_file)
+                pygame.mixer.music.play()
+                # Clean up
+                os.remove(temp_file)
+            except Exception as e:
+                self.logger.error(f"Error in speak_chunk: {e}")
+
     def draw(self, screen, position):
         font = pygame.font.Font(None, 36)
         text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
@@ -246,19 +364,3 @@ class AIInteractionModule:
             self.processing_thread.join(timeout=1.0)
         if hasattr(self, 'button'):
             self.button.cleanup()
-
-    def ask_openai(self, text):
-        """Process text through OpenAI API"""
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
-                    {"role": "user", "content": text}
-                ],
-                max_tokens=DEFAULT_MAX_TOKENS
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            self.logger.error(f"OpenAI API error: {str(e)}")
-            return None

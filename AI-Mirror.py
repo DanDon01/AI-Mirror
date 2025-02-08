@@ -1,3 +1,8 @@
+#  Code for the main Magic Mirror application that runs on the Raspberry Pi
+#  This code is responsible for initializing the modules, handling events, updating the modules, and drawing the modules on the screen
+#  It also handles toggling between active, screensaver, and sleep states, and toggling debug mode on/off
+#  The main loop runs until the user closes the application
+
 import pygame
 import sys
 import logging
@@ -11,11 +16,11 @@ from calendar_module import CalendarModule
 from weather_module import WeatherModule
 from fitbit_module import FitbitModule
 from smarthome_module import SmartHomeModule
-from stocks_module import StocksModule  # Add this import at the top
-from clock_module import ClockModule  # Add this import
-from retrocharacters_module import RetroCharactersModule  # Add this import
-from AI_Module import AIInteractionModule  # Add this import at the top
-from module_manager import ModuleManager  # Add this import
+from stocks_module import StocksModule 
+from clock_module import ClockModule  
+from retrocharacters_module import RetroCharactersModule 
+from AI_Module import AIInteractionModule  
+from module_manager import ModuleManager 
 
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" # Hide ALSA errors
@@ -123,7 +128,7 @@ class MagicMirror:
                     logging.error(f"Error initializing {module_name} module: {str(e)}")
                     logging.error(traceback.format_exc())
         
-        return modules  # Remove the manual ClockModule creation
+        return modules
 
     def handle_events(self):
         for event in pygame.event.get():

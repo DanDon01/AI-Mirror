@@ -200,14 +200,17 @@ CONFIG = {
             'config': {
                 'openai': {
                     'api_key': os.getenv('OPENAI_API_KEY'),
-                    'model': 'gpt-4o-mini-2024-07-18'
+                    'model': 'gpt-4-1106-preview'  # Update to latest model
                 },
                 'audio': {
                     'mic_energy_threshold': 1000,
                     'tts_volume': 0.7,
                     'wav_volume': 0.7,
                 },
-                'sound_effects_path': sound_effects_path  # Add this here
+                'fallback_responses': {
+                    'enabled': True,
+                    'response_file': 'fallback_responses.json'
+                }
             }
         }
     },
