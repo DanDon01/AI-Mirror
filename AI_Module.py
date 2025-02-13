@@ -299,13 +299,13 @@ class AIInteractionModule:
                 if chunk.choices[0].delta.content is not None:
                     delta = chunk.choices[0].delta.content
                     full_response += delta
-                    yield ('chunk', delta)
+                    self.status_message = full_response[-50:]
             
-            yield ('complete', full_response)
+            return full_response
             
         except Exception as e:
             self.logger.error(f"OpenAI streaming error: {str(e)}")
-            yield ('error', str(e))
+            return self.process_with_fallback(text)
 
     def process_with_fallback(self, text):
         """Process text using basic response templates"""
@@ -331,18 +331,9 @@ class AIInteractionModule:
             if not self.has_openai_access:
                 return self.process_with_fallback(text)
 
-            full_response = ""
-            async for response_type, content in self.process_with_openai(text):
-                if response_type == 'chunk':
-                    self.status_message = content[-50:]
-                    full_response += content
-                elif response_type == 'error':
-                    self.logger.error(f"Falling back to basic response due to: {content}")
-                    return self.process_with_fallback(text)
-                elif response_type == 'complete':
-                    return content
+            response = await self.process_with_openai(text)
+            return response
 
-            return full_response
         except Exception as e:
             self.logger.error(f"Error in process_audio_async_helper: {str(e)}")
             return self.process_with_fallback(text)
