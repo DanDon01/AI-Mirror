@@ -277,7 +277,7 @@ class AIInteractionModule:
             
         except Exception as e:
             self.logger.error(f"Streaming error: {str(e)}")
-            return None
+            yield f"Error: {str(e)}"  # Yield the error instead of returning None
 
     async def process_with_openai(self, text):
         """Process text using OpenAI's streaming API"""
@@ -325,13 +325,26 @@ class AIInteractionModule:
                 
         return response
 
+    async def process_audio_async_helper(self, text):
+        """Helper function to process audio asynchronously"""
+        if self.has_openai_access:
+            async for response_type, content in self.process_with_openai(text):
+                if response_type == 'chunk':
+                    self.status_message = content[-50:]
+                elif response_type == 'error':
+                    self.logger.error(f"Falling back to basic response due to: {content}")
+                    return self.process_with_fallback(text)
+            return content
+        else:
+            return self.process_with_fallback(text)
+
     def process_audio_async(self):
         try:
             with self.microphone as source:
                 self.logger.info("Listening for speech...")
                 self.logger.info(f"Current energy threshold: {self.recognizer.energy_threshold}")
                 
-                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)  # Increased timeouts
+                audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
                 
                 self.set_status("Processing", "Recognizing speech...")
                 text = self.recognizer.recognize_google(audio)
@@ -344,19 +357,11 @@ class AIInteractionModule:
                     self.response_queue.put(('command', {'text': text, 'command': command}))
                     self.set_status("Command", f"{command['action']}ing {command['module']}")
                 else:
-                    # Choose processing method based on API access
-                    if self.has_openai_access:
-                        async_response = asyncio.run(self.process_with_openai(text))
-                        full_response = ""
-                        async for response_type, content in async_response:
-                            if response_type == 'chunk':
-                                full_response += content
-                                self.status_message = full_response[-50:]
-                            elif response_type == 'error':
-                                self.logger.error(f"Falling back to basic response due to: {content}")
-                                full_response = self.process_with_fallback(text)
-                    else:
-                        full_response = self.process_with_fallback(text)
+                    # Create event loop and run async processing
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    full_response = loop.run_until_complete(self.process_audio_async_helper(text))
+                    loop.close()
                     
                     self.response_queue.put(('speech', {
                         'user_text': text,
