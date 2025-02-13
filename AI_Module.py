@@ -188,7 +188,7 @@ class AIInteractionModule:
         """Load fallback responses from configured file"""
         try:
             response_file = self.fallback_config.get('response_file')
-            if response_file and os.path.exists(response_file):
+            if (response_file and os.path.exists(response_file)):
                 with open(response_file, 'r') as f:
                     self.fallback_responses = json.load(f)
                 self.logger.info("Loaded fallback responses successfully")
@@ -274,8 +274,6 @@ class AIInteractionModule:
                     # Update the display with the partial response
                     self.status_message = response_text[-50:]  # Show last 50 chars
                     yield delta
-            
-            return response_text
             
         except Exception as e:
             self.logger.error(f"Streaming error: {str(e)}")
