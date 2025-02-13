@@ -327,15 +327,24 @@ class AIInteractionModule:
 
     async def process_audio_async_helper(self, text):
         """Helper function to process audio asynchronously"""
-        if self.has_openai_access:
+        try:
+            if not self.has_openai_access:
+                return self.process_with_fallback(text)
+
+            full_response = ""
             async for response_type, content in self.process_with_openai(text):
                 if response_type == 'chunk':
                     self.status_message = content[-50:]
+                    full_response += content
                 elif response_type == 'error':
                     self.logger.error(f"Falling back to basic response due to: {content}")
                     return self.process_with_fallback(text)
-            return content
-        else:
+                elif response_type == 'complete':
+                    return content
+
+            return full_response
+        except Exception as e:
+            self.logger.error(f"Error in process_audio_async_helper: {str(e)}")
             return self.process_with_fallback(text)
 
     def process_audio_async(self):
