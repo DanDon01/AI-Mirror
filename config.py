@@ -194,13 +194,13 @@ CONFIG = {
             'rotation_speed': 1
         }
     },
-    'ai_interaction': {
-        'class': 'AIInteractionModule',
+    'ai_module': {
+        'class': 'AIModuleManager',
         'params': {
             'config': {
                 'openai': {
                     'api_key': os.getenv('OPENAI_API_KEY'),
-                    'model': 'gpt-4-1106-preview'  # Update to latest model
+                    'model': 'gpt-4-1106-preview'
                 },
                 'audio': {
                     'mic_energy_threshold': 1000,

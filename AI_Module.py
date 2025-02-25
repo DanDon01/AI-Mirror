@@ -184,6 +184,12 @@ class AIInteractionModule:
         self.set_status("Idle", "Press button to speak")
         self.logger.info("AI Module initialization complete")
 
+        # Add to the __init__ method:
+        self.hotword_listening = False
+        self.listening_thread = threading.Thread(target=self.hotword_detection_loop)
+        self.listening_thread.daemon = True
+        self.listening_thread.start()
+
     def load_fallback_responses(self):
         """Load fallback responses from configured file"""
         try:
@@ -414,3 +420,26 @@ class AIInteractionModule:
             self.processing_thread.join(timeout=1.0)
         if hasattr(self, 'button'):
             self.button.cleanup()
+
+    def hotword_detection_loop(self):
+        """Continuously listens for the hotword 'Mirror'."""
+        while self.running:
+            if not self.recording and not self.processing:
+                try:
+                    with self.microphone as source:
+                        self.hotword_listening = True
+                        audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=3)
+                        try:
+                            text = self.recognizer.recognize_google(audio).lower()
+                            self.logger.debug(f"Heard: {text}")
+                            
+                            if "mirror" in text:
+                                self.logger.info("Hotword detected!")
+                                self.on_button_press()
+                        except sr.UnknownValueError:
+                            pass  # Speech wasn't understood
+                        except sr.RequestError:
+                            pass  # Could not request results
+                except Exception as e:
+                    self.logger.error(f"Error in hotword detection: {e}")
+                    time.sleep(1)  # Prevent tight loop on error

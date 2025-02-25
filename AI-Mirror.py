@@ -19,8 +19,9 @@ from smarthome_module import SmartHomeModule
 from stocks_module import StocksModule 
 from clock_module import ClockModule  
 from retrocharacters_module import RetroCharactersModule 
-from AI_Module import AIInteractionModule  
+from ai_module_manager import AIModuleManager
 from module_manager import ModuleManager 
+from layout_manager import LayoutManager
 
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" # Hide ALSA errors
@@ -76,7 +77,11 @@ class MagicMirror:
         self.state = "active"
         self.font = pygame.font.Font(None, 48)
         self.module_manager = ModuleManager()
+        # Initialize module visibility with all modules
+        for module_name in self.modules.keys():
+            self.module_manager.module_visibility[module_name] = True
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
+        self.layout_manager = LayoutManager(CONFIG['screen']['size'][0], CONFIG['screen']['size'][1])
 
     def setup_logging(self):
         """Set up logging configuration"""
@@ -144,8 +149,8 @@ class MagicMirror:
                 elif event.key == pygame.K_d:
                     self.toggle_debug()
                 elif event.key == pygame.K_SPACE:
-                    if 'ai_interaction' in self.modules:
-                        self.modules['ai_interaction'].handle_event(event)
+                    if 'ai_module' in self.modules:
+                        self.modules['ai_module'].handle_event(event)
             # Add more event handling here (e.g., for voice commands or gestures)
 
     def toggle_mode(self):
@@ -170,12 +175,15 @@ class MagicMirror:
             for module_name, module in self.modules.items():
                 self.debug_log(f"Attempting to draw {module_name}")
                 if self.module_manager.is_module_visible(module_name):
-                    if module_name in CONFIG['positions']:
-                        position = CONFIG['positions'][module_name]
-                        self.debug_log(f"Drawing {module_name} at position {position}")
-                        module.draw(self.screen, position)
-                    else:
-                        logging.warning(f"No position defined for {module_name} in CONFIG")
+                    try:
+                        position = self.layout_manager.get_module_position(module_name)
+                        if position:
+                            self.debug_log(f"Drawing {module_name} at position {position}")
+                            module.draw(self.screen, (position['x'], position['y']))
+                        else:
+                            logging.warning(f"No position defined for {module_name}")
+                    except Exception as e:
+                        logging.error(f"Error drawing module {module_name}: {str(e)}")
             
             pygame.display.flip()
         except Exception as e:
@@ -189,9 +197,9 @@ class MagicMirror:
 
     def update_modules(self):
         # Check for AI commands first
-        if 'ai_interaction' in self.modules:
-            while not self.modules['ai_interaction'].response_queue.empty():
-                msg_type, content = self.modules['ai_interaction'].response_queue.get()
+        if 'ai_module' in self.modules:
+            while not self.modules['ai_module'].response_queue.empty():
+                msg_type, content = self.modules['ai_module'].response_queue.get()
                 if msg_type == 'command':
                     logging.info(f"Processing command: {content}")
                     self.module_manager.handle_command(content)
@@ -205,9 +213,11 @@ class MagicMirror:
         for module_name, module in self.modules.items():
             if self.module_manager.is_module_visible(module_name):
                 try:
+                    if self.state == "screensaver" and module_name not in CONFIG.get('screensaver_modules', ['retro_characters']):
+                        continue
+                    if self.state == "sleep" and module_name not in CONFIG.get('sleep_modules', []):
+                        continue
                     if hasattr(module, 'update'):
-                        if self.state == "screensaver" and module_name != 'retro_characters':
-                            continue
                         module.update()
                 except Exception as e:
                     logging.error(f"Error updating {module_name}: {e}")
