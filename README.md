@@ -13,18 +13,19 @@
   - Real-time clock and calendar
   - Local weather updates and forecasts
   - Fitbit health data integration
-  - Stock market ticker
+  - Stock market ticker with visual alerts
   - Package delivery tracking
   
-- 🤖 **AI Integration**
-  - Voice command recognition
+- 🤖 **Advanced AI Integration**
+  - Dual AI system with OpenAI GPT-4 and Realtime API
+  - Automatic fallback between AI systems
+  - "Mirror" hotword activation
   - Natural language interactions
   - Personalized responses
-  - Context-aware suggestions
   
 - 👋 **Interactive Controls**
-  - Gesture recognition for hands-free control
   - Voice-activated commands
+  - Gesture recognition for hands-free control
   - Customizable interface layout
   - Motion detection for power saving
 
@@ -33,6 +34,13 @@
   - Control lights, thermostats, and other IoT devices
   - Scene automation support
   - Status monitoring
+
+- 🎨 **Enhanced Visual Experience**
+  - Sleek, modern UI with rounded corners
+  - Subtle animations and transitions
+  - Text shadows for improved readability on mirror
+  - Dynamic color coding for information
+  - Responsive layout for different screen sizes
 
 ## 🔧 Installation Overview
 
@@ -57,6 +65,7 @@
 - 24" Monitor or larger (with built-in speakers)
 - Two-way mirror or acrylic sheet with mirror film
 - Raspberry Pi Camera Module v3
+- USB Microphone with good pickup range
 - 5V/4A Power Supply
 - Custom frame for mounting
 
@@ -66,10 +75,12 @@
 Python 3.x
 Pygame
 OpenCV-Python
-pyttsx3
+SpeechRecognition
+gTTS (Google Text-to-Speech)
+OpenAI API
+Websockets
 FitbitAPI
-PyAudio
-TensorFlow Lite
+yfinance
 ```
 
 ## 🚀 Quick Start
@@ -91,39 +102,56 @@ Create `Variables.env` with your API keys:
 # Fitbit API
 FITBIT_CLIENT_ID=your_id
 FITBIT_CLIENT_SECRET=your_secret
+FITBIT_ACCESS_TOKEN=your_token
+FITBIT_REFRESH_TOKEN=your_refresh_token
 
 # Weather API
 OPENWEATHERMAP_API_KEY=your_key
 
 # OpenAI API
 OPENAI_API_KEY=your_key
+
+# Google Calendar API
+GOOGLE_CLIENT_ID=your_id
+GOOGLE_CLIENT_SECRET=your_secret
+GOOGLE_ACCESS_TOKEN=your_token
+GOOGLE_REFRESH_TOKEN=your_refresh_token
 ```
 
 4. **Run the application:**
 ```bash
-python magic_mirror.py
+python AI-Mirror.py
 ```
 
 ## 🎯 Core Functionalities
 
-### AI Assistant
+### Dual AI Assistant System
+- Primary system using OpenAI's Realtime API for faster responses
+- Fallback system using standard GPT-4 API for reliability
+- Automatic switching between systems based on availability
+- Voice activation with "Mirror" hotword
 - Natural language processing for conversational interaction
-- Context-aware responses and reminders
-- Voice-activated commands and queries
-- Personalized user profiles and preferences
 
-### Smart Display
+### Enhanced Visual Display
+- Modern UI with rounded corners and subtle shadows
+- Animated transitions and fade effects
+- Pulsing highlights for important information
+- Progress bars for visual data representation
+- Color-coded information for quick understanding
+
+### Smart Display Modules
 - Modular widget system for customizable layouts
 - Automatic brightness adjustment based on ambient light
-- Energy-efficient screen management
-- Smooth transitions and animations
+- Energy-efficient screen management with sleep mode
+- Screensaver mode with retro character animations
+- Smooth transitions between display states
 
 ### Data Integration
 - Real-time weather updates and forecasts
-- Calendar synchronization
-- Health metrics visualization
-- Stock market data tracking
-- Package delivery status
+- Calendar synchronization with visual event grouping
+- Health metrics visualization with progress tracking
+- Stock market data with visual alerts for significant changes
+- Package delivery status tracking
 
 ## 🤝 Contributing
 
@@ -143,7 +171,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) f
 
 - Fitbit for their comprehensive API
 - OpenWeatherMap for reliable weather data
-- OpenAI for AI capabilities
+- OpenAI for GPT-4 and Realtime API capabilities
 - The Raspberry Pi Foundation
 - Contributors and the open-source community
 
