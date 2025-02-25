@@ -51,6 +51,12 @@ class LayoutManager:
                 'y': int(self.screen_height * sections['bottom'] / 100),
                 'width': std_width,
                 'height': std_height
+            },
+            'ai_module': {
+                'x': (self.screen_width - std_width) // 2,
+                'y': int(self.screen_height * 0.8),  # Position near bottom
+                'width': std_width,
+                'height': std_height
             }
         }
 

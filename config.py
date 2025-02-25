@@ -232,5 +232,16 @@ CONFIG = {
     'debug': {
         'enabled': False,  # Set to True when you need detailed logging
         'log_level': 'INFO'  # Can be 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+    },
+    'screensaver_modules': ['retro_characters', 'clock'],
+    'sleep_modules': ['clock'],
+    'visual_effects': {
+        'enabled': True,
+        'animation_speed': 1.0,  # Adjust to speed up or slow down animations
+        'transparency': {
+            'background': 180,
+            'text': 220,
+            'highlights': 255
+        }
     }
 }

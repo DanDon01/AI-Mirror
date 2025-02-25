@@ -4,6 +4,9 @@ import logging
 from datetime import datetime, timedelta
 from pytz import timezone
 from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY  # Import font settings and color constants from config
+from visual_effects import VisualEffects
+import time
+import math
 
 class StocksModule:
     def __init__(self, tickers, market_timezone='America/New_York'):
@@ -41,6 +44,18 @@ class StocksModule:
 
         self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
         self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 6)
+
+        # Add new visual properties
+        self.effects = VisualEffects()
+        self.animation_start_time = time.time()
+        self.item_fade_offsets = {ticker: i * 0.2 for i, ticker in enumerate(tickers)}
+        self.header_pulse_speed = 0.3
+        self.alert_pulse_speed = 0.8
+        
+        # Add background properties
+        self.bg_color = (20, 20, 20, 180)  # Dark with transparency
+        self.header_bg_color = (40, 40, 40, 200)
+        self.alert_bg_color = (60, 20, 20, 200)  # Reddish for alerts
 
     def update(self):
         current_time = datetime.now(timezone('UTC'))
@@ -108,67 +123,103 @@ class StocksModule:
             x, y = position
             current_time = datetime.now(timezone('UTC'))
             
-            # Check market status
+            # Create a background surface for the entire module
+            module_width = 300  # Adjust based on your layout
+            module_height = (len(self.tickers) + 4) * LINE_SPACING  # Height based on content
+            
+            # Draw module background
+            module_rect = pygame.Rect(x-10, y-10, module_width, module_height)
+            self.effects.draw_rounded_rect(screen, module_rect, self.bg_color, radius=15, alpha=180)
+            
+            # Draw header with pulsing effect
+            header_rect = pygame.Rect(x-10, y-10, module_width, LINE_SPACING + 10)
+            header_alpha = self.effects.pulse_effect(180, 220, self.header_pulse_speed)
+            self.effects.draw_rounded_rect(screen, header_rect, self.header_bg_color, radius=15, alpha=header_alpha)
+            
+            # Check market status with enhanced visuals
             us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
             uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
-
-            # Render text
-            markets_text = self.markets_font.render("Markets:", True, COLOR_FONT_DEFAULT)
+            
+            # Create text with shadow effect
+            markets_text = self.effects.create_text_with_shadow(
+                self.markets_font, "Markets:", COLOR_FONT_DEFAULT, offset=1)
+            
             us_status = "Open" if us_open else "Closed"
             uk_status = "Open" if uk_open else "Closed"
-            us_text = self.status_font.render("US: {}".format(us_status), True, COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
-            uk_text = self.status_font.render("UK: {}".format(uk_status), True, COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
-
-            # Set transparency
-            markets_text.set_alpha(TRANSPARENCY)
-            us_text.set_alpha(TRANSPARENCY)
-            uk_text.set_alpha(TRANSPARENCY)
-
-            # Calculate positions
-            markets_width = markets_text.get_width()
-            us_width = us_text.get_width()
-            uk_width = uk_text.get_width()
-
-            # Draw text
+            
+            us_text = self.effects.create_text_with_shadow(
+                self.status_font, f"US: {us_status}", 
+                COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
+            
+            uk_text = self.effects.create_text_with_shadow(
+                self.status_font, f"UK: {uk_status}", 
+                COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
+            
+            # Draw text with fade-in effect
             screen.blit(markets_text, (x, y))
-            screen.blit(us_text, (x + markets_width + 10, y - 4))
-            screen.blit(uk_text, (x + markets_width + 10, y + 10))
-
+            screen.blit(us_text, (x + markets_text.get_width() + 10, y - 4))
+            screen.blit(uk_text, (x + markets_text.get_width() + 10, y + 10))
+            
             y += LINE_SPACING + 5  # Move position down after displaying market status
-
-            # Draw alerts (now integrated into the main stock list)
+            
+            # Draw alerts with pulsing effect
             y = self.draw_alerts(screen, (x, y))
-
-            # Draw stock data
+            
+            # Draw stock data with staggered fade-in
             if self.stock_data:
-                for ticker, data in self.stock_data.items():
+                for i, (ticker, data) in enumerate(self.stock_data.items()):
+                    # Calculate fade-in alpha based on time offset
+                    elapsed = time.time() - self.animation_start_time
+                    fade_progress = min(1.0, max(0, elapsed - self.item_fade_offsets[ticker]))
+                    alpha = int(220 * fade_progress)
+                    
                     price = data['price']
                     percent_change = data['percent_change']
-
-                    color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else COLOR_FONT_DEFAULT
-
+                    
+                    # Determine color based on change
+                    color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else \
+                           COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else \
+                           COLOR_FONT_DEFAULT
+                    
                     currency_symbol = '£' if ticker.endswith('.L') else '$'
-
+                    
+                    # Format text with better spacing and alignment
                     if isinstance(price, (float, int)) and isinstance(percent_change, (float, int)):
-                        text = "{}: {}{:.2f} ({:+.2f}%)".format(ticker, currency_symbol, price, percent_change)
+                        ticker_text = f"{ticker}"
+                        price_text = f"{currency_symbol}{price:.2f}"
+                        change_text = f"({percent_change:+.2f}%)"
+                        
+                        # Create surfaces with shadow effect
+                        ticker_surface = self.font.render(ticker_text, True, COLOR_FONT_DEFAULT)
+                        price_surface = self.font.render(price_text, True, color)
+                        change_surface = self.font.render(change_text, True, color)
+                        
+                        # Apply alpha fade
+                        ticker_surface.set_alpha(alpha)
+                        price_surface.set_alpha(alpha)
+                        change_surface.set_alpha(alpha)
+                        
+                        # Position elements with better spacing
+                        screen.blit(ticker_surface, (x, y))
+                        screen.blit(price_surface, (x + 80, y))  # Adjust spacing as needed
+                        screen.blit(change_surface, (x + 160, y))  # Adjust spacing as needed
                     else:
-                        text = "{}: {}".format(ticker, "N/A")
-
-                    text_surface = self.font.render(text, True, color)
-                    text_surface.set_alpha(TRANSPARENCY)
-                    screen.blit(text_surface, (x, y))
-
+                        text = f"{ticker}: N/A"
+                        text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
+                        text_surface.set_alpha(alpha)
+                        screen.blit(text_surface, (x, y))
+                    
                     y += LINE_SPACING  # Move to the next stock
             else:
                 no_data_surface = self.font.render("Stock data unavailable", True, COLOR_PASTEL_RED)
                 no_data_surface.set_alpha(TRANSPARENCY)
                 screen.blit(no_data_surface, (x, y))
-
-            # Draw scrolling ticker
+            
+            # Draw scrolling ticker with enhanced visuals
             self.draw_scrolling_ticker(screen)
-
+            
         except Exception as e:
-            logging.error("Error drawing stock data: %s", str(e))
+            logging.error(f"Error drawing stock data: {str(e)}")
 
     def draw_scrolling_ticker(self, screen):
         ticker_height = 30
@@ -208,19 +259,37 @@ class StocksModule:
             percent_change = data['percent_change']
             if isinstance(percent_change, float) and abs(percent_change) >= 5:
                 self.alerts.append((ticker, percent_change))
-
+        
         if self.alerts:
-            logging.info("Displaying %d stock alerts", len(self.alerts))
-            alert_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE, bold=True)  # Use the same size as regular font, but bold
+            # Draw alert background with pulsing effect
+            alert_width = 280  # Adjust based on your layout
+            alert_height = len(self.alerts) * LINE_SPACING + 10
+            alert_rect = pygame.Rect(x-5, y-5, alert_width, alert_height)
+            
+            # Pulse the alert background for attention
+            alert_alpha = self.effects.pulse_effect(160, 220, self.alert_pulse_speed)
+            self.effects.draw_rounded_rect(screen, alert_rect, self.alert_bg_color, radius=10, alpha=alert_alpha)
+            
+            logging.info(f"Displaying {len(self.alerts)} stock alerts")
+            alert_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE, bold=True)
+            
             for ticker, percent_change in self.alerts:
                 color = COLOR_PASTEL_GREEN if percent_change > 0 else COLOR_PASTEL_RED
-                text = "{} {:+.2f}%".format(ticker, percent_change)
-                text_surface = alert_font.render(text, True, color)
-                text_surface.set_alpha(TRANSPARENCY)
+                
+                # Create alert text with arrow indicator
+                arrow = "▲" if percent_change > 0 else "▼"
+                text = f"{ticker} {arrow} {abs(percent_change):.2f}%"
+                
+                # Create text with glow effect for alerts
+                text_surface = self.effects.create_text_with_shadow(
+                    alert_font, text, color, offset=2)
+                
                 screen.blit(text_surface, (x, y))
-                y += LINE_SPACING  # Move down for the next alert
-
-        return y  # Return the new y position after drawing alerts
+                y += LINE_SPACING
+            
+            y += 5  # Add a bit of extra space after alerts
+        
+        return y
 
     def is_market_open(self, current_market_time, market):
         market_hours = self.market_hours[market]
