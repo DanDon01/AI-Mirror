@@ -578,3 +578,34 @@ class AIInteractionModule:
                 # Using Enter key to simulate button release
                 if self.recording:
                     self.on_button_release()
+
+    def start_listening(self):
+        """Start listening with fixed arguments"""
+        try:
+            # Configure recognizer with proper timeout handling
+            self.recognizer = sr.Recognizer()
+            self.recognizer.pause_threshold = 0.8
+            self.recognizer.dynamic_energy_threshold = True
+            
+            # Use a try/except block for each recognition method
+            try:
+                with sr.Microphone(device_index=self.mic_index) as source:
+                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    
+                    # Use different recognize methods depending on version
+                    if hasattr(self.recognizer, 'recognize_sphinx'):
+                        # Older version API
+                        audio = self.recognizer.listen(source, timeout=10)
+                        text = self.recognizer.recognize_sphinx(audio)
+                    else:
+                        # Newer version API
+                        audio = self.recognizer.listen(source)
+                        text = self.recognizer.recognize_google(audio)
+                    
+                    return text.lower()
+            except Exception as e:
+                logging.error(f"Error in speech recognition: {e}")
+                return None
+        except Exception as e:
+            logging.error(f"Error starting listening: {e}")
+            return None

@@ -7,32 +7,35 @@
 import os
 import sys
 
-# Create a pipe to filter stderr
+# Create a pipe to completely filter audio-related stderr messages
 real_stderr = sys.stderr
 
-# Create a basic filter for stderr before any imports
-class FilteredStderr:
+# Create a more aggressive filter for stderr
+class EnhancedFilteredStderr:
     def write(self, message):
-        # Filter out ALSA and JACK errors
+        # Filter out ALSA, JACK, pcm, sound-related errors completely
         if not any(x in message for x in [
-            "ALSA lib", "jack server", "JackShmReadWritePtr", 
-            "Cannot connect to server", "aconnect", "pcm_", "snd_"
+            "ALSA", "alsa", "pcm", "snd_", "jack", "Jack", "JackShm", 
+            "Cannot connect", "socket", "pulse", "audio", "sound",
+            "hdmi", "device", "hw", "recognize_legacy"
         ]):
             real_stderr.write(message)
     
     def flush(self):
         real_stderr.flush()
 
-# Replace stderr with our filtered version
-sys.stderr = FilteredStderr()
+# Replace stderr with our enhanced filtered version
+sys.stderr = EnhancedFilteredStderr()
 
-# Set environment variables to disable problematic audio components
+# Completely silence audio errors
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+os.environ['ALSA_CARD'] = "3"
+os.environ['PYTHONUNBUFFERED'] = '1'
+
+# More aggressive environment settings to reduce errors
+os.environ['ALSA_CONFIG_PATH'] = '/dev/null'
 os.environ['JACK_NO_START_SERVER'] = '1'
 os.environ['JACK_NO_AUDIO_RESERVATION'] = '1'
-os.environ['ALSA_CARD'] = "3"
-os.environ['PA_ALSA_PLUGHW'] = "1"
-os.environ['PYTHONUNBUFFERED'] = '1'
 
 # Make sure Python logging still works by setting up a basic logger
 import logging
@@ -382,49 +385,44 @@ class MagicMirror:
                 module.cleanup()
 
     def initialize_screen(self):
-        """Initialize the pygame display screen with proper dimensions"""
+        """Force fullscreen with multiple hardware-specific options"""
         # Set display modes for fullscreen
         pygame.display.set_caption("Magic Mirror")
+        pygame.mouse.set_visible(False)  # Hide cursor
         
-        # Force-hide mouse cursor
-        pygame.mouse.set_visible(False)
-        
-        # Force respect for configured screen dimensions
+        # Get screen dimensions from config
         config_screen = CONFIG.get('current_monitor', {})
-        width = config_screen.get('width')
-        height = config_screen.get('height')
+        width = config_screen.get('width', 800)  # Default to 800 for safety
+        height = config_screen.get('height', 480)  # Default to 480 for safety
         
-        if width and height:
-            logging.info(f"Setting screen to configured dimensions: {width}x{height}")
-            if CONFIG.get('screen', {}).get('fullscreen', True):  # Default to fullscreen
-                # Try different fullscreen flags
-                try:
-                    self.screen = pygame.display.set_mode(
-                        (width, height), 
-                        pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF
-                    )
-                except:
-                    # Fallback if that combination fails
-                    self.screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
-            else:
-                self.screen = pygame.display.set_mode((width, height))
-            
-            # Create layout manager with these dimensions
-            self.layout_manager = LayoutManager(width, height)
-        else:
-            # Fallback to default implementation if no screen dimensions in config
-            logging.warning("No screen dimensions in config, using fallback dimensions")
-            fallback_width = CONFIG.get('screen', {}).get('size', (800, 600))[0]
-            fallback_height = CONFIG.get('screen', {}).get('size', (800, 600))[1]
-            
-            logging.info(f"Using fallback dimensions: {fallback_width}x{fallback_height}")
-            if CONFIG.get('screen', {}).get('fullscreen', False):
-                self.screen = pygame.display.set_mode((fallback_width, fallback_height), pygame.FULLSCREEN)
-            else:
-                self.screen = pygame.display.set_mode((fallback_width, fallback_height))
-            
-            # Create layout manager with fallback dimensions
-            self.layout_manager = LayoutManager(fallback_width, fallback_height)
+        # Log the configured dimensions
+        logging.info(f"Using screen dimensions: {width}x{height}")
+        
+        # Try multiple approaches to force fullscreen
+        fullscreen_flags = [
+            pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF,
+            pygame.FULLSCREEN | pygame.NOFRAME,
+            pygame.FULLSCREEN
+        ]
+        
+        for flags in fullscreen_flags:
+            try:
+                logging.info(f"Trying fullscreen mode with flags: {flags}")
+                self.screen = pygame.display.set_mode((width, height), flags)
+                actual_size = self.screen.get_size()
+                logging.info(f"Screen created with size: {actual_size[0]}x{actual_size[1]}")
+                break
+            except Exception as e:
+                logging.error(f"Failed to set fullscreen with flags {flags}: {e}")
+        
+        # If all fullscreen attempts failed, try a final fallback
+        if not hasattr(self, 'screen') or self.screen is None:
+            logging.warning("Fullscreen attempts failed, using basic mode")
+            self.screen = pygame.display.set_mode((width, height))
+        
+        # Setup layout manager with correct dimensions
+        self.layout_manager = LayoutManager(width, height)
+        self.debug_layout = True  # Enable debug overlay to see boundaries
 
 if __name__ == "__main__":
     mirror = MagicMirror()

@@ -121,8 +121,9 @@ LAYOUT = {
 
 CONFIG = {
     'screen': {
-        'size': CURRENT_MONITOR['resolution'],
-        'scale': CURRENT_MONITOR['module_scale']
+        'fullscreen': True,
+        'size': (800, 480),  # Fallback size if current_monitor not set
+        'scale': 1.0
     },
     'layout': LAYOUT,
     'update_schedule': {
@@ -243,5 +244,10 @@ CONFIG = {
             'text': 220,
             'highlights': 255
         }
+    },
+    'current_monitor': {
+        'width': 800,  # Set to actual physical width of your display 
+        'height': 480,  # Set to actual physical height of your display
+        'is_portrait': False  # Set to False since the Pi should use landscape mode
     }
 }
