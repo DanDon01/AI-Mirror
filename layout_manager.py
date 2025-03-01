@@ -12,69 +12,81 @@ class LayoutManager:
         self.calculate_positions()
 
     def calculate_positions(self):
-        """Recalculate module positions for portrait orientation"""
-        # Log actual screen dimensions
+        """Recalculate positions for side-by-side layout with clear center"""
+        # Log dimensions
         logging.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
         
-        # Simple portrait-mode layout with fixed spacing
-        top_margin = 50
-        side_margin = 50
+        # Define layout parameters
+        top_margin = 60
+        side_margin = 40
         module_height = 180
-        module_width = self.screen_width - (side_margin * 2)
-        spacing = 20
+        module_width = int(self.screen_width * 0.25)  # 25% of screen width
+        center_gap = self.screen_width - (module_width * 2) - (side_margin * 2)
+        vertical_spacing = 30
         
-        # Calculate positions for each module in portrait orientation
-        current_y = top_margin
+        # Calculate vertical positions (3 rows)
+        row_y = [
+            top_margin + 60,  # First row (after clock)
+            top_margin + module_height + vertical_spacing + 60,  # Second row
+            top_margin + (module_height + vertical_spacing) * 2 + 60  # Third row
+        ]
         
-        # Clock at top
+        # Calculate horizontal positions (left and right sides)
+        left_x = side_margin
+        right_x = self.screen_width - side_margin - module_width
+        
+        # Assign module positions
+        
+        # Clock spans the top
         self.module_positions['clock'] = {
-            'x': side_margin,
-            'y': current_y,
-            'width': module_width,
-            'height': module_height
+            'x': 0,
+            'y': 5,
+            'width': self.screen_width,
+            'height': 50
         }
-        current_y += module_height + spacing
         
-        # Weather below clock
+        # Left side modules
         self.module_positions['weather'] = {
-            'x': side_margin,
-            'y': current_y,
+            'x': left_x,
+            'y': row_y[0],
             'width': module_width,
             'height': module_height
         }
-        current_y += module_height + spacing
         
-        # Stocks below weather
         self.module_positions['stocks'] = {
-            'x': side_margin,
-            'y': current_y,
+            'x': left_x,
+            'y': row_y[1],
             'width': module_width,
             'height': module_height
         }
-        current_y += module_height + spacing
         
-        # Fitbit below stocks
-        self.module_positions['fitbit'] = {
-            'x': side_margin,
-            'y': current_y,
-            'width': module_width,
-            'height': module_height
-        }
-        current_y += module_height + spacing
-        
-        # Calendar below fitbit
         self.module_positions['calendar'] = {
-            'x': side_margin,
-            'y': current_y,
+            'x': left_x,
+            'y': row_y[2],
             'width': module_width,
             'height': module_height
         }
-        current_y += module_height + spacing
         
-        # AI module at bottom
+        # Right side modules
+        self.module_positions['fitbit'] = {
+            'x': right_x,
+            'y': row_y[0],
+            'width': module_width,
+            'height': module_height
+        }
+        
+        # Placeholder for additional right-side module
+        self.module_positions['placeholder'] = {
+            'x': right_x,
+            'y': row_y[1],
+            'width': module_width,
+            'height': module_height
+        }
+        
+        # AI module on right side bottom
         self.module_positions['ai_module'] = {
-            'x': side_margin,
-            'y': self.screen_height - module_height - top_margin,
+            'x': right_x,
+            'y': row_y[2],
             'width': module_width,
             'height': module_height
         }
@@ -89,7 +101,7 @@ class LayoutManager:
         
         # Log calculated positions
         for module_name, pos in self.module_positions.items():
-            logging.info(f"{module_name}: (x={pos['x']}, y={pos['y']})")
+            logging.info(f"{module_name}: (x={pos['x']}, y={pos['y']}), size={pos['width']}x{pos['height']}")
 
     def get_module_position(self, module_name):
         """Get the position for a specific module, ensuring proper return format"""
