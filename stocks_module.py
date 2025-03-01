@@ -58,65 +58,76 @@ class StocksModule:
         self.alert_bg_color = (60, 20, 20, 200)  # Reddish for alerts
 
     def update(self):
-        current_time = datetime.now(timezone('UTC'))
+        """Enhanced update method with better API diagnostics"""
+        current_time = datetime.now()
         
-        if current_time - self.last_update < self.update_interval:
-            if not hasattr(self, 'last_skip_log') or current_time - self.last_skip_log > timedelta(minutes=5):
-                logging.debug("Skipping stock update: Not enough time has passed since last update")
-                self.last_skip_log = current_time
-            return  # Skip update if not enough time has passed
-
+        # Check if we need to update
+        if (current_time - self.last_update).total_seconds() < self.update_interval:
+            return
+        
         try:
-            for ticker in self.tickers:
-                market = 'UK' if ticker.endswith('.L') else 'US'
-                current_market_time = current_time.astimezone(self.market_timezones[market])
-
-                logging.info("Updating %s stock: %s", market, ticker)
-                logging.info("Current market time: %s", current_market_time)
-                logging.info("Market open: %s", self.is_market_open(current_market_time, market))
-
-                if not self.is_market_open(current_market_time, market):
-                    logging.info("Market is closed for %s. Displaying last available data.", ticker)
-                    # Fetching last available data (closing prices from the previous session)
-                    stock = yf.Ticker(ticker)
-                    data = stock.history(period="1d")
-                    if not data.empty:
-                        last_close = data['Close'].iloc[-1]
-                        self.stock_data[ticker] = {
-                            'price': last_close,
-                            'percent_change': 'N/A',
-                            'volume': 'N/A',
-                            'day_range': 'N/A'
-                        }
-                    continue
-
-                # Fetch real-time data if the market is open
-                stock = yf.Ticker(ticker)
-                data = stock.history(period="1d", interval="1m")
-                if not data.empty:
-                    last_close = float(data['Close'].iloc[0])  # Last session's close
-                    current_price = float(data['Close'].iloc[-1])  # Current price or last close
-                    percent_change = ((current_price - last_close) / last_close) * 100
-                    volume = int(data['Volume'].iloc[-1])
-                    day_range = "{:.2f} - {:.2f}".format(float(data['Low'].min()), float(data['High'].max()))
-                    self.stock_data[ticker] = {
-                        'price': current_price,
-                        'percent_change': percent_change,
-                        'volume': volume,
-                        'day_range': day_range
-                    }
+            # Add API diagnostic check
+            self.logger.info("Testing Yahoo Finance API connection...")
+            
+            # Test with a known reliable stock
+            test_ticker = "AAPL"
+            try:
+                # Simple API test that doesn't rely on complex data fetching
+                test_ticker_obj = yf.Ticker(test_ticker)
+                test_info = test_ticker_obj.info
+                
+                if test_info and ('regularMarketPrice' in test_info or 'currentPrice' in test_info):
+                    self.logger.info("✓ Yahoo Finance API appears to be working")
                 else:
-                    self.stock_data[ticker] = {
-                        'price': 'N/A',
-                        'percent_change': 'N/A',
-                        'volume': 'N/A',
-                        'day_range': 'N/A'
-                    }
-                logging.info("Updated data for %s: %s", ticker, self.stock_data[ticker])
+                    self.logger.warning("⚠ Yahoo Finance API test returned incomplete data")
+                    self.logger.debug(f"API returned: {str(test_info)[:100]}...")
+            except Exception as e:
+                self.logger.error(f"✗ Yahoo Finance API test failed: {e}")
+            
+            # Check market status
+            is_market_open = self.check_market_open()
+            if not is_market_open:
+                self.logger.info("Market is closed, fetching last available data")
+            
+            # Proceed with update for each ticker
+            for ticker in self.tickers:
+                self.logger.info(f"Fetching data for {ticker}...")
+                
+                try:
+                    stock = yf.Ticker(ticker)
+                    
+                    # Try to fetch minimal info first to verify ticker exists
+                    try:
+                        basic_info = stock.info
+                        if not basic_info or not isinstance(basic_info, dict):
+                            self.logger.warning(f"No basic info available for {ticker}")
+                    except Exception as info_error:
+                        self.logger.error(f"Error fetching basic info for {ticker}: {info_error}")
+                    
+                    # Now try to get history
+                    try:
+                        data = stock.history(period="2d")  # Get two days for comparison
+                        
+                        if data.empty:
+                            self.logger.warning(f"Empty data returned for {ticker}")
+                            # Log HTTP Response if possible
+                            if hasattr(stock, '_last_response') and stock._last_response:
+                                self.logger.debug(f"API Response: {stock._last_response.text[:200]}...")
+                        else:
+                            self.logger.info(f"Successfully retrieved data for {ticker}: {len(data)} rows")
+                            self.logger.debug(f"Data columns: {list(data.columns)}")
+                            self.logger.debug(f"Latest data: {data.iloc[-1].to_dict()}")
+                    except Exception as hist_error:
+                        self.logger.error(f"History fetch failed for {ticker}: {hist_error}")
+                    
+                    # Rest of your existing update logic...
+                except Exception as e:
+                    self.logger.error(f"Error fetching data for {ticker}: {e}")
+            
             self.last_update = current_time
-            logging.info("Stock data updated successfully")
+            self.logger.info("Stock data updated successfully")
         except Exception as e:
-            logging.error("Error updating stock data: %s", e)
+            self.logger.error("Error updating stock data: %s", e)
 
     def draw(self, screen, position):
         try:

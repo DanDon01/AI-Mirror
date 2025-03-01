@@ -306,6 +306,23 @@ class MagicMirror:
                     except Exception as e:
                         logging.debug(f"Debug overlay error for {name}: {e}")
             
+            # Visual debug for screen boundaries
+            if self.debug_layout:
+                # Draw screen boundaries
+                pygame.draw.rect(self.screen, (255, 0, 0), 
+                                (0, 0, self.screen.get_width(), self.screen.get_height()), 1)
+                
+                # Draw center crosshair
+                center_x = self.screen.get_width() // 2
+                center_y = self.screen.get_height() // 2
+                pygame.draw.line(self.screen, (255, 0, 0), (center_x, 0), (center_x, self.screen.get_height()), 1)
+                pygame.draw.line(self.screen, (255, 0, 0), (0, center_y), (self.screen.get_width(), center_y), 1)
+                
+                # Draw dimension text
+                debug_font = pygame.font.Font(None, 24)
+                dims_text = debug_font.render(f"Screen: {self.screen.get_width()}x{self.screen.get_height()}", True, (255, 0, 0))
+                self.screen.blit(dims_text, (10, self.screen.get_height() - 30))
+            
             pygame.display.flip()
         except Exception as e:
             logging.error(f"Error in draw_modules: {e}")

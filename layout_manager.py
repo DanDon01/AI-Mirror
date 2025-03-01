@@ -25,38 +25,38 @@ class LayoutManager:
         self.calculate_positions()
 
     def calculate_positions(self):
-        """Recalculate positions with narrower modules to fit the screen"""
-        # Log dimensions
+        """Recalculate positions with even narrower modules to fit screen"""
+        # Log dimensions to see what we're working with
         logging.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
         
-        # Define layout parameters with much narrower modules
+        # Define layout parameters with narrower modules
         top_margin = 60
-        side_margin = 30
+        side_margin = 20
         module_height = 180
         
-        # Narrow module width for portrait orientation
-        module_width = min(int(self.screen_width * 0.2), 300)  # Maximum 20% of screen width, capped at 300px
+        # Force narrower modules for very small displays
+        # Assume minimum 700px width display
+        module_width = min(int((self.screen_width - (3 * side_margin)) / 2), 250)
         
-        # Ensure left and right modules fit on screen with reasonable gap
-        total_width = (module_width * 2) + (side_margin * 3)
-        if total_width > self.screen_width:
-            # Adjust width to fit within screen
-            module_width = (self.screen_width - (side_margin * 3)) // 2
-            logging.info(f"Adjusted module width to {module_width}px to fit screen")
+        # Check if we need to adjust again for very narrow screens
+        if module_width * 2 + 3 * side_margin > self.screen_width:
+            module_width = (self.screen_width - (3 * side_margin)) // 2
+            logging.info(f"Forced module width to {module_width}px for narrow screen")
         
         # Calculate vertical positions (3 rows)
         row_y = [
-            top_margin + 60,  # First row (after clock)
-            top_margin + module_height + 40 + 60,  # Second row with more spacing
-            top_margin + (module_height + 40) * 2 + 60  # Third row
+            top_margin + 50,  # First row (after clock)
+            top_margin + module_height + 30 + 50,  # Second row
+            top_margin + (module_height + 30) * 2 + 50  # Third row
         ]
         
-        # Calculate horizontal positions with safety margins
+        # Calculate horizontal positions
         left_x = side_margin
         right_x = self.screen_width - side_margin - module_width
         
         # Log the calculated positions for debugging
         logging.info(f"Left edge: {left_x}, Right edge: {right_x}, Module width: {module_width}")
+        logging.info(f"Screen width check: right edge({right_x}) + module width({module_width}) = {right_x + module_width}")
         
         # Assign module positions
         # Clock spans the top
