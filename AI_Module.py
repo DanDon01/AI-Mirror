@@ -437,6 +437,10 @@ class AIInteractionModule:
 
     def hotword_detection_loop(self):
         """Continuously listens for the hotword 'Mirror'."""
+        # Make sure we have the needed imports
+        import time
+        
+        # Skip if audio isn't available
         if not self.has_audio:
             self.logger.warning("Hotword detection disabled - no audio system")
             return
@@ -448,9 +452,13 @@ class AIInteractionModule:
                 try:
                     with self.microphone as source:
                         self.hotword_listening = True
-                        audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=3)
+                        # Use a much more generous timeout
+                        audio = self.recognizer.listen(source, 
+                                                      timeout=3, 
+                                                      phrase_time_limit=5)
                         try:
-                            text = self.recognizer.recognize_google(audio).lower()
+                            # Use a longer timeout for Google API
+                            text = self.recognizer.recognize_google(audio, timeout=5).lower()
                             if "mirror" in text:
                                 self.logger.info("🎯 Hotword 'Mirror' detected!")
                                 self.on_button_press()
@@ -458,112 +466,50 @@ class AIInteractionModule:
                                 self.logger.debug(f"Heard: {text} (not hotword)")
                         except sr.UnknownValueError:
                             pass  # Speech wasn't understood
-                        except sr.RequestError:
-                            pass  # Could not request results
+                        except sr.RequestError as e:
+                            self.logger.warning(f"Could not request results from Google: {e}")
+                            time.sleep(3)  # Wait longer on API errors
+                            
                 except Exception as e:
                     self.logger.error(f"Error in hotword detection: {e}")
-                    time.sleep(1)  # Prevent tight loop on error
+                    time.sleep(3)  # Wait longer on general errors
+                
+                # Always sleep a little to prevent tight loops
+                time.sleep(0.5)
 
     def initialize_audio_system(self):
         """Safely initialize the audio system with fallbacks"""
+        # First, set default state
+        self.has_audio = False
+        
         try:
             # First check if PyAudio is available
             import pyaudio
             
-            # Use subprocess to modify ALSA configuration instead of directly in Python
-            try:
-                import subprocess
-                # Redirect all output to /dev/null
-                with open(os.devnull, 'w') as devnull:
-                    subprocess.call(['amixer', 'cset', 'numid=3', '1'], 
-                                   stdout=devnull, stderr=devnull)
-            except:
-                self.logger.warning("Failed to configure ALSA mixer")
+            # Completely avoid using PyAudio directly - use only high-level SR functions
+            self.logger.info("Initializing audio with safe defaults...")
             
-            # Initialize recognizer with configured settings
+            # Initialize recognizer with very conservative settings
             self.recognizer = sr.Recognizer()
-            self.recognizer.energy_threshold = self.mic_energy_threshold
+            self.recognizer.energy_threshold = 500  # Medium sensitivity
             self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.pause_threshold = 1.0    # Increased for better phrase detection
-            self.recognizer.phrase_threshold = 0.5
-            self.recognizer.non_speaking_duration = 0.5
+            self.recognizer.pause_threshold = 1.0
             
-            # Check available audio devices
-            audio = pyaudio.PyAudio()
-            device_count = audio.get_device_count()
-            self.logger.info(f"Found {device_count} audio devices")
-            
-            # List all devices for debugging
-            for i in range(device_count):
-                try:
-                    device_info = audio.get_device_info_by_index(i)
-                    self.logger.info(f"Device {i}: {device_info['name']} (in: {device_info['maxInputChannels']}, out: {device_info['maxOutputChannels']})")
-                except Exception as e:
-                    self.logger.warning(f"Could not get info for device {i}: {e}")
-            
-            # Find a suitable input device
-            input_device = None
-            for i in range(device_count):
-                try:
-                    device_info = audio.get_device_info_by_index(i)
-                    device_name = device_info['name'].lower()
-                    if device_info['maxInputChannels'] > 0:
-                        if 'usb' in device_name or 'external' in device_name or 'mic' in device_name:
-                            self.logger.info(f"Found USB/external microphone: {device_info['name']}")
-                            input_device = i
-                            break
-                except Exception as e:
-                    pass
-            
-            # If no USB device found, try pulse or default
-            if input_device is None:
-                for i in range(device_count):
-                    try:
-                        device_info = audio.get_device_info_by_index(i)
-                        device_name = device_info['name'].lower()
-                        if device_info['maxInputChannels'] > 0 and ('pulse' in device_name or 'default' in device_name):
-                            self.logger.info(f"Found pulse/default input device: {device_info['name']}")
-                            input_device = i
-                            break
-                    except:
-                        pass
-            
-            # Initialize microphone with the detected device
-            if input_device is not None:
-                try:
-                    # DO NOT initialize pygame mixer here - it seems to conflict
-                    self.microphone = sr.Microphone(
-                        device_index=input_device,
-                        sample_rate=16000,  # Lower sample rate for better compatibility
-                        chunk_size=1024     # Smaller chunk size to reduce memory issues
-                    )
-                    
-                    # Configure recognizer with more conservative settings
-                    self.recognizer.energy_threshold = 400  # Moderate sensitivity
-                    
-                    # Limited ambient noise adjustment to avoid hangs
-                    with self.microphone as source:
-                        self.logger.info("Briefly adjusting for ambient noise...")
-                        self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                    
-                    self.has_audio = True
-                    self.logger.info(f"Audio input initialized with device {input_device}")
-                    
-                except Exception as e:
-                    self.logger.error(f"Error initializing microphone: {str(e)}")
-                    self.has_audio = False
-            else:
-                self.logger.error("No suitable input device found")
-                self.has_audio = False
-            
-            # Initialize sound output separately from input
+            # Use the default microphone - let SpeechRecognition handle it
             try:
-                if pygame.mixer.get_init():
-                    pygame.mixer.quit()
-                pygame.mixer.init(frequency=44100, size=-16, channels=1, buffer=2048)
-                self.logger.info("Audio output initialized")
+                # This is much safer than trying to manipulate PyAudio directly
+                self.microphone = sr.Microphone(sample_rate=16000, chunk_size=1024)
+                
+                # Try a brief initialization
+                with self.microphone as source:
+                    self.logger.info("Testing microphone...")
+                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    self.has_audio = True
+                    self.logger.info("Audio initialized successfully")
+                    
             except Exception as e:
-                self.logger.error(f"Error initializing audio output: {e}")
+                self.logger.error(f"Error initializing microphone: {str(e)}")
+                self.has_audio = False
                 
         except ImportError as e:
             self.logger.error(f"PyAudio not installed: {e}")
@@ -571,6 +517,15 @@ class AIInteractionModule:
         except Exception as e:
             self.logger.error(f"Error in audio initialization: {str(e)}")
             self.has_audio = False
+        
+        # Initialize pygame mixer separately (if audio isn't available, this might still work for output)
+        try:
+            if pygame.mixer.get_init():
+                pygame.mixer.quit()
+            pygame.mixer.init(frequency=44100, size=-16, channels=1, buffer=2048)
+            self.logger.info("Audio output initialized")
+        except Exception as e:
+            self.logger.error(f"Error initializing audio output: {e}")
 
     def handle_event(self, event):
         """Handle keyboard events, specifically the space bar"""
