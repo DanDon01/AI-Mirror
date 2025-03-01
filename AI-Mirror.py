@@ -365,6 +365,7 @@ class MagicMirror:
                 module.cleanup()
 
     def initialize_screen(self):
+        """Initialize the pygame display screen with proper dimensions"""
         # Force respect for configured screen dimensions
         config_screen = CONFIG.get('current_monitor', {})
         width = config_screen.get('width')
@@ -377,11 +378,22 @@ class MagicMirror:
             else:
                 self.screen = pygame.display.set_mode((width, height))
             
-            # Update layout manager with correct dimensions
+            # Create layout manager with these dimensions
             self.layout_manager = LayoutManager(width, height)
         else:
-            # Fallback to default implementation
-            logging.warning("No screen dimensions in config, using system defaults")
+            # Fallback to default implementation if no screen dimensions in config
+            logging.warning("No screen dimensions in config, using fallback dimensions")
+            fallback_width = CONFIG.get('screen', {}).get('size', (800, 600))[0]
+            fallback_height = CONFIG.get('screen', {}).get('size', (800, 600))[1]
+            
+            logging.info(f"Using fallback dimensions: {fallback_width}x{fallback_height}")
+            if CONFIG.get('screen', {}).get('fullscreen', False):
+                self.screen = pygame.display.set_mode((fallback_width, fallback_height), pygame.FULLSCREEN)
+            else:
+                self.screen = pygame.display.set_mode((fallback_width, fallback_height))
+            
+            # Create layout manager with fallback dimensions
+            self.layout_manager = LayoutManager(fallback_width, fallback_height)
 
 if __name__ == "__main__":
     mirror = MagicMirror()
