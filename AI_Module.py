@@ -22,15 +22,35 @@ DEFAULT_MODEL = "gpt-4-1106-preview"
 DEFAULT_MAX_TOKENS = 250
 
 class Button:
-    def __init__(self, chip_name="/dev/gpiochip0", pin=17):
+    def __init__(self, chip_name="/dev/gpiochip0", pin=17, led_pin=None):
         self.chip = gpiod.Chip(chip_name)
         self.line = self.chip.get_line(pin)
         self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN)
+        
+        # Setup LED if pin provided
+        self.has_led = False
+        if led_pin is not None:
+            try:
+                self.led_line = self.chip.get_line(led_pin)
+                self.led_line.request(consumer="led", type=gpiod.LINE_REQ_DIR_OUT)
+                self.has_led = True
+            except Exception as e:
+                print(f"Failed to initialize LED: {e}")
 
     def read(self):
         return self.line.get_value()  # 0 is pressed, 1 is not pressed
+        
+    def turn_led_on(self):
+        if self.has_led:
+            self.led_line.set_value(1)
+            
+    def turn_led_off(self):
+        if self.has_led:
+            self.led_line.set_value(0)
 
     def cleanup(self):
+        if hasattr(self, 'led_line') and self.has_led:
+            self.led_line.release()
         if hasattr(self, 'line'):
             self.line.release()
         if hasattr(self, 'chip'):
@@ -38,6 +58,20 @@ class Button:
 
 class AIInteractionModule:
     def __init__(self, config):
+        # Suppress ALSA errors by redirecting stderr before other imports
+        try:
+            # Only import this if we're not on Windows
+            import sys, os
+            # Redirect stderr to null device to suppress ALSA errors
+            stderr = sys.stderr
+            sys.stderr = open(os.devnull, 'w')
+            # Import the problematic library
+            import pygame
+            # Restore stderr
+            sys.stderr = stderr
+        except:
+            pass
+        
         # Initialize logging first thing
         logging.basicConfig(
             level=logging.INFO,
@@ -47,6 +81,9 @@ class AIInteractionModule:
         self.logger.info("Initializing AI Interaction Module")
         
         self.config = config
+        
+        # Add flag to track audio availability
+        self.has_audio = False
         
         # Get configuration from CONFIG object
         ai_config = CONFIG.get('ai_interaction', {}).get('params', {}).get('config', {})
@@ -72,81 +109,28 @@ class AIInteractionModule:
         self.tts_volume = audio_config.get('tts_volume', 0.7)
         self.wav_volume = audio_config.get('wav_volume', 0.7)
         
-        # Initialize speech recognition with configured settings
-        self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = self.mic_energy_threshold
-        self.recognizer.dynamic_energy_threshold = True
-        self.recognizer.pause_threshold = 0.8
-        self.recognizer.phrase_threshold = 0.5
-        self.recognizer.non_speaking_duration = 0.5
-
-        # Initialize microphone with Google Voice HAT
-        try:
-            # List available microphones
-            mics = sr.Microphone.list_microphone_names()
-            self.logger.info(f"Available microphones: {mics}")
-            
-            # Look for Adafruit Voice Bonnet instead of Google Voice HAT
-            device_index = None
-            for index, name in enumerate(mics):
-                # The exact name will depend on how the bonnet identifies itself
-                if 'adafruit' in name.lower() or 'voice bonnet' in name.lower():
-                    device_index = index
-                    self.logger.info(f"Found Adafruit Voice Bonnet at index {index}: {name}")
-                    break
-            
-            if device_index is None:
-                self.logger.warning("Voice Bonnet not found by name, using default")
-                device_index = None  # Let it use system default
-            
-            self.microphone = sr.Microphone(
-                device_index=device_index,
-                sample_rate=48000,
-                chunk_size=4096
-            )
-            
-            # Configure recognizer with much higher sensitivity
-            self.recognizer = sr.Recognizer()
-            self.recognizer.energy_threshold = 300    # Lowered to detect quieter sounds
-            self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.dynamic_energy_adjustment_damping = 0.15
-            self.recognizer.dynamic_energy_ratio = 1.5
-            self.recognizer.pause_threshold = 0.8
-            self.recognizer.phrase_threshold = 0.3
-            self.recognizer.non_speaking_duration = 0.5
-            
-            with self.microphone as source:
-                self.logger.info("Adjusting for ambient noise...")
-                source.gain = 20.0  # Increase microphone gain
-                self.recognizer.adjust_for_ambient_noise(source, duration=2)
-                self.logger.info(f"Microphone energy threshold set to: {self.recognizer.energy_threshold}")
-                
-        except Exception as e:
-            self.logger.error(f"Error initializing microphone: {str(e)}")
-            self.logger.error(traceback.format_exc())
-
-        # Load fallback responses if configured
-        self.fallback_config = ai_config.get('fallback_responses', {})
-        if self.fallback_config.get('enabled'):
-            self.load_fallback_responses()
+        # Initialize audio with robust error handling
+        self.initialize_audio_system()
         
+        # Skip the rest of audio initialization if no audio available
+        if not self.has_audio:
+            self.logger.warning("Audio system unavailable - voice features disabled")
+            # Initialize state variables
+            self.status = "Limited"
+            self.status_message = "Voice features unavailable"
+            self.recording = False
+            self.processing = False
+            self.listening = False
+            self.running = True
+            return
+            
         # Initialize button
-        self.button = Button(chip_name="/dev/gpiochip0", pin=17)
-        
-        # Initialize OpenAI client with credential check
-        self.has_openai_access = False
-        openai_config = config.get('openai', {})
-        if openai_config.get('api_key'):
-            try:
-                self.client = OpenAI(api_key=openai_config.get('api_key'))
-                self.model = openai_config.get('model', DEFAULT_MODEL)
-                # Test the connection
-                response = self.client.models.list()
-                self.has_openai_access = True
-                self.logger.info("OpenAI API access confirmed")
-            except Exception as e:
-                self.logger.warning(f"OpenAI API access failed: {e}")
-                self.has_openai_access = False
+        try:
+            self.button = Button(chip_name="/dev/gpiochip0", pin=17)
+            self.button_available = True
+        except Exception as e:
+            self.logger.error(f"Button initialization failed: {e}")
+            self.button_available = False
         
         # Initialize basic text-to-speech as fallback
         self.tts_engine = gTTS
@@ -167,7 +151,7 @@ class AIInteractionModule:
         
         # Initialize state variables
         self.status = "Idle"
-        self.status_message = "Press button to speak"
+        self.status_message = "Say 'Mirror' or press SPACE to speak"
         self.last_status_update = pygame.time.get_ticks()
         self.status_duration = 5000
         self.recording = False
@@ -190,10 +174,11 @@ class AIInteractionModule:
         self.running = True
         
         # These should be the last lines of __init__
-        self.set_status("Idle", "Press button to speak")
-        self.logger.info("AI Module initialization complete")
+        self.set_status("Idle", "Say 'Mirror' or press SPACE to speak")
+        self.logger.info("AI Module initialization complete - Listening for 'Mirror' hotword")
+        self.logger.info("Available input methods: Hotword 'Mirror' or Space bar keypress")
 
-        # Add to the __init__ method:
+        # Start hotword detection
         self.hotword_listening = False
         self.listening_thread = threading.Thread(target=self.hotword_detection_loop)
         self.listening_thread.daemon = True
@@ -215,13 +200,10 @@ class AIInteractionModule:
             self.fallback_responses = {}
 
     def update(self):
-        # Button is pressed (0) and we're not already processing
-        if self.button.read() == 0:
-            if not self.recording and not self.processing:
-                self.on_button_press()
-        else:
-            if self.recording:
-                self.on_button_release()
+        # This method is now primarily for hotword processing
+        # Physical button is no longer used - interaction is through
+        # keyboard space bar or hotword "Mirror"
+        pass
 
     def set_status(self, status, message):
         self.status = status
@@ -230,36 +212,51 @@ class AIInteractionModule:
         self.logger.debug(f"Status set to: {status} - {message}")
 
     def play_sound_effect(self, sound_name):
+        """Play a sound effect with better error handling"""
         self.logger.info(f"Attempting to play sound effect: {sound_name}")
-        self.logger.info(f"Available sound effects: {list(self.sound_effects.keys())}")
+        
+        if not self.has_audio:
+            self.logger.warning("Cannot play sound effects - audio system unavailable")
+            return
+        
         try:
             if sound_name in self.sound_effects:
                 self.logger.info(f"Found sound effect: {sound_name}")
-                volume = self.config.get('audio', {}).get('wav_volume', 0.7)
+                
+                # Make sure pygame mixer is initialized
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                    
+                volume = self.wav_volume  # Use class attribute
                 self.sound_effects[sound_name].set_volume(volume)
+                
+                # Stop any existing sounds to prevent overlap
+                pygame.mixer.stop()
+                
+                # Play the sound
                 self.sound_effects[sound_name].play()
                 self.logger.info(f"Successfully played {sound_name}")
             else:
                 self.logger.error(f"Sound effect '{sound_name}' not found in available effects")
+                
         except Exception as e:
             self.logger.error(f"Error playing sound effect '{sound_name}': {str(e)}")
+            self.logger.error(traceback.format_exc())
 
     def on_button_press(self):
-        self.logger.info("Processing button press")
+        self.logger.info("Starting voice interaction")
         if not self.recording and not self.processing:
-            self.button.turn_led_on()
-            self.button_light_on = True
+            # No need to control physical LED
             self.play_sound_effect('mirror_listening')
             self.recording = True
             self.listening = True
             self.set_status("Listening...", "Speak now")
 
     def on_button_release(self):
-        self.logger.info("Processing button release")
+        self.logger.info("Processing voice input")
         if self.recording:
             self.recording = False
-            self.button.turn_led_off()
-            self.button_light_on = False
+            # No need to control physical LED
             if not self.processing:
                 self.processing = True
                 self.set_status("Processing", "Processing your speech...")
@@ -397,7 +394,7 @@ class AIInteractionModule:
             self.listening = False
             self.button.turn_led_off()
             if not self.recording:
-                self.set_status("Idle", "Press button to speak")
+                self.set_status("Idle", "Say 'Mirror' or press SPACE to speak")
 
     def speak_chunk(self, text_chunk):
         """Optional: Implement real-time text-to-speech for response chunks"""
@@ -433,6 +430,12 @@ class AIInteractionModule:
 
     def hotword_detection_loop(self):
         """Continuously listens for the hotword 'Mirror'."""
+        if not self.has_audio:
+            self.logger.warning("Hotword detection disabled - no audio system")
+            return
+        
+        self.logger.info("🎤 Hotword detection active - listening for 'Mirror'")
+        
         while self.running:
             if not self.recording and not self.processing:
                 try:
@@ -441,11 +444,11 @@ class AIInteractionModule:
                         audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=3)
                         try:
                             text = self.recognizer.recognize_google(audio).lower()
-                            self.logger.debug(f"Heard: {text}")
-                            
                             if "mirror" in text:
-                                self.logger.info("Hotword detected!")
+                                self.logger.info("🎯 Hotword 'Mirror' detected!")
                                 self.on_button_press()
+                            else:
+                                self.logger.debug(f"Heard: {text} (not hotword)")
                         except sr.UnknownValueError:
                             pass  # Speech wasn't understood
                         except sr.RequestError:
@@ -453,3 +456,123 @@ class AIInteractionModule:
                 except Exception as e:
                     self.logger.error(f"Error in hotword detection: {e}")
                     time.sleep(1)  # Prevent tight loop on error
+
+    def initialize_audio_system(self):
+        """Safely initialize the audio system with fallbacks"""
+        try:
+            # First check if PyAudio is available
+            import pyaudio
+            
+            # Redirect stderr to suppress ALSA errors during audio initialization
+            import sys, os
+            stderr = sys.stderr
+            sys.stderr = open(os.devnull, 'w')
+            
+            # Initialize recognizer with configured settings
+            self.recognizer = sr.Recognizer()
+            self.recognizer.energy_threshold = self.mic_energy_threshold
+            self.recognizer.dynamic_energy_threshold = True
+            self.recognizer.pause_threshold = 0.8
+            self.recognizer.phrase_threshold = 0.5
+            self.recognizer.non_speaking_duration = 0.5
+            
+            # Check available audio devices
+            audio = pyaudio.PyAudio()
+            device_count = audio.get_device_count()
+            self.logger.info(f"Found {device_count} audio devices")
+            
+            # List all devices for debugging
+            for i in range(device_count):
+                try:
+                    device_info = audio.get_device_info_by_index(i)
+                    self.logger.info(f"Device {i}: {device_info['name']} (in: {device_info['maxInputChannels']}, out: {device_info['maxOutputChannels']})")
+                except Exception as e:
+                    self.logger.warning(f"Could not get info for device {i}: {e}")
+                    
+            # Find a suitable USB input device
+            input_device = None
+            for i in range(device_count):
+                try:
+                    device_info = audio.get_device_info_by_index(i)
+                    device_name = device_info['name'].lower()
+                    # Look for USB or external microphones
+                    if device_info['maxInputChannels'] > 0 and ('usb' in device_name or 'external' in device_name or 'mic' in device_name):
+                        self.logger.info(f"Found USB/external microphone: {device_info['name']}")
+                        input_device = i
+                        break
+                except Exception as e:
+                    self.logger.warning(f"Error checking device {i}: {e}")
+                    
+            # If no USB device found, try any input device
+            if input_device is None:
+                for i in range(device_count):
+                    try:
+                        device_info = audio.get_device_info_by_index(i)
+                        if device_info['maxInputChannels'] > 0:
+                            self.logger.info(f"Found fallback input device: {device_info['name']}")
+                            input_device = i
+                            break
+                    except:
+                        pass
+                    
+            # Restore stderr
+            sys.stderr = stderr
+            
+            if input_device is not None:
+                # Configure audio output - this will help with audio playback
+                try:
+                    # Try to set up ALSA config for USB speaker
+                    os.system("amixer cset numid=3 1") # Set output to USB audio if available
+                    
+                    # Use higher sensitivity settings for recognizer
+                    self.recognizer.energy_threshold = 300  # Lower for more sensitivity
+                    self.recognizer.dynamic_energy_adjustment_damping = 0.15
+                    self.recognizer.dynamic_energy_ratio = 1.5
+                    
+                    # Initialize microphone with the detected device
+                    self.microphone = sr.Microphone(
+                        device_index=input_device,
+                        sample_rate=48000,
+                        chunk_size=4096
+                    )
+                    
+                    with self.microphone as source:
+                        self.logger.info("Adjusting for ambient noise...")
+                        source.gain = 20.0  # Increase microphone gain
+                        self.recognizer.adjust_for_ambient_noise(source, duration=2)
+                        self.logger.info(f"Microphone energy threshold set to: {self.recognizer.energy_threshold}")
+                    
+                    self.has_audio = True
+                    self.logger.info(f"Audio system initialized successfully using device {input_device}")
+                    
+                    # Initialize pygame mixer for output
+                    if pygame.mixer.get_init():
+                        pygame.mixer.quit()  # Reset the mixer
+                    pygame.mixer.init(frequency=48000, size=-16, channels=2, buffer=4096)
+                    pygame.mixer.set_num_channels(16)  # Allow multiple sounds
+                    
+                except Exception as e:
+                    self.logger.error(f"Error configuring audio: {str(e)}")
+                    self.has_audio = False
+            else:
+                self.logger.error("No suitable input device found")
+                self.has_audio = False
+                
+        except ImportError as e:
+            self.logger.error(f"PyAudio not installed - audio features disabled: {e}")
+            self.has_audio = False
+        except Exception as e:
+            self.logger.error(f"Error initializing audio: {str(e)}")
+            self.has_audio = False
+
+    def handle_event(self, event):
+        """Handle keyboard events, specifically the space bar"""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                self.logger.info("Space bar pressed - activating voice input")
+                if not self.recording and not self.processing:
+                    self.on_button_press()
+            elif event.key == pygame.K_RETURN:
+                # Using Enter key to simulate button release
+                if self.recording:
+                    self.on_button_release()
