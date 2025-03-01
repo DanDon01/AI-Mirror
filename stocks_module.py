@@ -120,6 +120,16 @@ class StocksModule:
 
     def draw(self, screen, position):
         try:
+            # Fix color handling at the beginning of the method
+            def safe_color(color):
+                if not isinstance(color, tuple) or len(color) < 3:
+                    return (200, 200, 200)  # Default color
+                return (int(color[0]), int(color[1]), int(color[2]))
+            
+            # Make sure all colors are valid by applying the safe_color function
+            self.bg_color = safe_color(self.bg_color)
+            self.header_bg_color = safe_color(self.header_bg_color)
+            
             x, y = position
             current_time = datetime.now(timezone('UTC'))
             

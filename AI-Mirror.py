@@ -286,16 +286,26 @@ class MagicMirror:
             
             if hasattr(self, 'debug_layout') and getattr(self, 'debug_layout', False):
                 for name, module in self.modules.items():
+                    # Skip rendering debug overlay for full-screen modules
+                    if name == 'retro_characters':
+                        continue
+                        
                     try:
                         pos = self.layout_manager.get_module_position(name)
                         if isinstance(pos, dict) and 'x' in pos and 'y' in pos:
+                            # Use width/height from position if available
+                            width = pos.get('width', 200)
+                            height = pos.get('height', 100)
+                            
+                            # Draw red rectangle around module area
                             pygame.draw.rect(self.screen, (255, 0, 0), 
-                                            (pos['x'], pos['y'], 200, 100), 2)
+                                            (pos['x'], pos['y'], width, height), 2)
+                            # Draw module name for identification
                             font = pygame.font.Font(None, 24)
                             text = font.render(name, True, (255, 0, 0))
-                            self.screen.blit(text, (pos['x'], pos['y']))
+                            self.screen.blit(text, (pos['x'], pos['y'] - 20))
                     except Exception as e:
-                        logging.error(f"Error in debug overlay for {name}: {e}")
+                        logging.debug(f"Debug overlay error for {name}: {e}")
             
             pygame.display.flip()
         except Exception as e:

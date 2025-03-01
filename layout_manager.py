@@ -12,103 +12,84 @@ class LayoutManager:
         self.calculate_positions()
 
     def calculate_positions(self):
-        """Recalculate all module positions based on screen dimensions"""
-        # Start with explicit screen size settings
-        logging.info(f"Original screen dimensions: {self.screen_width}x{self.screen_height}")
-        
-        # Safety check - if screen is very wide relative to height (unusual for a mirror)
-        if self.screen_width > self.screen_height * 1.5:
-            logging.warning("Unusual screen dimensions detected, forcing standard layout")
-            # Force more reasonable dimensions for testing
-            self.original_width = self.screen_width
-            self.original_height = self.screen_height
-            self.screen_width = 800  # reasonable width
-            self.screen_height = 1200  # reasonable height for mirror
-        
-        padding = self.layout.get('screen_padding', 20)
-        sections = self.layout.get('sections', {
-            'top': 5,
-            'upper': 20,
-            'middle': 40,
-            'bottom': 60
-        })
-        
-        # Debug output to see actual screen dimensions
+        """Recalculate module positions for portrait orientation"""
+        # Log actual screen dimensions
         logging.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
         
-        # Calculate standard module dimensions with safer defaults
-        std_width = int(self.screen_width * 0.25)  # 25% of screen width
-        std_height = int(self.screen_height * 0.15)  # 15% of screen height
-        large_height = int(self.screen_height * 0.25)  # 25% of screen height
+        # Simple portrait-mode layout with fixed spacing
+        top_margin = 50
+        side_margin = 50
+        module_height = 180
+        module_width = self.screen_width - (side_margin * 2)
+        spacing = 20
         
-        # Safety margin to prevent modules from being off-screen
-        safety_margin = 50
-        right_edge = self.screen_width - std_width - padding
-        if right_edge > (self.screen_width - safety_margin):
-            right_edge = self.screen_width - std_width - safety_margin
+        # Calculate positions for each module in portrait orientation
+        current_y = top_margin
         
-        bottom_edge = self.screen_height - std_height - padding
-        if bottom_edge > (self.screen_height - safety_margin):
-            bottom_edge = self.screen_height - std_height - safety_margin
+        # Clock at top
+        self.module_positions['clock'] = {
+            'x': side_margin,
+            'y': current_y,
+            'width': module_width,
+            'height': module_height
+        }
+        current_y += module_height + spacing
         
-        # Define module regions with improved positioning
-        self.module_positions = {
-            'clock': {
-                'x': (self.screen_width - std_width) // 2,
-                'y': padding + int(self.screen_height * sections.get('top', 5) / 100),
-                'width': std_width,
-                'height': std_height
-            },
-            'weather': {
-                'x': padding,
-                'y': padding + int(self.screen_height * sections.get('upper', 20) / 100),
-                'width': std_width,
-                'height': large_height
-            },
-            'stocks': {
-                'x': min(right_edge, self.screen_width - std_width - padding),
-                'y': padding + int(self.screen_height * sections.get('upper', 20) / 100),
-                'width': std_width,
-                'height': large_height
-            },
-            'calendar': {
-                'x': padding,
-                'y': min(bottom_edge, padding + int(self.screen_height * sections.get('bottom', 60) / 100)),
-                'width': std_width,
-                'height': std_height
-            },
-            'fitbit': {
-                'x': min(right_edge, self.screen_width - std_width - padding),
-                'y': min(bottom_edge, padding + int(self.screen_height * sections.get('bottom', 60) / 100)),
-                'width': std_width,
-                'height': std_height
-            },
-            'ai_module': {
-                'x': (self.screen_width - std_width) // 2,
-                'y': min(self.screen_height - std_height - padding, int(self.screen_height * 0.8)),
-                'width': std_width,
-                'height': std_height
-            },
-            'retro_characters': {
-                'x': 0,
-                'y': 0,
-                'width': self.screen_width,
-                'height': self.screen_height
-            }
+        # Weather below clock
+        self.module_positions['weather'] = {
+            'x': side_margin,
+            'y': current_y,
+            'width': module_width,
+            'height': module_height
+        }
+        current_y += module_height + spacing
+        
+        # Stocks below weather
+        self.module_positions['stocks'] = {
+            'x': side_margin,
+            'y': current_y,
+            'width': module_width,
+            'height': module_height
+        }
+        current_y += module_height + spacing
+        
+        # Fitbit below stocks
+        self.module_positions['fitbit'] = {
+            'x': side_margin,
+            'y': current_y,
+            'width': module_width,
+            'height': module_height
+        }
+        current_y += module_height + spacing
+        
+        # Calendar below fitbit
+        self.module_positions['calendar'] = {
+            'x': side_margin,
+            'y': current_y,
+            'width': module_width,
+            'height': module_height
+        }
+        current_y += module_height + spacing
+        
+        # AI module at bottom
+        self.module_positions['ai_module'] = {
+            'x': side_margin,
+            'y': self.screen_height - module_height - top_margin,
+            'width': module_width,
+            'height': module_height
         }
         
-        # Log the calculated positions
-        logging.info(f"Calculated module positions:")
-        for module_name, pos in self.module_positions.items():
-            logging.info(f"{module_name}: {pos}")
+        # Retro characters is full screen
+        self.module_positions['retro_characters'] = {
+            'x': 0,
+            'y': 0,
+            'width': self.screen_width,
+            'height': self.screen_height
+        }
         
-        # Apply scaling to all dimensions
-        scale = self.scale if hasattr(self, 'scale') and self.scale else 1.0
-        for module in self.module_positions.values():
-            module['x'] = int(module['x'] * scale)
-            module['y'] = int(module['y'] * scale)
-            module['width'] = int(module['width'] * scale)
-            module['height'] = int(module['height'] * scale)
+        # Log calculated positions
+        for module_name, pos in self.module_positions.items():
+            logging.info(f"{module_name}: (x={pos['x']}, y={pos['y']})")
 
     def get_module_position(self, module_name):
         """Get the position for a specific module, ensuring proper return format"""
