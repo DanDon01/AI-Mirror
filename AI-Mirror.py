@@ -3,8 +3,52 @@
 #  It also handles toggling between active, screensaver, and sleep states, and toggling debug mode on/off
 #  The main loop runs until the user closes the application
 
-import pygame
+# Silence all audio subsystem errors
+import os
 import sys
+import ctypes
+from ctypes import util
+
+# Set environment variables to disable problematic audio components
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"  
+os.environ['ALSA_CARD'] = "3"  # Force ALSA to use card 3 (your USB device)
+os.environ['PA_ALSA_PLUGHW'] = "1"  # Force PortAudio to use hw devices
+
+# Completely suppress ALSA errors by loading libasound with custom error handler
+try:
+    # Load the ALSA library and set error handler to quiet mode
+    alsa_lib = ctypes.CDLL(util.find_library('asound'))
+    # Define the silent error handler
+    ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_int, 
+                                          ctypes.c_char_p, ctypes.c_int, 
+                                          ctypes.c_char_p)
+    def py_error_handler(filename, line, function, err, fmt):
+        pass  # Do nothing instead of printing errors
+    # Pass the function pointer to C
+    c_error_handler = ERROR_HANDLER_FUNC(py_error_handler)
+    # Set the error handler
+    alsa_lib.snd_lib_error_set_handler(c_error_handler)
+except:
+    pass  # If this fails, we'll try other methods
+
+# Redirect stderr during problematic imports
+_stderr = sys.stderr
+null_fh = open(os.devnull, 'w')
+sys.stderr = null_fh
+
+# Import problematic audio libraries here
+try:
+    import pygame
+    import pyaudio
+    import speech_recognition
+except ImportError:
+    pass
+
+# Restore stderr
+sys.stderr = _stderr
+null_fh.close()
+
+# Import the problematic libraries
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
@@ -23,8 +67,6 @@ from ai_module_manager import AIModuleManager
 from module_manager import ModuleManager 
 from layout_manager import LayoutManager
 
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" # Hide ALSA errors
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
