@@ -502,45 +502,26 @@ class AIInteractionModule:
                 time.sleep(0.5)
 
     def initialize_audio_system(self):
-        """Safely initialize the audio system with extreme safeguards against crashes"""
+        """Safe PyAudio initialization that avoids device enumeration crashes"""
         self.has_audio = False
         
-        # Set these to None in case other methods try to use them
-        self.microphone = None
-        self.mic_index = None
-        
         try:
-            # Skip audio initialization completely if we detect we're on a problematic system
-            # Check for known problem indicators
-            if os.environ.get('DISPLAY') and os.path.exists('/dev/gpiochip0'):  # Likely a Pi
-                self.logger.warning("Detected Raspberry Pi - disabling audio to prevent crashes")
-                return
+            # Import the required modules
+            import speech_recognition as sr
             
-            # Force import check first
-            try:
-                import pyaudio
-                import speech_recognition as sr
-            except ImportError as e:
-                self.logger.error(f"Missing audio libraries: {e}")
-                return
-            
-            # Initialize recognizer first (no device selection yet)
+            # Create recognizer
             self.recognizer = sr.Recognizer()
             self.recognizer.energy_threshold = 500
             self.recognizer.dynamic_energy_threshold = True
             
-            # Get device info without trying to open devices
+            # Simply create a microphone with default device
+            # This avoids the dangerous device enumeration
             try:
-                # First, check if we can get a PyAudio instance at all
-                p = pyaudio.PyAudio()
-                
-                # Don't try to enumerate devices - just use default
-                self.microphone = sr.Microphone()
+                self.microphone = sr.Microphone(device_index=None)
                 self.has_audio = True
                 self.logger.info("Audio initialized with default microphone")
-                
             except Exception as e:
-                self.logger.error(f"PyAudio initialization error: {e}")
+                self.logger.error(f"Could not initialize microphone: {e}")
                 self.has_audio = False
             
         except Exception as e:

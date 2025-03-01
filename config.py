@@ -195,22 +195,19 @@ CONFIG = {
             'rotation_speed': 1
         }
     },
-    'ai_module': {
+    'ai_interaction': {
         'class': 'AIModuleManager',
         'params': {
             'config': {
+                'disable_audio': False,  # Set to True only if needed
                 'openai': {
                     'api_key': os.getenv('OPENAI_API_KEY'),
                     'model': 'gpt-4-1106-preview'
                 },
                 'audio': {
-                    'mic_energy_threshold': 1000,
-                    'tts_volume': 0.7,
-                    'wav_volume': 0.7,
-                },
-                'fallback_responses': {
-                    'enabled': True,
-                    'response_file': 'fallback_responses.json'
+                    'mic_energy_threshold': 500,
+                    'tts_volume': 0.8,
+                    'wav_volume': 0.5
                 }
             }
         }
