@@ -59,19 +59,11 @@ class Button:
 
 class AIInteractionModule:
     def __init__(self, config):
-        # Suppress ALSA errors by redirecting stderr before other imports
-        try:
-            # Only import this if we're not on Windows
-            import sys, os
-            # Redirect stderr to null device to suppress ALSA errors
-            stderr = sys.stderr
-            sys.stderr = open(os.devnull, 'w')
-            # Import the problematic library
-            import pygame
-            # Restore stderr
-            sys.stderr = stderr
-        except:
-            pass
+        # Suppress ALSA errors by setting environment variables
+        import os
+        # Set environment variables to reduce ALSA verbosity
+        os.environ['ALSA_CONFIG_DIR'] = '/tmp/non-existent-dir'  # Use non-existent config
+        os.environ['PYTHONUNBUFFERED'] = '1'  # Ensure output isn't buffered
         
         # Initialize logging first thing
         logging.basicConfig(
