@@ -7,7 +7,7 @@ from queue import Queue
 
 # Import both modules
 from AI_Module import AIInteractionModule as FallbackModule
-from ai_voice_module import AIInteractionModule as RealtimeModule
+from ai-voice-module import AIInteractionModule as RealtimeModule
 
 class AIModuleManager:
     def __init__(self, config):
