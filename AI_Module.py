@@ -124,30 +124,45 @@ class AIInteractionModule:
             self.running = True
             return
             
-        # Initialize button
+        # Initialize button with fallback
         try:
             self.button = Button(chip_name="/dev/gpiochip0", pin=17)
             self.button_available = True
         except Exception as e:
             self.logger.error(f"Button initialization failed: {e}")
             self.button_available = False
+            # Create a dummy button object
+            self.button = type('obj', (object,), {
+                'read': lambda: 1,
+                'turn_led_on': lambda: None,
+                'turn_led_off': lambda: None,
+                'cleanup': lambda: None
+            })
         
-        # Initialize basic text-to-speech as fallback
-        self.tts_engine = gTTS
-        self.logger.info(f"AI Module initialized with OpenAI access: {self.has_openai_access}")
-        
-        # Initialize sound effects
+        # Initialize sound effects with correct path
         self.sound_effects = {}
         try:
-            sound_file = '/home/Dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3'
-            self.logger.info(f"Loading sound file from: {sound_file}")
-            if os.path.exists(sound_file):
-                self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
-                self.logger.info("Successfully loaded mirror_listening.mp3")
+            # Try multiple possible paths
+            sound_paths = [
+                '/home/dan/Projects/ai_mirror/assets/sound_effects/mirror_listening.mp3',
+                '/home/Dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3',
+                '/home/dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3',
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                             'assets', 'sound_effects', 'mirror_listening.mp3')
+            ]
+            
+            for sound_file in sound_paths:
+                self.logger.info(f"Trying sound file at: {sound_file}")
+                if os.path.exists(sound_file):
+                    self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
+                    self.logger.info(f"Successfully loaded mirror_listening.mp3 from {sound_file}")
+                    break
             else:
-                self.logger.error(f"Sound file not found at: {sound_file}")
+                self.logger.error("Sound file not found in any expected location")
+                self.create_fallback_sound()  # Create a beep sound instead
         except Exception as e:
             self.logger.error(f"Error loading sound: {e}")
+            self.create_fallback_sound()
         
         # Initialize state variables
         self.status = "Idle"

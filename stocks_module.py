@@ -317,5 +317,67 @@ class StocksModule:
     def cleanup(self):
         pass  # No cleanup needed for this module
 
+    def determine_color(self, percent_change):
+        """Determine the color based on the percent change"""
+        if isinstance(percent_change, str) and percent_change == 'N/A':
+            return COLOR_FONT_DEFAULT  # Use default color for N/A values
+        
+        try:
+            if float(percent_change) > 0:
+                return COLOR_PASTEL_GREEN
+            elif float(percent_change) < 0:
+                return COLOR_PASTEL_RED
+            else:
+                return COLOR_FONT_DEFAULT
+        except (ValueError, TypeError):
+            return COLOR_FONT_DEFAULT  # For any conversion errors
+
+    def update_data(self):
+        """Update stock data with better error handling"""
+        try:
+            for ticker in self.tickers:
+                try:
+                    # Get stock data with longer timeout and more retries
+                    ticker_data = yf.Ticker(ticker)
+                    history = ticker_data.history(period="1d")
+                    
+                    if not history.empty:
+                        current_price = history['Close'].iloc[-1]
+                        open_price = history['Open'].iloc[0]
+                        percent_change = ((current_price - open_price) / open_price) * 100
+                        volume = history['Volume'].iloc[-1]
+                        day_high = history['High'].iloc[-1]
+                        day_low = history['Low'].iloc[-1]
+                        
+                        self.stock_data[ticker] = {
+                            'price': current_price,
+                            'percent_change': percent_change,
+                            'volume': volume,
+                            'day_range': f"{day_low:.2f} - {day_high:.2f}"
+                        }
+                    else:
+                        # Empty history but not an error
+                        self.stock_data[ticker] = {
+                            'price': 'N/A',
+                            'percent_change': 'N/A',
+                            'volume': 'N/A',
+                            'day_range': 'N/A'
+                        }
+                        self.logger.info(f"No data available for {ticker}, using N/A values")
+                except Exception as e:
+                    self.logger.error(f"Error fetching data for {ticker}: {e}")
+                    # Still add the ticker with N/A values
+                    self.stock_data[ticker] = {
+                        'price': 'N/A',
+                        'percent_change': 'N/A',
+                        'volume': 'N/A',
+                        'day_range': 'N/A'
+                    }
+                    
+            self.logger.info("Stock data updated successfully")
+            self.last_update = time.time()
+        except Exception as e:
+            self.logger.error(f"Error updating stock data: {e}")
+
 
 

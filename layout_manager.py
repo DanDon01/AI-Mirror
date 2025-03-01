@@ -13,6 +13,18 @@ class LayoutManager:
 
     def calculate_positions(self):
         """Recalculate all module positions based on screen dimensions"""
+        # Start with explicit screen size settings
+        logging.info(f"Original screen dimensions: {self.screen_width}x{self.screen_height}")
+        
+        # Safety check - if screen is very wide relative to height (unusual for a mirror)
+        if self.screen_width > self.screen_height * 1.5:
+            logging.warning("Unusual screen dimensions detected, forcing standard layout")
+            # Force more reasonable dimensions for testing
+            self.original_width = self.screen_width
+            self.original_height = self.screen_height
+            self.screen_width = 800  # reasonable width
+            self.screen_height = 1200  # reasonable height for mirror
+        
         padding = self.layout.get('screen_padding', 20)
         sections = self.layout.get('sections', {
             'top': 5,
@@ -99,29 +111,33 @@ class LayoutManager:
             module['height'] = int(module['height'] * scale)
 
     def get_module_position(self, module_name):
-        """Get the position for a specific module"""
-        # Default positions if not configured
+        """Get the position for a specific module, ensuring proper return format"""
+        # First check configured positions
+        if hasattr(self, 'module_positions') and module_name in self.module_positions:
+            position = self.module_positions[module_name]
+            
+            # Ensure position is a dictionary with x/y keys
+            if isinstance(position, dict) and 'x' in position and 'y' in position:
+                return position
+            # Handle tuple format (x, y)
+            elif isinstance(position, tuple) and len(position) == 2:
+                return {'x': position[0], 'y': position[1]}
+        
+        # Fall back to defaults
         default_positions = {
             'clock': {'x': 10, 'y': 10},
             'weather': {'x': 10, 'y': 100},
             'stocks': {'x': 10, 'y': 300},
             'calendar': {'x': 10, 'y': 500},
             'fitbit': {'x': self.screen_width - 210, 'y': 500},
-            'retro_characters': {'x': 0, 'y': 0},  # Full screen overlay
+            'retro_characters': {'x': 0, 'y': 0},
             'ai_module': {'x': 10, 'y': self.screen_height - 100}
         }
         
-        # First check configured positions
-        if hasattr(self, 'module_positions') and module_name in self.module_positions:
-            return self.module_positions[module_name]
-        
-        # Fall back to defaults
         if module_name in default_positions:
-            logging.warning(f"Using default position for {module_name}")
             return default_positions[module_name]
         
-        # Last resort - top left corner with a warning
-        logging.warning(f"No position defined for {module_name} - using top left corner")
+        # Last resort - top left corner
         return {'x': 10, 'y': 10}
 
     def draw_module_background(self, screen, module_name, title):
