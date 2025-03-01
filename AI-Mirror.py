@@ -103,6 +103,9 @@ sys.stderr = sys.__stderr__
 # Mock problematic audio libraries before they're imported
 import sys
 
+# Add this global variable to track if we've already logged the message
+_mock_pyaudio_initialized = False
+
 class MockPyAudio:
     # Add necessary constants
     paInt16 = 8
@@ -122,7 +125,10 @@ class MockPyAudio:
     
     class PyAudio:
         def __init__(self): 
-            print("MOCK: Safe PyAudio initialized")
+            global _mock_pyaudio_initialized
+            if not _mock_pyaudio_initialized:
+                print("MOCK: Safe PyAudio initialized (mock audio system active)")
+                _mock_pyaudio_initialized = True
             
         def get_device_count(self):
             return 3  # Pretend we have 3 devices

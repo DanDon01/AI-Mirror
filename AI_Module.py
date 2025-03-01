@@ -454,6 +454,11 @@ class AIInteractionModule:
         # Make sure we have the needed imports
         import time
         
+        # Skip the hotword detection completely if audio is disabled
+        if not self.has_audio:
+            self.logger.info("Hotword detection disabled - no audio system available")
+            return
+        
         # Check for FLAC at startup and warn if not available
         try:
             subprocess.check_output(['flac', '--version'])
@@ -462,11 +467,6 @@ class AIInteractionModule:
             self.logger.error("FLAC utility not found - speech recognition will not work properly")
             self.logger.error("Please install FLAC: sudo apt-get install flac")
             flac_available = False
-        
-        # Skip if audio isn't available
-        if not self.has_audio or not flac_available:
-            self.logger.warning("Hotword detection disabled - no audio system or missing FLAC")
-            return
         
         self.logger.info("🎤 Hotword detection active - listening for 'Mirror'")
         
