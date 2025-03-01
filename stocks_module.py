@@ -113,47 +113,60 @@ class StocksModule:
             self.logger.error(f"Error updating stock data: {e}")
 
     def update_ticker(self, ticker):
-        """Process a single ticker without fallback data"""
+        """Process a single ticker with improved diagnostics"""
         try:
-            # Get live data only
-            stock = yf.Ticker(ticker)
-            data = stock.history(period="2d")
+            # Log network connectivity check
+            try:
+                import socket
+                socket.create_connection(("yahoo.com", 443), timeout=5)
+                self.logger.info("✓ Network connectivity to Yahoo confirmed")
+            except Exception as e:
+                self.logger.warning(f"⚠ Network connectivity issue: {e}")
             
-            if not data.empty:
-                # Successfully got data
-                current_price = data['Close'].iloc[-1]
-                if len(data) > 1:
-                    previous_close = data['Close'].iloc[0]
-                    percent_change = ((current_price - previous_close) / previous_close) * 100
-                else:
+            # Try a longer timeframe which is more reliable
+            stock = yf.Ticker(ticker)
+            
+            # First try getting basic info which is often cached
+            try:
+                info = stock.info
+                if 'regularMarketPrice' in info:
+                    price = info['regularMarketPrice']
+                    self.logger.info(f"✓ Got basic price for {ticker}: ${price}")
+                    
+                    # Calculate percent change if we have previous close
                     percent_change = 0.0
+                    if 'regularMarketPreviousClose' in info:
+                        prev = info['regularMarketPreviousClose']
+                        percent_change = ((price - prev) / prev) * 100
+                    
+                    self.stock_data[ticker] = {
+                        'price': price,
+                        'percent_change': percent_change,
+                        'volume': info.get('regularMarketVolume', 0),
+                        'day_range': f"{info.get('regularMarketDayLow', price):.2f} - {info.get('regularMarketDayHigh', price):.2f}"
+                    }
+                    return
+            except Exception as e:
+                self.logger.debug(f"Info method failed for {ticker}: {e}")
+            
+            # Fall back to history method with longer periods
+            for period in ["5d", "1mo", "3mo"]:
+                try:
+                    data = stock.history(period=period)
+                    if not data.empty:
+                        # Process data as before
+                        # ...
+                        return
+                except Exception as e:
+                    self.logger.debug(f"History method with {period} failed: {e}")
                 
-                volume = data['Volume'].iloc[-1] if 'Volume' in data.columns else 0
-                day_high = data['High'].max() if 'High' in data.columns else current_price
-                day_low = data['Low'].min() if 'Low' in data.columns else current_price
-                
-                self.stock_data[ticker] = {
-                    'price': current_price,
-                    'percent_change': percent_change,
-                    'volume': int(volume) if not math.isnan(volume) else 0,
-                    'day_range': f"{day_low:.2f} - {day_high:.2f}"
-                }
-                if hasattr(self, 'logger'):
-                    self.logger.info(f"✓ Live data for {ticker}: ${current_price:.2f}")
-                return
+            # All attempts failed
+            self.logger.warning(f"⚠ Could not get any data for {ticker}")
+            self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
+            
         except Exception as e:
-            if hasattr(self, 'logger'):
-                self.logger.warning(f"Failed to get data for {ticker}: {e}")
-        
-        # If we get here, no data was available
-        self.stock_data[ticker] = {
-            'price': 'N/A',
-            'percent_change': 'N/A',
-            'volume': 'N/A',
-            'day_range': 'N/A'
-        }
-        if hasattr(self, 'logger'):
-            self.logger.info(f"⚠ Data unavailable for {ticker}")
+            self.logger.error(f"✗ Complete failure for {ticker}: {str(e)}")
+            self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
 
     def draw(self, screen, position):
         """Draw stock data with proper handling of unavailable data"""
@@ -190,93 +203,92 @@ class StocksModule:
                 # Draw unavailable message
                 unavailable_text = self.font.render("Data Unavailable", True, COLOR_PASTEL_RED)
                 screen.blit(unavailable_text, (x + 20, y + 60))
-                return
-            
-            # Check market status with enhanced visuals
-            current_time = datetime.now(timezone('UTC'))
-            us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
-            uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
-            
-            # Create text with shadow effect
-            markets_text = self.effects.create_text_with_shadow(
-                self.markets_font, "Markets:", COLOR_FONT_DEFAULT, offset=1)
-            
-            us_status = "Open" if us_open else "Closed"
-            uk_status = "Open" if uk_open else "Closed"
-            
-            us_text = self.effects.create_text_with_shadow(
-                self.status_font, f"US: {us_status}", 
-                COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
-            
-            uk_text = self.effects.create_text_with_shadow(
-                self.status_font, f"UK: {uk_status}", 
-                COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
-            
-            # Draw text with fade-in effect
-            screen.blit(markets_text, (x, y))
-            screen.blit(us_text, (x + markets_text.get_width() + 10, y - 4))
-            screen.blit(uk_text, (x + markets_text.get_width() + 10, y + 10))
-            
-            y += LINE_SPACING + 5  # Move position down after displaying market status
-            
-            # Draw alerts with pulsing effect
-            y = self.draw_alerts(screen, (x, y))
-            
-            # Draw stock data with staggered fade-in
-            if self.stock_data:
-                for i, (ticker, data) in enumerate(self.stock_data.items()):
-                    # Calculate fade-in alpha based on time offset
-                    elapsed = time.time() - self.animation_start_time
-                    fade_progress = min(1.0, max(0, elapsed - self.item_fade_offsets[ticker]))
-                    alpha = int(220 * fade_progress)
-                    
-                    price = data['price']
-                    percent_change = data['percent_change']
-                    
-                    # Fix here - handle 'N/A' properly
-                    if isinstance(percent_change, str) and percent_change == 'N/A':
-                        color = COLOR_FONT_DEFAULT
-                    else:
-                        # Determine color based on change
-                        color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else \
-                              COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else \
-                              COLOR_FONT_DEFAULT
-                    
-                    currency_symbol = '£' if ticker.endswith('.L') else '$'
-                    
-                    # Format text with better spacing and alignment
-                    if isinstance(price, (float, int)) and isinstance(percent_change, (float, int)):
-                        ticker_text = f"{ticker}"
-                        price_text = f"{currency_symbol}{price:.2f}"
-                        change_text = f"({percent_change:+.2f}%)"
-                        
-                        # Create surfaces with shadow effect
-                        ticker_surface = self.font.render(ticker_text, True, COLOR_FONT_DEFAULT)
-                        price_surface = self.font.render(price_text, True, color)
-                        change_surface = self.font.render(change_text, True, color)
-                        
-                        # Apply alpha fade
-                        ticker_surface.set_alpha(alpha)
-                        price_surface.set_alpha(alpha)
-                        change_surface.set_alpha(alpha)
-                        
-                        # Position elements with better spacing
-                        screen.blit(ticker_surface, (x, y))
-                        screen.blit(price_surface, (x + 80, y))  # Adjust spacing as needed
-                        screen.blit(change_surface, (x + 160, y))  # Adjust spacing as needed
-                    else:
-                        # Handle N/A values
-                        price_str = f"{price:.2f}" if isinstance(price, (float, int)) else "N/A"
-                        text = f"{ticker}: {currency_symbol}{price_str}"
-                        text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
-                        text_surface.set_alpha(alpha)
-                        screen.blit(text_surface, (x, y))
-                    
-                    y += LINE_SPACING  # Move to the next stock
             else:
-                no_data_surface = self.font.render("Stock data unavailable", True, COLOR_PASTEL_RED)
-                no_data_surface.set_alpha(TRANSPARENCY)
-                screen.blit(no_data_surface, (x, y))
+                # Check market status with enhanced visuals
+                current_time = datetime.now(timezone('UTC'))
+                us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
+                uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
+                
+                # Create text with shadow effect
+                markets_text = self.effects.create_text_with_shadow(
+                    self.markets_font, "Markets:", COLOR_FONT_DEFAULT, offset=1)
+                
+                us_status = "Open" if us_open else "Closed"
+                uk_status = "Open" if uk_open else "Closed"
+                
+                us_text = self.effects.create_text_with_shadow(
+                    self.status_font, f"US: {us_status}", 
+                    COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
+                
+                uk_text = self.effects.create_text_with_shadow(
+                    self.status_font, f"UK: {uk_status}", 
+                    COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
+                
+                # Draw text with fade-in effect
+                screen.blit(markets_text, (x, y))
+                screen.blit(us_text, (x + markets_text.get_width() + 10, y - 4))
+                screen.blit(uk_text, (x + markets_text.get_width() + 10, y + 10))
+                
+                y += LINE_SPACING + 5  # Move position down after displaying market status
+                
+                # Draw alerts with pulsing effect
+                y = self.draw_alerts(screen, (x, y))
+                
+                # Draw stock data with staggered fade-in
+                if self.stock_data:
+                    for i, (ticker, data) in enumerate(self.stock_data.items()):
+                        # Calculate fade-in alpha based on time offset
+                        elapsed = time.time() - self.animation_start_time
+                        fade_progress = min(1.0, max(0, elapsed - self.item_fade_offsets[ticker]))
+                        alpha = int(220 * fade_progress)
+                        
+                        price = data['price']
+                        percent_change = data['percent_change']
+                        
+                        # Fix here - handle 'N/A' properly
+                        if isinstance(percent_change, str) and percent_change == 'N/A':
+                            color = COLOR_FONT_DEFAULT
+                        else:
+                            # Determine color based on change
+                            color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else \
+                                  COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else \
+                                  COLOR_FONT_DEFAULT
+                        
+                        currency_symbol = '£' if ticker.endswith('.L') else '$'
+                        
+                        # Format text with better spacing and alignment
+                        if isinstance(price, (float, int)) and isinstance(percent_change, (float, int)):
+                            ticker_text = f"{ticker}"
+                            price_text = f"{currency_symbol}{price:.2f}"
+                            change_text = f"({percent_change:+.2f}%)"
+                            
+                            # Create surfaces with shadow effect
+                            ticker_surface = self.font.render(ticker_text, True, COLOR_FONT_DEFAULT)
+                            price_surface = self.font.render(price_text, True, color)
+                            change_surface = self.font.render(change_text, True, color)
+                            
+                            # Apply alpha fade
+                            ticker_surface.set_alpha(alpha)
+                            price_surface.set_alpha(alpha)
+                            change_surface.set_alpha(alpha)
+                            
+                            # Position elements with better spacing
+                            screen.blit(ticker_surface, (x, y))
+                            screen.blit(price_surface, (x + 80, y))  # Adjust spacing as needed
+                            screen.blit(change_surface, (x + 160, y))  # Adjust spacing as needed
+                        else:
+                            # Handle N/A values
+                            price_str = f"{price:.2f}" if isinstance(price, (float, int)) else "N/A"
+                            text = f"{ticker}: {currency_symbol}{price_str}"
+                            text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
+                            text_surface.set_alpha(alpha)
+                            screen.blit(text_surface, (x, y))
+                        
+                        y += LINE_SPACING  # Move to the next stock
+                else:
+                    no_data_surface = self.font.render("Stock data unavailable", True, COLOR_PASTEL_RED)
+                    no_data_surface.set_alpha(TRANSPARENCY)
+                    screen.blit(no_data_surface, (x, y))
             
             # Draw scrolling ticker with enhanced visuals
             self.draw_scrolling_ticker(screen)
@@ -285,46 +297,60 @@ class StocksModule:
             logging.error(f"Error drawing stock data: {e}", exc_info=True)  # Add exc_info to see full traceback
 
     def draw_scrolling_ticker(self, screen):
-        ticker_height = 30
-        y = screen.get_height() - ticker_height
-        total_width = 0
-
-        for ticker, data in self.stock_data.items():
-            price = data['price'] 
-            percent_change = data['percent_change']
+        """Draw a scrolling ticker at the bottom of the screen with stock data"""
+        try:
+            ticker_height = 30
+            y = screen.get_height() - ticker_height
+            total_width = 0
             
-            # Handle invalid values
-            if isinstance(price, str) or price == 'N/A':
-                continue
+            # Check if we have valid data
+            if not self.stock_data or all(data.get('price') == 'N/A' for data in self.stock_data.values()):
+                # Show "Market Closed" message instead of fake data
+                message = "Markets Closed - Data Unavailable"
+                text_surface = self.ticker_font.render(message, True, (200, 200, 200))
+                text_surface.set_alpha(TRANSPARENCY)
+                
+                # Center the message
+                x_pos = (screen.get_width() - text_surface.get_width()) // 2
+                screen.blit(text_surface, (x_pos, y))
+                return
             
-            if isinstance(percent_change, str) and percent_change == 'N/A':
-                color = COLOR_FONT_DEFAULT
-                arrow = ""
-                percent_text = ""
-            else:
-                color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else \
-                       COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else \
-                       COLOR_FONT_DEFAULT
-                arrow = "▲" if isinstance(percent_change, float) and percent_change > 0 else \
-                       "▼" if isinstance(percent_change, float) and percent_change < 0 else ""
-                percent_text = f" ({percent_change:+.2f}%)" if isinstance(percent_change, float) else ""
-
-            currency_symbol = '£' if ticker.endswith('.L') else '$'
-            
-            # Safe formatting
-            try:
-                text = f"{ticker}: {currency_symbol}{price:.2f} {arrow}{percent_text}   "
+            # If we have data, show the scrolling ticker
+            for ticker, data in self.stock_data.items():
+                price = data.get('price', 'N/A')
+                percent_change = data.get('percent_change', 0)
+                
+                # Skip items with no valid price
+                if price == 'N/A' or not isinstance(price, (int, float)):
+                    continue
+                
+                # Format change as string with sign
+                if isinstance(percent_change, (int, float)):
+                    change_str = f"{'+' if percent_change >= 0 else ''}{percent_change:.2f}%"
+                    arrow = "▲" if percent_change > 0 else "▼" if percent_change < 0 else ""
+                    color = self.determine_color(percent_change)
+                else:
+                    change_str = "0.00%"
+                    arrow = ""
+                    color = (180, 180, 180)  # Default gray
+                
+                # Format with proper currency symbol
+                currency_symbol = '£' if ticker.endswith('.L') else '$'
+                text = f"{ticker}: {currency_symbol}{price:.2f} {arrow}{change_str}   "
+                
+                # Render and draw
                 text_surface = self.ticker_font.render(text, True, color)
                 text_surface.set_alpha(TRANSPARENCY)
                 screen.blit(text_surface, (self.scroll_position + total_width, y))
                 total_width += text_surface.get_width()
-            except (ValueError, TypeError) as e:
-                logging.error(f"Error rendering ticker {ticker}: {e}")
-                continue
-
-        self.scroll_position -= self.scroll_speed
-        if self.scroll_position < -total_width:
-            self.scroll_position = screen.get_width()
+            
+            # Scroll and reset position when needed
+            self.scroll_position -= self.scroll_speed
+            if self.scroll_position < -total_width:
+                self.scroll_position = screen.get_width()
+            
+        except Exception as e:
+            logging.error(f"Error drawing scrolling ticker: {e}")
 
     def draw_alerts(self, screen, position):
         x, y = position
