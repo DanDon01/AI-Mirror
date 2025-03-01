@@ -605,3 +605,66 @@ class AIInteractionModule:
         except Exception as e:
             logging.error(f"Error starting listening: {e}")
             return None
+
+    def start_hotword_detection(self):
+        """Start listening for the hotword 'mirror'"""
+        if not self.has_audio:
+            self.logger.info("Hotword detection disabled - no audio system available")
+            return
+
+        self.logger.info("Starting hotword detection loop")
+        self.listening = True
+        
+        def hotword_loop():
+            while self.running and self.listening:
+                try:
+                    # Skip if audio isn't available
+                    if not self.has_audio or not hasattr(self, 'microphone'):
+                        time.sleep(1)
+                        continue
+                        
+                    with self.microphone as source:
+                        try:
+                            # Short timeout to avoid freezing
+                            audio = self.recognizer.listen(source, 
+                                                     timeout=3, 
+                                                     phrase_time_limit=5)
+                            
+                            # Make sure audio isn't None before trying to use it
+                            if audio is None:
+                                continue
+                                
+                            try:
+                                # Use a longer timeout for Google API
+                                text = self.recognizer.recognize_google(audio, timeout=5).lower()
+                                if "mirror" in text:
+                                    self.logger.info("🎯 Hotword 'Mirror' detected!")
+                                    self.on_button_press()
+                                else:
+                                    self.logger.debug(f"Heard: {text} (not hotword)")
+                            except sr.UnknownValueError:
+                                pass  # Speech wasn't understood
+                            except sr.RequestError as e:
+                                self.logger.warning(f"Could not request results from Google: {e}")
+                                time.sleep(3)  # Wait longer on API errors
+                            
+                        except Exception as e:
+                            self.logger.warning(f"Error listening: {e}")
+                            time.sleep(0.5)
+                            
+                except Exception as e:
+                    if "NoneType" in str(e) and "close" in str(e):
+                        # This is the specific error we're trying to fix
+                        self.logger.debug("Skipping audio close error in hotword detection")
+                        time.sleep(1)
+                        continue
+                    else:
+                        self.logger.error(f"Error in hotword detection: {e}")
+                        time.sleep(3)  # Wait longer on general errors
+                
+                # Always sleep a little to prevent tight loops
+                time.sleep(0.5)
+        
+        # Start the hotword detection in a thread
+        self.hotword_thread = threading.Thread(target=hotword_loop, daemon=True)
+        self.hotword_thread.start()
