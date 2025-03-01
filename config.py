@@ -228,7 +228,14 @@ CONFIG = {
         'calendar': True,
         'fitbit': True,
         'retro_characters': True,
-        'ai_interaction': True
+        'ai_interaction': {
+            'params': {
+                'config': {
+                    'disable_audio': True,  # Set to True to completely disable audio (prevents crashes)
+                    # ... other settings
+                }
+            }
+        }
     },
     'debug': {
         'enabled': False,  # Set to True when you need detailed logging

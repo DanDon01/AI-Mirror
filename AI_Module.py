@@ -78,9 +78,9 @@ class AIInteractionModule:
         # Add flag to track audio availability
         self.has_audio = False
         
-        # Allow disabling audio completely via config
-        force_no_audio = config.get('force_no_audio', False)
-        if force_no_audio:
+        # Check if audio is disabled in config
+        ai_config = CONFIG.get('ai_interaction', {}).get('params', {}).get('config', {})
+        if ai_config.get('disable_audio', False):
             self.logger.info("Audio system disabled by configuration")
             self.has_audio = False
             # Skip audio initialization completely
@@ -502,39 +502,45 @@ class AIInteractionModule:
                 time.sleep(0.5)
 
     def initialize_audio_system(self):
-        """Safely initialize the audio system with fallbacks"""
+        """Safely initialize the audio system with extreme safeguards against crashes"""
         self.has_audio = False
         
+        # Set these to None in case other methods try to use them
+        self.microphone = None
+        self.mic_index = None
+        
         try:
+            # Skip audio initialization completely if we detect we're on a problematic system
+            # Check for known problem indicators
+            if os.environ.get('DISPLAY') and os.path.exists('/dev/gpiochip0'):  # Likely a Pi
+                self.logger.warning("Detected Raspberry Pi - disabling audio to prevent crashes")
+                return
+            
+            # Force import check first
+            try:
+                import pyaudio
+                import speech_recognition as sr
+            except ImportError as e:
+                self.logger.error(f"Missing audio libraries: {e}")
+                return
+            
             # Initialize recognizer first (no device selection yet)
             self.recognizer = sr.Recognizer()
             self.recognizer.energy_threshold = 500
             self.recognizer.dynamic_energy_threshold = True
             
             # Get device info without trying to open devices
-            p = pyaudio.PyAudio()
-            info = p.get_host_api_info_by_index(0)
-            numdevices = info.get('deviceCount')
-            
-            # Find input device
-            input_device = None
-            for i in range(numdevices):
-                try:
-                    device_info = p.get_device_info_by_index(i)
-                    self.logger.info(f"Device {i}: {device_info['name']}")
-                    if device_info.get('maxInputChannels') > 0:
-                        input_device = i
-                        self.logger.info(f"Using input device: {device_info['name']}")
-                        break
-                except Exception as e:
-                    self.logger.warning(f"Failed to get info for device {i}: {e}")
+            try:
+                # First, check if we can get a PyAudio instance at all
+                p = pyaudio.PyAudio()
                 
-            # Now initialize microphone with explicit device
-            if input_device is not None:
-                self.microphone = sr.Microphone(device_index=input_device)
+                # Don't try to enumerate devices - just use default
+                self.microphone = sr.Microphone()
                 self.has_audio = True
-            else:
-                self.logger.error("No input devices found")
+                self.logger.info("Audio initialized with default microphone")
+                
+            except Exception as e:
+                self.logger.error(f"PyAudio initialization error: {e}")
                 self.has_audio = False
             
         except Exception as e:
