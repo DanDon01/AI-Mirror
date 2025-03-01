@@ -104,6 +104,11 @@ sys.stderr = sys.__stderr__
 import sys
 
 class MockPyAudio:
+    # Add necessary constants
+    paInt16 = 8
+    paFloat32 = 32
+    paInt32 = 16
+    
     class PyAudio:
         def __init__(self): 
             print("MOCK: Safe PyAudio initialized")

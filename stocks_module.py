@@ -172,9 +172,12 @@ class StocksModule:
             screen.blit(title_surface, (x + 10, y))
             
             # Check if all data is unavailable
-            all_unavailable = all(data.get('price') == 'N/A' for data in self.stock_data.values())
+            all_unavailable = all(
+                isinstance(data.get('price'), str) and data.get('price') == 'N/A' 
+                for data in self.stock_data.values()
+            )
             
-            if all_unavailable:
+            if all_unavailable or not self.stock_data:
                 # Draw unavailable message
                 unavailable_text = self.font.render("Data Unavailable", True, COLOR_PASTEL_RED)
                 screen.blit(unavailable_text, (x + 20, y + 60))
@@ -270,7 +273,7 @@ class StocksModule:
             self.draw_scrolling_ticker(screen)
             
         except Exception as e:
-            logging.error(f"Error drawing stock data: {str(e)}")
+            logging.error(f"Error drawing stock data: {e}", exc_info=True)  # Add exc_info to see full traceback
 
     def draw_scrolling_ticker(self, screen):
         ticker_height = 30
@@ -364,18 +367,22 @@ class StocksModule:
 
     def determine_color(self, percent_change):
         """Determine the color based on the percent change"""
-        if isinstance(percent_change, str) and percent_change == 'N/A':
-            return COLOR_FONT_DEFAULT  # Use default color for N/A values
+        # Default color for invalid cases
+        default_color = (180, 180, 180)  # Light gray
+        
+        # Handle N/A or string values
+        if not isinstance(percent_change, (int, float)):
+            return default_color
         
         try:
-            if float(percent_change) > 0:
+            if percent_change > 0:
                 return COLOR_PASTEL_GREEN
-            elif float(percent_change) < 0:
+            elif percent_change < 0:
                 return COLOR_PASTEL_RED
             else:
-                return COLOR_FONT_DEFAULT
-        except (ValueError, TypeError):
-            return COLOR_FONT_DEFAULT  # For any conversion errors
+                return default_color
+        except Exception:
+            return default_color  # Safe fallback
 
     def update_data(self):
         """Update stock data with more robust error handling and fallback"""
