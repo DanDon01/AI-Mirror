@@ -32,6 +32,7 @@ os.environ['JACK_NO_START_SERVER'] = '1'
 os.environ['JACK_NO_AUDIO_RESERVATION'] = '1'
 os.environ['ALSA_CARD'] = "3"
 os.environ['PA_ALSA_PLUGHW'] = "1"
+os.environ['PYTHONUNBUFFERED'] = '1'
 
 # Make sure Python logging still works by setting up a basic logger
 import logging

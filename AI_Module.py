@@ -63,7 +63,6 @@ class AIInteractionModule:
         # Suppress ALSA errors by setting environment variables
         import os
         # Set environment variables to reduce ALSA verbosity
-        os.environ['ALSA_CONFIG_DIR'] = '/tmp/non-existent-dir'  # Use non-existent config
         os.environ['PYTHONUNBUFFERED'] = '1'  # Ensure output isn't buffered
         
         # Initialize logging first thing
@@ -492,24 +491,37 @@ class AIInteractionModule:
         self.has_audio = False
         
         try:
-            # Set explicit device indices to avoid defaulting errors
-            device_index = None
-            for i in range(pyaudio.PyAudio().get_device_count()):
-                device_info = pyaudio.PyAudio().get_device_info_by_index(i)
-                self.logger.info(f"Device {i}: {device_info['name']}")
-                # Look for a working input device
-                if device_info['maxInputChannels'] > 0:
-                    device_index = i
-                    self.logger.info(f"Using input device: {device_info['name']}")
-                    break
+            # Initialize recognizer first (no device selection yet)
+            self.recognizer = sr.Recognizer()
+            self.recognizer.energy_threshold = 500
+            self.recognizer.dynamic_energy_threshold = True
             
-            # Initialize with explicit device selection
-            self.microphone = sr.Microphone(device_index=device_index)
-            with self.microphone as source:
-                self.recognizer = sr.Recognizer()
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                self.has_audio = True
+            # Get device info without trying to open devices
+            p = pyaudio.PyAudio()
+            info = p.get_host_api_info_by_index(0)
+            numdevices = info.get('deviceCount')
+            
+            # Find input device
+            input_device = None
+            for i in range(numdevices):
+                try:
+                    device_info = p.get_device_info_by_index(i)
+                    self.logger.info(f"Device {i}: {device_info['name']}")
+                    if device_info.get('maxInputChannels') > 0:
+                        input_device = i
+                        self.logger.info(f"Using input device: {device_info['name']}")
+                        break
+                except Exception as e:
+                    self.logger.warning(f"Failed to get info for device {i}: {e}")
                 
+            # Now initialize microphone with explicit device
+            if input_device is not None:
+                self.microphone = sr.Microphone(device_index=input_device)
+                self.has_audio = True
+            else:
+                self.logger.error("No input devices found")
+                self.has_audio = False
+            
         except Exception as e:
             self.logger.error(f"Audio initialization error: {e}")
             self.has_audio = False
