@@ -6,8 +6,6 @@ import calendar
 
 class ClockModule:
     def __init__(self, font_file=None, time_font_size=60, date_font_size=30, color=(255, 255, 255), time_format='%H:%M:%S', date_format='%a, %b %d, %Y', timezone='local'):
-        self.width = 300  # Default module width
-        self.height = 150  # Default module height
         self.time_font = pygame.font.Font(font_file, time_font_size) if font_file else pygame.font.SysFont('Arial', time_font_size)
         self.date_font = pygame.font.Font(font_file, date_font_size) if font_file else pygame.font.SysFont('Arial', date_font_size)
         self.color = color
@@ -28,42 +26,26 @@ class ClockModule:
     def draw(self, screen, position):
         """Draw clock with error handling"""
         try:
-            # Make sure position is a tuple or dict we can use
-            if isinstance(position, dict) and 'x' in position and 'y' in position:
+            # Extract x,y coordinates from position
+            if isinstance(position, dict):
                 x, y = position['x'], position['y']
-            elif isinstance(position, (list, tuple)) and len(position) >= 2:
-                x, y = position[0], position[1]
             else:
-                # Fallback position
-                x, y = 10, 10
+                x, y = position
             
-            # Get current time
-            current_time = datetime.now()
-            date_str = current_time.strftime("%A, %B %d, %Y")
-            time_str = current_time.strftime("%I:%M:%S %p")
+            current_time = datetime.now(self.tz) if self.tz else datetime.now()
             
-            # Render time with large font
-            time_font = pygame.font.SysFont('Arial', 72)
-            time_surface = time_font.render(time_str, True, (200, 200, 200))
+            # Draw time
+            time_str = current_time.strftime(self.time_format)
+            time_surface = self.time_font.render(time_str, True, self.color)
+            screen.blit(time_surface, (x, y))
             
-            # Render date with smaller font
-            date_font = pygame.font.SysFont('Arial', 36)
-            date_surface = date_font.render(date_str, True, (180, 180, 180))
-            
-            # Calculate positions for centered text
-            time_x = x + (self.width - time_surface.get_width()) // 2
-            date_x = x + (self.width - date_surface.get_width()) // 2
-            
-            # Draw to screen
-            screen.blit(time_surface, (time_x, y))
-            screen.blit(date_surface, (date_x, y + time_surface.get_height() + 10))
+            # Draw date below time
+            date_str = self.format_date(current_time)
+            date_surface = self.date_font.render(date_str, True, self.color)
+            screen.blit(date_surface, (x, y + time_surface.get_height() + 5))
             
         except Exception as e:
-            # Handle any errors gracefully
-            print(f"Error drawing clock: {e}")
-            error_font = pygame.font.SysFont('Arial', 24)
-            error_surface = error_font.render("Clock Error", True, (255, 0, 0))
-            screen.blit(error_surface, (x, y))
+            logging.error(f"Error drawing clock: {e}")
 
     def format_date(self, date):
         # Custom date formatting to match "Tues, Sept 03, 2024" format

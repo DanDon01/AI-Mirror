@@ -92,6 +92,34 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 import sys
 sys.stderr = sys.__stderr__
 
+def ensure_valid_color(color):
+    """Ensure a color value is valid for pygame"""
+    if color is None:
+        return (200, 200, 200)  # Default gray
+    
+    if isinstance(color, tuple) and len(color) >= 3:
+        # Make sure all values are integers
+        return (int(color[0]), int(color[1]), int(color[2]))
+    
+    if isinstance(color, str):
+        # Try to convert from hex
+        if color.startswith('#') and len(color) in (4, 7):
+            try:
+                if len(color) == 4:
+                    r = int(color[1] + color[1], 16)
+                    g = int(color[2] + color[2], 16)
+                    b = int(color[3] + color[3], 16)
+                else:
+                    r = int(color[1:3], 16)
+                    g = int(color[3:5], 16)
+                    b = int(color[5:7], 16)
+                return (r, g, b)
+            except:
+                pass
+    
+    # Fallback default
+    return (200, 200, 200)
+
 class SpeechLogger:
     def __init__(self):
         # Set up speech logger
@@ -230,10 +258,8 @@ class MagicMirror:
         try:
             self.screen.fill((0, 0, 0))  # Black background
             
-            # Debug logging only when debug mode is enabled
-            self.debug_log("Drawing modules:")
-            self.debug_log(f"Available modules: {list(self.modules.keys())}")
-            self.debug_log(f"Module visibility states: {self.module_manager.module_visibility}")
+            # Debug layout flag - make this false to disable red boxes
+            self.debug_layout = True
             
             # Draw only visible modules
             for module_name, module in self.modules.items():
@@ -242,12 +268,21 @@ class MagicMirror:
                     try:
                         position = self.layout_manager.get_module_position(module_name)
                         if position:
-                            self.debug_log(f"Drawing {module_name} at position {position}")
-                            module.draw(self.screen, (position['x'], position['y']))
+                            # Fix: ensure position is correctly formatted
+                            if isinstance(position, dict) and 'x' in position and 'y' in position:
+                                pos_tuple = (position['x'], position['y'])
+                            else:
+                                pos_tuple = position
+                            
+                            self.debug_log(f"Drawing {module_name} at position {pos_tuple}")
+                            module.draw(self.screen, pos_tuple)
                         else:
                             logging.warning(f"No position defined for {module_name}")
                     except Exception as e:
-                        logging.error(f"Error drawing module {module_name}: {str(e)}")
+                        if not hasattr(self, f'_reported_{module_name}'):
+                            logging.error(f"Error drawing module {module_name}: {str(e)}")
+                            logging.error(traceback.format_exc())
+                            setattr(self, f'_reported_{module_name}', True)
             
             if hasattr(self, 'debug_layout') and getattr(self, 'debug_layout', False):
                 for name, module in self.modules.items():
