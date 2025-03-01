@@ -176,10 +176,14 @@ class StocksModule:
                     price = data['price']
                     percent_change = data['percent_change']
                     
-                    # Determine color based on change
-                    color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else \
-                           COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else \
-                           COLOR_FONT_DEFAULT
+                    # Fix here - handle 'N/A' properly
+                    if isinstance(percent_change, str) and percent_change == 'N/A':
+                        color = COLOR_FONT_DEFAULT
+                    else:
+                        # Determine color based on change
+                        color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else \
+                              COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else \
+                              COLOR_FONT_DEFAULT
                     
                     currency_symbol = '£' if ticker.endswith('.L') else '$'
                     
@@ -204,7 +208,9 @@ class StocksModule:
                         screen.blit(price_surface, (x + 80, y))  # Adjust spacing as needed
                         screen.blit(change_surface, (x + 160, y))  # Adjust spacing as needed
                     else:
-                        text = f"{ticker}: N/A"
+                        # Handle N/A values
+                        price_str = f"{price:.2f}" if isinstance(price, (float, int)) else "N/A"
+                        text = f"{ticker}: {currency_symbol}{price_str}"
                         text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
                         text_surface.set_alpha(alpha)
                         screen.blit(text_surface, (x, y))
@@ -227,28 +233,41 @@ class StocksModule:
         total_width = 0
 
         for ticker, data in self.stock_data.items():
-            price = data['price']
+            price = data['price'] 
             percent_change = data['percent_change']
-
-            color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else COLOR_FONT_DEFAULT
+            
+            # Handle invalid values
+            if isinstance(price, str) or price == 'N/A':
+                continue
+            
+            if isinstance(percent_change, str) and percent_change == 'N/A':
+                color = COLOR_FONT_DEFAULT
+                arrow = ""
+                percent_text = ""
+            else:
+                color = COLOR_PASTEL_GREEN if isinstance(percent_change, float) and percent_change > 0 else \
+                       COLOR_PASTEL_RED if isinstance(percent_change, float) and percent_change < 0 else \
+                       COLOR_FONT_DEFAULT
+                arrow = "▲" if isinstance(percent_change, float) and percent_change > 0 else \
+                       "▼" if isinstance(percent_change, float) and percent_change < 0 else ""
+                percent_text = f" ({percent_change:+.2f}%)" if isinstance(percent_change, float) else ""
 
             currency_symbol = '£' if ticker.endswith('.L') else '$'
-            arrow = "▲" if isinstance(percent_change, float) and percent_change > 0 else "▼" if isinstance(percent_change, float) and percent_change < 0 else ""
-
-            if percent_change != 'N/A':
-                text = "{}: {}{:.2f} {} ({:+.2f}%)   ".format(ticker, currency_symbol, price, arrow, percent_change)
-            else:
-                text = "{}: {}{:.2f}   ".format(ticker, currency_symbol, price)
-
-            text_surface = self.ticker_font.render(text, True, color)
-            text_surface.set_alpha(TRANSPARENCY)
-            screen.blit(text_surface, (self.scroll_position + total_width, y))
-            total_width += text_surface.get_width()
+            
+            # Safe formatting
+            try:
+                text = f"{ticker}: {currency_symbol}{price:.2f} {arrow}{percent_text}   "
+                text_surface = self.ticker_font.render(text, True, color)
+                text_surface.set_alpha(TRANSPARENCY)
+                screen.blit(text_surface, (self.scroll_position + total_width, y))
+                total_width += text_surface.get_width()
+            except (ValueError, TypeError) as e:
+                logging.error(f"Error rendering ticker {ticker}: {e}")
+                continue
 
         self.scroll_position -= self.scroll_speed
         if self.scroll_position < -total_width:
             self.scroll_position = screen.get_width()
-            logging.info("Stock ticker reset position")  # Log only when resetting position
 
     def draw_alerts(self, screen, position):
         x, y = position

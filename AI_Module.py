@@ -17,6 +17,7 @@ from voice_commands import ModuleCommand
 import json
 import websockets  # New import for websocket connections
 from typing import Iterator
+import subprocess
 
 DEFAULT_MODEL = "gpt-4-1106-preview"
 DEFAULT_MAX_TOKENS = 250
@@ -440,9 +441,18 @@ class AIInteractionModule:
         # Make sure we have the needed imports
         import time
         
+        # Check for FLAC at startup and warn if not available
+        try:
+            subprocess.check_output(['flac', '--version'])
+            flac_available = True
+        except (subprocess.SubprocessError, FileNotFoundError):
+            self.logger.error("FLAC utility not found - speech recognition will not work properly")
+            self.logger.error("Please install FLAC: sudo apt-get install flac")
+            flac_available = False
+        
         # Skip if audio isn't available
-        if not self.has_audio:
-            self.logger.warning("Hotword detection disabled - no audio system")
+        if not self.has_audio or not flac_available:
+            self.logger.warning("Hotword detection disabled - no audio system or missing FLAC")
             return
         
         self.logger.info("🎤 Hotword detection active - listening for 'Mirror'")
@@ -454,8 +464,8 @@ class AIInteractionModule:
                         self.hotword_listening = True
                         # Use a much more generous timeout
                         audio = self.recognizer.listen(source, 
-                                                      timeout=3, 
-                                                      phrase_time_limit=5)
+                                                     timeout=3, 
+                                                     phrase_time_limit=5)
                         try:
                             # Use a longer timeout for Google API
                             text = self.recognizer.recognize_google(audio, timeout=5).lower()
@@ -469,7 +479,14 @@ class AIInteractionModule:
                         except sr.RequestError as e:
                             self.logger.warning(f"Could not request results from Google: {e}")
                             time.sleep(3)  # Wait longer on API errors
-                            
+                        except OSError as e:
+                            if "FLAC conversion utility not available" in str(e):
+                                self.logger.error("FLAC utility missing - please install: sudo apt-get install flac")
+                                time.sleep(10)  # Wait longer to avoid log spam
+                            else:
+                                self.logger.error(f"OS Error in speech recognition: {e}")
+                                time.sleep(3)
+                        
                 except Exception as e:
                     self.logger.error(f"Error in hotword detection: {e}")
                     time.sleep(3)  # Wait longer on general errors

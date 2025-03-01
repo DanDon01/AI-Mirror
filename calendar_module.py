@@ -125,6 +125,17 @@ class CalendarModule:
             self.events = None
 
     def draw(self, screen, position):
+        # Safety check
+        if not hasattr(self, 'events') or self.events is None:
+            self.events = []  # Initialize to empty list
+        
+        # Use a sane default if no upcoming events
+        if len(self.events) == 0:
+            font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+            text = font.render("No upcoming events", True, (200, 200, 200))
+            screen.blit(text, position)
+            return
+        
         x, y = position
         original_y = y
         
