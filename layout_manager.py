@@ -4,24 +4,47 @@ import logging
 
 class LayoutManager:
     def __init__(self, screen_width, screen_height):
-        self.screen_width = screen_width
-        self.screen_height = screen_height
+        # Get configured screen size from CONFIG
+        config_screen = CONFIG.get('current_monitor', {})
+        config_width = config_screen.get('width')
+        config_height = config_screen.get('height')
+        
+        # Use config values if available (override passed parameters)
+        if config_width and config_height:
+            logging.info(f"Using screen dimensions from config: {config_width}x{config_height}")
+            self.screen_width = config_width
+            self.screen_height = config_height
+        else:
+            logging.info(f"Using passed screen dimensions: {screen_width}x{screen_height}")
+            self.screen_width = screen_width
+            self.screen_height = screen_height
+        
         self.layout = CONFIG['layout']
         self.scale = CONFIG['screen']['scale']
         self.module_positions = {}
         self.calculate_positions()
 
     def calculate_positions(self):
-        """Recalculate positions for side-by-side layout with clear center"""
+        """Recalculate positions with safety bounds for narrow screens"""
         # Log dimensions
         logging.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
         
-        # Define layout parameters
+        # Force a minimal safety margin
+        safe_width = min(self.screen_width, 1440)  # Cap width to reasonable maximum
+        
+        # Define layout parameters with narrower modules
         top_margin = 60
-        side_margin = 40
+        side_margin = 20  # Reduce side margin
         module_height = 180
-        module_width = int(self.screen_width * 0.25)  # 25% of screen width
-        center_gap = self.screen_width - (module_width * 2) - (side_margin * 2)
+        
+        # Calculate module width to fit screen
+        module_width = int(safe_width * 0.3)  # Reduce from 25% to 20% of screen width
+        
+        # Safety check - ensure modules don't exceed screen
+        max_module_width = (safe_width - (side_margin * 3)) // 2
+        module_width = min(module_width, max_module_width)
+        
+        # Calculate spacing based on available space
         vertical_spacing = 30
         
         # Calculate vertical positions (3 rows)
@@ -31,12 +54,15 @@ class LayoutManager:
             top_margin + (module_height + vertical_spacing) * 2 + 60  # Third row
         ]
         
-        # Calculate horizontal positions (left and right sides)
+        # Calculate horizontal positions with safety bounds
         left_x = side_margin
-        right_x = self.screen_width - side_margin - module_width
+        right_x = min(self.screen_width - module_width - side_margin, 
+                     safe_width - module_width - side_margin)
+        
+        # Log the calculated positions for debugging
+        logging.info(f"Left edge: {left_x}, Right edge: {right_x}, Module width: {module_width}")
         
         # Assign module positions
-        
         # Clock spans the top
         self.module_positions['clock'] = {
             'x': 0,
@@ -75,13 +101,14 @@ class LayoutManager:
             'height': module_height
         }
         
-        # Placeholder for additional right-side module
-        self.module_positions['placeholder'] = {
-            'x': right_x,
-            'y': row_y[1],
-            'width': module_width,
-            'height': module_height
-        }
+        # Skip placeholder module if screen is too narrow
+        if right_x + module_width <= self.screen_width - 10:
+            self.module_positions['placeholder'] = {
+                'x': right_x,
+                'y': row_y[1],
+                'width': module_width,
+                'height': module_height
+            }
         
         # AI module on right side bottom
         self.module_positions['ai_module'] = {

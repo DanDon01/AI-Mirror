@@ -161,7 +161,7 @@ class MagicMirror:
         pygame.init()
         self.speech_logger = SpeechLogger()
         logging.info("Initializing MagicMirror")
-        self.screen = pygame.display.set_mode(CONFIG['screen']['size'], pygame.FULLSCREEN)
+        self.initialize_screen()
         self.clock = pygame.time.Clock()
         self.modules = self.initialize_modules()
         self.frame_rate = CONFIG.get('frame_rate', 30)
@@ -173,7 +173,6 @@ class MagicMirror:
         for module_name in self.modules.keys():
             self.module_manager.module_visibility[module_name] = True
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
-        self.layout_manager = LayoutManager(CONFIG['screen']['size'][0], CONFIG['screen']['size'][1])
 
     def setup_logging(self):
         """Set up logging configuration"""
@@ -364,6 +363,25 @@ class MagicMirror:
         for module in self.modules.values():
             if hasattr(module, 'cleanup'):
                 module.cleanup()
+
+    def initialize_screen(self):
+        # Force respect for configured screen dimensions
+        config_screen = CONFIG.get('current_monitor', {})
+        width = config_screen.get('width')
+        height = config_screen.get('height')
+        
+        if width and height:
+            logging.info(f"Setting screen to configured dimensions: {width}x{height}")
+            if CONFIG.get('screen', {}).get('fullscreen', False):
+                self.screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
+            else:
+                self.screen = pygame.display.set_mode((width, height))
+            
+            # Update layout manager with correct dimensions
+            self.layout_manager = LayoutManager(width, height)
+        else:
+            # Fallback to default implementation
+            logging.warning("No screen dimensions in config, using system defaults")
 
 if __name__ == "__main__":
     mirror = MagicMirror()
