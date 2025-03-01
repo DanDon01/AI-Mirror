@@ -276,12 +276,18 @@ class MagicMirror:
         for module_name, module_config in CONFIG.items():
             if isinstance(module_config, dict) and 'class' in module_config:
                 try:
+                    # Add debug logging
+                    logging.info(f"Attempting to initialize {module_name} module")
                     module_class = globals()[module_config['class']]
                     modules[module_name] = module_class(**module_config['params'])
-                    logging.info(f"Initialized {module_name} module")
+                    logging.info(f"Successfully initialized {module_name} module")
                 except Exception as e:
                     logging.error(f"Error initializing {module_name} module: {str(e)}")
                     logging.error(traceback.format_exc())
+        
+        # Verify AI module initialization
+        if 'ai_interaction' not in modules:
+            logging.warning("AI module not initialized - check config settings")
         
         return modules
 

@@ -196,10 +196,10 @@ CONFIG = {
         }
     },
     'ai_interaction': {
-        'class': 'AIModuleManager',
+        'class': 'AIInteractionModule',
         'params': {
             'config': {
-                'disable_audio': False,  # Set to True only if needed
+                'disable_audio': False,
                 'openai': {
                     'api_key': os.getenv('OPENAI_API_KEY'),
                     'model': 'gpt-4-1106-preview'
