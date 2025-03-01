@@ -91,9 +91,6 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 import sys
 sys.stderr = sys.__stderr__
 
-# Replace stderr with our custom handler
-sys.stderr = NullHandler()
-
 class SpeechLogger:
     def __init__(self):
         # Set up speech logger
@@ -127,22 +124,6 @@ class SpeechLogger:
     def log_ai_response(self, text):
         """Log what the AI responded"""
         self.speech_logger.info(f"AI: {text}")
-
-def silence_stderr_for_audio():
-    """Silence audio-related errors forever"""
-    # Create a file descriptor to /dev/null
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    # Replace stderr with /dev/null completely
-    os.dup2(devnull, 2)
-    os.close(devnull)
-    # Now stderr is permanently redirected to /dev/null
-
-# Call this before any imports 
-silence_stderr_for_audio()
-
-# Continue with your imports
-import pygame
-import logging
 
 class MagicMirror:
     def __init__(self):
