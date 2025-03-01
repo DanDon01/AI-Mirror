@@ -110,34 +110,9 @@ class StocksModule:
                 self.logger.error(f"Error updating stocks: {e}")
 
     def update_ticker(self, ticker):
-        """Process a single ticker with network retry logic"""
-        # Setup fallback data
-        fallback_data = {
-            'AAPL': {'price': 205.76, 'percent_change': 0.22, 'volume': 54321000},
-            'GOOGL': {'price': 175.43, 'percent_change': -0.31, 'volume': 10293000},
-            'MSFT': {'price': 428.74, 'percent_change': 1.15, 'volume': 25678000},
-            'LLOY.L': {'price': 54.30, 'percent_change': 0.05, 'volume': 13456000},
-            'TSLA': {'price': 178.21, 'percent_change': 1.2, 'volume': 19873000},
-            'NVDA': {'price': 806.25, 'percent_change': 1.8, 'volume': 22156000},
-            'AMD': {'price': 165.14, 'percent_change': -0.7, 'volume': 14328000},
-            'RR.L': {'price': 420.60, 'percent_change': 0.3, 'volume': 11235000},
-        }
-        
-        # Early fallback if network issues are known
-        if ticker in fallback_data:
-            data = fallback_data[ticker]
-            self.stock_data[ticker] = {
-                'price': data['price'],
-                'percent_change': data['percent_change'],
-                'volume': data['volume'],
-                'day_range': f"{data['price']*0.99:.2f} - {data['price']*1.01:.2f}"
-            }
-            if hasattr(self, 'logger'):
-                self.logger.info(f"Using fallback data for {ticker}")
-            return
-        
+        """Process a single ticker without fallback data"""
         try:
-            # Get live data first
+            # Get live data only
             stock = yf.Ticker(ticker)
             data = stock.history(period="2d")
             
@@ -165,73 +140,48 @@ class StocksModule:
                 return
         except Exception as e:
             if hasattr(self, 'logger'):
-                self.logger.warning(f"Failed to get live data for {ticker}: {e}")
-            
-        # Use fallback data if we couldn't get live data
-        if ticker in fallback_data:
-            data = fallback_data[ticker]
-            self.stock_data[ticker] = {
-                'price': data['price'],
-                'percent_change': data['percent_change'],
-                'volume': data['volume'],
-                'day_range': f"{data['price']*0.99:.2f} - {data['price']*1.01:.2f}"
-            }
-            if hasattr(self, 'logger'):
-                self.logger.info(f"✓ Using fallback data for {ticker}")
-        else:
-            # Generic placeholder
-            self.stock_data[ticker] = {
-                'price': 100.00,
-                'percent_change': 0.0,
-                'volume': 0,
-                'day_range': 'N/A'
-            }
-            if hasattr(self, 'logger'):
-                self.logger.info(f"✓ Using generic placeholder for {ticker}")
-            
-    except Exception as e:
-        if hasattr(self, 'logger'):
-            self.logger.error(f"Complete failure updating {ticker}: {e}")
-        else:
-            logging.error(f"Complete failure updating {ticker}: {e}")
+                self.logger.warning(f"Failed to get data for {ticker}: {e}")
         
-        # Emergency fallback
+        # If we get here, no data was available
         self.stock_data[ticker] = {
-            'price': 100.00,
-            'percent_change': 0.0,
-            'volume': 0,
+            'price': 'N/A',
+            'percent_change': 'N/A',
+            'volume': 'N/A',
             'day_range': 'N/A'
         }
+        if hasattr(self, 'logger'):
+            self.logger.info(f"⚠ Data unavailable for {ticker}")
 
     def draw(self, screen, position):
+        """Draw stock data with proper handling of unavailable data"""
         try:
-            # Fix color handling at the beginning of the method
-            def safe_color(color):
-                if not isinstance(color, tuple) or len(color) < 3:
-                    return (200, 200, 200)  # Default color
-                return (int(color[0]), int(color[1]), int(color[2]))
-            
-            # Make sure all colors are valid by applying the safe_color function
-            self.bg_color = safe_color(self.bg_color)
-            self.header_bg_color = safe_color(self.header_bg_color)
-            
-            x, y = position
-            current_time = datetime.now(timezone('UTC'))
-            
-            # Create a background surface for the entire module
-            module_width = 300  # Adjust based on your layout
-            module_height = (len(self.tickers) + 4) * LINE_SPACING  # Height based on content
+            x, y = position if isinstance(position, tuple) else (position['x'], position['y'])
             
             # Draw module background
-            module_rect = pygame.Rect(x-10, y-10, module_width, module_height)
-            self.effects.draw_rounded_rect(screen, module_rect, self.bg_color, radius=15, alpha=180)
+            module_rect = pygame.Rect(x-10, y-10, 280, 210)
+            self.effects.draw_rounded_rect(screen, module_rect, self.bg_color, radius=15)
             
             # Draw header with pulsing effect
-            header_rect = pygame.Rect(x-10, y-10, module_width, LINE_SPACING + 10)
-            header_alpha = self.effects.pulse_effect(180, 220, self.header_pulse_speed)
+            header_rect = pygame.Rect(x-10, y-10, 280, 40)
+            header_alpha = self.effects.pulse_effect(160, 220, self.header_pulse_speed)
             self.effects.draw_rounded_rect(screen, header_rect, self.header_bg_color, radius=15, alpha=header_alpha)
             
+            # Draw title
+            title_surface = self.effects.create_text_with_shadow(
+                self.font, "STOCKS", COLOR_HEADER, offset=1)
+            screen.blit(title_surface, (x + 10, y))
+            
+            # Check if all data is unavailable
+            all_unavailable = all(data.get('price') == 'N/A' for data in self.stock_data.values())
+            
+            if all_unavailable:
+                # Draw unavailable message
+                unavailable_text = self.font.render("Data Unavailable", True, COLOR_PASTEL_RED)
+                screen.blit(unavailable_text, (x + 20, y + 60))
+                return
+            
             # Check market status with enhanced visuals
+            current_time = datetime.now(timezone('UTC'))
             us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
             uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
             
