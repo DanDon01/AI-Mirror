@@ -7,13 +7,31 @@
 import os
 import sys
 
-# Silence ALSA and JACK forever
-os.environ['NOPORT'] = '1' 
+# Create a pipe to filter stderr
+real_stderr = sys.stderr
+
+# Create a basic filter for stderr before any imports
+class FilteredStderr:
+    def write(self, message):
+        # Filter out ALSA and JACK errors
+        if not any(x in message for x in [
+            "ALSA lib", "jack server", "JackShmReadWritePtr", 
+            "Cannot connect to server", "aconnect", "pcm_", "snd_"
+        ]):
+            real_stderr.write(message)
+    
+    def flush(self):
+        real_stderr.flush()
+
+# Replace stderr with our filtered version
+sys.stderr = FilteredStderr()
+
+# Set environment variables to disable problematic audio components
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 os.environ['JACK_NO_START_SERVER'] = '1'
 os.environ['JACK_NO_AUDIO_RESERVATION'] = '1'
-
-# Redirect stderr to /dev/null
-os.dup2(os.open(os.devnull, os.O_WRONLY), 2)
+os.environ['ALSA_CARD'] = "3"
+os.environ['PA_ALSA_PLUGHW'] = "1"
 
 # Make sure Python logging still works by setting up a basic logger
 import logging
@@ -24,13 +42,6 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)  # Log to stdout instead of stderr
     ]
 )
-
-# Set environment variables to disable problematic audio components
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"  
-os.environ['ALSA_CARD'] = "3"  # Force ALSA to use card 3 (your USB device)
-os.environ['PA_ALSA_PLUGHW'] = "1"  # Force PortAudio to use hw devices
-os.environ['AUDIODEV'] = 'null'  # Use null audio device if no others work
-os.environ['AUDIODRIVER'] = 'alsa'  # Force ALSA as audio driver
 
 # Completely suppress ALSA errors by loading libasound with custom error handler
 try:

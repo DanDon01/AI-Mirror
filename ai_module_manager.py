@@ -13,45 +13,40 @@ from ai_voice_module import AIInteractionModule as RealtimeModule
 
 class AIModuleManager:
     def __init__(self, config=None):
-        # Silence JACK server noise
-        os.environ['NOPORT'] = '1'
-        os.environ['JACK_NO_START_SERVER'] = '1'
-        os.environ['JACK_NO_AUDIO_RESERVATION'] = '1'
-        
+        # Set up basic attributes
         self.logger = logging.getLogger(__name__)
+        self.config = config or {}
         self.active_module = None
         self.response_queue = Queue()
         self.status = "Initializing"
         self.status_message = "Starting AI systems..."
+        
+        # Check if realtime is enabled
+        self.realtime_enabled = config.get('ai_interaction', {}).get('realtime_enabled', False)
         
         # Initialize AI module
         try:
             if self.realtime_enabled:
                 self.logger.info("Attempting to initialize Realtime API module")
                 
-                # Temporarily redirect stderr to suppress JACK errors
-                old_stderr = sys.stderr
-                sys.stderr = open(os.devnull, 'w')
-                
                 try:
-                    from ai_voice_module import AIInteractionModule as RealtimeModule
-                    self.active_module = RealtimeModule(self.config)
-                    self.logger.info("Realtime API module initialized successfully")
-                    self.status = "Ready (Realtime)"
-                    self.status_message = "Say 'Mirror' to activate"
+                    self.realtime_module = RealtimeModule(self.config)
+                    if hasattr(self.realtime_module, 'websocket') and self.realtime_module.websocket:
+                        self.logger.info("Realtime API module initialized successfully")
+                        self.active_module = self.realtime_module
+                        self.status = "Ready (Realtime)"
+                        self.status_message = "Say 'Mirror' to activate"
+                    else:
+                        raise Exception("Failed to connect to Realtime API")
                 except Exception as e:
-                    self.logger.warning(f"Realtime API module failed to connect")
-                    self.logger.warning(f"Failed to initialize Realtime API module: {e}")
+                    self.logger.warning(f"Realtime API module failed to connect: {e}")
                     self.active_module = None
-                finally:
-                    # Restore stderr
-                    sys.stderr = old_stderr
-                    
+                
             if not self.active_module:
-                self.logger.info("Falling back to standard GPT-4 module")
+                self.logger.info("Using standard GPT-4 module")
                 self.fallback_module = FallbackModule(self.config)
                 self.active_module = self.fallback_module
-                self.status = "Ready (Fallback)"
+                self.status = "Ready (GPT-4)"
                 self.status_message = "Say 'Mirror' to activate"
             
         except Exception as e:
