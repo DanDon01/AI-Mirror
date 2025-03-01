@@ -8,6 +8,9 @@ from visual_effects import VisualEffects
 import time
 import math
 
+# Color constants
+COLOR_HEADER = (240, 240, 240)  # White for headers
+
 class StocksModule:
     def __init__(self, tickers, market_timezone='America/New_York'):
         self.tickers = tickers
