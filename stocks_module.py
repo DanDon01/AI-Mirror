@@ -53,9 +53,9 @@ class StocksModule:
         self.alert_pulse_speed = 0.8
         
         # Add background properties
-        self.bg_color = (20, 20, 20, 180)  # Dark with transparency
-        self.header_bg_color = (40, 40, 40, 200)
-        self.alert_bg_color = (60, 20, 20, 200)  # Reddish for alerts
+        self.bg_color = (20, 20, 20)  # No alpha, handled in draw_rounded_rect
+        self.header_bg_color = (40, 40, 40)  # No alpha, handled in draw_rounded_rect
+        self.alert_bg_color = (60, 20, 20)  # No alpha, handled in draw_rounded_rect
 
     def update(self):
         """Update stock data with rate limiting protection"""
@@ -156,6 +156,12 @@ class StocksModule:
         """Draw stock data with proper handling of unavailable data"""
         try:
             x, y = position if isinstance(position, tuple) else (position['x'], position['y'])
+            
+            # Check colors are valid RGB tuples before drawing
+            if not (isinstance(self.bg_color, tuple) and len(self.bg_color) >= 3):
+                self.bg_color = (20, 20, 20)
+            if not (isinstance(self.header_bg_color, tuple) and len(self.header_bg_color) >= 3):
+                self.header_bg_color = (40, 40, 40)
             
             # Draw module background
             module_rect = pygame.Rect(x-10, y-10, 280, 210)

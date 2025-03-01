@@ -109,6 +109,17 @@ class MockPyAudio:
     paFloat32 = 32
     paInt32 = 16
     
+    @staticmethod
+    def get_sample_size(format_type):
+        """Mock implementation of get_sample_size"""
+        if format_type == MockPyAudio.paInt16:
+            return 2
+        elif format_type == MockPyAudio.paFloat32:
+            return 4
+        elif format_type == MockPyAudio.paInt32:
+            return 4
+        return 2  # Default to 2 bytes
+    
     class PyAudio:
         def __init__(self): 
             print("MOCK: Safe PyAudio initialized")
