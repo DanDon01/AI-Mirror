@@ -85,6 +85,16 @@ class AIInteractionModule:
         # Add flag to track audio availability
         self.has_audio = False
         
+        # Allow disabling audio completely via config
+        force_no_audio = config.get('force_no_audio', False)
+        if force_no_audio:
+            self.logger.info("Audio system disabled by configuration")
+            self.has_audio = False
+            # Skip audio initialization completely
+        else:
+            # Initialize audio with robust error handling
+            self.initialize_audio_system()
+        
         # Get configuration from CONFIG object
         ai_config = CONFIG.get('ai_interaction', {}).get('params', {}).get('config', {})
         
@@ -108,9 +118,6 @@ class AIInteractionModule:
         self.mic_energy_threshold = audio_config.get('mic_energy_threshold', 1000)
         self.tts_volume = audio_config.get('tts_volume', 0.7)
         self.wav_volume = audio_config.get('wav_volume', 0.7)
-        
-        # Initialize audio with robust error handling
-        self.initialize_audio_system()
         
         # Skip the rest of audio initialization if no audio available
         if not self.has_audio:
@@ -463,16 +470,21 @@ class AIInteractionModule:
             # First check if PyAudio is available
             import pyaudio
             
-            # Redirect stderr to suppress ALSA errors during audio initialization
-            import sys, os
-            stderr = sys.stderr
-            sys.stderr = open(os.devnull, 'w')
+            # Use subprocess to modify ALSA configuration instead of directly in Python
+            try:
+                import subprocess
+                # Redirect all output to /dev/null
+                with open(os.devnull, 'w') as devnull:
+                    subprocess.call(['amixer', 'cset', 'numid=3', '1'], 
+                                   stdout=devnull, stderr=devnull)
+            except:
+                self.logger.warning("Failed to configure ALSA mixer")
             
             # Initialize recognizer with configured settings
             self.recognizer = sr.Recognizer()
             self.recognizer.energy_threshold = self.mic_energy_threshold
             self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.pause_threshold = 0.8
+            self.recognizer.pause_threshold = 1.0    # Increased for better phrase detection
             self.recognizer.phrase_threshold = 0.5
             self.recognizer.non_speaking_duration = 0.5
             
@@ -488,81 +500,76 @@ class AIInteractionModule:
                     self.logger.info(f"Device {i}: {device_info['name']} (in: {device_info['maxInputChannels']}, out: {device_info['maxOutputChannels']})")
                 except Exception as e:
                     self.logger.warning(f"Could not get info for device {i}: {e}")
-                    
-            # Find a suitable USB input device
+            
+            # Find a suitable input device
             input_device = None
             for i in range(device_count):
                 try:
                     device_info = audio.get_device_info_by_index(i)
                     device_name = device_info['name'].lower()
-                    # Look for USB or external microphones
-                    if device_info['maxInputChannels'] > 0 and ('usb' in device_name or 'external' in device_name or 'mic' in device_name):
-                        self.logger.info(f"Found USB/external microphone: {device_info['name']}")
-                        input_device = i
-                        break
+                    if device_info['maxInputChannels'] > 0:
+                        if 'usb' in device_name or 'external' in device_name or 'mic' in device_name:
+                            self.logger.info(f"Found USB/external microphone: {device_info['name']}")
+                            input_device = i
+                            break
                 except Exception as e:
-                    self.logger.warning(f"Error checking device {i}: {e}")
-                    
-            # If no USB device found, try any input device
+                    pass
+            
+            # If no USB device found, try pulse or default
             if input_device is None:
                 for i in range(device_count):
                     try:
                         device_info = audio.get_device_info_by_index(i)
-                        if device_info['maxInputChannels'] > 0:
-                            self.logger.info(f"Found fallback input device: {device_info['name']}")
+                        device_name = device_info['name'].lower()
+                        if device_info['maxInputChannels'] > 0 and ('pulse' in device_name or 'default' in device_name):
+                            self.logger.info(f"Found pulse/default input device: {device_info['name']}")
                             input_device = i
                             break
                     except:
                         pass
-                    
-            # Restore stderr
-            sys.stderr = stderr
             
+            # Initialize microphone with the detected device
             if input_device is not None:
-                # Configure audio output - this will help with audio playback
                 try:
-                    # Try to set up ALSA config for USB speaker
-                    os.system("amixer cset numid=3 1") # Set output to USB audio if available
-                    
-                    # Use higher sensitivity settings for recognizer
-                    self.recognizer.energy_threshold = 300  # Lower for more sensitivity
-                    self.recognizer.dynamic_energy_adjustment_damping = 0.15
-                    self.recognizer.dynamic_energy_ratio = 1.5
-                    
-                    # Initialize microphone with the detected device
+                    # DO NOT initialize pygame mixer here - it seems to conflict
                     self.microphone = sr.Microphone(
                         device_index=input_device,
-                        sample_rate=48000,
-                        chunk_size=4096
+                        sample_rate=16000,  # Lower sample rate for better compatibility
+                        chunk_size=1024     # Smaller chunk size to reduce memory issues
                     )
                     
+                    # Configure recognizer with more conservative settings
+                    self.recognizer.energy_threshold = 400  # Moderate sensitivity
+                    
+                    # Limited ambient noise adjustment to avoid hangs
                     with self.microphone as source:
-                        self.logger.info("Adjusting for ambient noise...")
-                        source.gain = 20.0  # Increase microphone gain
-                        self.recognizer.adjust_for_ambient_noise(source, duration=2)
-                        self.logger.info(f"Microphone energy threshold set to: {self.recognizer.energy_threshold}")
+                        self.logger.info("Briefly adjusting for ambient noise...")
+                        self.recognizer.adjust_for_ambient_noise(source, duration=1)
                     
                     self.has_audio = True
-                    self.logger.info(f"Audio system initialized successfully using device {input_device}")
-                    
-                    # Initialize pygame mixer for output
-                    if pygame.mixer.get_init():
-                        pygame.mixer.quit()  # Reset the mixer
-                    pygame.mixer.init(frequency=48000, size=-16, channels=2, buffer=4096)
-                    pygame.mixer.set_num_channels(16)  # Allow multiple sounds
+                    self.logger.info(f"Audio input initialized with device {input_device}")
                     
                 except Exception as e:
-                    self.logger.error(f"Error configuring audio: {str(e)}")
+                    self.logger.error(f"Error initializing microphone: {str(e)}")
                     self.has_audio = False
             else:
                 self.logger.error("No suitable input device found")
                 self.has_audio = False
+            
+            # Initialize sound output separately from input
+            try:
+                if pygame.mixer.get_init():
+                    pygame.mixer.quit()
+                pygame.mixer.init(frequency=44100, size=-16, channels=1, buffer=2048)
+                self.logger.info("Audio output initialized")
+            except Exception as e:
+                self.logger.error(f"Error initializing audio output: {e}")
                 
         except ImportError as e:
-            self.logger.error(f"PyAudio not installed - audio features disabled: {e}")
+            self.logger.error(f"PyAudio not installed: {e}")
             self.has_audio = False
         except Exception as e:
-            self.logger.error(f"Error initializing audio: {str(e)}")
+            self.logger.error(f"Error in audio initialization: {str(e)}")
             self.has_audio = False
 
     def handle_event(self, event):
