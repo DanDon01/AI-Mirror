@@ -125,144 +125,120 @@ class CalendarModule:
             self.events = None
 
     def draw(self, screen, position):
-        # Safety check
-        if not hasattr(self, 'events') or self.events is None:
-            self.events = []  # Initialize to empty list
-        
-        # Use a sane default if no upcoming events
-        if len(self.events) == 0:
-            font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
-            text = font.render("No upcoming events", True, (200, 200, 200))
-            screen.blit(text, position)
-            return
-        
-        x, y = position
-        original_y = y
-        
-        # Calculate module dimensions
-        module_width = 300  # Adjust based on your layout
-        module_height = min(400, (len(self.events) + 2) * 30)  # Limit height
-        
-        # Draw module background
-        module_rect = pygame.Rect(x-10, y-10, module_width, module_height)
-        self.effects.draw_rounded_rect(screen, module_rect, self.bg_color, radius=15)
-        
-        # Draw header with pulsing effect
-        header_rect = pygame.Rect(x-10, y-10, module_width, 40)
-        header_alpha = self.effects.pulse_effect(180, 220, self.header_pulse_speed)
-        self.effects.draw_rounded_rect(screen, header_rect, self.header_bg_color, radius=15, alpha=header_alpha)
-        
-        # Draw title with shadow
-        title_text = self.effects.create_text_with_shadow(
-            self.font, "Calendar", (220, 220, 220), offset=2)
-        screen.blit(title_text, (x + 5, y))
-        
-        y += 40  # Move down past header
-        
-        # Group events by date
-        events_by_date = {}
-        for event in self.events:
-            date_str = event['start'].get('dateTime', event['start'].get('date')).split('T')[0]
-            if date_str not in events_by_date:
-                events_by_date[date_str] = []
-            events_by_date[date_str].append(event)
-        
-        # Get today's date
-        today = datetime.date.today().strftime('%Y-%m-%d')
-        
-        # Initialize event fade-in for new events
-        current_events = set(e['id'] for e in self.events)
-        for event_id in list(self.event_fade_in.keys()):
-            if event_id not in current_events:
-                del self.event_fade_in[event_id]
-        
-        for event in self.events:
-            if event['id'] not in self.event_fade_in:
-                self.event_fade_in[event['id']] = 0.0
-        
-        # Update fade-in progress
-        elapsed = time.time() - self.last_update_time
-        fade_speed = 2.0  # Adjust for faster/slower fade
-        
-        for event_id in self.event_fade_in:
-            self.event_fade_in[event_id] = min(1.0, self.event_fade_in[event_id] + elapsed * fade_speed)
-        
-        self.last_update_time = time.time()
-        
-        # Draw events by date
-        for date_str, date_events in sorted(events_by_date.items()):
-            # Check if this is today
-            is_today = (date_str == today)
-            
-            # Format date header
-            date_obj = datetime.date.fromisoformat(date_str)
-            if is_today:
-                date_header = "Today"
-            elif date_obj.strftime('%Y-%m-%d') == (datetime.date.today() + datetime.timedelta(days=1)).strftime('%Y-%m-%d'):
-                date_header = "Tomorrow"
+        """Draw calendar with improved error handling"""
+        try:
+            # Extract x,y coordinates
+            if isinstance(position, dict):
+                x, y = position['x'], position['y']
             else:
-                date_header = date_obj.strftime('%A, %b %d')
+                x, y = position
             
-            # Draw date header with appropriate styling
-            date_color = (180, 220, 255) if is_today else (180, 180, 180)
-            date_text = self.effects.create_text_with_shadow(
-                self.font, date_header, date_color, offset=1)
+            # Initialize font if needed
+            if self.font is None:
+                try:
+                    self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+                except Exception as e:
+                    logging.error(f"Error loading font: {e}")
+                    self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback
             
-            # Draw date background if it's today
-            if is_today:
-                date_rect = pygame.Rect(x-5, y-2, module_width-10, 25)
-                self.effects.draw_rounded_rect(screen, date_rect, self.today_bg_color, radius=8)
+            # Fix color values for background
+            if not hasattr(self, 'bg_color') or not isinstance(self.bg_color, tuple) or len(self.bg_color) < 3:
+                self.bg_color = (20, 20, 20)  # Default almost black
+            else:
+                # Ensure all color values are valid integers
+                self.bg_color = tuple(max(0, min(255, int(c))) for c in self.bg_color[:3])
             
-            screen.blit(date_text, (x + 5, y))
-            y += 25
+            # Fix header background color
+            if not hasattr(self, 'header_bg_color') or not isinstance(self.header_bg_color, tuple) or len(self.header_bg_color) < 3:
+                self.header_bg_color = (40, 40, 40)  # Default dark gray
+            else:
+                # Ensure all color values are valid integers
+                self.header_bg_color = tuple(max(0, min(255, int(c))) for c in self.header_bg_color[:3])
             
-            # Draw events for this date with fade-in effect
-            for event in date_events:
-                # Calculate alpha based on fade-in progress
-                alpha = int(255 * self.event_fade_in[event['id']])
-                
-                # Format time
-                start = event['start'].get('dateTime', event['start'].get('date'))
-                if 'T' in start:  # This is a datetime
-                    start_date = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
-                    time_str = start_date.strftime("%H:%M")
-                else:  # This is a date
-                    start_date = datetime.date.fromisoformat(start)
-                    time_str = "All day"
-                
-                if isinstance(start_date, datetime.datetime):
-                    start_date = start_date.date()
-                
-                if start_date < datetime.date.today():
-                    continue  # Skip past events
-                
-                if start_date > datetime.date.today() + datetime.timedelta(days=7):
-                    break  # Don't show events more than a week in the future
-                
-                # Determine color based on event type or calendar
-                event_color = (220, 220, 220)  # Default color
-                
-                # Create text surfaces with shadow
-                time_surface = self.font.render(time_str, True, (160, 160, 160))
-                title_surface = self.font.render(event['summary'], True, event_color)
-                
-                # Apply fade-in
-                time_surface.set_alpha(alpha)
-                title_surface.set_alpha(alpha)
-                
-                # Draw with better alignment
-                screen.blit(time_surface, (x + 5, y))
-                screen.blit(title_surface, (x + 60, y))  # Adjust position as needed
-                
-                y += 22  # Slightly smaller spacing between events
+            # Draw module background using the visual effects with fixed colors
+            module_width = 300  # Fixed width
+            module_height = 400  # Approximate height
+            module_rect = pygame.Rect(x-10, y-10, module_width, module_height)
             
-            y += 10  # Add space between date groups
+            try:
+                self.effects.draw_rounded_rect(screen, module_rect, self.bg_color, radius=15)
+                # Draw header
+                header_rect = pygame.Rect(x-10, y-10, module_width, 40)
+                self.effects.draw_rounded_rect(screen, header_rect, self.header_bg_color, radius=15)
+            except ValueError as e:
+                # Fallback if visual effects fail
+                logging.error(f"Visual effects error: {e}")
+                pygame.draw.rect(screen, self.bg_color, module_rect, border_radius=10)
+                pygame.draw.rect(screen, self.header_bg_color, header_rect, border_radius=10)
+            
+            # Draw title
+            title_font = pygame.font.Font(None, FONT_SIZE + 6)
+            title_surface = title_font.render("Calendar", True, (220, 220, 220))
+            screen.blit(title_surface, (x + 10, y + 5))
+            
+            # Draw calendar events
+            current_y = y + 40  # Start below title
+            
+            # Debug message if no events
+            if not self.events:
+                debug_text = self.font.render("No calendar events", True, (180, 180, 180))
+                screen.blit(debug_text, (x + 10, current_y))
+                current_y += LINE_SPACING
+                
+                # Draw auth status
+                auth_status = "Not authenticated" if not self.service else "Authenticated"
+                status_color = (255, 100, 100) if not self.service else (100, 255, 100)
+                status_text = self.font.render(auth_status, True, status_color)
+                screen.blit(status_text, (x + 10, current_y))
+                return
+                
+            # Draw events
+            for event in self.events[:8]:  # Limit to 8 events
+                # Draw event date/time
+                start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', 'No date'))
+                if isinstance(start, str):
+                    if 'T' in start:
+                        # This is a datetime
+                        try:
+                            dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                            date_str = dt.strftime('%a %H:%M')
+                        except:
+                            date_str = start[:10]
+                    else:
+                        # This is a date only
+                        date_str = start
+                else:
+                    date_str = "Invalid date"
+                    
+                date_surface = self.font.render(date_str, True, (180, 180, 180))
+                screen.blit(date_surface, (x + 10, current_y))
+                
+                # Draw event title
+                title = event.get('summary', 'No title')
+                if len(title) > 25:
+                    title = title[:22] + "..."
+                    
+                title_surface = self.font.render(title, True, (230, 230, 230))
+                screen.blit(title_surface, (x + 10, current_y + LINE_SPACING))
+                
+                current_y += LINE_SPACING * 2
+                
+                # Draw a separator line
+                pygame.draw.line(screen, (50, 50, 50), 
+                    (x + 5, current_y - 5), 
+                    (x + module_width - 10, current_y - 5), 1)
         
-        # If no events, show a message
-        if not self.events:
-            no_events = self.effects.create_text_with_shadow(
-                self.font, "No upcoming events", (150, 150, 150), offset=1)
-            screen.blit(no_events, (x + 20, y + 20))
+        except Exception as e:
+            logging.error(f"Error drawing calendar: {e}")
+            logging.error(traceback.format_exc())
+            
+            # Draw error message
+            try:
+                error_font = pygame.font.Font(None, 24)
+                error_text = error_font.render("Calendar Error", True, (255, 50, 50))
+                screen.blit(error_text, (x + 10, y + 10))
+            except:
+                pass  # Last resort - if even error display fails
 
     def test(self):
         pygame.init()

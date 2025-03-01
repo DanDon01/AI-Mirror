@@ -366,6 +366,12 @@ class MagicMirror:
 
     def initialize_screen(self):
         """Initialize the pygame display screen with proper dimensions"""
+        # Set display modes for fullscreen
+        pygame.display.set_caption("Magic Mirror")
+        
+        # Force-hide mouse cursor
+        pygame.mouse.set_visible(False)
+        
         # Force respect for configured screen dimensions
         config_screen = CONFIG.get('current_monitor', {})
         width = config_screen.get('width')
@@ -373,8 +379,16 @@ class MagicMirror:
         
         if width and height:
             logging.info(f"Setting screen to configured dimensions: {width}x{height}")
-            if CONFIG.get('screen', {}).get('fullscreen', False):
-                self.screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
+            if CONFIG.get('screen', {}).get('fullscreen', True):  # Default to fullscreen
+                # Try different fullscreen flags
+                try:
+                    self.screen = pygame.display.set_mode(
+                        (width, height), 
+                        pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF
+                    )
+                except:
+                    # Fallback if that combination fails
+                    self.screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
             else:
                 self.screen = pygame.display.set_mode((width, height))
             

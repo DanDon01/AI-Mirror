@@ -24,25 +24,41 @@ class ClockModule:
             self.scroll_position = self.screen_width
 
     def draw(self, screen, position):
-        """Draw clock with error handling"""
+        """Draw clock with scrolling text"""
         try:
-            # Extract x,y coordinates from position
+            # Extract position 
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
             else:
                 x, y = position
             
+            # Set width for scrolling calculations if not already set
+            if not hasattr(self, 'screen_width') or self.screen_width == 0:
+                self.screen_width = screen.get_width()
+                self.width = self.screen_width
+            
             current_time = datetime.now(self.tz) if self.tz else datetime.now()
             
-            # Draw time
-            time_str = current_time.strftime(self.time_format)
-            time_surface = self.time_font.render(time_str, True, self.color)
-            screen.blit(time_surface, (x, y))
-            
-            # Draw date below time
+            # Create time string with date for scrolling
             date_str = self.format_date(current_time)
-            date_surface = self.date_font.render(date_str, True, self.color)
-            screen.blit(date_surface, (x, y + time_surface.get_height() + 5))
+            time_str = current_time.strftime(self.time_format)
+            full_text = f"{time_str} — {date_str}"
+            
+            # Create scrolling text surface
+            text_surface = self.time_font.render(full_text, True, self.color)
+            self.total_width = text_surface.get_width()
+            
+            # Draw scrolling text
+            screen.blit(text_surface, (self.scroll_position, y))
+            
+            # If text is long enough to need scrolling, add a second copy
+            if self.total_width > self.screen_width:
+                screen.blit(text_surface, (self.scroll_position + self.total_width, y))
+            
+            # Update scroll position for next frame
+            self.scroll_position -= self.scroll_speed
+            if self.scroll_position < -self.total_width:
+                self.scroll_position = 0
             
         except Exception as e:
             logging.error(f"Error drawing clock: {e}")

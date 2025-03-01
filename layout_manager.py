@@ -25,39 +25,35 @@ class LayoutManager:
         self.calculate_positions()
 
     def calculate_positions(self):
-        """Recalculate positions with safety bounds for narrow screens"""
+        """Recalculate positions with narrower modules to fit the screen"""
         # Log dimensions
         logging.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
         
-        # Force a minimal safety margin
-        safe_width = min(self.screen_width, 1440)  # Cap width to reasonable maximum
-        
-        # Define layout parameters with narrower modules
+        # Define layout parameters with much narrower modules
         top_margin = 60
-        side_margin = 20  # Reduce side margin
+        side_margin = 30
         module_height = 180
         
-        # Calculate module width to fit screen
-        module_width = int(safe_width * 0.3)  # Reduce from 25% to 20% of screen width
+        # Narrow module width for portrait orientation
+        module_width = min(int(self.screen_width * 0.2), 300)  # Maximum 20% of screen width, capped at 300px
         
-        # Safety check - ensure modules don't exceed screen
-        max_module_width = (safe_width - (side_margin * 3)) // 2
-        module_width = min(module_width, max_module_width)
-        
-        # Calculate spacing based on available space
-        vertical_spacing = 30
+        # Ensure left and right modules fit on screen with reasonable gap
+        total_width = (module_width * 2) + (side_margin * 3)
+        if total_width > self.screen_width:
+            # Adjust width to fit within screen
+            module_width = (self.screen_width - (side_margin * 3)) // 2
+            logging.info(f"Adjusted module width to {module_width}px to fit screen")
         
         # Calculate vertical positions (3 rows)
         row_y = [
             top_margin + 60,  # First row (after clock)
-            top_margin + module_height + vertical_spacing + 60,  # Second row
-            top_margin + (module_height + vertical_spacing) * 2 + 60  # Third row
+            top_margin + module_height + 40 + 60,  # Second row with more spacing
+            top_margin + (module_height + 40) * 2 + 60  # Third row
         ]
         
-        # Calculate horizontal positions with safety bounds
+        # Calculate horizontal positions with safety margins
         left_x = side_margin
-        right_x = min(self.screen_width - module_width - side_margin, 
-                     safe_width - module_width - side_margin)
+        right_x = self.screen_width - side_margin - module_width
         
         # Log the calculated positions for debugging
         logging.info(f"Left edge: {left_x}, Right edge: {right_x}, Module width: {module_width}")
