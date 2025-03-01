@@ -473,36 +473,59 @@ class AIInteractionModule:
         while self.running:
             if not self.recording and not self.processing:
                 try:
-                    with self.microphone as source:
-                        self.hotword_listening = True
-                        # Use a much more generous timeout
-                        audio = self.recognizer.listen(source, 
-                                                     timeout=3, 
-                                                     phrase_time_limit=5)
-                        try:
-                            # Use a longer timeout for Google API
-                            text = self.recognizer.recognize_google(audio, timeout=5).lower()
-                            if "mirror" in text:
-                                self.logger.info("🎯 Hotword 'Mirror' detected!")
-                                self.on_button_press()
-                            else:
-                                self.logger.debug(f"Heard: {text} (not hotword)")
-                        except sr.UnknownValueError:
-                            pass  # Speech wasn't understood
-                        except sr.RequestError as e:
-                            self.logger.warning(f"Could not request results from Google: {e}")
-                            time.sleep(3)  # Wait longer on API errors
-                        except OSError as e:
-                            if "FLAC conversion utility not available" in str(e):
-                                self.logger.error("FLAC utility missing - please install: sudo apt-get install flac")
-                                time.sleep(10)  # Wait longer to avoid log spam
-                            else:
-                                self.logger.error(f"OS Error in speech recognition: {e}")
-                                time.sleep(3)
+                    # Check if microphone exists before trying to use it
+                    if not hasattr(self, 'microphone') or self.microphone is None:
+                        time.sleep(1)
+                        continue
                         
+                    # Make sure we're using our mock PyAudio for safety
+                    try:
+                        with self.microphone as source:
+                            self.hotword_listening = True
+                            # Use a much more generous timeout
+                            audio = self.recognizer.listen(source, 
+                                                        timeout=3, 
+                                                        phrase_time_limit=5)
+                            
+                            # Make sure audio isn't None
+                            if audio is None:
+                                continue
+                                
+                            try:
+                                # Use a longer timeout for Google API
+                                text = self.recognizer.recognize_google(audio, timeout=5).lower()
+                                if "mirror" in text:
+                                    self.logger.info("🎯 Hotword 'Mirror' detected!")
+                                    self.on_button_press()
+                                else:
+                                    self.logger.debug(f"Heard: {text} (not hotword)")
+                            except sr.UnknownValueError:
+                                pass  # Speech wasn't understood
+                            except sr.RequestError as e:
+                                self.logger.warning(f"Could not request results from Google: {e}")
+                                time.sleep(3)  # Wait longer on API errors
+                            except OSError as e:
+                                if "FLAC conversion utility not available" in str(e):
+                                    self.logger.error("FLAC utility missing - please install: sudo apt-get install flac")
+                                    time.sleep(10)  # Wait longer to avoid log spam
+                                else:
+                                    self.logger.error(f"OS Error in speech recognition: {e}")
+                                    time.sleep(3)
+                    except TypeError as e:
+                        if "NoneType" in str(e) and "close" in str(e):
+                            self.logger.warning("Microphone close error (safely ignored)")
+                            time.sleep(1)
+                        else:
+                            raise  # Re-raise other TypeError exceptions
+                            
                 except Exception as e:
-                    self.logger.error(f"Error in hotword detection: {e}")
-                    time.sleep(3)  # Wait longer on general errors
+                    # Ignore the specific NoneType error
+                    if "NoneType" in str(e) and "close" in str(e):
+                        self.logger.debug("Skipping known microphone issue - continuing")
+                        time.sleep(1)
+                    else:
+                        self.logger.error(f"Error in hotword detection: {e}")
+                        time.sleep(3)  # Wait longer on general errors
                 
                 # Always sleep a little to prevent tight loops
                 time.sleep(0.5)
