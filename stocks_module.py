@@ -61,112 +61,105 @@ class StocksModule:
         self.alert_bg_color = (60, 20, 20)  # No alpha, handled in draw_rounded_rect
 
     def update(self):
-        """Update stock data with rate limiting protection"""
-        # Use timezone-aware current_time
+        """Update stock data with minimal API calls to avoid rate limiting"""
         current_time = datetime.now(timezone('UTC'))
         
-        # Check if we need to update
-        if current_time - self.last_update < self.update_interval:
+        # Check if it's time to update (use longer intervals to reduce API calls)
+        if current_time - self.last_update < timedelta(minutes=30):  # Extend to 30 minutes
+            return
+        
+        # Skip updates during weekends when markets are closed
+        if current_time.weekday() >= 5:  # 5=Saturday, 6=Sunday
+            self.logger.info("Skipping stock updates during weekend")
             return
         
         try:
             if not hasattr(self, 'logger'):
                 self.logger = logging.getLogger('stocks_module')
             
-            # Check if we've already been rate-limited recently
+            # Check if we've been rate-limited recently (wait longer)
             if hasattr(self, 'rate_limited') and self.rate_limited:
                 time_since_rate_limit = time.time() - self.rate_limited_time
-                if time_since_rate_limit < 3600:  # Wait an hour after being rate limited
-                    self.logger.warning(f"Skipping Yahoo Finance API due to rate limiting (retry in {3600-time_since_rate_limit:.0f}s)")
+                if time_since_rate_limit < 3600 * 6:  # Wait 6 hours after being rate limited
+                    self.logger.warning(f"Skipping Yahoo Finance due to rate limits (retry in {(3600*6-time_since_rate_limit)/60:.0f}m)")
                     return
             
-            # Only test the connection once per day to avoid extra API calls
-            day_now = datetime.now().day
-            if not hasattr(self, 'last_test_day') or self.last_test_day != day_now:
-                self.logger.info("Testing Yahoo Finance API connection...")
-                self.last_test_day = day_now
-                try:
-                    # Use a bare minimum API call
-                    test_ticker_obj = yf.Ticker("AAPL")
-                    test_info = test_ticker_obj.fast_info
-                    if test_info:
-                        self.logger.info("✓ Yahoo Finance API working")
-                        self.rate_limited = False
-                except Exception as e:
-                    if "429" in str(e) or "Too Many Requests" in str(e):
-                        self.logger.warning("⚠ Yahoo Finance API rate limited")
-                        self.rate_limited = True
-                        self.rate_limited_time = time.time()
-                        return
-                    self.logger.error(f"✗ Yahoo Finance API test failed: {e}")
+            # Only test connection once, not for each ticker
+            try:
+                import socket
+                socket.create_connection(("yahoo.com", 443), timeout=5)
+                self.logger.info("✓ Network connectivity confirmed")
+            except Exception as e:
+                self.logger.warning(f"⚠ Network issue: {e}")
+                return
             
-            # Update tickers if we're not rate limited
-            if not getattr(self, 'rate_limited', False):
-                for ticker in self.tickers:
-                    self.update_ticker(ticker)
-                    time.sleep(0.5)  # Add delay between requests to avoid rate limits
-                
+            # Update all tickers with batch fetching
+            self.update_tickers_batch()
+            
             self.last_update = current_time
             self.logger.info("Stock data update complete")
             
         except Exception as e:
             self.logger.error(f"Error updating stock data: {e}")
 
-    def update_ticker(self, ticker):
-        """Process a single ticker with improved diagnostics"""
+    def update_tickers_batch(self):
+        """Update all tickers with minimal API calls"""
         try:
-            # Log network connectivity check
-            try:
-                import socket
-                socket.create_connection(("yahoo.com", 443), timeout=5)
-                self.logger.info("✓ Network connectivity to Yahoo confirmed")
-            except Exception as e:
-                self.logger.warning(f"⚠ Network connectivity issue: {e}")
+            # Attempt to use a single API call with multiple tickers
+            tickers_str = " ".join(self.tickers)
+            batch = yf.Tickers(tickers_str)
             
-            # Try a longer timeframe which is more reliable
-            stock = yf.Ticker(ticker)
-            
-            # First try getting basic info which is often cached
-            try:
-                info = stock.info
-                if 'regularMarketPrice' in info:
-                    price = info['regularMarketPrice']
-                    self.logger.info(f"✓ Got basic price for {ticker}: ${price}")
-                    
-                    # Calculate percent change if we have previous close
-                    percent_change = 0.0
-                    if 'regularMarketPreviousClose' in info:
-                        prev = info['regularMarketPreviousClose']
-                        percent_change = ((price - prev) / prev) * 100
-                    
-                    self.stock_data[ticker] = {
-                        'price': price,
-                        'percent_change': percent_change,
-                        'volume': info.get('regularMarketVolume', 0),
-                        'day_range': f"{info.get('regularMarketDayLow', price):.2f} - {info.get('regularMarketDayHigh', price):.2f}"
-                    }
-                    return
-            except Exception as e:
-                self.logger.debug(f"Info method failed for {ticker}: {e}")
-            
-            # Fall back to history method with longer periods
-            for period in ["5d", "1mo", "3mo"]:
+            # Check if we're already being rate limited
+            for ticker in self.tickers[:1]:  # Just check one ticker to minimize requests
                 try:
-                    data = stock.history(period=period)
-                    if not data.empty:
-                        # Process data as before
-                        # ...
-                        return
+                    single = batch.tickers[ticker]
+                    info = single.fast_info
+                    if info is None or (hasattr(info, 'regular_market_price') and info.regular_market_price is None):
+                        raise Exception("No data available")
                 except Exception as e:
-                    self.logger.debug(f"History method with {period} failed: {e}")
+                    if "429" in str(e) or "Too Many Requests" in str(e):
+                        self.logger.warning("⚠ Yahoo Finance API rate limited")
+                        self.rate_limited = True
+                        self.rate_limited_time = time.time()
+                        return
+            
+            # Process each ticker but limit the API calls
+            for ticker in self.tickers:
+                try:
+                    # Use the ticker from the batch to minimize requests
+                    stock = batch.tickers[ticker]
+                    
+                    # Try getting price from fast_info first (less likely to be rate limited)
+                    try:
+                        info = stock.fast_info
+                        if hasattr(info, 'regular_market_price') and info.regular_market_price is not None:
+                            price = info.regular_market_price
+                            prev_close = info.previous_close if hasattr(info, 'previous_close') else price
+                            percent_change = ((price - prev_close) / prev_close) * 100 if prev_close != 0 else 0.0
+                            
+                            self.stock_data[ticker] = {
+                                'price': price,
+                                'percent_change': percent_change,
+                                'volume': getattr(info, 'regular_market_volume', 0),
+                                'day_range': f"{getattr(info, 'day_low', price):.2f} - {getattr(info, 'day_high', price):.2f}"
+                            }
+                            continue  # Skip to next ticker if successful
+                    except Exception as e:
+                        self.logger.debug(f"Fast info failed for {ticker}: {e}")
+                    
+                    # If we get here, we couldn't get data for this ticker
+                    self.logger.warning(f"⚠ Could not get data for {ticker}")
+                    self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
+                    
+                except Exception as e:
+                    self.logger.error(f"✗ Error fetching {ticker}: {str(e)}")
+                    self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
                 
-            # All attempts failed
-            self.logger.warning(f"⚠ Could not get any data for {ticker}")
-            self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
+                # Add delay between processing each ticker
+                time.sleep(1.0)  # Longer delay to avoid rate limits
             
         except Exception as e:
-            self.logger.error(f"✗ Complete failure for {ticker}: {str(e)}")
-            self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
+            self.logger.error(f"Batch update failed: {e}")
 
     def draw(self, screen, position):
         """Draw stock data with proper handling of unavailable data"""
