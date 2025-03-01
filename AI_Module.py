@@ -436,11 +436,17 @@ class AIInteractionModule:
             screen.blit(message_text, (position[0], position[1] + 40))
 
     def cleanup(self):
-        self.running = False  # Stop the hotword detection loop
-        if self.processing_thread and self.processing_thread.is_alive():
+        """Safely clean up resources even when audio is disabled"""
+        # Stop any running threads
+        self.running = False
+        
+        # Only try to join threads that exist
+        if hasattr(self, 'processing_thread') and self.processing_thread and self.processing_thread.is_alive():
             self.processing = False
             self.processing_thread.join(timeout=1.0)
-        if hasattr(self, 'button'):
+        
+        # Only clean up button if it exists and has a cleanup method
+        if hasattr(self, 'button') and hasattr(self.button, 'cleanup'):
             self.button.cleanup()
 
     def hotword_detection_loop(self):

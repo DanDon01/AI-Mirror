@@ -58,56 +58,56 @@ class StocksModule:
         self.alert_bg_color = (60, 20, 20, 200)  # Reddish for alerts
 
     def update(self):
-        """Fixed update method with timezone-aware datetime handling"""
-        # Use timezone-aware current_time to match self.last_update
+        """Update stock data with rate limiting protection"""
+        # Use timezone-aware current_time
         current_time = datetime.now(timezone('UTC'))
         
-        # Check if we need to update - use total_seconds() to safely compare
+        # Check if we need to update
         if current_time - self.last_update < self.update_interval:
             return
         
         try:
-            # Initialize logger if it doesn't exist
             if not hasattr(self, 'logger'):
                 self.logger = logging.getLogger('stocks_module')
             
-            self.logger.info("Testing Yahoo Finance API connection...")
+            # Check if we've already been rate-limited recently
+            if hasattr(self, 'rate_limited') and self.rate_limited:
+                time_since_rate_limit = time.time() - self.rate_limited_time
+                if time_since_rate_limit < 3600:  # Wait an hour after being rate limited
+                    self.logger.warning(f"Skipping Yahoo Finance API due to rate limiting (retry in {3600-time_since_rate_limit:.0f}s)")
+                    return
             
-            # Test with a known reliable stock
-            test_ticker = "AAPL"
-            try:
-                test_ticker_obj = yf.Ticker(test_ticker)
-                test_info = test_ticker_obj.info
+            # Only test the connection once per day to avoid extra API calls
+            day_now = datetime.now().day
+            if not hasattr(self, 'last_test_day') or self.last_test_day != day_now:
+                self.logger.info("Testing Yahoo Finance API connection...")
+                self.last_test_day = day_now
+                try:
+                    # Use a bare minimum API call
+                    test_ticker_obj = yf.Ticker("AAPL")
+                    test_info = test_ticker_obj.fast_info
+                    if test_info:
+                        self.logger.info("✓ Yahoo Finance API working")
+                        self.rate_limited = False
+                except Exception as e:
+                    if "429" in str(e) or "Too Many Requests" in str(e):
+                        self.logger.warning("⚠ Yahoo Finance API rate limited")
+                        self.rate_limited = True
+                        self.rate_limited_time = time.time()
+                        return
+                    self.logger.error(f"✗ Yahoo Finance API test failed: {e}")
+            
+            # Update tickers if we're not rate limited
+            if not getattr(self, 'rate_limited', False):
+                for ticker in self.tickers:
+                    self.update_ticker(ticker)
+                    time.sleep(0.5)  # Add delay between requests to avoid rate limits
                 
-                if test_info and ('regularMarketPrice' in test_info or 'currentPrice' in test_info):
-                    self.logger.info("✓ Yahoo Finance API appears to be working")
-                else:
-                    self.logger.warning("⚠ Yahoo Finance API test returned incomplete data")
-            except Exception as e:
-                self.logger.error(f"✗ Yahoo Finance API test failed: {e}")
-            
-            # Fix missing method - use existing is_market_open instead
-            us_market_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
-            uk_market_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
-            
-            if not (us_market_open or uk_market_open):
-                self.logger.info("All markets are closed, fetching last available data")
-            
-            # Proceed with update for each ticker
-            for ticker in self.tickers:
-                market = 'UK' if ticker.endswith('.L') else 'US'
-                self.logger.info(f"Fetching data for {ticker} ({market} market)...")
-                
-                # Call the previous implementation which is more robust
-                self.update_ticker(ticker)
-            
             self.last_update = current_time
-            self.logger.info("Stock data updated successfully")
+            self.logger.info("Stock data update complete")
+            
         except Exception as e:
-            if not hasattr(self, 'logger'):
-                logging.error(f"Error updating stocks: {e}")
-            else:
-                self.logger.error(f"Error updating stocks: {e}")
+            self.logger.error(f"Error updating stock data: {e}")
 
     def update_ticker(self, ticker):
         """Process a single ticker without fallback data"""

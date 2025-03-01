@@ -107,10 +107,22 @@ class MockPyAudio:
     class PyAudio:
         def __init__(self): 
             print("MOCK: Safe PyAudio initialized")
+            
+        def get_device_count(self):
+            return 3  # Pretend we have 3 devices
+            
         def get_host_api_info_by_index(self, index): 
-            return {"deviceCount": 0}
+            return {"deviceCount": 3}
+            
         def get_device_info_by_index(self, index): 
+            if index == 2:  # Our USB microphone
+                return {
+                    "name": "Mock USB PnP Sound Device", 
+                    "maxInputChannels": 2,
+                    "defaultSampleRate": 44100
+                }
             return {"name": "Mock Device", "maxInputChannels": 0}
+            
         def terminate(self): 
             pass
 
