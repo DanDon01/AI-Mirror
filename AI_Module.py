@@ -38,8 +38,14 @@ class Button:
 
 class AIInteractionModule:
     def __init__(self, config):
-        # Initialize logging
-        self.logger = logging.getLogger(__name__)
+        # Initialize logging first thing
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+        )
+        self.logger = logging.getLogger("AI_Module")
+        self.logger.info("Initializing AI Interaction Module")
+        
         self.config = config
         
         # Get configuration from CONFIG object
@@ -179,6 +185,9 @@ class AIInteractionModule:
         # Initialize pygame mixer
         if not pygame.mixer.get_init():
             pygame.mixer.init()
+        
+        # Add the running attribute
+        self.running = True
         
         # These should be the last lines of __init__
         self.set_status("Idle", "Press button to speak")
@@ -415,6 +424,7 @@ class AIInteractionModule:
             screen.blit(message_text, (position[0], position[1] + 40))
 
     def cleanup(self):
+        self.running = False  # Stop the hotword detection loop
         if self.processing_thread and self.processing_thread.is_alive():
             self.processing = False
             self.processing_thread.join(timeout=1.0)
