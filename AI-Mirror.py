@@ -249,6 +249,19 @@ class MagicMirror:
                     except Exception as e:
                         logging.error(f"Error drawing module {module_name}: {str(e)}")
             
+            if hasattr(self, 'debug_layout') and getattr(self, 'debug_layout', False):
+                for name, module in self.modules.items():
+                    try:
+                        pos = self.layout_manager.get_module_position(name)
+                        if isinstance(pos, dict) and 'x' in pos and 'y' in pos:
+                            pygame.draw.rect(self.screen, (255, 0, 0), 
+                                            (pos['x'], pos['y'], 200, 100), 2)
+                            font = pygame.font.Font(None, 24)
+                            text = font.render(name, True, (255, 0, 0))
+                            self.screen.blit(text, (pos['x'], pos['y']))
+                    except Exception as e:
+                        logging.error(f"Error in debug overlay for {name}: {e}")
+            
             pygame.display.flip()
         except Exception as e:
             logging.error(f"Error in draw_modules: {e}")
