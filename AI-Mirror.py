@@ -29,7 +29,7 @@ sys.stderr = EnhancedFilteredStderr()
 
 # Completely silence audio errors
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-os.environ['ALSA_CARD'] = "3"
+os.environ['ALSA_CARD'] = '2'  # Use card 2 (USB PnP Sound Device)
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 # More aggressive environment settings to reduce errors
@@ -99,6 +99,23 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # After importing all audio libraries, restore stderr for normal logging
 import sys
 sys.stderr = sys.__stderr__
+
+# Mock problematic audio libraries before they're imported
+import sys
+
+class MockPyAudio:
+    class PyAudio:
+        def __init__(self): 
+            print("MOCK: Safe PyAudio initialized")
+        def get_host_api_info_by_index(self, index): 
+            return {"deviceCount": 0}
+        def get_device_info_by_index(self, index): 
+            return {"name": "Mock Device", "maxInputChannels": 0}
+        def terminate(self): 
+            pass
+
+# Replace PyAudio with our mock before anything imports it
+sys.modules['pyaudio'] = MockPyAudio
 
 def ensure_valid_color(color):
     """Ensure a color value is valid for pygame"""

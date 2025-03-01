@@ -502,7 +502,7 @@ class AIInteractionModule:
                 time.sleep(0.5)
 
     def initialize_audio_system(self):
-        """Safe PyAudio initialization that avoids device enumeration crashes"""
+        """Initialize audio with correct device index for Raspberry Pi"""
         self.has_audio = False
         
         try:
@@ -514,14 +514,17 @@ class AIInteractionModule:
             self.recognizer.energy_threshold = 500
             self.recognizer.dynamic_energy_threshold = True
             
-            # Simply create a microphone with default device
-            # This avoids the dangerous device enumeration
+            # Use EXACT device index from arecord -l
+            # Card 2: USB PnP Sound Device is our microphone
+            self.mic_index = 2  # This matches your system's USB microphone
+            
+            # Safely initialize microphone with specific device
             try:
-                self.microphone = sr.Microphone(device_index=None)
+                self.microphone = sr.Microphone(device_index=self.mic_index)
                 self.has_audio = True
-                self.logger.info("Audio initialized with default microphone")
+                self.logger.info(f"Audio initialized with USB PnP Sound Device (card {self.mic_index})")
             except Exception as e:
-                self.logger.error(f"Could not initialize microphone: {e}")
+                self.logger.error(f"Could not initialize microphone with index {self.mic_index}: {e}")
                 self.has_audio = False
             
         except Exception as e:
