@@ -3,16 +3,17 @@
 #  It also handles toggling between active, screensaver, and sleep states, and toggling debug mode on/off
 #  The main loop runs until the user closes the application
 
-# Silence all audio subsystem errors
+# Block JACK server completely
 import os
 import sys
-import ctypes
-from ctypes import util
 
 # Set environment variables to disable problematic audio components
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"  
 os.environ['ALSA_CARD'] = "3"  # Force ALSA to use card 3 (your USB device)
 os.environ['PA_ALSA_PLUGHW'] = "1"  # Force PortAudio to use hw devices
+os.environ['NOPORT'] = '1'  # Tell PortAudio to skip JACK
+os.environ['AUDIODEV'] = 'null'  # Use null audio device if no others work
+os.environ['AUDIODRIVER'] = 'alsa'  # Force ALSA as audio driver
 
 # Completely suppress ALSA errors by loading libasound with custom error handler
 try:
@@ -31,22 +32,16 @@ try:
 except:
     pass  # If this fails, we'll try other methods
 
-# Redirect stderr during problematic imports
-_stderr = sys.stderr
-null_fh = open(os.devnull, 'w')
-sys.stderr = null_fh
+# Redirect standard error output to /dev/null for the entire program
+sys.stderr = open(os.devnull, 'w')
 
-# Import problematic audio libraries here
-try:
-    import pygame
-    import pyaudio
-    import speech_recognition
-except ImportError:
-    pass
+# Now import the problematic libraries
+import pygame
+import pyaudio
+import speech_recognition
 
 # Restore stderr
-sys.stderr = _stderr
-null_fh.close()
+sys.stderr = open(os.devnull, 'w')
 
 # Import the problematic libraries
 import logging
@@ -69,6 +64,21 @@ from layout_manager import LayoutManager
 
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+# After importing all audio libraries, restore stderr for normal logging
+import sys
+sys.stderr = sys.__stderr__
+
+# Set up a null handler for ALSA messages
+class NullHandler:
+    def write(self, s):
+        if not any(x in s for x in ["ALSA", "jack server"]):
+            sys.__stderr__.write(s)
+    def flush(self):
+        sys.__stderr__.flush()
+
+# Replace stderr with our custom handler
+sys.stderr = NullHandler()
 
 class SpeechLogger:
     def __init__(self):

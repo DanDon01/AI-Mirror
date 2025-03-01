@@ -18,6 +18,7 @@ import json
 import websockets  # New import for websocket connections
 from typing import Iterator
 import subprocess
+import pyaudio
 
 DEFAULT_MODEL = "gpt-4-1106-preview"
 DEFAULT_MAX_TOKENS = 250
@@ -488,131 +489,30 @@ class AIInteractionModule:
 
     def initialize_audio_system(self):
         """Safely initialize the audio system with fallbacks"""
-        # First, set default state
         self.has_audio = False
         
-        # Configure ALSA to use the USB audio device
         try:
-            import subprocess
-            # Get available audio devices
-            self.logger.info("Checking audio devices:")
-            result = subprocess.run(['aplay', '-l'], capture_output=True, text=True)
-            self.logger.info(result.stdout)
+            # Set explicit device indices to avoid defaulting errors
+            device_index = None
+            for i in range(pyaudio.PyAudio().get_device_count()):
+                device_info = pyaudio.PyAudio().get_device_info_by_index(i)
+                self.logger.info(f"Device {i}: {device_info['name']}")
+                # Look for a working input device
+                if device_info['maxInputChannels'] > 0:
+                    device_index = i
+                    self.logger.info(f"Using input device: {device_info['name']}")
+                    break
             
-            # Test audio output directly using aplay
-            self.logger.info("Testing USB audio with ALSA directly...")
-            test_file = "/usr/share/sounds/alsa/Front_Center.wav"
-            
-            # Check if test file exists
-            if os.path.exists(test_file):
-                # Set maximum volume for card 3
-                subprocess.run(['amixer', '-c', '3', 'set', 'Speaker', '100%'], 
-                               capture_output=True, text=True)
-                self.logger.info("Set USB speaker volume to 100%")
-                
-                # Play test sound directly to USB device
-                subprocess.run(['aplay', '-D', 'hw:3,0', test_file], 
-                               capture_output=True, text=True)
-                self.logger.info("Played test sound directly to USB device")
-            else:
-                self.logger.error(f"Test sound file not found at {test_file}")
-            
-            # Create a simpler .asoundrc file
-            with open(os.path.expanduser('~/.asoundrc'), 'w') as f:
-                f.write('''
-pcm.!default {
-    type hw
-    card 3
-}
-
-ctl.!default {
-    type hw
-    card 3
-}
-''')
-            self.logger.info("Created simplified ALSA configuration")
-            
-        except Exception as e:
-            self.logger.error(f"Error configuring ALSA: {e}")
-        
-        # Try to initialize microphone
-        try:
-            import pyaudio
-            self.logger.info("Initializing audio with safe defaults...")
-            
-            # Initialize recognizer with very conservative settings
-            self.recognizer = sr.Recognizer()
-            self.recognizer.energy_threshold = 500
-            self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.pause_threshold = 1.0
-            
-            # Use the default microphone
-            try:
-                self.microphone = sr.Microphone(sample_rate=16000, chunk_size=1024)
-                
-                with self.microphone as source:
-                    self.logger.info("Testing microphone...")
-                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                    self.has_audio = True
-                    self.logger.info("Audio input initialized successfully")
-                    
-            except Exception as e:
-                self.logger.error(f"Error initializing microphone: {str(e)}")
-                self.has_audio = False
+            # Initialize with explicit device selection
+            self.microphone = sr.Microphone(device_index=device_index)
+            with self.microphone as source:
+                self.recognizer = sr.Recognizer()
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                self.has_audio = True
                 
         except Exception as e:
-            self.logger.error(f"Error in audio initialization: {str(e)}")
+            self.logger.error(f"Audio initialization error: {e}")
             self.has_audio = False
-        
-        # Initialize pygame mixer with higher volume
-        try:
-            if pygame.mixer.get_init():
-                pygame.mixer.quit()
-            
-            # Initialize with more compatible settings
-            pygame.mixer.init(frequency=44100, size=-16, channels=1, buffer=2048)
-            pygame.mixer.set_num_channels(8)
-            
-            # Fix sound file paths and load sound effects
-            sound_paths = [
-                # Try different common paths
-                '/home/dan/Projects/ai_mirror/assets/sound_effects/mirror_listening.mp3',
-                '/home/Dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3',
-                '/home/dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3',
-                # Add absolute path based on current file
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                             '..', 'assets', 'sound_effects', 'mirror_listening.mp3')
-            ]
-            
-            sound_loaded = False
-            for path in sound_paths:
-                if os.path.exists(path):
-                    self.logger.info(f"Found sound file at: {path}")
-                    try:
-                        self.sound_effects['mirror_listening'] = pygame.mixer.Sound(path)
-                        # Set maximum volume
-                        self.sound_effects['mirror_listening'].set_volume(1.0)
-                        sound_loaded = True
-                        self.logger.info(f"Loaded sound file with max volume")
-                        break
-                    except Exception as e:
-                        self.logger.error(f"Error loading sound from {path}: {e}")
-            
-            if not sound_loaded:
-                self.logger.error("Could not find mirror_listening.mp3 in any expected location")
-                # Create a simple tone as fallback
-                self.create_fallback_sound()
-            
-            # Test audio output
-            self.logger.info("Testing audio output with pygame...")
-            if 'mirror_listening' in self.sound_effects:
-                # Play at maximum volume
-                self.sound_effects['mirror_listening'].set_volume(1.0)
-                self.sound_effects['mirror_listening'].play()
-                self.logger.info("Played sound with max volume")
-                
-        except Exception as e:
-            self.logger.error(f"Error initializing audio output: {e}")
 
     def create_fallback_sound(self):
         """Create a simple beep sound as fallback"""
