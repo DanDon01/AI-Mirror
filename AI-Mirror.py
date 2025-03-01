@@ -7,11 +7,28 @@
 import os
 import sys
 
+# Silence ALSA and JACK forever
+os.environ['NOPORT'] = '1' 
+os.environ['JACK_NO_START_SERVER'] = '1'
+os.environ['JACK_NO_AUDIO_RESERVATION'] = '1'
+
+# Redirect stderr to /dev/null
+os.dup2(os.open(os.devnull, os.O_WRONLY), 2)
+
+# Make sure Python logging still works by setting up a basic logger
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)  # Log to stdout instead of stderr
+    ]
+)
+
 # Set environment variables to disable problematic audio components
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"  
 os.environ['ALSA_CARD'] = "3"  # Force ALSA to use card 3 (your USB device)
 os.environ['PA_ALSA_PLUGHW'] = "1"  # Force PortAudio to use hw devices
-os.environ['NOPORT'] = '1'  # Tell PortAudio to skip JACK
 os.environ['AUDIODEV'] = 'null'  # Use null audio device if no others work
 os.environ['AUDIODRIVER'] = 'alsa'  # Force ALSA as audio driver
 
@@ -32,16 +49,10 @@ try:
 except:
     pass  # If this fails, we'll try other methods
 
-# Redirect standard error output to /dev/null for the entire program
-sys.stderr = open(os.devnull, 'w')
-
 # Now import the problematic libraries
 import pygame
 import pyaudio
 import speech_recognition
-
-# Restore stderr
-sys.stderr = open(os.devnull, 'w')
 
 # Import the problematic libraries
 import logging
@@ -68,14 +79,6 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # After importing all audio libraries, restore stderr for normal logging
 import sys
 sys.stderr = sys.__stderr__
-
-# Set up a null handler for ALSA messages
-class NullHandler:
-    def write(self, s):
-        if not any(x in s for x in ["ALSA", "jack server"]):
-            sys.__stderr__.write(s)
-    def flush(self):
-        sys.__stderr__.flush()
 
 # Replace stderr with our custom handler
 sys.stderr = NullHandler()
@@ -113,6 +116,22 @@ class SpeechLogger:
     def log_ai_response(self, text):
         """Log what the AI responded"""
         self.speech_logger.info(f"AI: {text}")
+
+def silence_stderr_for_audio():
+    """Silence audio-related errors forever"""
+    # Create a file descriptor to /dev/null
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    # Replace stderr with /dev/null completely
+    os.dup2(devnull, 2)
+    os.close(devnull)
+    # Now stderr is permanently redirected to /dev/null
+
+# Call this before any imports 
+silence_stderr_for_audio()
+
+# Continue with your imports
+import pygame
+import logging
 
 class MagicMirror:
     def __init__(self):
