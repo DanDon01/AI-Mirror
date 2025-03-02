@@ -197,15 +197,18 @@ class MagicMirror:
         self.module_manager.initialize_modules = lambda: None  # Do nothing
         self.module_manager.initialize_module = lambda x: None  # Do nothing
         
+        # Flag to track if positions have been set up
+        self._positions_initialized = False
+        
         # Initialize layout manager for proper module positioning
         self.layout_manager = LayoutManager(self.screen.get_width(), self.screen.get_height())
         
-        # Initialize module positions using the layout manager
-        self.module_positions = {}
-        self.setup_module_positions()
-        
         # Debug layout flag
         self.debug_layout = CONFIG.get('debug', {}).get('show_layout', False)
+        
+        # Initialize module positions only once
+        self.module_positions = {}
+        self.setup_module_positions()
         
         # Initialize module visibility with all modules
         for module_name in self.modules.keys():
@@ -548,7 +551,12 @@ class MagicMirror:
         # based on the current state and the screensaver_modules/sleep_modules settings
 
     def setup_module_positions(self):
-        """Initialize the positions of each module using the layout manager"""
+        """Set up module positions based on the layout from config"""
+        # Skip if we've already set up positions
+        if hasattr(self, '_positions_initialized') and self._positions_initialized:
+            logging.info("Module positions already initialized, skipping")
+            return
+        
         try:
             # Use layout manager to get positions for each module
             for name in self.modules.keys():
@@ -586,6 +594,9 @@ class MagicMirror:
                         idx = missing_positions.index(name)
                         self.module_positions[name] = {'x': 10, 'y': 10 + idx*100, 'width': 300, 'height': 90}
                         logging.info(f"Using generic position for {name}")
+        
+            # Mark positions as initialized
+            self._positions_initialized = True
         
         except Exception as e:
             logging.error(f"Error setting up module positions: {e}")
