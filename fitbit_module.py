@@ -376,7 +376,7 @@ class FitbitModule:
             # Heart rate
             if 'resting_heart_rate' in self.data and self.data['resting_heart_rate'] != 'N/A':
                 hr_label = self.body_font.render("Resting HR:", True, label_color)
-                hr_value = self.body_font.render(f"{self.data['resting_heart_rate']} bpm", True, value_color)
+                hr_value = self.body_font.render(f"{str(self.data['resting_heart_rate'])} bpm", True, value_color)
                 screen.blit(hr_label, (x + padding, current_y))
                 screen.blit(hr_value, (x + padding + hr_label.get_width() + 5, current_y))
                 current_y += line_height
@@ -392,7 +392,7 @@ class FitbitModule:
             # Active minutes
             if 'active_minutes' in self.data:
                 active_label = self.body_font.render("Active:", True, label_color)
-                active_value = self.body_font.render(f"{self.data['active_minutes']} min", True, value_color)
+                active_value = self.body_font.render(f"{str(self.data['active_minutes'])} min", True, value_color)
                 screen.blit(active_label, (x + padding, current_y))
                 screen.blit(active_value, (x + padding + active_label.get_width() + 5, current_y))
                 current_y += line_height
@@ -400,7 +400,7 @@ class FitbitModule:
             # Calories
             if 'calories' in self.data and self.data['calories'] != 'N/A':
                 cal_label = self.body_font.render("Calories:", True, label_color)
-                cal_value = self.body_font.render(self.data['calories'], True, value_color)
+                cal_value = self.body_font.render(str(self.data['calories']), True, value_color)
                 screen.blit(cal_label, (x + padding, current_y))
                 screen.blit(cal_value, (x + padding + cal_label.get_width() + 5, current_y))
             

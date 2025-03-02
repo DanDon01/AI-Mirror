@@ -14,7 +14,6 @@
   - Local weather updates and forecasts
   - Fitbit health data integration
   - Stock market ticker with visual alerts
-  - Package delivery tracking
   
 - 🤖 **Advanced AI Integration**
   - Dual AI system with OpenAI GPT-4 and Realtime API
