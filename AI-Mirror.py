@@ -180,14 +180,16 @@ class MagicMirror:
         logging.info("Initializing MagicMirror")
         self.initialize_screen()
         self.clock = pygame.time.Clock()
-        self.modules = self.initialize_modules()
-        self.frame_rate = CONFIG.get('frame_rate', 30)
-        self.running = True
-        self.state = "active"
-        self.font = pygame.font.Font(None, 48)
         
-        # Create module manager to handle visibility and other module controls
+        # Initialize modules first
+        self.modules = self.initialize_modules()
+        
+        # Create module manager with EXPLICIT flag to use initialized modules
         self.module_manager = ModuleManager(initialized_modules=self.modules)
+        
+        # Override any methods in module_manager that might reinitialize
+        self.module_manager.initialize_modules = lambda: None  # Do nothing
+        self.module_manager.initialize_module = lambda x: None  # Do nothing
         
         # Initialize layout manager for proper module positioning
         self.layout_manager = LayoutManager(self.screen.get_width(), self.screen.get_height())

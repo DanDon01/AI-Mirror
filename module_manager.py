@@ -6,21 +6,17 @@ class ModuleManager:
     def __init__(self, initialized_modules=None):
         self.module_visibility = CONFIG.get('module_visibility', {})
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"ModuleManager initialized with visibility states: {self.module_visibility}")
         
-        # Fix: store modules with the correct attribute name that the class uses
-        self.modules = initialized_modules or {}
-        
-        # The initialize_modules method is trying to access self.modules and self.enabled_modules
-        # Let's fix that
-        if not initialized_modules:
+        if initialized_modules:
+            # Use pre-initialized modules - COMPLETELY SKIP initialization code
+            self.modules = initialized_modules
+            self.enabled_modules = list(initialized_modules.keys())
+            self.logger.info("Using pre-initialized modules only.")
+        else:
             # Only initialize if no modules were provided
+            self.modules = {}
             self.enabled_modules = CONFIG.get('enabled_modules', [])
             self.initialize_modules()
-        else:
-            # Skip initialization completely if modules were already provided
-            self.enabled_modules = list(initialized_modules.keys())
-            self.logger.info("Using pre-initialized modules, skipping module initialization")
 
     def handle_command(self, command):
         """Handle show/hide commands for modules"""
