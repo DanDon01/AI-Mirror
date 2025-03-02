@@ -429,7 +429,7 @@ class AIInteractionModule:
         self.hotword_thread.start()
 
     def hotword_detection_loop(self):
-        """A safer implementation of hotword detection"""
+        """A safer implementation of hotword detection with proper microphone handling"""
         self.logger.info("Hotword detection loop started")
         
         while self.running:
@@ -439,52 +439,71 @@ class AIInteractionModule:
                 continue
             
             # Skip if audio isn't available
-            if not self.has_audio or not hasattr(self, 'microphone'):
+            if not self.has_audio or not hasattr(self, 'microphone') or self.microphone is None:
                 time.sleep(1)
                 continue
             
-            # Create a new recognizer instance each time to avoid stale references
             try:
-                # ALWAYS use the microphone in a with statement
+                # Create a fresh recognizer each time to avoid stale state
+                if not hasattr(self, 'recognizer') or self.recognizer is None:
+                    self.recognizer = sr.Recognizer()
+                    
+                # CRITICAL: Use proper context management with microphone
+                # This is the key fix for the "Audio source must be entered before adjusting" error
                 with self.microphone as source:
                     try:
-                        # Inside the with block, adjust for ambient noise
+                        # Adjust for ambient noise inside the with block
                         self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                         
-                        # Try to listen with a short timeout
+                        # Listen with short timeout to not block too long
                         audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=3)
                         
-                        # Try to recognize text
-                        text = self.recognizer.recognize_google(audio).lower()
-                        self.logger.info(f"Heard: {text}")
-                        
-                        # Check for hotword
-                        if "mirror" in text:
-                            self.logger.info(f"Hotword detected: {text}")
-                            self.on_button_press()
-                            time.sleep(2)  # Prevent immediate re-triggering
-                            
-                    except sr.UnknownValueError:
-                        # Normal behavior - nothing was recognized
-                        pass
-                    except sr.RequestError as e:
-                        # Google API issue 
-                        self.logger.warning(f"Google API error: {e}")
-                        time.sleep(1)
+                        # Only continue if we got audio data
+                        if audio:
+                            try:
+                                # Convert to text
+                                text = self.recognizer.recognize_google(audio).lower()
+                                self.logger.debug(f"Heard: {text}")
+                                
+                                # Check for hotword
+                                if "mirror" in text:
+                                    self.logger.info(f"Hotword detected: {text}")
+                                    self.on_button_press()
+                                    time.sleep(2)  # Prevent re-triggering
+                            except sr.UnknownValueError:
+                                # No speech detected - perfectly normal
+                                pass
+                            except sr.RequestError as e:
+                                # Google API issue
+                                self.logger.warning(f"Google API error: {e}")
+                                time.sleep(1)
+                    
                     except Exception as e:
-                        # Other errors during listening
+                        # Issues during listening inside the with block
                         if "timed out" in str(e).lower():
-                            # Normal timeout
+                            # This is normal - just means no speech was detected within timeout
                             pass
                         else:
                             self.logger.warning(f"Listen error: {e}")
-                            
-            except Exception as e:
-                # Error with microphone context
-                self.logger.warning(f"Microphone context error: {e}")
-                time.sleep(1)
+                            time.sleep(0.1)
             
-            # Brief pause before next detection attempt
+            except Exception as e:
+                # Issues with the microphone context itself
+                self.logger.warning(f"Microphone context error: {e}")
+                
+                # If we're getting NoneType errors, the microphone might need reinitialization
+                if "NoneType" in str(e):
+                    try:
+                        self.logger.info("Attempting to reinitialize microphone...")
+                        self.reinitialize_microphone()
+                        time.sleep(1)  # Wait a bit after reinitialization
+                    except Exception as reinit_error:
+                        self.logger.error(f"Failed to reinitialize microphone: {reinit_error}")
+                        time.sleep(5)  # Back off longer on reinit failure
+                else:
+                    time.sleep(1)  # Standard backoff for other errors
+            
+            # Brief pause before next attempt
             time.sleep(0.1)
 
     def initialize_audio_system(self):
@@ -940,3 +959,31 @@ class AIInteractionModule:
             os.remove(temp_file)
         except Exception as e:
             self.logger.error(f"Error in TTS: {e}")
+
+    def reinitialize_microphone(self):
+        """Reinitialize the microphone if it has failed"""
+        try:
+            # Clear any existing microphone
+            self.microphone = None
+            
+            # Reset the recognizer
+            self.recognizer = sr.Recognizer()
+            
+            # Get the device index from config or use default
+            device_idx = self.config.get('audio', {}).get('device_index', None)
+            
+            # Create a new microphone instance
+            print(f"MIRROR DEBUG: Reinitializing microphone with index {device_idx}")
+            self.microphone = sr.Microphone(device_index=device_idx)
+            
+            # Log success
+            self.logger.info(f"Microphone reinitialized with index {device_idx}")
+            print(f"MIRROR DEBUG: ✅ Microphone reinitialized")
+            
+            # Ensure we have audio capability
+            self.has_audio = True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to reinitialize microphone: {e}")
+            print(f"MIRROR DEBUG: ❌ Microphone reinitialization failed: {e}")
+            self.has_audio = False
