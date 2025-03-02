@@ -342,60 +342,35 @@ class MagicMirror:
         logging.info(f"Mirror state changed to: {self.state}")
 
     def draw_modules(self):
+        """Draw all visible modules"""
         try:
-            self.screen.fill((0, 0, 0))  # Black background
+            # Clear screen with background color
+            self.screen.fill(self.background_color)
             
-            # Draw only modules appropriate for the current state
-            for module_name, module in self.modules.items():
-                # First check if module should be visible in current state
-                visible_in_state = True
-                
-                # Apply state-specific visibility rules
-                if self.state == "screensaver" and module_name not in CONFIG.get('screensaver_modules', ['retro_characters']):
-                    visible_in_state = False
-                elif self.state == "sleep" and module_name not in CONFIG.get('sleep_modules', ['clock']):
-                    visible_in_state = False
-                    
-                # Module must be both enabled AND appropriate for the current state
-                if visible_in_state and self.module_manager.is_module_visible(module_name):
-                    try:
-                        position = self.layout_manager.get_module_position(module_name)
-                        if position:
-                            # Fix: ensure position is correctly formatted
-                            if isinstance(position, dict) and 'x' in position and 'y' in position:
-                                pos_tuple = (position['x'], position['y'])
-                            else:
-                                pos_tuple = position
-                            
-                            self.debug_log(f"Drawing {module_name} in state {self.state}")
-                            module.draw(self.screen, pos_tuple)
-                        else:
-                            logging.warning(f"No position defined for {module_name}")
-                    except Exception as e:
-                        logging.error(f"Error drawing module {module_name}: {str(e)}")
-            
-            if hasattr(self, 'debug_layout') and getattr(self, 'debug_layout', False):
-                for name, module in self.modules.items():
-                    # Skip rendering debug overlay for full-screen modules
-                    if name == 'retro_characters':
-                        continue
+            # Draw each module in the specified position
+            for name, module in self.modules.items():
+                if name in self.module_manager.module_visibility:
+                    if self.module_manager.module_visibility[name]:
+                        position = self.module_positions.get(name, (0, 0))
+                        module.draw(self.screen, position)
                         
-                    try:
-                        pos = self.layout_manager.get_module_position(name)
-                        if isinstance(pos, dict) and 'x' in pos and 'y' in pos:
-                            # Use width/height from position if available
-                            width = pos.get('width', 200)
-                            height = pos.get('height', 100)
-                            
-                            # Draw red rectangle around module area
-                            pygame.draw.rect(self.screen, (255, 0, 0), 
-                                            (pos['x'], pos['y'], width, height), 2)
-                            # Draw module name for identification
-                            font = pygame.font.Font(None, 24)
-                            text = font.render(name, True, (255, 0, 0))
-                            self.screen.blit(text, (pos['x'], pos['y'] - 20))
-                    except Exception as e:
-                        logging.debug(f"Debug overlay error for {name}: {e}")
+                        # Draw debug overlay if enabled
+                        if self.debug_layout:
+                            try:
+                                # Different colors for different module types
+                                pos = position
+                                width = pos.get('width', 200)
+                                height = pos.get('height', 100)
+                                
+                                # Draw red rectangle around module area
+                                pygame.draw.rect(self.screen, (255, 0, 0), 
+                                                (pos['x'], pos['y'], width, height), 2)
+                                # Draw module name for identification
+                                font = pygame.font.Font(None, 24)
+                                text = font.render(name, True, (255, 0, 0))
+                                self.screen.blit(text, (pos['x'], pos['y'] - 20))
+                            except Exception as e:
+                                logging.debug(f"Debug overlay error for {name}: {e}")
             
             # Visual debug for screen boundaries
             if self.debug_layout:
@@ -413,10 +388,6 @@ class MagicMirror:
                 debug_font = pygame.font.Font(None, 24)
                 dims_text = debug_font.render(f"Screen: {self.screen.get_width()}x{self.screen.get_height()}", True, (255, 0, 0))
                 self.screen.blit(dims_text, (10, self.screen.get_height() - 30))
-            
-            if 'ai_interaction' in self.modules:
-                module = self.modules['ai_interaction']
-                print(f"MIRROR TRACE: AI module type: {type(module)}, Has on_button_press: {'on_button_press' in dir(module)}")
             
             pygame.display.flip()
         except Exception as e:

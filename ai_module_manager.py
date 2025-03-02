@@ -48,8 +48,15 @@ class AIModuleManager:
                     # Make sure config includes OPENAI_VOICE_KEY
                     voice_config = dict(ai_config)
                     if 'openai' in voice_config:
-                        # Ensure the voice key is used
-                        voice_config['openai']['api_key'] = voice_config['openai'].get('voice_api_key')
+                        # FIXED: Directly get the voice key from the environment
+                        import os
+                        voice_api_key = os.getenv('OPENAI_VOICE_KEY')
+                        if voice_api_key:
+                            # Directly set the API key instead of relying on nested get
+                            voice_config['openai']['api_key'] = voice_api_key
+                            print(f"MIRROR DEBUG: Using voice API key from environment for realtime module: {voice_api_key[:4]}...{voice_api_key[-4:]}")
+                        else:
+                            print("MIRROR DEBUG: ⚠️ Could not find OPENAI_VOICE_KEY in environment for realtime module")
                     
                     # Initialize the voice module
                     self.realtime_module = AIVoiceModule(voice_config)

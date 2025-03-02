@@ -421,7 +421,7 @@ class AIInteractionModule:
             self.button.cleanup()
 
     def hotword_detection_loop(self):
-        """Continuously listen for the hotword 'mirror'"""
+        """Continuously listen for the hotword 'mirror' with improved error handling"""
         self.logger.info("Starting hotword detection loop")
         
         while self.running:
@@ -432,50 +432,46 @@ class AIInteractionModule:
             
             # Skip if audio isn't available
             if not self.has_audio or not hasattr(self, 'microphone'):
-                time.sleep(1)
+                time.sleep(1)  # Check less frequently if no audio
                 continue
             
             try:
-                self.hotword_listening = True
+                # CRITICAL FIX: Use microphone properly inside with statement
                 with self.microphone as source:
                     try:
-                        # Short timeout to avoid freezing
-                        self.logger.debug("Listening for hotword...")
-                        audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=3)
+                        # Adjust for ambient noise before each listen
+                        self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                         
-                        if audio is None:
-                            continue
+                        # Listen for a short audio segment
+                        audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=3)
+                        
+                        # Convert speech to text
+                        text = self.recognizer.recognize_google(audio).lower()
+                        
+                        # Check for hotword
+                        if "mirror" in text:
+                            self.logger.info(f"Hotword detected: {text}")
+                            # Activate the conversation
+                            self.on_button_press()
+                            # Wait to avoid re-triggering
+                            time.sleep(2)
                             
-                        try:
-                            # Use a timeout for Google API
-                            text = self.recognizer.recognize_google(audio, timeout=5).lower()
-                            self.logger.debug(f"Heard: {text}")
-                            
-                            if "mirror" in text:
-                                self.logger.info("🎯 Hotword 'Mirror' detected!")
-                                # This will start the listening flow
-                                self.on_button_press()
-                        except sr.UnknownValueError:
-                            pass  # Speech wasn't understood
-                        except sr.RequestError as e:
-                            self.logger.warning(f"RequestError: {e}")
-                            time.sleep(2)  # Back off a bit
+                    except sr.UnknownValueError:
+                        # Normal case: no speech detected
+                        pass
+                    except sr.RequestError as e:
+                        self.logger.warning(f"Google API error: {e}")
+                        time.sleep(1)  # Back off on API errors
                     except Exception as e:
-                        if "NoneType" in str(e) and "close" in str(e):
-                            # This is a known microphone issue, safely skip
+                        if "listening timed out" in str(e):
+                            # Normal timeout, can happen regularly
                             pass
                         else:
                             self.logger.warning(f"Error in listen: {e}")
-                            time.sleep(0.5)
+                            
             except Exception as e:
-                if "NoneType" in str(e) and "close" in str(e):
-                    # This is a known microphone issue, safely skip
-                    pass
-                else:
-                    self.logger.error(f"Error in hotword detection: {e}")
-                    time.sleep(1)
-                
-            time.sleep(0.1)  # Prevent tight loop
+                self.logger.warning(f"Error listening: {e}")
+                time.sleep(0.5)  # Avoid tight loop on errors
 
     def initialize_audio_system(self):
         """Initialize audio with safer device detection"""
