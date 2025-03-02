@@ -44,6 +44,7 @@ class AIVoiceModule:
         self.response_queue = Queue()
         self.running = True
         self.initialized = False
+        self.session_ready = False
         
         # Setup API configuration
         openai_config = self.config.get('openai', {})
@@ -54,41 +55,13 @@ class AIVoiceModule:
         audio_config = self.config.get('audio', {})
         self.tts_volume = audio_config.get('tts_volume', 0.8)
         
-        # Only perform essential setup in __init__, defer the rest to delayed init
-        print("MIRROR DEBUG: 🔄 Setting up basic AI Voice module structure")
+        # Defer most initialization to allow other modules to connect first
+        print("MIRROR DEBUG: 🕒 Voice module will initialize after other modules")
+        self.set_status("Initializing", "Will start after other modules...")
         
-        # Placeholder for later initialization
-        self.session_ready = False
-        
-        # Defer full initialization
-        print("MIRROR DEBUG: 🕒 Deferring full AI Voice module initialization")
-        self.set_status("Initializing", "Will initialize after other modules...")
-        
-        # Start the delayed initialization
-        threading.Timer(10.0, self.delayed_initialization).start()
-        
-        # Safer approach for audio hardware detection
-        # Don't try to check audio devices at init time - defer to when needed
-        print("MIRROR DEBUG: 🔍 Deferring audio hardware check until needed")
-        
-        # Initialize systems
-        self.initialize_openai()
-        self.load_sound_effects()
-        
-        # Start background processes
-        self.start_websocket_connection()
-        
-        # Don't use speech_recognition for hotword - we'll use a button-only approach
-        # self.initialize_hotword_detection()
-        
-        # Add this near the start of __init__
-        print("MIRROR DEBUG: 🔍 Checking audio device usage:")
-        try:
-            result = subprocess.run(["fuser", "-v", "/dev/snd/*"], capture_output=True, text=True)
-            print(result.stdout)
-            print(result.stderr)
-        except Exception as e:
-            print(f"MIRROR DEBUG: Could not check audio device usage: {e}")
+        # Only start the timer for delayed initialization
+        # Remove all other initialization calls from __init__
+        threading.Timer(15.0, self.delayed_initialization).start()
     
     def initialize_openai(self):
         """Initialize the OpenAI client with the voice API key and check for Realtime API access"""
@@ -337,14 +310,9 @@ class AIVoiceModule:
                 self.set_status("Initializing", "Please wait...")
                 return
             
-            # Check WebSocket status and decide which method to use
-            if hasattr(self, 'ws') and self.session_ready:
-                print("MIRROR DEBUG: 🎙️ Using WebSocket for voice interaction")
-                self.start_audio_stream()
-            else:
-                # Use fallback API approach
-                print("MIRROR DEBUG: 🎙️ Using standard API for voice interaction")
-                self.fallback_voice_api()
+            # Use fallback API by default for reliability
+            print("MIRROR DEBUG: 🎙️ Using standard API for voice interaction")
+            self.fallback_voice_api()
         
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ Button press error: {e}")
@@ -1177,37 +1145,82 @@ class AIVoiceModule:
             return False
 
     def delayed_initialization(self):
-        """Delayed initialization to allow other modules to connect first"""
+        """Delayed initialization that loads after other modules"""
         try:
-            print("MIRROR DEBUG: 🔄 Starting delayed AI Voice module initialization")
+            print("MIRROR DEBUG: 🔄 Starting AI Voice module initialization")
             
-            # Basic checks for audio hardware
-            print("MIRROR DEBUG: 🔍 Checking audio device usage:")
-            try:
-                result = subprocess.run(["fuser", "-v", "/dev/snd/*"], capture_output=True, text=True)
-                print(result.stdout)
-                print(result.stderr)
-            except Exception as e:
-                print(f"MIRROR DEBUG: Could not check audio device usage: {e}")
-            
-            # Initialize OpenAI
+            # Initialize OpenAI client
             self.initialize_openai()
             
-            # Load sound effects
+            # Initialize sound effects
             self.load_sound_effects()
             
-            # Try WebSocket connection with retries
-            self.retry_websocket_connection()
-            
-            # Mark as initialized
+            # Try to establish Realtime API connection
+            if self.api_key:
+                # Use the official session creation endpoint as documented
+                print("MIRROR DEBUG: 🔄 Attempting to create Realtime API session")
+                
+                try:
+                    # Create a session via REST API
+                    session_url = "https://api.openai.com/v1/realtime/sessions"
+                    session_headers = {
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "OpenAI-Beta": "realtime=v1"
+                    }
+                    
+                    # Configure session according to documentation
+                    session_data = {
+                        "model": "gpt-4o",
+                        "modalities": ["audio", "text"],
+                        "instructions": "You are a helpful assistant for a smart mirror.",
+                        "voice": "alloy",
+                        "input_audio_format": "pcm16",
+                        "output_audio_format": "pcm16",
+                        "temperature": 0.7,
+                        "max_response_output_tokens": 1024
+                    }
+                    
+                    # Create the session
+                    response = requests.post(
+                        session_url,
+                        headers=session_headers,
+                        json=session_data,
+                        timeout=10
+                    )
+                    
+                    if response.status_code == 200:
+                        session_info = response.json()
+                        print("MIRROR DEBUG: ✅ Realtime session created successfully")
+                        
+                        # Save session ID and token
+                        self.session_id = session_info.get("id")
+                        self.client_secret = session_info.get("client_secret", {}).get("value")
+                        
+                        if self.client_secret:
+                            print(f"MIRROR DEBUG: ✅ Got session token: {self.client_secret[:4]}...")
+                            
+                            # Now establish WebSocket connection
+                            self.establish_websocket_connection()
+                        else:
+                            print("MIRROR DEBUG: ❌ No client_secret in session response")
+                    else:
+                        print(f"MIRROR DEBUG: ❌ Failed to create session: {response.status_code}")
+                        print(f"Response: {response.text}")
+                except Exception as e:
+                    print(f"MIRROR DEBUG: ❌ Error creating Realtime session: {e}")
+                    
+            # Mark as initialized even if Realtime setup failed
             self.initialized = True
             print("MIRROR DEBUG: ✅ AI Voice module initialization complete")
+            self.set_status("Ready", "Voice assistant ready")
             
         except Exception as e:
             import traceback
             self.logger.error(f"Error in delayed initialization: {e}")
             print(f"MIRROR DEBUG: ❌ Delayed initialization error: {e}")
             print(traceback.format_exc())
+            
             # Still mark as initialized so we can use fallback
             self.initialized = True
             self.set_status("Ready", "Using fallback API")
@@ -1244,4 +1257,78 @@ class AIVoiceModule:
             
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ Retry process failed: {e}")
+            return False
+
+    def establish_websocket_connection(self):
+        """Establish WebSocket connection using the session token"""
+        try:
+            import websocket
+            import threading
+            
+            print("MIRROR DEBUG: 🔄 Establishing WebSocket connection with session token")
+            
+            # Connection URL for realtime API
+            self.ws_url = "wss://realtime.api.openai.com/v1/audio/chat"
+            
+            # Headers with the client_secret token
+            self.ws_headers = [
+                f"Authorization: Bearer {self.client_secret}",
+                "Content-Type: application/json"
+            ]
+            
+            # Define event handlers
+            def on_message(ws, message):
+                try:
+                    data = json.loads(message)
+                    print(f"MIRROR DEBUG: 📄 WebSocket message: {message[:100]}...")
+                    
+                    # Handle different event types
+                    if "audio" in data:
+                        audio_data = base64.b64decode(data["audio"])
+                        print(f"MIRROR DEBUG: 🔊 Received audio chunk: {len(audio_data)} bytes")
+                        # Play audio
+                        self.play_audio_chunk(audio_data)
+                    
+                    if "text" in data:
+                        text = data.get("text", "")
+                        print(f"MIRROR DEBUG: 💬 Response text: {text}")
+                
+                except Exception as e:
+                    print(f"MIRROR DEBUG: ❌ Error processing message: {e}")
+            
+            def on_error(ws, error):
+                self.logger.error(f"WebSocket error: {error}")
+                print(f"MIRROR DEBUG: ❌ WebSocket error: {error}")
+            
+            def on_close(ws, close_status_code, close_msg):
+                self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
+                print(f"MIRROR DEBUG: WebSocket closed: {close_status_code}")
+                self.session_ready = False
+            
+            def on_open(ws):
+                self.logger.info("WebSocket connection opened")
+                print("MIRROR DEBUG: ✅ WebSocket connection established")
+                self.session_ready = True
+            
+            # Create WebSocket connection
+            self.ws = websocket.WebSocketApp(
+                self.ws_url,
+                header=self.ws_headers,
+                on_open=on_open,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close
+            )
+            
+            # Start WebSocket in a separate thread
+            self.ws_thread = threading.Thread(target=self.ws.run_forever)
+            self.ws_thread.daemon = True
+            self.ws_thread.start()
+            
+            print("MIRROR DEBUG: 🔄 WebSocket connection thread started")
+            return True
+        
+        except Exception as e:
+            self.logger.error(f"Error establishing WebSocket: {e}")
+            print(f"MIRROR DEBUG: ❌ WebSocket connection error: {e}")
             return False
