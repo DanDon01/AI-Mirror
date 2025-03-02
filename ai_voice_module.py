@@ -48,6 +48,10 @@ class AIVoiceModule:
         audio_config = self.config.get('audio', {})
         self.tts_volume = audio_config.get('tts_volume', 0.8)
         
+        # Safer approach for audio hardware detection
+        # Don't try to check audio devices at init time - defer to when needed
+        print("MIRROR DEBUG: 🔍 Deferring audio hardware check until needed")
+        
         # Initialize systems
         self.initialize_openai()
         self.load_sound_effects()
@@ -901,15 +905,14 @@ class AIVoiceModule:
             print(f"MIRROR DEBUG: ❌ Error stopping audio stream: {e}")
 
     def play_audio_chunk(self, audio_bytes):
-        """Play an audio chunk received from the API"""
+        """Play an audio chunk received from the API using system player for reliability"""
         try:
             import tempfile
-            import pygame
             import os
+            import subprocess
             
-            # Create a better temporary file name for debugging
+            # Create a temporary file for the audio chunk
             temp_filename = f"/tmp/mirror_audio_{int(time.time())}.wav"
-            
             print(f"MIRROR DEBUG: 🔊 Writing {len(audio_bytes)} bytes to {temp_filename}")
             
             # Write WAV header (improved version)
@@ -934,28 +937,38 @@ class AIVoiceModule:
                 temp_file.write(struct.pack('<I', len(audio_bytes)))
                 temp_file.write(audio_bytes)
             
-            # Try playing with system player as a fallback
-            if not pygame.mixer.get_init():
-                try:
-                    pygame.mixer.init(frequency=24000, channels=1)
-                    print("MIRROR DEBUG: 🔊 Initialized pygame mixer")
-                except Exception as mixer_err:
-                    print(f"MIRROR DEBUG: ⚠️ Could not initialize pygame mixer: {mixer_err}")
-                    os.system(f"aplay {temp_filename}")
-                    return
+            # Play audio using system commands - more reliable than pygame
+            print(f"MIRROR DEBUG: 🔊 Playing audio with system player")
             
-            # Play with pygame if initialized
+            # Use aplay command - standard on Linux
             try:
-                sound = pygame.mixer.Sound(temp_filename)
-                sound.set_volume(self.tts_volume)
-                print(f"MIRROR DEBUG: 🔊 Playing audio with volume {self.tts_volume}")
-                sound.play()
-                # Wait for sound to finish
-                pygame.time.wait(500)  # Give it at least 500ms to start playing
+                process = subprocess.Popen(["aplay", temp_filename], 
+                                          stdout=subprocess.PIPE, 
+                                          stderr=subprocess.PIPE)
+                # Don't wait for it to finish - let it play in background
+                print("MIRROR DEBUG: 🔊 Audio playback started")
+                
+                # Schedule file cleanup after a few seconds
+                def cleanup_audio_file():
+                    time.sleep(5)  # Wait for playback to likely finish
+                    try:
+                        os.remove(temp_filename)
+                        print(f"MIRROR DEBUG: 🧹 Cleaned up audio file: {temp_filename}")
+                    except:
+                        pass
+                
+                # Start cleanup thread
+                cleanup_thread = threading.Thread(target=cleanup_audio_file)
+                cleanup_thread.daemon = True
+                cleanup_thread.start()
+                
             except Exception as play_err:
-                print(f"MIRROR DEBUG: ⚠️ Could not play with pygame: {play_err}")
-                # Fallback to system player
-                os.system(f"aplay {temp_filename}")
+                print(f"MIRROR DEBUG: ⚠️ Could not play with aplay: {play_err}")
+                # Try alternative players if available
+                try:
+                    os.system(f"paplay {temp_filename}")
+                except:
+                    pass
             
         except Exception as e:
             self.logger.error(f"Error playing audio chunk: {e}")
