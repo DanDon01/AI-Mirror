@@ -266,7 +266,6 @@ CONFIG = {
         'class': 'AIInteractionModule',
         'params': {
             'use_direct_audio': True,  # Use our direct audio approach
-            'config': CONFIG  # This will be set after CONFIG is defined
         }
     },
     
