@@ -19,6 +19,7 @@ import websockets  # New import for websocket connections
 from typing import Iterator
 import subprocess
 import pyaudio
+import math
 
 DEFAULT_MODEL = "gpt-4-1106-preview"
 DEFAULT_MAX_TOKENS = 250
@@ -220,11 +221,12 @@ class AIInteractionModule:
         # keyboard space bar or hotword "Mirror"
         pass
 
-    def set_status(self, status, message):
+    def set_status(self, status, message=None):
+        """Set status with logging"""
         self.status = status
-        self.status_message = message
-        self.last_status_update = pygame.time.get_ticks()
-        self.logger.debug(f"Status set to: {status} - {message}")
+        if message:
+            self.status_message = message
+        self.logger.info(f"Status changed to: {status} - {message}")
 
     def play_sound_effect(self, sound_name):
         """Play a sound effect with better error handling"""
@@ -446,12 +448,92 @@ class AIInteractionModule:
                 self.logger.error(f"Error in speak_chunk: {e}")
 
     def draw(self, screen, position):
-        font = pygame.font.Font(None, 36)
-        text = font.render(f"AI Status: {self.status}", True, (200, 200, 200))
-        screen.blit(text, position)
-        if self.status_message:
-            message_text = font.render(self.status_message, True, (200, 200, 200))
-            screen.blit(message_text, (position[0], position[1] + 40))
+        """Enhanced drawing with detailed status indicators"""
+        try:
+            if isinstance(position, dict):
+                x, y = position['x'], position['y']
+                width = position.get('width', 225)
+                height = position.get('height', 200)
+            else:
+                x, y = position
+                width, height = 225, 200
+            
+            # Draw module background (with debugging border in debug mode)
+            if hasattr(self, 'debug_mode') and self.debug_mode:
+                pygame.draw.rect(screen, (50, 50, 100), (x, y, width, height))
+                pygame.draw.rect(screen, (100, 100, 200), (x, y, width, height), 2)
+            
+            # Initialize fonts if needed
+            if not hasattr(self, 'debug_font'):
+                self.debug_font = pygame.font.Font(None, 24)
+                self.status_font = pygame.font.Font(None, 36)
+            
+            # Draw main status
+            status_text = self.status_font.render(f"AI: {self.status}", True, (200, 200, 200))
+            screen.blit(status_text, (x + 10, y + 10))
+            
+            # Draw status message
+            if self.status_message:
+                # Truncate message if too long
+                msg = self.status_message
+                if len(msg) > 30:
+                    msg = msg[:27] + "..."
+                
+                message_text = self.debug_font.render(msg, True, (200, 200, 200))
+                screen.blit(message_text, (x + 10, y + 50))
+            
+            # Draw connection status indicators
+            y_offset = 80
+            
+            # Mic status
+            mic_color = (0, 255, 0) if self.has_audio else (255, 0, 0)
+            pygame.draw.circle(screen, mic_color, (x + 20, y + y_offset), 8)
+            mic_text = self.debug_font.render("Mic", True, (200, 200, 200))
+            screen.blit(mic_text, (x + 35, y + y_offset - 8))
+            
+            # API status
+            api_color = (0, 255, 0) if self.has_openai_access else (255, 0, 0)
+            pygame.draw.circle(screen, api_color, (x + 20, y + y_offset + 25), 8)
+            api_text = self.debug_font.render("API", True, (200, 200, 200))
+            screen.blit(api_text, (x + 35, y + y_offset + 17))
+            
+            # Recording status
+            if self.recording:
+                # Pulsing red circle for recording
+                pulse = int(128 + 127 * math.sin(pygame.time.get_ticks() / 200))
+                rec_color = (255, pulse, pulse)
+                pygame.draw.circle(screen, rec_color, (x + 20, y + y_offset + 50), 8)
+                rec_text = self.debug_font.render("Recording", True, (255, pulse, pulse))
+                screen.blit(rec_text, (x + 35, y + y_offset + 42))
+            
+            # Processing status
+            if self.processing:
+                # Pulsing blue circle for processing
+                pulse = int(128 + 127 * math.sin(pygame.time.get_ticks() / 300))
+                proc_color = (pulse, pulse, 255)
+                pygame.draw.circle(screen, proc_color, (x + 20, y + y_offset + 75), 8)
+                proc_text = self.debug_font.render("Processing", True, (pulse, pulse, 255))
+                screen.blit(proc_text, (x + 35, y + y_offset + 67))
+            
+            # Display last heard text if available
+            if hasattr(self, 'last_heard_text') and self.last_heard_text:
+                heard_label = self.debug_font.render("Heard:", True, (180, 180, 220))
+                screen.blit(heard_label, (x + 10, y + height - 60))
+                
+                # Truncate if needed
+                heard_text = self.last_heard_text
+                if len(heard_text) > 30:
+                    heard_text = heard_text[:27] + "..."
+                
+                text_render = self.debug_font.render(heard_text, True, (220, 220, 255))
+                screen.blit(text_render, (x + 10, y + height - 35))
+            
+        except Exception as e:
+            self.logger.error(f"Error in draw: {e}")
+            # Simple fallback if drawing fails
+            font = pygame.font.Font(None, 28)
+            text = font.render(f"AI Module: {self.status}", True, (255, 100, 100))
+            screen.blit(text, position)
 
     def cleanup(self):
         """Safely clean up resources even when audio is disabled"""
@@ -525,7 +607,7 @@ class AIInteractionModule:
             time.sleep(0.1)  # Prevent tight loop
 
     def initialize_audio_system(self):
-        """Initialize audio with correct device selection"""
+        """Initialize audio with correct device selection based on arecord test"""
         self.has_audio = False
         
         try:
@@ -538,35 +620,77 @@ class AIInteractionModule:
             self.recognizer.pause_threshold = 0.8
             self.recognizer.dynamic_energy_threshold = True
             
-            # First try to list available devices
+            # Log available audio devices for debugging
             self.logger.info("Checking available audio devices...")
             
-            # Try specific index first, then fall back to default
+            # Try to enumerate audio devices first
             try:
-                for device_index in [2, 0, None]:  # Try index 2, then 0, then None (default)
-                    try:
-                        self.logger.info(f"Trying microphone with device_index={device_index}")
-                        self.microphone = sr.Microphone(device_index=device_index)
-                        
-                        # Test the microphone by adjusting for ambient noise
-                        with self.microphone as source:
-                            self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                            self.logger.info(f"Successfully initialized microphone with index {device_index}")
-                            self.mic_index = device_index
-                            self.has_audio = True
-                            break
-                    except Exception as e:
-                        self.logger.warning(f"Failed with device index {device_index}: {e}")
-                        continue
-                    
-                if not self.has_audio:
-                    self.logger.error("Could not initialize any microphone")
+                # Get PyAudio instance
+                p = pyaudio.PyAudio()
+                
+                # Log all available devices
+                info = "\n=== Available Audio Devices ===\n"
+                for i in range(p.get_device_count()):
+                    dev_info = p.get_device_info_by_index(i)
+                    info += f"Device {i}: {dev_info['name']}\n"
+                    info += f"  Input Channels: {dev_info['maxInputChannels']}\n"
+                info += "============================="
+                
+                self.logger.info(info)
+                print(info)
+                
+                # Clean up PyAudio instance
+                p.terminate()
             except Exception as e:
-                self.logger.error(f"Error during microphone initialization: {e}")
+                self.logger.warning(f"Could not enumerate audio devices: {e}")
             
+            # Try specific device index based on arecord test
+            # Device hw:2,0 corresponds to device index 2 in PyAudio
+            try:
+                print("MIRROR DEBUG: 🎤 Trying to initialize microphone with device index 2...")
+                self.logger.info("Initializing microphone with device index 2 (hw:2,0)")
+                self.microphone = sr.Microphone(device_index=2, sample_rate=44100)
+                
+                # Test the microphone by adjusting for ambient noise
+                with self.microphone as source:
+                    print("MIRROR DEBUG: 🎤 Testing microphone...")
+                    self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                    self.logger.info("Microphone test successful with device index 2")
+                    print("MIRROR DEBUG: ✅ Microphone initialized successfully!")
+                    self.mic_index = 2
+                    self.has_audio = True
+            except Exception as e:
+                self.logger.warning(f"Failed with specific device: {e}")
+                
+                # Fall back to default device if specific one fails
+                try:
+                    print("MIRROR DEBUG: 🎤 Trying fallback to default microphone...")
+                    self.logger.info("Trying default microphone")
+                    self.microphone = sr.Microphone()
+                    
+                    with self.microphone as source:
+                        self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                        self.logger.info("Default microphone initialized successfully")
+                        print("MIRROR DEBUG: ✅ Default microphone working")
+                        self.mic_index = None
+                        self.has_audio = True
+                except Exception as e:
+                    self.logger.error(f"Default microphone failed: {e}")
+                    print(f"MIRROR DEBUG: ❌ All microphone initialization attempts failed")
+                
         except Exception as e:
             self.logger.error(f"Audio initialization error: {e}")
             self.has_audio = False
+            print(f"MIRROR DEBUG: ❌ Audio system initialization failed: {e}")
+        
+        # Set up properly based on audio availability
+        if self.has_audio:
+            self.status_message = f"Ready with mic #{self.mic_index}"
+            print(f"MIRROR DEBUG: 🎙️ Audio system ready with device index {self.mic_index}")
+        else:
+            self.status_message = "No audio available"
+            self.logger.warning("Audio system unavailable")
+            print("MIRROR DEBUG: ⚠️ Audio system unavailable - voice features disabled")
 
     def create_fallback_sound(self):
         """Create a simple beep sound as fallback"""
@@ -596,15 +720,49 @@ class AIInteractionModule:
 
     def handle_event(self, event):
         """Handle keyboard events, specifically the space bar"""
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                self.logger.info("Space bar pressed - activating voice input")
-                if not self.recording and not self.processing:
-                    self.on_button_press()
-            elif event.key == pygame.K_RETURN:
-                # Using Enter key to simulate button release
-                if self.recording:
-                    self.on_button_release()
+        try:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    self.logger.info("⌨️ SPACE key pressed - activating voice input")
+                    print("MIRROR DEBUG: Space bar pressed - starting listening...")
+                    
+                    if not self.recording and not self.processing:
+                        self.on_button_press()
+                    else:
+                        print("MIRROR DEBUG: Already recording or processing - ignoring space bar")
+                    
+                elif event.key == pygame.K_d:
+                    # Debug key - show audio device info
+                    print("\n=== MIRROR AUDIO DEBUG INFO ===")
+                    if hasattr(self, 'mic_index'):
+                        print(f"Current microphone index: {self.mic_index}")
+                    print(f"Audio available: {self.has_audio}")
+                    print(f"OpenAI API available: {self.has_openai_access}")
+                    print(f"Current status: {self.status}")
+                    
+                    # Try to enumerate audio devices
+                    try:
+                        p = pyaudio.PyAudio()
+                        print("\nAVAILABLE AUDIO DEVICES:")
+                        for i in range(p.get_device_count()):
+                            dev = p.get_device_info_by_index(i)
+                            print(f"Device {i}: {dev['name']}")
+                            print(f"  Max Input Channels: {dev['maxInputChannels']}")
+                            print(f"  Default Sample Rate: {dev['defaultSampleRate']}")
+                        p.terminate()
+                    except Exception as e:
+                        print(f"Could not enumerate audio devices: {e}")
+                        
+                    print("==============================\n")
+                    
+                elif event.key == pygame.K_ESCAPE:
+                    # Use ESC to cancel recording
+                    if self.recording:
+                        print("MIRROR DEBUG: Recording canceled by ESC key")
+                        self.recording = False
+                        self.set_status("Idle", "Recording canceled")
+        except Exception as e:
+            self.logger.error(f"Error in handle_event: {e}")
 
     def start_listening(self):
         """Start listening with fixed arguments"""
@@ -699,3 +857,145 @@ class AIInteractionModule:
         # Start the hotword detection in a thread
         self.hotword_thread = threading.Thread(target=hotword_loop, daemon=True)
         self.hotword_thread.start()
+
+    def process_voice_input(self):
+        """Process voice input with enhanced feedback"""
+        self.logger.info("Starting voice input processing")
+        print("MIRROR DEBUG: Listening for your voice input...")
+        
+        try:
+            if not self.has_audio or not hasattr(self, 'microphone'):
+                self.logger.error("No audio system available for voice input")
+                self.set_status("Error", "No audio system available")
+                self.recording = False
+                return
+            
+            with self.microphone as source:
+                self.set_status("Listening", "Speak now...")
+                print("MIRROR DEBUG: 🎤 Microphone active - speak now")
+                
+                # Get audio with reasonable timeout
+                try:
+                    audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                    
+                    if audio is None:
+                        self.logger.warning("No audio detected")
+                        self.set_status("Error", "No speech detected")
+                        self.recording = False
+                        return
+                        
+                    self.set_status("Processing", "Converting speech to text...")
+                    print("MIRROR DEBUG: 🔍 Processing your speech...")
+                    
+                    try:
+                        # Convert speech to text
+                        text = self.recognizer.recognize_google(audio)
+                        self.logger.info(f"User said: '{text}'")
+                        print(f"MIRROR DEBUG: 👂 Heard: '{text}'")
+                        
+                        # Store for display
+                        self.last_heard_text = text
+                        
+                        # Process with AI
+                        self.set_status("Sending", f"Sending to AI: '{text[:20]}...'")
+                        print(f"MIRROR DEBUG: 🔄 Sending to OpenAI: '{text}'")
+                        
+                        # Start AI processing in a thread
+                        threading.Thread(target=self.process_with_ai, args=(text,), daemon=True).start()
+                        
+                    except sr.UnknownValueError:
+                        self.logger.warning("Speech Recognition could not understand audio")
+                        self.set_status("Error", "Could not understand speech")
+                        print("MIRROR DEBUG: ❌ Could not understand your speech")
+                        self.recording = False
+                        
+                    except sr.RequestError as e:
+                        self.logger.error(f"Speech Recognition service error: {e}")
+                        self.set_status("Error", "Speech recognition service error")
+                        print(f"MIRROR DEBUG: ❌ Speech recognition error: {e}")
+                        self.recording = False
+                        
+                except Exception as e:
+                    self.logger.error(f"Error recording audio: {e}")
+                    self.set_status("Error", "Error recording audio")
+                    print(f"MIRROR DEBUG: ❌ Error recording audio: {e}")
+                    self.recording = False
+                
+        except Exception as e:
+            self.logger.error(f"Error in process_voice_input: {e}")
+            self.set_status("Error", "Voice processing error")
+            print(f"MIRROR DEBUG: ❌ Voice processing error: {e}")
+            
+        finally:
+            # Ensure we always reset recording flag
+            self.recording = False
+
+    def process_with_ai(self, text):
+        """Process text with AI and handle response"""
+        self.processing = True
+        
+        try:
+            self.set_status("Processing", "AI is thinking...")
+            print("MIRROR DEBUG: 🧠 OpenAI is processing your request...")
+            
+            # Check for wake word commands
+            if text.lower().startswith(("mirror", "hey mirror", "ok mirror")):
+                # Try to extract the actual command
+                command_text = text.lower().replace("mirror", "", 1).strip()
+                command_text = command_text.replace("hey", "", 1).strip()
+                command_text = command_text.replace("ok", "", 1).strip()
+                
+                # Only use the command part if it exists
+                if command_text:
+                    text = command_text
+                    
+            # Log the final text we're sending to the API
+            self.logger.info(f"Processing with AI: '{text}'")
+            
+            # Stream the response from OpenAI
+            response_text = ""
+            
+            # Run the streaming in an async loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            async def stream_and_collect():
+                nonlocal response_text
+                async for chunk in self.stream_response(text):
+                    response_text += chunk
+                    # Update status with last part of response
+                    self.set_status("Responding", response_text[-40:])
+                    print(f"MIRROR DEBUG: 🗣️ AI: {chunk}", end="", flush=True)
+            
+            try:
+                loop.run_until_complete(stream_and_collect())
+                print("\n")  # Add newline after streaming
+            finally:
+                loop.close()
+                
+            # Log the response
+            self.logger.info(f"AI Response: '{response_text}'")
+            print(f"MIRROR DEBUG: ✅ AI response complete: '{response_text[:50]}...'")
+            
+            # Speak the response
+            self.set_status("Speaking", "Speaking response...")
+            print("MIRROR DEBUG: 🔊 Converting to speech...")
+            self.speak_text(response_text)
+            
+            # Add to response queue for main thread
+            self.response_queue.put(('speech', {
+                'user_text': text,
+                'ai_response': response_text
+            }))
+            
+            # Check for commands in the response
+            self.check_for_commands(text, response_text)
+            
+        except Exception as e:
+            self.logger.error(f"Error in AI processing: {e}")
+            self.set_status("Error", f"AI error: {str(e)[:30]}")
+            print(f"MIRROR DEBUG: ❌ AI processing error: {e}")
+            
+        finally:
+            self.processing = False
+            self.set_status("Idle", "Say 'Mirror' or press SPACE")
