@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import time as time_module
 import pygame
 import logging
-from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING, TRANSPARENCY, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA
+from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING, TRANSPARENCY, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA, COLOR_FONT_SUBTITLE, COLOR_FONT_BODY
 import os
 from pathlib import Path
 import requests
@@ -284,6 +284,12 @@ class FitbitModule:
             fonts = styling.get('fonts', {})
             backgrounds = styling.get('backgrounds', {})
             
+            # Get module dimensions from config
+            module_dims = styling.get('module_dimensions', {}).get('standard', {})
+            module_width = module_dims.get('width', 225)
+            module_height = module_dims.get('height', 200)
+            header_height = module_dims.get('header_height', 40)
+            
             # Get styles for drawing
             radius = styling.get('radius', 15)
             padding = styling.get('spacing', {}).get('padding', 10)
@@ -299,37 +305,35 @@ class FitbitModule:
                 self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
                 self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             
-            # Get background colors - Use transparent backgrounds 
-            bg_color = COLOR_BG_MODULE_ALPHA
-            header_bg_color = COLOR_BG_HEADER_ALPHA
+            # Color for labels (use subtitle color from config)
+            label_color = COLOR_FONT_SUBTITLE
+            # Color for values (use body color from config)
+            value_color = COLOR_FONT_BODY
             
             # Draw module background
-            module_width = 225  # Reduced from 300 by 25%
-            module_height = 200
             module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
-            header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)
+            header_rect = pygame.Rect(x-padding, y-padding, module_width, header_height)
             
+            # Draw background with styling from config
             try:
-                # Draw background with rounded corners and transparency
                 self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
+                self.effects.draw_rounded_rect(screen, header_rect, bg_color, radius=radius, alpha=0)
             except:
                 # Fallback if effects fail
                 from config import draw_module_background_fallback
                 draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
             
             # Draw title
-            title_color = fonts.get('title', {}).get('color', (240, 240, 240))
+            title_color = fonts.get('title', {}).get('color', COLOR_FONT_DEFAULT)
             title_text = self.title_font.render("Fitbit", True, title_color)
             screen.blit(title_text, (x + padding, y + padding))
             
             # Draw Fitbit data
-            current_y = y + 50  # Start below title
-            text_color = fonts.get('body', {}).get('color', (200, 200, 200))
+            current_y = y + header_height + 5  # Start below title
             
             # Check if we have data
             if not self.data:
-                no_data_text = self.body_font.render("No Fitbit data available", True, text_color)
+                no_data_text = self.body_font.render("No Fitbit data available", True, value_color)
                 screen.blit(no_data_text, (x + padding, current_y))
                 return
             
@@ -346,43 +350,59 @@ class FitbitModule:
                 steps_int = 0
             
             # Draw progress bar for steps
-            self.draw_progress_bar(screen, x + padding, current_y, 280, 10, steps_int, step_goal)
-            current_y += 5  # Small space after progress bar
+            self.draw_progress_bar(screen, x + padding, current_y, module_width - 2*padding, 10, steps_int, step_goal)
+            current_y += 15  # Space after progress bar
             
-            # Display Steps and Goal
-            steps_text = self.body_font.render(f"Steps: {steps}", True, text_color)
-            screen.blit(steps_text, (x + padding, current_y))
+            # Display Steps and Goal with different colors for label vs value
+            steps_label = self.body_font.render("Steps:", True, label_color)
+            steps_value = self.body_font.render(str(steps), True, value_color)
+            
+            # Draw them side by side
+            screen.blit(steps_label, (x + padding, current_y))
+            # Position value right after label
+            label_width = steps_label.get_width()
+            screen.blit(steps_value, (x + padding + label_width + 5, current_y))
             
             # Display goal if available
             if 'goals' in self.data and 'steps' in self.data['goals']:
-                goal = self.data['goals']['steps']
-                goal_text = self.small_font.render(f"Goal: {goal}", True, fonts.get('small', {}).get('color', (180, 180, 180)))
-                screen.blit(goal_text, (x + padding + 150, current_y))
+                goal_label = self.small_font.render("Goal:", True, label_color)
+                goal_value = self.small_font.render(str(self.data['goals']['steps']), True, value_color)
+                screen.blit(goal_label, (x + padding + 150, current_y))
+                screen.blit(goal_value, (x + padding + 150 + goal_label.get_width() + 5, current_y))
             
             current_y += line_height
             
-            # Display heart rate
+            # Use the same pattern for other metrics
+            # Heart rate
             if 'resting_heart_rate' in self.data and self.data['resting_heart_rate'] != 'N/A':
-                hr_text = self.body_font.render(f"Resting HR: {self.data['resting_heart_rate']} bpm", True, text_color)
-                screen.blit(hr_text, (x + padding, current_y))
+                hr_label = self.body_font.render("Resting HR:", True, label_color)
+                hr_value = self.body_font.render(f"{self.data['resting_heart_rate']} bpm", True, value_color)
+                screen.blit(hr_label, (x + padding, current_y))
+                screen.blit(hr_value, (x + padding + hr_label.get_width() + 5, current_y))
                 current_y += line_height
             
-            # Display sleep data if available
+            # Sleep data
             if 'sleep' in self.data and self.data['sleep'] != 'N/A':
-                sleep_text = self.body_font.render(f"Sleep: {self.data['sleep']}", True, text_color)
-                screen.blit(sleep_text, (x + padding, current_y))
+                sleep_label = self.body_font.render("Sleep:", True, label_color)
+                sleep_value = self.body_font.render(self.data['sleep'], True, value_color)
+                screen.blit(sleep_label, (x + padding, current_y))
+                screen.blit(sleep_value, (x + padding + sleep_label.get_width() + 5, current_y))
                 current_y += line_height
             
-            # Display active minutes
+            # Active minutes
             if 'active_minutes' in self.data:
-                active_text = self.body_font.render(f"Active: {self.data['active_minutes']} min", True, text_color)
-                screen.blit(active_text, (x + padding, current_y))
+                active_label = self.body_font.render("Active:", True, label_color)
+                active_value = self.body_font.render(f"{self.data['active_minutes']} min", True, value_color)
+                screen.blit(active_label, (x + padding, current_y))
+                screen.blit(active_value, (x + padding + active_label.get_width() + 5, current_y))
                 current_y += line_height
             
-            # Display calories
+            # Calories
             if 'calories' in self.data and self.data['calories'] != 'N/A':
-                cal_text = self.body_font.render(f"Calories: {self.data['calories']}", True, text_color)
-                screen.blit(cal_text, (x + padding, current_y))
+                cal_label = self.body_font.render("Calories:", True, label_color)
+                cal_value = self.body_font.render(self.data['calories'], True, value_color)
+                screen.blit(cal_label, (x + padding, current_y))
+                screen.blit(cal_value, (x + padding + cal_label.get_width() + 5, current_y))
             
         except Exception as e:
             logging.error(f"Error drawing Fitbit data: {e}")
