@@ -514,11 +514,11 @@ class AIInteractionModule:
             time.sleep(0.1)
 
     def initialize_audio_system(self):
-        """Initialize audio with safer device detection"""
+        """Initialize audio with hardcoded device to avoid crashes"""
         self.has_audio = False
         
         try:
-            # Import the required modules
+            # Import required modules
             import speech_recognition as sr
             
             # Create recognizer with appropriate settings
@@ -527,50 +527,76 @@ class AIInteractionModule:
             self.recognizer.pause_threshold = 0.8
             self.recognizer.dynamic_energy_threshold = True
             
-            # SAFER APPROACH: Skip PyAudio enumeration which is causing crashes
-            self.logger.info("Initializing microphone with safer approach")
-            print("MIRROR DEBUG: 🎤 Using safer microphone initialization")
+            # SAFER: Create a custom microphone without device enumeration
+            self.logger.info("Using direct device approach to bypass enumeration")
+            print("MIRROR DEBUG: 🎤 Using direct ALSA device (bypassing enumeration)")
             
-            # Try direct device initialization without enumeration
+            # Create audio directly via PyAudio (not through SpeechRecognition)
+            # to avoid the enumeration crash
             try:
-                # First try with explicit device index based on your arecord test
-                print("MIRROR DEBUG: Attempting to use microphone at index 2 (hw:2,0)")
+                import pyaudio
                 
-                # Create microphone without adjusting for ambient noise yet
-                self.microphone = sr.Microphone(device_index=2, sample_rate=44100)
-                self.mic_index = 2
+                # Custom microphone class that avoids device enumeration
+                class DirectMicrophone(sr.AudioSource):
+                    def __init__(self, sample_rate=16000, chunk_size=1024):
+                        self.SAMPLE_RATE = sample_rate
+                        self.CHUNK = chunk_size
+                        self.SAMPLE_WIDTH = 2  # 16-bit
+                        self.CHANNELS = 1  # mono
+                        
+                        # These are required properties for sr.AudioSource
+                        self.stream = None
+                        self.SAMPLE_WIDTH = 2  # 16-bit
+                        
+                    def __enter__(self):
+                        self.audio = pyaudio.PyAudio()
+                        
+                        # Open stream directly - skip enumeration
+                        self.stream = self.audio.open(
+                            input_device_index=None,  # Use system default
+                            format=pyaudio.paInt16,
+                            channels=self.CHANNELS,
+                            rate=self.SAMPLE_RATE,
+                            input=True,
+                            frames_per_buffer=self.CHUNK,
+                            input_host_api_specific_stream_info=None
+                        )
+                        
+                        self.stream.start_stream()
+                        return self
+                    
+                    def __exit__(self, exc_type, exc_value, traceback):
+                        if self.stream:
+                            self.stream.stop_stream()
+                            self.stream.close()
+                        
+                        if self.audio:
+                            self.audio.terminate()
+                        
+                        self.stream = None
+                        self.audio = None
+                
+                # Use our custom microphone class
+                self.microphone = DirectMicrophone()
+                self.mic_index = "direct"
                 self.has_audio = True
-                print("MIRROR DEBUG: ✅ Microphone created with index 2")
-                
-                # Skip ambient noise adjustment for now - it can be done later as needed
-                # This avoids potential crashes during initialization
+                print("MIRROR DEBUG: ✅ Created direct microphone access")
                 
             except Exception as e:
-                self.logger.warning(f"Failed with device index 2: {e}")
-                print(f"MIRROR DEBUG: Failed with index 2, error: {e}")
-                
-                # Fall back to default device as a last resort
-                try:
-                    print("MIRROR DEBUG: Falling back to default microphone")
-                    self.microphone = sr.Microphone(sample_rate=16000)
-                    self.mic_index = "default"
-                    self.has_audio = True
-                except Exception as e:
-                    self.logger.error(f"Failed to initialize any microphone: {e}")
-                    print(f"MIRROR DEBUG: ❌ All microphone attempts failed: {e}")
-                
+                self.logger.error(f"Error creating direct microphone: {e}")
+                print(f"MIRROR DEBUG: ❌ Failed to create direct microphone: {e}")
+                # Don't try fallbacks - they'll likely fail the same way
+        
         except Exception as e:
-            self.logger.error(f"Audio initialization error: {e}")
-            self.has_audio = False
+            self.logger.error(f"Audio system initialization error: {e}")
             print(f"MIRROR DEBUG: ❌ Audio system initialization failed: {e}")
         
         # Update status based on result
         if self.has_audio:
-            self.status_message = f"Ready with mic #{self.mic_index}"
-            print(f"MIRROR DEBUG: 🎙️ Audio system ready with device {self.mic_index}")
+            self.status_message = "Ready with direct mic"
+            print("MIRROR DEBUG: 🎙️ Audio system ready with direct device access")
         else:
             self.status_message = "No audio available"
-            self.logger.warning("Audio system unavailable")
             print("MIRROR DEBUG: ⚠️ Audio system unavailable - voice features disabled")
 
     def create_fallback_sound(self):

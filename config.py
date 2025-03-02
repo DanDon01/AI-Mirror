@@ -264,7 +264,10 @@ CONFIG = {
     },
     'ai_interaction': {
         'class': 'AIInteractionModule',
-        'params': {}  # Empty for now, we'll fill it later
+        'params': {
+            'config': CONFIG,
+            'disable_audio': True  # Force disable audio to avoid crashes
+        }
     },
     
     # Audio and sound effects

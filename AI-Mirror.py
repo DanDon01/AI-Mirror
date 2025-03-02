@@ -39,9 +39,10 @@ os.environ['JACK_NO_START_SERVER'] = '1'
 os.environ['JACK_NO_AUDIO_RESERVATION'] = '1'
 
 # Set environment variables to make PyAudio safer
-os.environ['AUDIODEV'] = '/dev/null'  # Force null audio device
+os.environ['AUDIODEV'] = 'hw:2,0'  # Force specific audio device
 os.environ['SDL_AUDIODRIVER'] = 'dummy'  # Use dummy audio driver
 os.environ['PULSE_SERVER'] = 'localhost'  # Avoid network audio issues
+os.environ['PORTAUDIO_ENABLE_DEVICE_ENUMERATION'] = '0'  # Disable enumeration
 
 # Make sure Python logging still works by setting up a basic logger
 import logging
