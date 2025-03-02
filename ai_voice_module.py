@@ -14,6 +14,7 @@ import openai
 import numpy as np
 from openai import OpenAI
 import sys
+import base64
 
 DEFAULT_MAX_TOKENS = 250
 
@@ -660,136 +661,185 @@ class AIVoiceModule:
         self.logger.info("Voice module cleanup complete")
 
     def initialize_audio_streaming(self):
-        """Set up audio streaming capabilities with a real USB microphone"""
+        """Set up audio streaming capabilities with a real USB microphone using ALSA directly"""
         try:
-            # Import the real PyAudio
-            import pyaudio
-            import numpy as np
-            import struct
+            import subprocess
             import base64
             
-            # Attempt to force-load the real PyAudio module
-            if 'pyaudio' in sys.modules and hasattr(sys.modules['pyaudio'], '_mock_audio'):
-                print("MIRROR DEBUG: 🔄 Removing mock PyAudio implementation")
-                del sys.modules['pyaudio']
-                import pyaudio
+            # Test if arecord is available
+            try:
+                subprocess.run(["which", "arecord"], check=True, capture_output=True)
+                print("MIRROR DEBUG: ✅ Found arecord utility")
+            except subprocess.CalledProcessError:
+                raise Exception("arecord utility not found - please install ALSA tools")
             
-            # Initialize PyAudio for streaming
-            self.audio = pyaudio.PyAudio()
+            # Get device info using arecord -l
+            print("MIRROR DEBUG: 🎙️ Available audio devices (ALSA):")
+            devices_output = subprocess.check_output(["arecord", "-l"]).decode("utf-8")
+            print(devices_output)
             
-            # List available devices to find your USB mic
-            print("MIRROR DEBUG: 🎙️ Available audio devices:")
-            usb_mic_index = None
+            # Use the working device that you confirmed
+            self.alsa_device = "hw:2,0"  # Based on your working arecord command
             
-            for i in range(self.audio.get_device_count()):
-                dev_info = self.audio.get_device_info_by_index(i)
-                device_name = dev_info.get('name', '')
-                print(f"MIRROR DEBUG: Device {i}: {device_name} (inputs: {dev_info.get('maxInputChannels')})")
-                
-                # Try to automatically detect USB microphone
-                if dev_info.get('maxInputChannels') > 0:
-                    if 'usb' in device_name.lower() or 'mic' in device_name.lower():
-                        usb_mic_index = i
-                        print(f"MIRROR DEBUG: ✅ Found likely USB microphone at index {i}: {device_name}")
+            # Let's check if this device is valid
+            try:
+                test_process = subprocess.run(
+                    ["arecord", "-D", self.alsa_device, "-d", "1", "-f", "S16_LE", "-c", "1", "-r", "16000", "/dev/null"],
+                    check=True, 
+                    capture_output=True
+                )
+                print(f"MIRROR DEBUG: ✅ Successfully tested recording with device {self.alsa_device}")
+            except subprocess.CalledProcessError as e:
+                print(f"MIRROR DEBUG: ⚠️ Device test failed: {e}")
+                print(f"Error output: {e.stderr.decode('utf-8')}")
+                # Try to use default device instead
+                self.alsa_device = "default"
+                print(f"MIRROR DEBUG: Falling back to default ALSA device")
             
-            # Get the device index from config or use detected USB mic
-            audio_config = self.config.get('audio', {})
-            device_idx = audio_config.get('device_index', usb_mic_index)
-            
-            if device_idx is not None:
-                print(f"MIRROR DEBUG: 🎙️ Using microphone device index: {device_idx}")
-            else:
-                # Fall back to default device
-                device_idx = None
-                print("MIRROR DEBUG: 🎙️ Using default microphone device")
-            
-            # Audio format parameters
-            self.format = pyaudio.paInt16
-            self.channels = 1
-            self.rate = 16000
-            self.chunk = 1024
+            # Audio format parameters - match arecord settings
+            self.format = "S16_LE"  # 16-bit signed little endian
+            self.channels = 1       # Mono
+            self.rate = 16000       # 16kHz sampling rate
             self.audio_buffer = bytearray()
-            self.input_device_index = device_idx
             
-            # VAD settings - can be adjusted
-            self.vad_enabled = True
-            self.speaking = False
-            self.silence_threshold = 500  # Adjust based on environment
-            self.silence_counter = 0
-            self.max_silence_count = 30  # About 1 second of silence
+            # Mark audio as initialized
+            self.has_audio = True
+            self.logger.info(f"ALSA audio streaming initialized with device: {self.alsa_device}")
+            print(f"MIRROR DEBUG: ✅ ALSA audio streaming initialized with device: {self.alsa_device}")
             
-            self.logger.info(f"Audio streaming initialized with device index: {device_idx}")
-            print(f"MIRROR DEBUG: ✅ Audio streaming initialized with device index: {device_idx}")
-            
-        except ImportError as e:
-            self.logger.error(f"Missing audio libraries: {e}")
-            print(f"MIRROR DEBUG: ❌ Cannot initialize audio streaming: {e}")
         except Exception as e:
             self.logger.error(f"Audio streaming initialization error: {e}")
             print(f"MIRROR DEBUG: ❌ Audio streaming error: {e}")
+            self.has_audio = False
 
     def start_audio_stream(self):
-        """Start streaming audio from the USB microphone to the WebSocket"""
-        if not hasattr(self, 'audio') or not self.session_ready:
+        """Start streaming audio from the USB microphone to the WebSocket using ALSA directly"""
+        if not self.has_audio or not self.session_ready:
             self.logger.error("Cannot start audio stream - not initialized")
             return False
         
         try:
             import threading
+            import subprocess
+            import io
             import base64
             import json
-            import pyaudio
+            import time
             
-            # Reset audio buffer
+            # Reset state
             self.audio_buffer = bytearray()
             self.speaking = False
             self.recording = True
             
-            # Define callback function for audio stream
-            def audio_callback(in_data, frame_count, time_info, status):
+            # Define thread function to capture and stream audio
+            def alsa_stream_thread():
                 try:
-                    if self.recording:
-                        # Add incoming audio to buffer
-                        self.audio_buffer.extend(in_data)
+                    print(f"MIRROR DEBUG: 🎙️ Starting ALSA audio capture with device {self.alsa_device}")
+                    self.set_status("Listening", "Listening via Realtime API...")
+                    
+                    # Create arecord process - stream to stdout
+                    cmd = [
+                        "arecord",
+                        "-D", self.alsa_device,
+                        "-f", self.format,
+                        "-c", str(self.channels),
+                        "-r", str(self.rate),
+                        "--buffer-size=4096",
+                        "--period-size=1024",
+                        "--max-file-time", "10"  # Max 10 seconds per recording
+                    ]
+                    
+                    # Start the recording process
+                    self.audio_process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    
+                    # Check if process started successfully
+                    if self.audio_process.poll() is not None:
+                        # Process already exited - check stderr
+                        error = self.audio_process.stderr.read().decode('utf-8')
+                        print(f"MIRROR DEBUG: ❌ arecord failed to start: {error}")
+                        self.set_status("Error", "Failed to start recording")
+                        self.recording = False
+                        return
+                    
+                    # Set timeout to stop after 10 seconds max
+                    start_time = time.time()
+                    max_time = 10  # 10 seconds max
+                    chunk_size = 4096  # Read in 4K chunks
+                    
+                    print("MIRROR DEBUG: ✅ Audio recording started")
+                                        
+                    # Read and stream audio in chunks
+                    while self.recording and (time.time() - start_time) < max_time:
+                        # Read a chunk of audio data
+                        audio_chunk = self.audio_process.stdout.read(chunk_size)
                         
-                        # Check buffer size - send in chunks to avoid overload
-                        if len(self.audio_buffer) >= 4096:  # ~256ms of audio at 16kHz
-                            # Encode as base64
-                            audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
+                        # If we got data, send it
+                        if audio_chunk and len(audio_chunk) > 0:
+                            # Add to buffer
+                            self.audio_buffer.extend(audio_chunk)
                             
-                            # Send audio chunk to WebSocket
-                            if hasattr(self, 'ws'):
-                                audio_event = {
-                                    "type": "input_audio_buffer.append",
-                                    "audio": audio_b64
-                                }
-                                self.ws.send(json.dumps(audio_event))
-                            
-                            # Clear buffer after sending
-                            self.audio_buffer = bytearray()
-                            
-                except Exception as e:
-                    self.logger.error(f"Audio callback error: {e}")
+                            # If buffer is large enough, send
+                            if len(self.audio_buffer) >= 4096:
+                                # Encode as base64
+                                audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
+                                
+                                # Send to WebSocket
+                                if hasattr(self, 'ws'):
+                                    audio_event = {
+                                        "type": "input_audio_buffer.append",
+                                        "audio": audio_b64
+                                    }
+                                    self.ws.send(json.dumps(audio_event))
+                                    
+                                # Clear buffer
+                                self.audio_buffer = bytearray()
                 
-                return (in_data, pyaudio.paContinue)
+                    # Send any remaining audio
+                    if len(self.audio_buffer) > 0:
+                        audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
+                        if hasattr(self, 'ws'):
+                            audio_event = {
+                                "type": "input_audio_buffer.append",
+                                "audio": audio_b64
+                            }
+                            self.ws.send(json.dumps(audio_event))
+                    
+                    # Let the API know we're done sending audio
+                    if hasattr(self, 'ws'):
+                        complete_event = {
+                            "type": "input_audio_buffer.complete"
+                        }
+                        self.ws.send(json.dumps(complete_event))
+                        
+                    print("MIRROR DEBUG: ✅ Done recording - sent complete event")
+                    
+                    # Clean up
+                    self.stop_audio_stream()
+                    
+                    # Update status
+                    self.recording = False
+                    self.processing = True
+                    self.set_status("Processing", "Processing your request...")
+                    
+                except Exception as e:
+                    self.logger.error(f"Audio stream thread error: {e}")
+                    print(f"MIRROR DEBUG: ❌ Audio stream error: {e}")
+                    self.recording = False
+                    self.set_status("Error", f"Audio stream error: {str(e)[:30]}")
+                    
+                    # Try to clean up
+                    self.stop_audio_stream()
             
-            # Open audio stream with the USB mic
-            print(f"MIRROR DEBUG: 🎙️ Opening audio stream with device index: {self.input_device_index}")
-            self.audio_stream = self.audio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.rate,
-                input=True,
-                input_device_index=self.input_device_index,  # Use the USB mic index
-                frames_per_buffer=self.chunk,
-                stream_callback=audio_callback
-            )
+            # Start the audio thread
+            self.audio_thread = threading.Thread(target=alsa_stream_thread)
+            self.audio_thread.daemon = True
+            self.audio_thread.start()
             
-            # Start the stream
-            self.audio_stream.start_stream()
-            self.logger.info(f"Audio streaming started with device {self.input_device_index}")
-            print(f"MIRROR DEBUG: ✅ Audio streaming started with device {self.input_device_index}")
-            
+            self.logger.info("ALSA audio streaming started")
             return True
                 
         except Exception as e:
@@ -802,27 +852,41 @@ class AIVoiceModule:
     def stop_audio_stream(self):
         """Stop audio streaming and release resources"""
         try:
-            if hasattr(self, 'audio_stream') and self.audio_stream:
-                if self.audio_stream.is_active():
-                    self.audio_stream.stop_stream()
-                self.audio_stream.close()
-                self.audio_stream = None
-                
-                # Send any remaining audio in buffer
-                if len(self.audio_buffer) > 0:
-                    audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
-                    if hasattr(self, 'ws'):
-                        audio_event = {
-                            "type": "input_audio_buffer.append",
-                            "audio": audio_b64
-                        }
-                        self.ws.send(json.dumps(audio_event))
-                
-                self.audio_buffer = bytearray()
-                self.recording = False
-                
-                self.logger.info("Audio stream stopped")
-                print("MIRROR DEBUG: 🎙️ Audio streaming stopped")
+            # Stop recording flag
+            self.recording = False
+            
+            # Terminate arecord process if it exists
+            if hasattr(self, 'audio_process') and self.audio_process:
+                try:
+                    self.audio_process.terminate()
+                    self.audio_process.wait(timeout=1)
+                    self.audio_process = None
+                    self.logger.info("Audio recording process terminated")
+                except Exception as e:
+                    self.logger.error(f"Error terminating audio process: {e}")
+                    
+                    # Force kill if needed
+                    try:
+                        self.audio_process.kill()
+                        self.audio_process = None
+                    except:
+                        pass
+            
+            # Send any remaining audio in buffer
+            if len(self.audio_buffer) > 0:
+                audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
+                if hasattr(self, 'ws'):
+                    audio_event = {
+                        "type": "input_audio_buffer.append",
+                        "audio": audio_b64
+                    }
+                    self.ws.send(json.dumps(audio_event))
+            
+            # Clear buffer
+            self.audio_buffer = bytearray()
+            
+            self.logger.info("Audio stream stopped")
+            print("MIRROR DEBUG: 🎙️ Audio streaming stopped")
         except Exception as e:
             self.logger.error(f"Error stopping audio stream: {e}")
             print(f"MIRROR DEBUG: ❌ Failed to stop audio stream: {e}")
