@@ -13,6 +13,7 @@ import time
 import openai
 import numpy as np
 from openai import OpenAI
+import sys
 
 DEFAULT_MAX_TOKENS = 250
 
@@ -659,15 +660,48 @@ class AIVoiceModule:
         self.logger.info("Voice module cleanup complete")
 
     def initialize_audio_streaming(self):
-        """Set up audio streaming capabilities"""
+        """Set up audio streaming capabilities with a real USB microphone"""
         try:
+            # Import the real PyAudio
             import pyaudio
             import numpy as np
             import struct
             import base64
             
+            # Attempt to force-load the real PyAudio module
+            if 'pyaudio' in sys.modules and hasattr(sys.modules['pyaudio'], '_mock_audio'):
+                print("MIRROR DEBUG: 🔄 Removing mock PyAudio implementation")
+                del sys.modules['pyaudio']
+                import pyaudio
+            
             # Initialize PyAudio for streaming
             self.audio = pyaudio.PyAudio()
+            
+            # List available devices to find your USB mic
+            print("MIRROR DEBUG: 🎙️ Available audio devices:")
+            usb_mic_index = None
+            
+            for i in range(self.audio.get_device_count()):
+                dev_info = self.audio.get_device_info_by_index(i)
+                device_name = dev_info.get('name', '')
+                print(f"MIRROR DEBUG: Device {i}: {device_name} (inputs: {dev_info.get('maxInputChannels')})")
+                
+                # Try to automatically detect USB microphone
+                if dev_info.get('maxInputChannels') > 0:
+                    if 'usb' in device_name.lower() or 'mic' in device_name.lower():
+                        usb_mic_index = i
+                        print(f"MIRROR DEBUG: ✅ Found likely USB microphone at index {i}: {device_name}")
+            
+            # Get the device index from config or use detected USB mic
+            audio_config = self.config.get('audio', {})
+            device_idx = audio_config.get('device_index', usb_mic_index)
+            
+            if device_idx is not None:
+                print(f"MIRROR DEBUG: 🎙️ Using microphone device index: {device_idx}")
+            else:
+                # Fall back to default device
+                device_idx = None
+                print("MIRROR DEBUG: 🎙️ Using default microphone device")
             
             # Audio format parameters
             self.format = pyaudio.paInt16
@@ -675,6 +709,7 @@ class AIVoiceModule:
             self.rate = 16000
             self.chunk = 1024
             self.audio_buffer = bytearray()
+            self.input_device_index = device_idx
             
             # VAD settings - can be adjusted
             self.vad_enabled = True
@@ -683,8 +718,8 @@ class AIVoiceModule:
             self.silence_counter = 0
             self.max_silence_count = 30  # About 1 second of silence
             
-            self.logger.info("Audio streaming initialized")
-            print("MIRROR DEBUG: 🎙️ Audio streaming initialized")
+            self.logger.info(f"Audio streaming initialized with device index: {device_idx}")
+            print(f"MIRROR DEBUG: ✅ Audio streaming initialized with device index: {device_idx}")
             
         except ImportError as e:
             self.logger.error(f"Missing audio libraries: {e}")
@@ -694,18 +729,16 @@ class AIVoiceModule:
             print(f"MIRROR DEBUG: ❌ Audio streaming error: {e}")
 
     def start_audio_stream(self):
-        """Start streaming audio from microphone to the WebSocket"""
+        """Start streaming audio from the USB microphone to the WebSocket"""
         if not hasattr(self, 'audio') or not self.session_ready:
             self.logger.error("Cannot start audio stream - not initialized")
             return False
         
         try:
-            import pyaudio
             import threading
             import base64
             import json
-            import struct
-            import numpy as np
+            import pyaudio
             
             # Reset audio buffer
             self.audio_buffer = bytearray()
@@ -740,26 +773,30 @@ class AIVoiceModule:
                 
                 return (in_data, pyaudio.paContinue)
             
-            # Open audio stream
+            # Open audio stream with the USB mic
+            print(f"MIRROR DEBUG: 🎙️ Opening audio stream with device index: {self.input_device_index}")
             self.audio_stream = self.audio.open(
                 format=self.format,
                 channels=self.channels,
                 rate=self.rate,
                 input=True,
+                input_device_index=self.input_device_index,  # Use the USB mic index
                 frames_per_buffer=self.chunk,
                 stream_callback=audio_callback
             )
             
             # Start the stream
             self.audio_stream.start_stream()
-            self.logger.info("Audio streaming started")
-            print("MIRROR DEBUG: 🎙️ Audio streaming started")
+            self.logger.info(f"Audio streaming started with device {self.input_device_index}")
+            print(f"MIRROR DEBUG: ✅ Audio streaming started with device {self.input_device_index}")
             
             return True
-            
+                
         except Exception as e:
             self.logger.error(f"Error starting audio stream: {e}")
             print(f"MIRROR DEBUG: ❌ Failed to start audio stream: {e}")
+            self.set_status("Error", "Failed to start audio")
+            self.recording = False
             return False
 
     def stop_audio_stream(self):
