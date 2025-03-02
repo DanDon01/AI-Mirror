@@ -467,37 +467,19 @@ class AIVoiceModule:
             self.logger.error(f"Error playing listen sound: {e}")
     
     def on_button_press(self):
-        """Handle button press (space bar) for voice interaction"""
-        try:
-            # If we're already recording, stop recording early
-            if self.recording:
-                self.logger.info("Stopping recording early")
-                print("MIRROR DEBUG: 🛑 Stopping recording early due to second button press")
-                
-                # Set a flag to indicate we're stopping deliberately
-                self.stopping_deliberately = True
-                
-                # Stop the audio stream - this will trigger the commit event
-                self.stop_audio_stream()
-                
-                # Update status
-                self.processing = True
-                self.set_status("Processing", "Processing your request...")
-                return
-            
-            # If we're processing, don't start a new recording yet
-            if self.processing:
-                self.logger.info("Still processing previous request")
-                print("MIRROR DEBUG: Still processing previous request")
-                return
-            
-            # Start a new recording
-            self.stopping_deliberately = False
-            self.start_audio_stream()
-            
-        except Exception as e:
-            self.logger.error(f"Button press error: {e}")
-            print(f"MIRROR DEBUG: ❌ Button press error: {e}")
+        """Handle button press to start voice recording"""
+        if self.recording or self.processing:
+            # Stop current recording
+            self.stop_audio_stream()
+            return
+        
+        # Create a new session for each interaction
+        if not self.reset_and_create_new_session():
+            self.set_status("Error", "Could not create API session")
+            return
+        
+        # Start recording
+        self.start_audio_stream()
     
     def process_voice_input(self):
         """Process voice input using OpenAI Realtime API with proper session handling"""
@@ -1130,4 +1112,108 @@ class AIVoiceModule:
         
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ Error resetting WebSocket session: {e}")
+            return False
+
+    def reset_and_create_new_session(self):
+        """Create a fresh session for every interaction"""
+        try:
+            print("\nMIRROR DEBUG: 🔄 Creating new Realtime API session")
+            
+            # Close existing WebSocket if any
+            if hasattr(self, 'ws') and self.ws:
+                try:
+                    self.ws.close()
+                    print("MIRROR DEBUG: 🔄 Closed existing WebSocket")
+                except:
+                    pass
+            
+            # Reset all state variables
+            self.session_ready = False
+            self.recording = False
+            self.processing = False
+            if hasattr(self, 'response_complete'):
+                delattr(self, 'response_complete')
+            if hasattr(self, 'speech_started'):
+                delattr(self, 'speech_started')
+            if hasattr(self, 'response_started'):
+                delattr(self, 'response_started')
+            
+            # Start new WebSocket
+            self.start_websocket_connection()
+            
+            # Wait for session to be ready
+            timeout = 5
+            start_time = time.time()
+            while not self.session_ready and time.time() - start_time < timeout:
+                time.sleep(0.1)
+            
+            if self.session_ready:
+                print("MIRROR DEBUG: ✅ New WebSocket session ready")
+                return True
+            else:
+                print("MIRROR DEBUG: ⚠️ Failed to create new session")
+                return False
+            
+        except Exception as e:
+            print(f"MIRROR DEBUG: ❌ Error creating new session: {e}")
+            return False
+
+    def reset_and_test_api(self):
+        """Completely reset and test the API connection"""
+        try:
+            print("\nMIRROR DEBUG: 🔄 Running full API diagnostic test")
+            
+            # 1. Check API key
+            if not self.api_key:
+                print("MIRROR DEBUG: ❌ No API key available")
+                return False
+            
+            print(f"MIRROR DEBUG: ✓ API key available (starts with {self.api_key[:4]}...)")
+            
+            # 2. Make a very simple API call to test basic connectivity
+            import requests
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            # Try the models endpoint - should work for any valid key
+            response = requests.get('https://api.openai.com/v1/models', headers=headers)
+            if response.status_code != 200:
+                print(f"MIRROR DEBUG: ❌ Basic API test failed: {response.status_code} - {response.text}")
+                return False
+            
+            print("MIRROR DEBUG: ✓ Basic API connection successful")
+            
+            # 3. Test realtime API access specifically
+            headers['OpenAI-Beta'] = 'realtime=v1'
+            response = requests.get(f'https://api.openai.com/v1/models/{self.realtime_model}', headers=headers)
+            
+            if response.status_code != 200:
+                print(f"MIRROR DEBUG: ❌ Realtime API access test failed: {response.status_code}")
+                print(f"MIRROR DEBUG: Response: {response.text}")
+                print("MIRROR DEBUG: Your account may not have access to the Realtime API")
+                return False
+            
+            print(f"MIRROR DEBUG: ✓ Confirmed access to Realtime API model: {self.realtime_model}")
+            
+            # 4. Try a very simple text-only request through the API
+            try:
+                from openai import OpenAI
+                client = OpenAI(api_key=self.api_key)
+                
+                completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{"role": "user", "content": "Say hello in one word"}],
+                    max_tokens=10
+                )
+                
+                print(f"MIRROR DEBUG: ✓ Simple API request successful: {completion.choices[0].message.content}")
+            except Exception as api_err:
+                print(f"MIRROR DEBUG: ❌ Simple API request failed: {api_err}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"MIRROR DEBUG: ❌ API diagnostic failed: {e}")
             return False
