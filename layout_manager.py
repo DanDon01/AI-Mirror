@@ -1,6 +1,8 @@
 import pygame
-from config import CONFIG
+from config import CONFIG, FONT_NAME
 import logging
+from visual_effects import VisualEffects
+from config import draw_module_background_fallback
 
 class LayoutManager:
     def __init__(self, screen_width, screen_height):
@@ -24,15 +26,22 @@ class LayoutManager:
         self.module_positions = {}
         self.calculate_positions()
 
+        # Initialize visual effects in __init__
+        self.effects = VisualEffects()
+
     def calculate_positions(self):
         """Recalculate positions with even narrower modules to fit screen"""
         # Log dimensions to see what we're working with
         logging.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
         
-        # Define layout parameters with narrower modules
-        top_margin = 60
-        side_margin = 20
-        module_height = 180
+        # Get module dimensions from config
+        standard_dims = CONFIG.get('module_styling', {}).get('module_dimensions', {}).get('standard', {})
+        module_height = standard_dims.get('height', 200)
+        module_width = standard_dims.get('width', 225)
+        
+        # Use spacing from config
+        padding = CONFIG.get('module_styling', {}).get('spacing', {}).get('padding', 10)
+        side_margin = padding * 2  # Or define in config
         
         # Force narrower modules for very small displays
         # Assume minimum 700px width display
@@ -45,9 +54,9 @@ class LayoutManager:
         
         # Calculate vertical positions (3 rows)
         row_y = [
-            top_margin + 50,  # First row (after clock)
-            top_margin + module_height + 30 + 50,  # Second row
-            top_margin + (module_height + 30) * 2 + 50  # Third row
+            padding + 50,  # First row (after clock)
+            padding + module_height + 30 + 50,  # Second row
+            padding + (module_height + 30) * 2 + 50  # Third row
         ]
         
         # Calculate horizontal positions
@@ -141,7 +150,7 @@ class LayoutManager:
         
         # Fall back to defaults
         default_positions = {
-            'clock': {'x': 10, 'y': 10},
+            'clock': {'x': 10, 'y': 10}, 
             'weather': {'x': 10, 'y': 100},
             'stocks': {'x': 10, 'y': 300},
             'calendar': {'x': 10, 'y': 500},
@@ -179,9 +188,15 @@ class LayoutManager:
         screen.blit(title_surface, (pos['x'], pos['y']))
 
         # Draw title text
-        font = pygame.font.SysFont('Arial', fonts['title']['size'])
+        font = pygame.font.SysFont(FONT_NAME, fonts['title']['size'])
         title_text = font.render(title, True, fonts['title']['color'])
         text_x = pos['x'] + (pos['width'] - title_text.get_width()) // 2
         screen.blit(title_text, (text_x, pos['y'] + 2))
+
+        try:
+            self.effects.draw_rounded_rect(screen, (pos['x'], pos['y'], pos['width'], pos['height']), bg_style['content']['color'], radius=10, alpha=0)
+            self.effects.draw_rounded_rect(screen, (pos['x'], pos['y'], pos['width'], title_height), bg_style['title']['color'], radius=10, alpha=0)
+        except:
+            draw_module_background_fallback(screen, pos['x'], pos['y'], pos['width'], pos['height'], pos['y'] + 2)
 
         return (pos['x'], pos['y'] + title_height)
