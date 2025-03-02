@@ -9,7 +9,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 from google_auth_oauthlib.flow import Flow
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA
 from visual_effects import VisualEffects
 import time
 
@@ -56,8 +56,8 @@ class CalendarModule:
         self.header_pulse_speed = 0.3
         
         # Background colors
-        self.bg_color = (20, 20, 20, 180)
-        self.header_bg_color = (40, 40, 40, 200)
+        self.bg_color = COLOR_BG_MODULE_ALPHA
+        self.header_bg_color = COLOR_BG_HEADER_ALPHA
         self.today_bg_color = (0, 40, 80, 180)  # Bluish for today's events
 
     def load_tokens(self):
@@ -173,8 +173,8 @@ class CalendarModule:
                 self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             
             # Get background colors - Use transparent backgrounds 
-            bg_color = (20, 20, 20, 100)  # Add alpha for transparency
-            header_bg_color = (40, 40, 40, 200)  # Add alpha for transparency
+            bg_color = COLOR_BG_MODULE_ALPHA
+            header_bg_color = COLOR_BG_HEADER_ALPHA
             
             # Draw module background
             module_width = 225  # Fixed width, reduced from 300 by 25%
@@ -188,19 +188,14 @@ class CalendarModule:
             
             try:
                 # Draw background with rounded corners and transparency
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=100)
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
                 # Draw header
                 header_rect = pygame.Rect(x-10, y-10, module_width, 40)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=120)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
             except Exception as e:
                 # Fallback if visual effects fail
-                s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
-                s.fill((20, 20, 20, 100))
-                screen.blit(s, (x-10, y-10))
-                
-                s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
-                s.fill((40, 40, 40, 120))
-                screen.blit(s, (x-10, y-10))
+                from config import draw_module_background_fallback
+                draw_module_background_fallback(screen, x, y, module_width, module_height, padding=10)
             
             # Draw title
             title_color = fonts.get('title', {}).get('color', (240, 240, 240))

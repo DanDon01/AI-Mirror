@@ -3,7 +3,7 @@ import pygame
 import logging
 from datetime import datetime, timedelta
 from pytz import timezone
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG  # Import font settings and color constants from config
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA, draw_module_background_fallback  # Import font settings and color constants from config
 from visual_effects import VisualEffects
 import time
 import math
@@ -57,8 +57,8 @@ class StocksModule:
         self.alert_pulse_speed = 0.8
         
         # Add background properties
-        self.bg_color = (20, 20, 20)  # No alpha, handled in draw_rounded_rect
-        self.header_bg_color = (40, 40, 40)  # No alpha, handled in draw_rounded_rect
+        self.bg_color = COLOR_BG_MODULE_ALPHA
+        self.header_bg_color = COLOR_BG_HEADER_ALPHA
         self.alert_bg_color = (60, 20, 20)  # No alpha, handled in draw_rounded_rect
 
     def update(self):
@@ -192,8 +192,8 @@ class StocksModule:
                 self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             
             # Get background colors - Use transparent backgrounds 
-            bg_color = (20, 20, 20, 100)  # Add alpha for transparency
-            header_bg_color = (40, 40, 40, 120)  # Add alpha for transparency
+            bg_color = COLOR_BG_MODULE_ALPHA
+            header_bg_color = COLOR_BG_HEADER_ALPHA
             
             # Draw module background
             module_width = 225  # Reduced from 300 by 25%
@@ -203,17 +203,11 @@ class StocksModule:
             
             try:
                 # Draw background with rounded corners and transparency
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=100)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=120)
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
             except:
                 # Fallback if effects fail
-                s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
-                s.fill((20, 20, 20, 100))
-                screen.blit(s, (x-padding, y-padding))
-                
-                s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
-                s.fill((40, 40, 40, 120))
-                screen.blit(s, (x-padding, y-padding))
+                draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
             
             # Draw title
             title_color = fonts.get('title', {}).get('color', (240, 240, 240))

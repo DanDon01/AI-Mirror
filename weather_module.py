@@ -2,10 +2,11 @@ import requests
 import pygame
 import logging
 from datetime import datetime, timedelta
-from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY
+from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA
 import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 from visual_effects import VisualEffects
+from config import draw_module_background_fallback
 
 class WeatherModule:
     def __init__(self, api_key, city, screen_width=800, screen_height=600, icons_path=None):
@@ -129,8 +130,8 @@ class WeatherModule:
                 self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             
             # Get background colors - Use transparent backgrounds 
-            bg_color = (20, 20, 20, 100)  # Add alpha for transparency
-            header_bg_color = (40, 40, 40, 120)  # Add alpha for transparency
+            bg_color = COLOR_BG_MODULE_ALPHA
+            header_bg_color = COLOR_BG_HEADER_ALPHA
             
             # Draw module background
             module_width = 225  # Reduced from 300 by 25%
@@ -140,17 +141,11 @@ class WeatherModule:
             
             try:
                 # Draw background with rounded corners and transparency
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=100)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=120)
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
             except:
                 # Fallback if effects fail
-                s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
-                s.fill((20, 20, 20, 100))
-                screen.blit(s, (x-padding, y-padding))
-                
-                s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
-                s.fill((40, 40, 40, 120))
-                screen.blit(s, (x-padding, y-padding))
+                draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
             
             # Draw title
             title_color = fonts.get('title', {}).get('color', (240, 240, 240))
@@ -197,8 +192,8 @@ class WeatherModule:
                     if "Feels like" in line:
                         color = self.get_temperature_color(feels_like)
                     else:
-                        color = COLOR_FONT_DEFAULT
-                    text_surface = self.font.render(line, True, color)
+                        color = fonts.get('body', {}).get('color', COLOR_FONT_DEFAULT)
+                    text_surface = self.body_font.render(line, True, color)
                     text_surface.set_alpha(TRANSPARENCY)
                     screen.blit(text_surface, (x, weather_y + i * LINE_SPACING))
 

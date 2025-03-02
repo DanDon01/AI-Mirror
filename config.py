@@ -163,6 +163,26 @@ LAYOUT = {
 # MAIN CONFIGURATION                    #
 #########################################
 
+def draw_module_background_fallback(screen, x, y, module_width, module_height, padding=10):
+    """Draw fallback module background when visual effects fail.
+    This creates a consistent transparent background across all modules.
+    
+    Parameters:
+    - screen: pygame surface to draw on
+    - x, y: top-left position of the module
+    - module_width, module_height: dimensions of the module
+    - padding: padding around the module content
+    """
+    # Draw main module background
+    s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
+    s.fill(COLOR_BG_MODULE_ALPHA)  # Uses the alpha from the constant
+    screen.blit(s, (x-padding, y-padding))
+    
+    # Draw header background
+    s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
+    s.fill(COLOR_BG_HEADER_ALPHA)  # Uses the alpha from the constant
+    screen.blit(s, (x-padding, y-padding))
+
 CONFIG = {
     'screen': {
         'fullscreen': True,
@@ -342,6 +362,18 @@ CONFIG = {
             'line_height': DEFAULT_LINE_HEIGHT,
             'padding': DEFAULT_PADDING
         },
-        'radius': DEFAULT_RADIUS
+        'radius': DEFAULT_RADIUS,
+        'module_dimensions': {
+            'standard': {
+                'width': 225,    # 75% of original 300px width
+                'height': 200,
+                'header_height': 40
+            },
+            'large': {
+                'width': 225,
+                'height': 400,
+                'header_height': 40
+            }
+        },
     },
 }

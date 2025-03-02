@@ -64,3 +64,31 @@ class VisualEffects:
         combined.blit(text_surface, (0, 0))
         
         return combined 
+
+    def init_module_styles(self, module, styling=None):
+        """Initialize consistent styling for a module"""
+        if styling is None:
+            styling = CONFIG.get('module_styling', {})
+        
+        fonts = styling.get('fonts', {})
+        
+        # Initialize fonts
+        title_size = fonts.get('title', {}).get('size', FONT_SIZE_TITLE)
+        body_size = fonts.get('body', {}).get('size', FONT_SIZE_BODY)
+        small_size = fonts.get('small', {}).get('size', FONT_SIZE_SMALL)
+        
+        module.title_font = pygame.font.SysFont(FONT_NAME, title_size)
+        module.body_font = pygame.font.SysFont(FONT_NAME, body_size)
+        module.small_font = pygame.font.SysFont(FONT_NAME, small_size)
+        
+        # Add other common properties
+        module.radius = styling.get('radius', DEFAULT_RADIUS)
+        module.padding = styling.get('spacing', {}).get('padding', DEFAULT_PADDING)
+        module.line_height = styling.get('spacing', {}).get('line_height', DEFAULT_LINE_HEIGHT)
+        
+        # Set dimensions from config
+        module.module_width = CONFIG.get('module_dimensions', {}).get('standard', {}).get('width', 225)
+        module.module_height = CONFIG.get('module_dimensions', {}).get('standard', {}).get('height', 200)
+        module.header_height = CONFIG.get('module_dimensions', {}).get('standard', {}).get('header_height', 40)
+        
+        return module 

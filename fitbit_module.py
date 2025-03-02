@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import time as time_module
 import pygame
 import logging
-from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING, TRANSPARENCY
+from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, LINE_SPACING, TRANSPARENCY, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA
 import os
 from pathlib import Path
 import requests
@@ -250,7 +250,8 @@ class FitbitModule:
         height = height * 2      # Double the height
         
         # Draw background
-        pygame.draw.rect(screen, (50, 50, 50), (x, y, width, height))
+        bg_color = COLOR_BG_MODULE_ALPHA
+        pygame.draw.rect(screen, bg_color, (x, y, width, height))
         
         # Calculate progress width, ensuring it doesn't exceed total width
         progress_width = min(int((progress / goal) * width), width)
@@ -299,8 +300,8 @@ class FitbitModule:
                 self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             
             # Get background colors - Use transparent backgrounds 
-            bg_color = (20, 20, 20, 100)  # Add alpha for transparency
-            header_bg_color = (40, 40, 40, 120)  # Add alpha for transparency
+            bg_color = COLOR_BG_MODULE_ALPHA
+            header_bg_color = COLOR_BG_HEADER_ALPHA
             
             # Draw module background
             module_width = 225  # Reduced from 300 by 25%
@@ -310,17 +311,12 @@ class FitbitModule:
             
             try:
                 # Draw background with rounded corners and transparency
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=100)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=120)
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
             except:
                 # Fallback if effects fail
-                s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
-                s.fill((20, 20, 20, 100))
-                screen.blit(s, (x-padding, y-padding))
-                
-                s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
-                s.fill((40, 40, 40, 120))
-                screen.blit(s, (x-padding, y-padding))
+                from config import draw_module_background_fallback
+                draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
             
             # Draw title
             title_color = fonts.get('title', {}).get('color', (240, 240, 240))
