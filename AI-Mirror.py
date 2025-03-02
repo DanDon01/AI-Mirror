@@ -184,6 +184,12 @@ class MagicMirror:
         # Initialize modules first
         self.modules = self.initialize_modules()
         
+        # RESTORE THESE ESSENTIAL VARIABLES
+        self.frame_rate = CONFIG.get('frame_rate', 30)
+        self.running = True
+        self.state = "active"
+        self.font = pygame.font.Font(None, 48)
+        
         # Create module manager with EXPLICIT flag to use initialized modules
         self.module_manager = ModuleManager(initialized_modules=self.modules)
         
