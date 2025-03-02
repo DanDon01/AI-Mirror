@@ -5,6 +5,7 @@
 
 # Block JACK server completely
 import os
+import time
 import sys
 
 # Create a pipe to completely filter audio-related stderr messages
