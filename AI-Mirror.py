@@ -252,13 +252,12 @@ class MagicMirror:
 
     def initialize_modules(self):
         """Initialize modules based on config but properly handle AI modules"""
-        # Don't create aliases here - this is what's causing conflicts
-        # globals()['AIInteractionModule'] = ModuleManager
-        # globals()['AIModuleManager'] = ModuleManager
-        
         modules = {}
         ai_modules = []
         regular_modules = []
+        
+        # Create a dictionary to track already initialized modules
+        initialized_module_classes = {}
         
         # First pass - identify regular vs AI modules
         for module_name, module_config in CONFIG.items():
@@ -274,13 +273,27 @@ class MagicMirror:
         for module_name, module_config in regular_modules:
             try:
                 logging.info(f"Initializing regular module: {module_name}")
+                class_name = module_config['class']
+                
+                # Skip if this class has already been initialized
+                if class_name in initialized_module_classes:
+                    logging.info(f"Module class {class_name} already initialized, reusing")
+                    modules[module_name] = initialized_module_classes[class_name]
+                    continue
+                
                 # Make sure the class exists in globals
-                if module_config['class'] in globals():
-                    module_class = globals()[module_config['class']]
-                    modules[module_name] = module_class(**module_config['params'])
+                if class_name in globals():
+                    module_class = globals()[class_name]
+                    module_instance = module_class(**module_config['params'])
+                    
+                    # Set a flag to indicate this module is initialized
+                    module_instance._initialized = True
+                    
+                    modules[module_name] = module_instance
+                    initialized_module_classes[class_name] = module_instance
                     logging.info(f"Successfully initialized {module_name} module")
                 else:
-                    logging.error(f"Module class {module_config['class']} not found")
+                    logging.error(f"Module class {class_name} not found")
             except Exception as e:
                 logging.error(f"Error initializing {module_name} module: {str(e)}")
                 logging.error(traceback.format_exc())

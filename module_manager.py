@@ -101,8 +101,15 @@ class ModuleManager:
         print("MIRROR DEBUG: ✅ All modules initialized")
 
     def initialize_module(self, module_name):
-        """Initialize a specific module"""
+        """Initialize a specific module with safety check"""
         if module_name in self.modules:
+            module_instance = self.modules.get(module_name)
+            
+            # If the module already has an _initialized flag, don't re-initialize
+            if hasattr(module_instance, '_initialized') and module_instance._initialized:
+                self.logger.info(f"Module {module_name} already initialized, skipping")
+                return module_instance
+            
             config = self.modules[module_name]
             if isinstance(config, dict) and 'class' in config:
                 try:

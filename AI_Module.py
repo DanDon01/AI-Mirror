@@ -25,6 +25,9 @@ DEFAULT_MAX_TOKENS = 250
 
 class AIInteractionModule:
     def __init__(self, config_path=None, **kwargs):
+        # First thing: set initialization flag
+        self._initialized = False
+        
         # Initialize logging first thing
         logging.basicConfig(
             level=logging.INFO,
@@ -86,6 +89,9 @@ class AIInteractionModule:
         
         # Initialize voice command parser
         self.command_parser = ModuleCommand()
+        
+        # At the end of initialization
+        self._initialized = True
 
     def load_fallback_responses(self):
         """Load fallback responses from configured file"""
