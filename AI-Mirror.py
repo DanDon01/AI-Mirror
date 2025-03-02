@@ -501,24 +501,11 @@ class MagicMirror:
         self.state = new_state
         logging.info(f"Mirror state changed to: {new_state}")
         
-        # Update module visibility based on state
-        if new_state == "active":
-            # In active mode, use configuration settings for module visibility
-            for module_name in self.modules:
-                visible = self.module_manager.module_config.get(module_name, {}).get('visible', True)
-                self.module_manager.set_module_visibility(module_name, visible)
+        # No need to directly modify visibility since the update_modules and 
+        # draw_modules methods already check the state to determine what to show
         
-        elif new_state == "screensaver":
-            # In screensaver mode, only show the retro characters module
-            for module_name in self.modules:
-                is_visible = module_name in CONFIG.get('screensaver_modules', ['retro_characters'])
-                self.module_manager.set_module_visibility(module_name, is_visible)
-        
-        elif new_state == "sleep":
-            # In sleep mode, only show the clock module
-            for module_name in self.modules:
-                is_visible = module_name in CONFIG.get('sleep_modules', ['clock'])
-                self.module_manager.set_module_visibility(module_name, is_visible)
+        # Module visibility is handled automatically in both update_modules() and draw_modules()
+        # based on the current state and the screensaver_modules/sleep_modules settings
 
 if __name__ == "__main__":
     mirror = MagicMirror()

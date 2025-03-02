@@ -79,3 +79,13 @@ class ClockModule:
     def cleanup(self):
         # No cleanup needed for this module
         pass
+
+    def get_current_time(self):
+        """Get formatted time string"""
+        current_time = datetime.now(self.tz) if self.tz else datetime.now()
+        return current_time.strftime(self.time_format)
+
+    def get_current_date(self):
+        """Get formatted date string"""
+        current_time = datetime.now(self.tz) if self.tz else datetime.now()
+        return self.format_date(current_time)

@@ -45,3 +45,11 @@ class ModuleManager:
             self.logger.info(f"Hid module: {module_name}")
             return True
         return False
+
+    def set_module_visibility(self, module_name, is_visible):
+        """Set visibility of a specific module"""
+        if module_name in self.module_visibility:
+            self.module_visibility[module_name] = is_visible
+            self.logger.info(f"Set {module_name} visibility to {is_visible}")
+        else:
+            self.logger.warning(f"Cannot set visibility - module {module_name} not found")
