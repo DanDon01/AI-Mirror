@@ -110,11 +110,11 @@ LAYOUT = {
     # Module dimensions (as percentage of screen)
     'module_sizes': {
         'standard': {
-            'width': 25,   # percent of screen width
+            'width': 18.75,   # percent of screen width (reduced from 25)
             'height': 15   # percent of screen height
         },
         'large': {
-            'width': 25,
+            'width': 18.75,  # reduced from 25
             'height': 30
         }
     },

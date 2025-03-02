@@ -303,7 +303,7 @@ class FitbitModule:
             header_bg_color = (40, 40, 40, 120)  # Add alpha for transparency
             
             # Draw module background
-            module_width = 300
+            module_width = 225  # Reduced from 300 by 25%
             module_height = 200
             module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
             header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)

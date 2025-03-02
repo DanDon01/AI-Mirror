@@ -174,10 +174,10 @@ class CalendarModule:
             
             # Get background colors - Use transparent backgrounds 
             bg_color = (20, 20, 20, 100)  # Add alpha for transparency
-            header_bg_color = (40, 40, 40, 120)  # Add alpha for transparency
+            header_bg_color = (40, 40, 40, 200)  # Add alpha for transparency
             
             # Draw module background
-            module_width = 300  # Fixed width
+            module_width = 225  # Fixed width, reduced from 300 by 25%
             module_height = 400  # Approximate height
             module_rect = pygame.Rect(x-10, y-10, module_width, module_height)
             
