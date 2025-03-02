@@ -21,6 +21,7 @@ import random
 import pyaudio
 import socket  # For DNS testing
 import subprocess
+import requests
 
 DEFAULT_MAX_TOKENS = 250
 
@@ -115,99 +116,17 @@ class AIVoiceModule:
             openai.api_key = self.api_key
             self.client = OpenAI(api_key=self.api_key)
             
-            # Test connection
-            print("MIRROR DEBUG: 🔄 Testing OpenAI Voice API connection...")
+            # Skip WebSocket tests and go straight to fallback method
+            print("MIRROR DEBUG: ⚠️ Skipping realtime API - using standard API only")
+            self.has_openai_access = True
+            self.set_status("Ready", "Using standard API")
             
-            # Set the specific model version to use
-            self.realtime_model = 'gpt-4o-realtime-preview-2024-10-01'
-            print(f"MIRROR DEBUG: Will use specific realtime model: {self.realtime_model}")
-            
-            # Try a direct API call to check beta access for this specific model
-            try:
-                headers = {
-                    'Authorization': f'Bearer {self.api_key}',
-                    'Content-Type': 'application/json',
-                    'OpenAI-Beta': 'realtime=v1'
-                }
-                
-                # Try to get info about this specific model
-                model_url = f'https://api.openai.com/v1/models/{self.realtime_model}'
-                response = requests.get(model_url, headers=headers)
-                
-                if response.status_code == 200:
-                    # Success - we have access to this model
-                    print(f"MIRROR DEBUG: ✅ Confirmed access to realtime model: {self.realtime_model}")
-                    self.has_openai_access = True
-                    self.set_status("Ready", "Realtime API ready")
-                else:
-                    # Try WebSocket connection as a fallback - WITHOUT using timeout
-                    print(f"MIRROR DEBUG: 🔄 Model API check failed, trying WebSocket connection...")
-                    import websocket
-                    import threading
-                    
-                    # Create variables for thread to modify
-                    self.ws_test_complete = False
-                    self.ws_test_successful = False
-                    
-                    def on_open(ws):
-                        print(f"MIRROR DEBUG: ✅ WebSocket connection to {self.realtime_model} successful!")
-                        self.ws_test_successful = True
-                        self.ws_test_complete = True
-                        ws.close()
-                    
-                    def on_error(ws, error):
-                        print(f"MIRROR DEBUG: ❌ WebSocket connection failed: {error}")
-                        self.ws_test_complete = True
-                    
-                    def on_close(ws, close_status_code, close_msg):
-                        self.ws_test_complete = True
-                    
-                    # Create WebSocket app
-                    ws_url = f"wss://api.openai.com/v1/realtime?model={self.realtime_model}"
-                    ws_headers = [
-                        "Authorization: Bearer " + self.api_key,
-                        "OpenAI-Beta: realtime=v1"
-                    ]
-                    
-                    ws = websocket.WebSocketApp(
-                        ws_url,
-                        header=ws_headers,
-                        on_open=on_open,
-                        on_error=on_error,
-                        on_close=on_close
-                    )
-                    
-                    # Start WebSocket in a thread so we can set our own timeout
-                    ws_thread = threading.Thread(target=ws.run_forever)
-                    ws_thread.daemon = True
-                    ws_thread.start()
-                    
-                    # Wait for a maximum of 5 seconds
-                    timeout = 5
-                    start_time = time.time()
-                    while not self.ws_test_complete and time.time() - start_time < timeout:
-                        time.sleep(0.1)
-                    
-                    # Set connection flag based on result
-                    if self.ws_test_successful:
-                        self.has_openai_access = True
-                        print("MIRROR DEBUG: ✅ WebSocket test confirmed Realtime API access")
-                        self.set_status("Ready", "Realtime API ready (WebSocket)")
-                    else:
-                        print("MIRROR DEBUG: ❌ Failed to access Realtime API")
-                        self.set_status("Error", "No Realtime API access")
-                
-            except Exception as check_error:
-                self.logger.error(f"Failed to check model access: {check_error}")
-                print(f"MIRROR DEBUG: ❌ Model access check failed: {check_error}")
-                
         except Exception as e:
             self.logger.error(f"OpenAI Voice API initialization error: {e}")
             print(f"MIRROR DEBUG: ❌ Voice API error: {e}")
-            self.set_status("Error", f"Voice API error: {str(e)[:30]}")
     
     def start_websocket_connection(self):
-        """Start a WebSocket connection to the OpenAI Realtime API using the correct documented endpoint"""
+        """Start a WebSocket connection to the OpenAI Realtime API using the correct session approach"""
         if not self.api_key:
             self.logger.warning("Cannot start WebSocket - No API key or access")
             print("MIRROR DEBUG: ❌ Cannot start WebSocket - No API key")
@@ -215,18 +134,68 @@ class AIVoiceModule:
         
         try:
             self.logger.info("Initializing WebSocket connection to OpenAI Realtime API")
-            print("MIRROR DEBUG: 🔄 Starting WebSocket connection using official endpoint")
+            print("MIRROR DEBUG: 🔄 Starting Realtime API session using official approach")
             
             import websocket
             import threading
+            import requests
+            import json
             
-            # According to official docs: https://platform.openai.com/docs/api-reference/audio/websockets
-            # The correct endpoint is actually:
-            self.ws_url = "wss://api.openai.com/v1/audio/speech"
+            # STEP 1: Create a session via REST API
+            print("MIRROR DEBUG: 🔍 Creating Realtime API session...")
             
-            # Use the proper model for Realtime API
-            self.realtime_model = "gpt-4o"  # Use the base model, not the preview version
-            print(f"MIRROR DEBUG: Using model: {self.realtime_model} for connection")
+            session_url = "https://api.openai.com/v1/realtime/sessions"
+            session_headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "OpenAI-Beta": "realtime=v1"
+            }
+            
+            session_data = {
+                "model": "gpt-4o", 
+                "modalities": ["audio", "text"],
+                "instructions": "You are a helpful assistant for a smart mirror.",
+                "voice": "alloy",
+                "input_audio_format": "pcm16",
+                "output_audio_format": "pcm16"
+            }
+            
+            try:
+                session_response = requests.post(
+                    session_url, 
+                    headers=session_headers,
+                    json=session_data
+                )
+                
+                if session_response.status_code != 200:
+                    print(f"MIRROR DEBUG: ❌ Failed to create Realtime session: {session_response.status_code}")
+                    print(f"MIRROR DEBUG: Response: {session_response.text}")
+                    return False
+                
+                # Parse the session response
+                session_info = session_response.json()
+                print("MIRROR DEBUG: ✅ Realtime session created successfully")
+                
+                # Get the ephemeral token from client_secret
+                client_secret = session_info.get("client_secret", {}).get("value")
+                if not client_secret:
+                    print("MIRROR DEBUG: ❌ No client_secret in session response")
+                    return False
+                    
+                print(f"MIRROR DEBUG: ✅ Got ephemeral token: {client_secret[:4]}...")
+                
+                # STEP 2: Use the ephemeral token to connect to WebSocket
+                self.ws_url = "wss://realtime.api.openai.com/v1/chat/completions"
+                
+                # Use the client_secret as the authorization token
+                self.ws_headers = [
+                    f"Authorization: Bearer {client_secret}",
+                    "Content-Type: application/json"
+                ]
+                
+            except Exception as e:
+                print(f"MIRROR DEBUG: ❌ Error creating Realtime session: {e}")
+                return False
             
             # Define event handlers for WebSocket
             def on_message(ws, message):
@@ -234,112 +203,30 @@ class AIVoiceModule:
                     # Parse the message as JSON
                     data = json.loads(message)
                     
-                    # Log WebSocket event type
-                    event_type = data.get('type', 'unknown')
-                    print(f"MIRROR DEBUG: 📄 WebSocket event: {event_type}")
-                    print(f"MIRROR DEBUG: 📄 Current states: recording={self.recording}, processing={self.processing}")
-                    if hasattr(self, 'response_complete'):
-                        print(f"MIRROR DEBUG: 📄 Has response_complete: {self.response_complete}")
-                    else:
-                        print(f"MIRROR DEBUG: 📄 Has response_complete: False")
+                    print(f"MIRROR DEBUG: 📄 WebSocket message received: {message[:100]}...")
                     
-                    # Handle different event types
-                    if event_type == 'session.created':
-                        self.logger.info("Session created")
-                        print("MIRROR DEBUG: ✅ Realtime session established")
-                        self.session_ready = True
-                        
-                        # Configure the session for both audio and text responses
-                        config_event = {
-                            "type": "session.configure",
-                            "config": {
-                                "modalities": ["audio", "text"],
-                                "voice": "alloy",
-                                "output_audio_format": "pcm16"
-                            }
-                        }
-                        ws.send(json.dumps(config_event))
-                        print("MIRROR DEBUG: ✅ Session configured with text and audio responses")
+                    # Handle streaming response chunks
+                    if "choices" in data:
+                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            print(f"MIRROR DEBUG: 💬 Received text: {content}")
                     
-                    elif event_type == 'session.updated':
-                        self.logger.info("Session updated successfully")
-                        print("MIRROR DEBUG: ✓ Session configuration updated")
-                    
-                    elif event_type == 'input_audio_buffer.speech_started':
-                        self.logger.info("Speech detected")
-                        print("MIRROR DEBUG: 🎤 User started speaking")
-                        self.speech_started = True
-                    
-                    elif event_type == 'input_audio_buffer.speech_stopped':
-                        self.logger.info("Speech ended")
-                        print("MIRROR DEBUG: 🛑 User stopped speaking")
-                    
-                    elif event_type == 'response.created':
-                        self.logger.info("Response started")
-                        print("MIRROR DEBUG: 🧠 Model generating response...")
-                        self.response_started = True
-                    
-                    elif event_type == 'response.chunk':
-                        chunk = data.get('chunk', {})
-                        
-                        # Handle text content
-                        text = chunk.get('text', '')
-                        if text:
-                            print(f"MIRROR DEBUG: 📝 Got text chunk: {text[:50]}")
-                        
-                        # Handle audio content
-                        audio = chunk.get('audio', '')
-                        if audio:
-                            # Decode audio from base64
-                            audio_bytes = base64.b64decode(audio)
-                            # Play audio chunk
-                            self.play_audio_chunk(audio_bytes)
-                    
-                    elif event_type == 'response.done':
-                        print("MIRROR DEBUG: ✅ Response complete")
-                        print(f"MIRROR DEBUG: 📄 Response complete from event: {event_type}")
-                        print(f"MIRROR DEBUG: 📄 Full response data: {data}")
-                        
-                        # Mark response as complete
-                        self.response_complete = True
-                        print("MIRROR DEBUG: 📄 Set response_complete flag to true")
-                        
-                        # Reset recording and processing flags
-                        self.recording = False
-                        self.processing = False
-                        print("MIRROR DEBUG: 📄 Reset recording and processing flags")
-                        
-                        # Update status
-                        self.set_status("Ready", "Say 'Mirror' or press SPACE")
-                    
-                    elif event_type == 'error':
-                        error = data.get('error', {})
-                        error_type = error.get('type', 'unknown')
-                        error_msg = error.get('message', 'No error message')
-                        
-                        self.logger.error(f"WebSocket error: {error_msg}")
-                        print(f"MIRROR DEBUG: ❌ Realtime API error: {error_msg}")
-                        print(f"MIRROR DEBUG: 📄 Error type: {error_type}, code: {error.get('code')}")
-                        print(f"MIRROR DEBUG: 📄 Full error data: {data}")
-                        
-                        # Update status
-                        self.set_status("Ready", "Say 'Mirror' or press SPACE")
-                    
-                    # Handle other events
-                    else:
-                        # Just log other event types without special handling
-                        pass
+                    # Handle audio chunks
+                    if "audio" in data:
+                        audio_data = base64.b64decode(data["audio"])
+                        print(f"MIRROR DEBUG: 🔊 Received audio chunk: {len(audio_data)} bytes")
+                        # Play the audio chunk
+                        self.play_audio_chunk(audio_data)
                     
                 except Exception as e:
-                    self.logger.error(f"Error processing WebSocket message: {e}")
-                    print(f"MIRROR DEBUG: ❌ Error in WebSocket message handler: {e}")
+                    print(f"MIRROR DEBUG: ❌ Error processing WebSocket message: {e}")
             
             def on_error(ws, error):
                 import traceback
                 self.logger.error(f"WebSocket error: {error}\n{traceback.format_exc()}")
                 print(f"MIRROR DEBUG: ❌ WebSocket error: {error}")
                 print(f"MIRROR DEBUG: 🔍 Will attempt to reconnect automatically")
-                # The on_close handler will handle reconnection
             
             def on_close(ws, close_status_code, close_msg):
                 self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
@@ -347,24 +234,19 @@ class AIVoiceModule:
                 
                 # Mark session as not ready
                 self.session_ready = False
-                self.has_openai_access = False
 
                 # Restart session fully
                 if self.running:
                     print("MIRROR DEBUG: 🔄 Restarting WebSocket session in 5 seconds...")
                     time.sleep(5)
-                    self.reset_websocket_session()  # Fully resets before reconnecting
+                    self.reset_websocket_session()
             
             def on_open(ws):
-                self.logger.info("WebSocket connection established")
-                print("MIRROR DEBUG: ✅ Connected to OpenAI Realtime API")
-                # Session will be marked as ready when we receive session.created event
-            
-            # Set proper headers according to documentation
-            self.ws_headers = [
-                f"Authorization: Bearer {self.api_key}",
-                "Content-Type: application/json"
-            ]
+                self.logger.info("WebSocket connection opened")
+                print("MIRROR DEBUG: ✅ WebSocket connection established")
+                
+                # Mark session as ready
+                self.session_ready = True
             
             # Create a new WebSocket connection
             self.ws = websocket.WebSocketApp(
@@ -428,14 +310,14 @@ class AIVoiceModule:
             self.logger.error(f"Error playing listen sound: {e}")
     
     def on_button_press(self):
-        """Handle button press to start voice recording using the fallback method directly"""
+        """Handle button press to start voice recording"""
         try:
             if self.recording or self.processing:
                 # Stop current recording
                 self.stop_audio_stream()
                 return
             
-            # Just use the fallback method directly instead of trying WebSockets
+            # Skip websocket entirely and use our fallback API method
             print("MIRROR DEBUG: 🎙️ Using standard OpenAI API sequence for voice interaction")
             self.fallback_voice_api()
             
@@ -686,7 +568,7 @@ class AIVoiceModule:
             self.has_audio = False
 
     def start_audio_stream(self):
-        """Record audio with maximum reliability and minimal dependencies"""
+        """Stream audio to the Realtime API using the correct format"""
         if not hasattr(self, 'session_ready') or not self.session_ready:
             self.logger.error("Cannot start audio stream - WebSocket session not ready")
             return False
@@ -696,13 +578,12 @@ class AIVoiceModule:
             import subprocess
             import base64
             import time
-            import os
             
             # Reset session state
             self.recording = True
             self.processing = False
             
-            print("MIRROR DEBUG: 🎙️ Starting simple audio recording")
+            print("MIRROR DEBUG: 🎙️ Starting audio capture for Realtime API")
             self.set_status("Listening", "Listening...")
             
             # Define the streaming function
@@ -711,58 +592,45 @@ class AIVoiceModule:
                     # Create a unique filename for this recording
                     temp_wav = os.path.join(os.getcwd(), f"recording_{int(time.time())}.wav")
                     
-                    # Use the simplest possible recording command
-                    cmd = f"arecord -d 5 -f S16_LE -r 16000 {temp_wav}"
-                    print(f"MIRROR DEBUG: 🎙️ Running: {cmd}")
+                    # Use simple recording command
+                    cmd = ["arecord", "-d", "5", "-f", "S16_LE", "-r", "24000", temp_wav]
+                    print(f"MIRROR DEBUG: 🎙️ Running: {' '.join(cmd)}")
                     
-                    # Run the command with a shell
-                    process = subprocess.run(
-                        cmd,
-                        shell=True,
-                        capture_output=True,
-                        text=True
-                    )
+                    # Run the command
+                    process = subprocess.run(cmd, capture_output=True, text=True)
                     
-                    # Check if recording was successful
                     if process.returncode == 0 and os.path.exists(temp_wav):
                         file_size = os.path.getsize(temp_wav)
                         print(f"MIRROR DEBUG: ✅ Recording successful: {temp_wav} ({file_size} bytes)")
                         
-                        # Only process if we got actual audio data
-                        if file_size > 44:  # More than just WAV header
+                        # Only proceed if we got actual audio
+                        if file_size > 100:  # More than just the WAV header
                             # Read the WAV file
                             with open(temp_wav, 'rb') as f:
                                 # Skip WAV header (44 bytes)
                                 f.seek(44)
                                 audio_data = f.read()
                             
-                            # Clean up temp file
+                            # Clean up
                             try:
                                 os.remove(temp_wav)
                             except:
                                 pass
                             
-                            # Send the audio to OpenAI
+                            # Send to Realtime API using the correct format
                             if hasattr(self, 'ws') and len(audio_data) > 1600:
+                                # Base64 encode the audio
                                 encoded_audio = base64.b64encode(audio_data).decode('utf-8')
+                                
+                                # Realtime API message format
+                                message = {
+                                    "audio": encoded_audio,
+                                    "content_type": "audio/pcm16;rate=24000"
+                                }
+                                
+                                # Send the message
                                 print(f"MIRROR DEBUG: 📤 Sending {len(audio_data)} bytes of audio")
-                                
-                                # Send audio data
-                                audio_event = {
-                                    "type": "input_audio_buffer.append",
-                                    "audio": encoded_audio
-                                }
-                                self.ws.send(json.dumps(audio_event))
-                                
-                                # Wait before committing
-                                time.sleep(0.5)
-                                
-                                # Send commit event
-                                commit_event = {
-                                    "type": "input_audio_buffer.commit"
-                                }
-                                self.ws.send(json.dumps(commit_event))
-                                print("MIRROR DEBUG: ✅ Audio committed")
+                                self.ws.send(json.dumps(message))
                                 
                                 # Update status
                                 self.recording = False
@@ -1190,34 +1058,45 @@ class AIVoiceModule:
             return False
 
     def fallback_voice_api(self):
-        """Fallback to using regular API if WebSocket connection fails"""
-        print("MIRROR DEBUG: ⚠️ WebSocket failed - using fallback API approach")
+        """Use regular API for voice interaction"""
+        print("MIRROR DEBUG: 🎙️ Starting voice interaction with standard API")
         
         try:
-            # First, record audio using simple arecord
-            temp_wav = os.path.join(os.getcwd(), f"recording_{int(time.time())}.wav")
-            cmd = f"arecord -d 5 -f S16_LE -r 16000 {temp_wav}"
-            subprocess.run(cmd, shell=True)
+            self.set_status("Listening", "Recording audio...")
             
+            # Create a unique filename for this recording
+            temp_wav = os.path.join(os.getcwd(), f"recording_{int(time.time())}.wav")
+            
+            # Use the default audio device - no hardware ID
+            cmd = ["arecord", "-d", "5", "-f", "S16_LE", "-r", "16000", temp_wav]
+            print(f"MIRROR DEBUG: 🎙️ Running: {' '.join(cmd)}")
+            
+            # Run the command and capture any errors
+            process = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if process.returncode != 0:
+                print(f"MIRROR DEBUG: ❌ Recording failed: {process.stderr}")
+                self.set_status("Error", "Recording failed")
+                return False
+            
+            # Check if file was created and has content
             if os.path.exists(temp_wav) and os.path.getsize(temp_wav) > 100:
                 print(f"MIRROR DEBUG: ✅ Recorded {os.path.getsize(temp_wav)} bytes of audio")
                 
-                # Use regular OpenAI API for transcription and response
-                from openai import OpenAI
-                client = OpenAI(api_key=self.api_key)
-                
                 # Transcribe the audio
+                self.set_status("Processing", "Transcribing audio...")
                 with open(temp_wav, "rb") as audio_file:
-                    transcription = client.audio.transcriptions.create(
+                    transcription = self.client.audio.transcriptions.create(
                         model="whisper-1",
                         file=audio_file
                     )
                 
                 print(f"MIRROR DEBUG: 📝 Transcribed: {transcription.text}")
                 
-                # Get a response via regular chat API
-                completion = client.chat.completions.create(
-                    model="gpt-4o",
+                # Generate response
+                self.set_status("Processing", "Generating response...")
+                completion = self.client.chat.completions.create(
+                    model="gpt-4o-mini",  # Use a more widely available model
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
                         {"role": "user", "content": transcription.text}
@@ -1227,27 +1106,47 @@ class AIVoiceModule:
                 response_text = completion.choices[0].message.content
                 print(f"MIRROR DEBUG: 💬 Response: {response_text}")
                 
-                # Generate speech from text
+                # Generate speech
+                self.set_status("Speaking", "Playing response...")
                 speech_file = os.path.join(os.getcwd(), "response.mp3")
-                response = client.audio.speech.create(
+                response = self.client.audio.speech.create(
                     model="tts-1",
                     voice="alloy",
                     input=response_text
                 )
                 response.stream_to_file(speech_file)
                 
-                # Play the audio
-                subprocess.run(["mpg123", speech_file], shell=True)
+                # Play the audio with multiple fallbacks
+                try:
+                    # First try mpg123
+                    subprocess.run(["mpg123", speech_file], check=False)
+                except:
+                    try:
+                        # Then try pygame
+                        import pygame
+                        pygame.mixer.init()
+                        pygame.mixer.music.load(speech_file)
+                        pygame.mixer.music.play()
+                        while pygame.mixer.music.get_busy():
+                            pygame.time.Clock().tick(10)
+                    except Exception as e:
+                        print(f"MIRROR DEBUG: ❌ Could not play audio: {e}")
                 
                 # Clean up
-                os.remove(temp_wav)
-                os.remove(speech_file)
+                try:
+                    os.remove(temp_wav)
+                    os.remove(speech_file)
+                except:
+                    pass
                 
+                self.set_status("Ready", "API ready")
                 return True
             else:
-                print("MIRROR DEBUG: ❌ Failed to record audio")
+                print("MIRROR DEBUG: ❌ No audio recorded or file too small")
+                self.set_status("Error", "No audio recorded")
                 return False
             
         except Exception as e:
-            print(f"MIRROR DEBUG: ❌ Fallback API failed: {e}")
+            print(f"MIRROR DEBUG: ❌ Voice API error: {e}")
+            self.set_status("Error", "API error")
             return False
