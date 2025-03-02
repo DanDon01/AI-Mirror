@@ -89,8 +89,7 @@ from smarthome_module import SmartHomeModule
 from stocks_module import StocksModule 
 from clock_module import ClockModule  
 from retrocharacters_module import RetroCharactersModule 
-from ai_module_manager import AIModuleManager
-from module_manager import ModuleManager 
+from module_manager import ModuleManager
 from layout_manager import LayoutManager
 from AI_Module import AIInteractionModule  # For backward compatibility
 
@@ -242,7 +241,7 @@ class MagicMirror:
 
     def initialize_modules(self):
         # Make sure AIInteractionModule is available in globals, aliasing AIModuleManager
-        globals()['AIInteractionModule'] = AIModuleManager
+        globals()['AIInteractionModule'] = ModuleManager
         
         modules = {}
         for module_name, module_config in CONFIG.items():
