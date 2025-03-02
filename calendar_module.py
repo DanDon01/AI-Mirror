@@ -9,7 +9,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 from google_auth_oauthlib.flow import Flow
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG
 from visual_effects import VisualEffects
 import time
 
@@ -149,7 +149,7 @@ class CalendarModule:
             self.events = None
 
     def draw(self, screen, position):
-        """Draw calendar with proper Google Calendar colors"""
+        """Draw calendar with proper Google Calendar colors and consistent styling"""
         try:
             # Extract x,y coordinates
             if isinstance(position, dict):
@@ -157,45 +157,61 @@ class CalendarModule:
             else:
                 x, y = position
             
+            # Get styling from config
+            styling = CONFIG.get('module_styling', {})
+            fonts = styling.get('fonts', {})
+            backgrounds = styling.get('backgrounds', {})
+            
             # Initialize fonts if not already done
             if not self.font:
-                self.font = pygame.font.SysFont('Arial', 16)
-                self.small_font = pygame.font.SysFont('Arial', 14)
+                title_size = fonts.get('title', {}).get('size', 24)
+                body_size = fonts.get('body', {}).get('size', 16)
+                small_size = fonts.get('small', {}).get('size', 14)
+                
+                self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
+                self.font = pygame.font.SysFont(FONT_NAME, body_size)
+                self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             
-            # Fix color values for background
-            bg_color = (20, 20, 20)
-            header_bg_color = (40, 40, 40)
+            # Get background colors
+            bg_color = backgrounds.get('module', (20, 20, 20))
+            header_bg_color = backgrounds.get('header', (40, 40, 40))
             
             # Draw module background
             module_width = 300  # Fixed width
             module_height = 400  # Approximate height
             module_rect = pygame.Rect(x-10, y-10, module_width, module_height)
             
+            # Get styles for drawing
+            radius = styling.get('radius', 15)
+            padding = styling.get('spacing', {}).get('padding', 10)
+            line_height = styling.get('spacing', {}).get('line_height', 22)
+            
             try:
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=15)
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius)
                 # Draw header
                 header_rect = pygame.Rect(x-10, y-10, module_width, 40)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=15)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius)
             except Exception as e:
                 # Fallback if visual effects fail
                 pygame.draw.rect(screen, bg_color, module_rect, border_radius=10)
                 pygame.draw.rect(screen, header_bg_color, header_rect, border_radius=10)
             
             # Draw title
-            title_font = pygame.font.SysFont('Arial', 24)
-            title_surface = title_font.render("Calendar", True, (220, 220, 220))
-            screen.blit(title_surface, (x + 10, y + 5))
+            title_color = fonts.get('title', {}).get('color', (240, 240, 240))
+            title_surface = self.title_font.render("Calendar", True, title_color)
+            screen.blit(title_surface, (x + padding, y + padding))
             
             # Draw calendar events
             current_y = y + 45  # Start below title
             
             # Debug message if no events
             if not self.events:
-                debug_text = self.font.render("No calendar events", True, (180, 180, 180))
-                screen.blit(debug_text, (x + 10, current_y))
+                debug_color = fonts.get('body', {}).get('color', (200, 200, 200))
+                debug_text = self.font.render("No calendar events", True, debug_color)
+                screen.blit(debug_text, (x + padding, current_y))
                 return
             
-            # Draw events with proper Google Colors
+            # Draw events with proper Google Colors but consistent font styling
             for event in self.events[:8]:  # Limit to 8 events
                 try:
                     # Get event color from colorId if available
@@ -218,7 +234,8 @@ class CalendarModule:
                         date_str = "All day"
                     
                     # Draw event time with adjusted position (after indicator)
-                    date_surface = self.small_font.render(date_str, True, (180, 180, 180))
+                    small_color = fonts.get('small', {}).get('color', (180, 180, 180))
+                    date_surface = self.small_font.render(date_str, True, small_color)
                     screen.blit(date_surface, (x + 15, current_y))
                     
                     # Draw event title with color influence
@@ -226,9 +243,8 @@ class CalendarModule:
                     if len(title) > 28:
                         title = title[:25] + "..."
                     
-                    # Use slightly lightened version of event color for title
-                    lighter_color = tuple(min(255, c + 40) for c in event_color)
-                    title_surface = self.font.render(title, True, lighter_color)
+                    # Use event color for title, but maintain consistent brightness level
+                    title_surface = self.font.render(title, True, event_color)
                     screen.blit(title_surface, (x + 15, current_y + 18))
                     
                     current_y += 40

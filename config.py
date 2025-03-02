@@ -253,5 +253,36 @@ CONFIG = {
         'width': 800,  # Set to actual physical width of your display 
         'height': 480,  # Set to actual physical height of your display
         'is_portrait': False  # Set to False since the Pi should use landscape mode
-    }
+    },
+    'module_styling': {
+        'font_family': FONT_NAME,
+        'fonts': {
+            'title': {
+                'size': 24,
+                'color': (240, 240, 240)  # Slightly off-white for titles
+            },
+            'subtitle': {
+                'size': 20,
+                'color': (220, 220, 220)
+            },
+            'body': {
+                'size': 16,
+                'color': (200, 200, 200)
+            },
+            'small': {
+                'size': 14,
+                'color': (180, 180, 180)
+            }
+        },
+        'backgrounds': {
+            'module': (20, 20, 20),       # Almost black
+            'header': (40, 40, 40),       # Dark gray
+            'highlight': (30, 30, 40)     # Slightly bluish dark background
+        },
+        'spacing': {
+            'line_height': 22,            # Default line spacing
+            'padding': 10                 # Default padding
+        },
+        'radius': 15                      # Default corner radius
+    },
 }

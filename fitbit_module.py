@@ -266,33 +266,107 @@ class FitbitModule:
         pygame.draw.rect(screen, (100, 100, 100), (x, y, width, height), 2)
 
     def draw(self, screen, position):
-        if self.font is None:
+        """Draw Fitbit data with consistent styling"""
+        try:
+            # Extract position
+            if isinstance(position, dict):
+                x, y = position['x'], position['y']
+            else:
+                x, y = position
+            
+            # Get styling from config
+            styling = CONFIG.get('module_styling', {})
+            fonts = styling.get('fonts', {})
+            backgrounds = styling.get('backgrounds', {})
+            
+            # Get styles for drawing
+            radius = styling.get('radius', 15)
+            padding = styling.get('spacing', {}).get('padding', 10)
+            line_height = styling.get('spacing', {}).get('line_height', 22)
+            
+            # Initialize fonts if needed
+            if not hasattr(self, 'title_font'):
+                title_size = fonts.get('title', {}).get('size', 24)
+                body_size = fonts.get('body', {}).get('size', 16)
+                small_size = fonts.get('small', {}).get('size', 14)
+                
+                self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
+                self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
+                self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
+            
+            # Get background colors
+            bg_color = backgrounds.get('module', (20, 20, 20))
+            header_bg_color = backgrounds.get('header', (40, 40, 40))
+            
+            # Draw module background
+            module_width = 300
+            module_height = 200
+            module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
+            header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)
+            
             try:
-                self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+                # Draw background with rounded corners
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius)
             except:
-                print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
-                self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
-        
-        x, y = position
-        
-        # Draw progress bar for steps
-        steps = int(self.data['steps']) if self.data['steps'] != 'N/A' else 0
-        self.draw_progress_bar(screen, x, y, 200, 20, steps, self.step_goal)
-        
-        # Draw step count and goal
-        step_text = f"Steps: {steps} / {self.step_goal}"
-        step_surface = self.font.render(step_text, True, COLOR_FONT_DEFAULT)
-        step_surface.set_alpha(TRANSPARENCY)
-        screen.blit(step_surface, (x, y + 25))
-        
-        # Draw other Fitbit data
-        y += 20  # Adjust starting y position for other data
-        for i, (key, value) in enumerate(self.data.items()):
-            if key != 'steps':  # Skip steps as we've already displayed it
-                text = f"{key.replace('_', ' ').title()}: {value}"
-                text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
-                text_surface.set_alpha(TRANSPARENCY)
-                screen.blit(text_surface, (x, y + i * LINE_SPACING))
+                # Fallback if effects fail
+                pygame.draw.rect(screen, bg_color, module_rect, border_radius=10)
+                pygame.draw.rect(screen, header_bg_color, header_rect, border_radius=10)
+            
+            # Draw title
+            title_color = fonts.get('title', {}).get('color', (240, 240, 240))
+            title_text = self.title_font.render("Fitbit", True, title_color)
+            screen.blit(title_text, (x + padding, y + padding))
+            
+            # Draw Fitbit data
+            current_y = y + 50  # Start below title
+            text_color = fonts.get('body', {}).get('color', (200, 200, 200))
+            
+            # Check if we have data
+            if not self.data:
+                no_data_text = self.body_font.render("No Fitbit data available", True, text_color)
+                screen.blit(no_data_text, (x + padding, current_y))
+                return
+            
+            # Display Steps and Goal
+            steps = self.data.get('steps', '0')
+            steps_text = self.body_font.render(f"Steps: {steps}", True, text_color)
+            screen.blit(steps_text, (x + padding, current_y))
+            
+            # Display goal if available
+            if 'goals' in self.data and 'steps' in self.data['goals']:
+                goal = self.data['goals']['steps']
+                goal_text = self.small_font.render(f"Goal: {goal}", True, fonts.get('small', {}).get('color', (180, 180, 180)))
+                screen.blit(goal_text, (x + padding + 150, current_y))
+            
+            current_y += line_height
+            
+            # Display heart rate
+            if 'resting_heart_rate' in self.data and self.data['resting_heart_rate'] != 'N/A':
+                hr_text = self.body_font.render(f"Resting HR: {self.data['resting_heart_rate']} bpm", True, text_color)
+                screen.blit(hr_text, (x + padding, current_y))
+                current_y += line_height
+            
+            # Display sleep data if available
+            if 'sleep' in self.data and self.data['sleep'] != 'N/A':
+                sleep_text = self.body_font.render(f"Sleep: {self.data['sleep']}", True, text_color)
+                screen.blit(sleep_text, (x + padding, current_y))
+                current_y += line_height
+            
+            # Display active minutes
+            if 'active_minutes' in self.data:
+                active_text = self.body_font.render(f"Active: {self.data['active_minutes']} min", True, text_color)
+                screen.blit(active_text, (x + padding, current_y))
+                current_y += line_height
+            
+            # Display calories
+            if 'calories' in self.data and self.data['calories'] != 'N/A':
+                cal_text = self.body_font.render(f"Calories: {self.data['calories']}", True, text_color)
+                screen.blit(cal_text, (x + padding, current_y))
+            
+        except Exception as e:
+            logging.error(f"Error drawing Fitbit data: {e}")
+            logging.error(traceback.format_exc())
 
     def cleanup(self):
         pass

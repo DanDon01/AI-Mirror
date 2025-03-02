@@ -3,10 +3,11 @@ import pygame
 import logging
 from datetime import datetime, timedelta
 from pytz import timezone
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY  # Import font settings and color constants from config
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG  # Import font settings and color constants from config
 from visual_effects import VisualEffects
 import time
 import math
+import traceback
 
 # Color constants
 COLOR_HEADER = (240, 240, 240)  # White for headers
@@ -162,132 +163,117 @@ class StocksModule:
             self.logger.error(f"Batch update failed: {e}")
 
     def draw(self, screen, position):
-        """Draw stock data with proper handling of unavailable data"""
+        """Draw stock data with consistent styling across modules"""
         try:
-            x, y = position if isinstance(position, tuple) else (position['x'], position['y'])
+            # Extract position
+            if isinstance(position, dict):
+                x, y = position['x'], position['y']
+            else:
+                x, y = position
             
-            # Check colors are valid RGB tuples before drawing
-            if not (isinstance(self.bg_color, tuple) and len(self.bg_color) >= 3):
-                self.bg_color = (20, 20, 20)
-            if not (isinstance(self.header_bg_color, tuple) and len(self.header_bg_color) >= 3):
-                self.header_bg_color = (40, 40, 40)
+            # Get styling from config
+            styling = CONFIG.get('module_styling', {})
+            fonts = styling.get('fonts', {})
+            backgrounds = styling.get('backgrounds', {})
+            
+            # Get styles for drawing
+            radius = styling.get('radius', 15)
+            padding = styling.get('spacing', {}).get('padding', 10)
+            line_height = styling.get('spacing', {}).get('line_height', 22)
+            
+            # Initialize fonts if not already done
+            if not hasattr(self, 'title_font'):
+                title_size = fonts.get('title', {}).get('size', 24)
+                body_size = fonts.get('body', {}).get('size', 16)
+                small_size = fonts.get('small', {}).get('size', 14)
+                
+                self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
+                self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
+                self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
+            
+            # Get background colors
+            bg_color = backgrounds.get('module', (20, 20, 20))
+            header_bg_color = backgrounds.get('header', (40, 40, 40))
             
             # Draw module background
-            module_rect = pygame.Rect(x-10, y-10, 280, 210)
-            self.effects.draw_rounded_rect(screen, module_rect, self.bg_color, radius=15)
+            module_width = 300
+            module_height = 200
+            module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
+            header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)
             
-            # Draw header with pulsing effect
-            header_rect = pygame.Rect(x-10, y-10, 280, 40)
-            header_alpha = self.effects.pulse_effect(160, 220, self.header_pulse_speed)
-            self.effects.draw_rounded_rect(screen, header_rect, self.header_bg_color, radius=15, alpha=header_alpha)
+            try:
+                # Draw background with rounded corners
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius)
+            except:
+                # Fallback if effects fail
+                pygame.draw.rect(screen, bg_color, module_rect, border_radius=10)
+                pygame.draw.rect(screen, header_bg_color, header_rect, border_radius=10)
             
             # Draw title
-            title_surface = self.effects.create_text_with_shadow(
-                self.font, "STOCKS", COLOR_HEADER, offset=1)
-            screen.blit(title_surface, (x + 10, y))
+            title_color = fonts.get('title', {}).get('color', (240, 240, 240))
+            title_text = self.title_font.render("Stocks", True, title_color)
+            screen.blit(title_text, (x + padding, y + padding))
             
-            # Check if all data is unavailable
-            all_unavailable = all(
-                isinstance(data.get('price'), str) and data.get('price') == 'N/A' 
-                for data in self.stock_data.values()
-            )
+            # Draw stock data
+            current_y = y + 50  # Start below title
             
-            if all_unavailable or not self.stock_data:
-                # Draw unavailable message
-                unavailable_text = self.font.render("Data Unavailable", True, COLOR_PASTEL_RED)
-                screen.blit(unavailable_text, (x + 20, y + 60))
-            else:
-                # Check market status with enhanced visuals
-                current_time = datetime.now(timezone('UTC'))
-                us_open = self.is_market_open(current_time.astimezone(self.market_timezones['US']), 'US')
-                uk_open = self.is_market_open(current_time.astimezone(self.market_timezones['UK']), 'UK')
+            if not self.stock_data:
+                # No data available
+                no_data_text = self.body_font.render("No stock data available", True, fonts.get('body', {}).get('color', (200, 200, 200)))
+                screen.blit(no_data_text, (x + padding, current_y))
+                return
+            
+            # Draw stock data in a grid
+            col_width = 145
+            row_height = 30
+            
+            # Display a subset of stocks in a grid layout
+            stocks_to_display = list(self.stock_data.items())[:8]  # Limit to 8 stocks
+            
+            for i, (ticker, data) in enumerate(stocks_to_display):
+                # Calculate position in grid (2 columns)
+                col = i % 2
+                row = i // 2
                 
-                # Create text with shadow effect
-                markets_text = self.effects.create_text_with_shadow(
-                    self.markets_font, "Markets:", COLOR_FONT_DEFAULT, offset=1)
+                item_x = x + padding + (col * col_width)
+                item_y = current_y + (row * row_height)
                 
-                us_status = "Open" if us_open else "Closed"
-                uk_status = "Open" if uk_open else "Closed"
+                # Get price and change
+                price = data.get('price', 'N/A')
+                percent_change = data.get('percent_change', 0)
                 
-                us_text = self.effects.create_text_with_shadow(
-                    self.status_font, f"US: {us_status}", 
-                    COLOR_PASTEL_GREEN if us_open else COLOR_PASTEL_RED)
-                
-                uk_text = self.effects.create_text_with_shadow(
-                    self.status_font, f"UK: {uk_status}", 
-                    COLOR_PASTEL_GREEN if uk_open else COLOR_PASTEL_RED)
-                
-                # Draw text with fade-in effect
-                screen.blit(markets_text, (x, y))
-                screen.blit(us_text, (x + markets_text.get_width() + 10, y - 4))
-                screen.blit(uk_text, (x + markets_text.get_width() + 10, y + 10))
-                
-                y += LINE_SPACING + 5  # Move position down after displaying market status
-                
-                # Draw alerts with pulsing effect
-                y = self.draw_alerts(screen, (x, y))
-                
-                # Draw stock data with staggered fade-in
-                if self.stock_data:
-                    for i, (ticker, data) in enumerate(self.stock_data.items()):
-                        # Calculate fade-in alpha based on time offset
-                        elapsed = time.time() - self.animation_start_time
-                        fade_progress = min(1.0, max(0, elapsed - self.item_fade_offsets[ticker]))
-                        alpha = int(220 * fade_progress)
-                        
-                        price = data['price']
-                        percent_change = data['percent_change']
-                        
-                        # Fix here - handle 'N/A' properly
-                        if isinstance(percent_change, str) and percent_change == 'N/A':
-                            color = COLOR_FONT_DEFAULT
-                        else:
-                            # Determine color based on change
-                            color = COLOR_PASTEL_GREEN if isinstance(percent_change, (float, int)) and percent_change > 0 else \
-                                  COLOR_PASTEL_RED if isinstance(percent_change, (float, int)) and percent_change < 0 else \
-                                  COLOR_FONT_DEFAULT
-                        
-                        currency_symbol = '£' if ticker.endswith('.L') else '$'
-                        
-                        # Format text with better spacing and alignment
-                        if isinstance(price, (float, int)) and isinstance(percent_change, (float, int)):
-                            ticker_text = f"{ticker}"
-                            price_text = f"{currency_symbol}{price:.2f}"
-                            change_text = f"({percent_change:+.2f}%)"
-                            
-                            # Create surfaces with shadow effect
-                            ticker_surface = self.font.render(ticker_text, True, COLOR_FONT_DEFAULT)
-                            price_surface = self.font.render(price_text, True, color)
-                            change_surface = self.font.render(change_text, True, color)
-                            
-                            # Apply alpha fade
-                            ticker_surface.set_alpha(alpha)
-                            price_surface.set_alpha(alpha)
-                            change_surface.set_alpha(alpha)
-                            
-                            # Position elements with better spacing
-                            screen.blit(ticker_surface, (x, y))
-                            screen.blit(price_surface, (x + 80, y))  # Adjust spacing as needed
-                            screen.blit(change_surface, (x + 160, y))  # Adjust spacing as needed
-                        else:
-                            # Handle N/A values
-                            price_str = f"{price:.2f}" if isinstance(price, (float, int)) else "N/A"
-                            text = f"{ticker}: {currency_symbol}{price_str}"
-                            text_surface = self.font.render(text, True, COLOR_FONT_DEFAULT)
-                            text_surface.set_alpha(alpha)
-                            screen.blit(text_surface, (x, y))
-                        
-                        y += LINE_SPACING  # Move to the next stock
+                # Determine color based on change
+                if isinstance(percent_change, (int, float)):
+                    color = self.determine_color(percent_change)
+                    change_str = f"{'+' if percent_change >= 0 else ''}{percent_change:.2f}%"
+                    arrow = "▲" if percent_change > 0 else "▼" if percent_change < 0 else ""
                 else:
-                    no_data_surface = self.font.render("Stock data unavailable", True, COLOR_PASTEL_RED)
-                    no_data_surface.set_alpha(TRANSPARENCY)
-                    screen.blit(no_data_surface, (x, y))
-            
-            # Draw scrolling ticker with enhanced visuals
-            self.draw_scrolling_ticker(screen)
-            
+                    color = fonts.get('body', {}).get('color', (200, 200, 200))
+                    change_str = "0.00%"
+                    arrow = ""
+                
+                # Format with proper currency symbol
+                currency_symbol = '£' if ticker.endswith('.L') else '$'
+                
+                # Draw ticker name
+                ticker_text = self.body_font.render(ticker, True, fonts.get('body', {}).get('color', (200, 200, 200)))
+                screen.blit(ticker_text, (item_x, item_y))
+                
+                # Draw price and change
+                if isinstance(price, (int, float)):
+                    price_text = self.small_font.render(f"{currency_symbol}{price:.2f}", True, color)
+                    screen.blit(price_text, (item_x, item_y + 18))
+                    
+                    change_text = self.small_font.render(f"{arrow}{change_str}", True, color)
+                    screen.blit(change_text, (item_x + 80, item_y + 18))
+                else:
+                    na_text = self.small_font.render("N/A", True, fonts.get('small', {}).get('color', (180, 180, 180)))
+                    screen.blit(na_text, (item_x, item_y + 18))
+                
         except Exception as e:
-            logging.error(f"Error drawing stock data: {e}", exc_info=True)  # Add exc_info to see full traceback
+            logging.error(f"Error drawing stocks: {e}")
+            logging.error(traceback.format_exc())
 
     def draw_scrolling_ticker(self, screen):
         """Draw a scrolling ticker at the bottom of the screen with stock data"""
