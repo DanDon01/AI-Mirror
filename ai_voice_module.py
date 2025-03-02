@@ -255,11 +255,11 @@ class AIVoiceModule:
                             "type": "session.update",
                             "session": {
                                 "instructions": "You are a helpful assistant running on a Magic Mirror. Be concise but thorough in your responses.",
-                                "modalities": ["text", "audio"]  # Enable both text and audio
+                                "modalities": ["text"]  # Only use text for now
                             }
                         }
                         ws.send(json.dumps(init_event))
-                        print("MIRROR DEBUG: 📝 Session configured with text and audio modalities")
+                        print("MIRROR DEBUG: �� Session configured")
                     
                     elif event_type == "session.updated":
                         self.logger.info("Session updated successfully")
@@ -267,86 +267,69 @@ class AIVoiceModule:
                     
                     # Handle voice activity detection events
                     elif event_type == "input_audio_buffer.speech_started":
-                        self.logger.info("Speech detected")
-                        print("MIRROR DEBUG: 🎤 User started speaking")
-                        self.speaking = True
+                        if not hasattr(self, 'speech_started'):
+                            self.logger.info("Speech detected")
+                            print("MIRROR DEBUG: 🎤 User started speaking")
+                            self.speech_started = True
                     
                     elif event_type == "input_audio_buffer.speech_stopped":
-                        self.logger.info("Speech ended")
-                        print("MIRROR DEBUG: 🛑 User stopped speaking")
-                        self.speaking = False
+                        if hasattr(self, 'speech_started'):
+                            self.logger.info("Speech ended")
+                            print("MIRROR DEBUG: 🛑 User stopped speaking")
+                            delattr(self, 'speech_started')
                     
                     # Handle model response events
                     elif event_type == "response.created":
-                        self.logger.info("Response started")
-                        print("MIRROR DEBUG: 🧠 Model generating response...")
+                        if not hasattr(self, 'response_started'):
+                            self.logger.info("Response started")
+                            print("MIRROR DEBUG: 🧠 Model generating response...")
+                            self.response_started = True
+                            self.current_response = ""
                     
-                    elif event_type == "response.text.delta":
-                        delta = data.get("delta", {}).get("text", "")
-                        # Accumulate text deltas for display
-                        print(f"{delta}", end="", flush=True)
+                    elif event_type == "content_block.delta" and data.get("delta", {}).get("type") == "text_delta":
+                        text_delta = data.get("delta", {}).get("text", "")
+                        if hasattr(self, 'response_started'):
+                            # Add to current response
+                            self.current_response += text_delta
+                            print(text_delta, end="", flush=True)
                     
-                    elif event_type == "response.audio.delta":
-                        # Handle audio chunks from the model
-                        audio_chunk = data.get("delta", {}).get("audio", "")
-                        if audio_chunk:
-                            # Decode base64 audio
-                            try:
-                                audio_bytes = base64.b64decode(audio_chunk)
-                                # Play audio directly (implementation varies)
-                                self.play_audio_chunk(audio_bytes)
-                            except Exception as e:
-                                self.logger.error(f"Error playing audio: {e}")
-                    
-                    elif event_type == "response.done":
-                        # Response is complete
-                        self.response_in_progress = False
-                        self.logger.info("Response complete")
+                    elif event_type == "response.done" or event_type == "message.complete":
                         print("\nMIRROR DEBUG: ✅ Response complete")
                         
-                        # Reset state
+                        # Reset all states
+                        self.recording = False
                         self.processing = False
+                        if hasattr(self, 'response_started'):
+                            delattr(self, 'response_started')
+                        if hasattr(self, 'speech_started'):
+                            delattr(self, 'speech_started')
+                        
+                        # Put final response in queue
+                        if hasattr(self, 'current_response') and self.current_response:
+                            self.response_queue.put({
+                                "type": "text",
+                                "text": self.current_response,
+                                "is_complete": True
+                            })
+                            self.current_response = ""
+                        
                         self.set_status("Ready", "Say 'Mirror' or press SPACE")
                     
                     elif event_type == "error":
                         error_message = data.get("error", {}).get("message", "Unknown error")
                         self.logger.error(f"WebSocket error: {error_message}")
                         print(f"MIRROR DEBUG: ❌ Realtime API error: {error_message}")
-                    
-                    elif event_type == "content_block.delta" and data.get("delta", {}).get("type") == "text_delta":
-                        # Process text response
-                        text_delta = data.get("delta", {}).get("text", "")
                         
-                        # Add to current response
-                        self.current_response += text_delta
-                        
-                        # Log response progress
-                        self.logger.debug(f"Text response delta: {text_delta}")
-                        
-                        # Update the response in the queue
-                        self.response_queue.put({
-                            "type": "text",
-                            "text": self.current_response,
-                            "is_complete": False
-                        })
-                    
-                    elif event_type == "message.complete":
-                        # Mark the response as complete
-                        self.response_in_progress = False
+                        # Reset states on error
+                        self.recording = False
                         self.processing = False
+                        if hasattr(self, 'response_started'):
+                            delattr(self, 'response_started')
+                        if hasattr(self, 'speech_started'):
+                            delattr(self, 'speech_started')
                         
-                        # Put final response in queue
-                        if self.current_response:
-                            self.response_queue.put({
-                                "type": "text",
-                                "text": self.current_response,
-                                "is_complete": True
-                            })
-                        
-                        # Reset for next interaction
-                        self.current_response = ""
-                        self.set_status("Ready", "Ready for voice input")
-                    
+                        self.set_status("Ready", "Say 'Mirror' or press SPACE")
+                
                 except Exception as e:
                     self.logger.error(f"Error processing WebSocket message: {e}")
                     print(f"MIRROR DEBUG: ❌ Error processing message: {e}")
