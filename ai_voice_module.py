@@ -700,8 +700,7 @@ class AIVoiceModule:
                         "-r", "44100",       # Sample rate
                         "-t", "raw",         # Raw format
                         "-B", "10000",       # Buffer size in frames
-                        "-p",                # Record from ALSA PCM device
-                        "-v",                # Verbose output for debugging
+                        "-v"                 # Verbose output for debugging
                     ]
                     
                     print(f"MIRROR DEBUG: 🎙️ Running command: {' '.join(cmd)}")
