@@ -170,32 +170,34 @@ class AIInteractionModule:
                 self.processing_thread.daemon = True
                 self.processing_thread.start()
 
-    async def stream_response(self, text: str) -> Iterator[str]:
-        """Stream the AI response in real-time"""
+    async def stream_response(self, text):
+        """Stream response from OpenAI API"""
         try:
-            stream = await self.client.chat.completions.create(
+            if not self.client:
+                self.logger.error("No OpenAI client available")
+                yield "I'm sorry, I can't access my AI capabilities right now."
+                return
+            
+            stream = await asyncio.to_thread(
+                self.client.chat.completions.create,
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
-                    {"role": "user", "content": text}
-                ],
-                stream=True  # Enable streaming
+                messages=[{"role": "user", "content": text}],
+                max_tokens=self.max_tokens,
+                stream=True
             )
             
-            self.set_status("Responding", "AI is thinking...")
-            response_text = ""
-            
+            full_response = ""
             async for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    delta = chunk.choices[0].delta.content
-                    response_text += delta
-                    # Update the display with the partial response
-                    self.status_message = response_text[-50:]  # Show last 50 chars
-                    yield delta
+                if not chunk.choices:
+                    continue
+                
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content
             
         except Exception as e:
-            self.logger.error(f"Streaming error: {str(e)}")
-            yield f"Error: {str(e)}"  # Yield the error instead of returning None
+            self.logger.error(f"Error in streaming response: {e}")
+            yield f"I'm sorry, I encountered an error: {str(e)[:50]}"
 
     async def process_with_openai(self, text):
         """Process text using OpenAI's streaming API"""
@@ -485,8 +487,6 @@ class AIInteractionModule:
             
             # Create recognizer with appropriate settings for a mirror environment
             self.recognizer = sr.Recognizer()
-            # Get energy threshold from config or use default
-            self.mic_energy_threshold = self.config.get('audio', {}).get('mic_energy_threshold', 500)
             self.recognizer.energy_threshold = self.mic_energy_threshold
             self.recognizer.pause_threshold = 0.8
             self.recognizer.dynamic_energy_threshold = True
@@ -550,26 +550,26 @@ class AIInteractionModule:
     def create_fallback_sound(self):
         """Create a simple beep sound as fallback"""
         try:
-            import numpy as np
-            from scipy.io.wavfile import write
+            # Initialize pygame mixer if needed
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=22050, size=-16, channels=2)
             
-            # Generate a simple beep
-            sample_rate = 44100
-            duration = 1  # seconds
-            frequency = 440  # Hz
+            # Create a simple beep using numpy
+            sample_rate = 22050
+            duration = 0.3  # 300ms beep
+            
+            # Generate a sine wave
             t = np.linspace(0, duration, int(sample_rate * duration), False)
-            beep = np.sin(2 * np.pi * frequency * t) * 32767
-            beep = beep.astype(np.int16)
+            beep = np.sin(2 * np.pi * 440 * t) * 0.5  # 440 Hz = A4, 0.5 = 50% volume
             
-            # Save to temp file
-            temp_file = "/tmp/fallback_beep.wav"
-            write(temp_file, sample_rate, beep)
+            # Convert to 16-bit signed integers
+            beep = (beep * 32767).astype(np.int16)
             
-            # Load into pygame
-            self.sound_effects['mirror_listening'] = pygame.mixer.Sound(temp_file)
-            self.sound_effects['mirror_listening'].set_volume(1.0)
+            # Create a Sound object from the array
+            beep_sound = pygame.sndarray.make_sound(np.column_stack([beep, beep]))
+            self.sound_effects['mirror_listening'] = beep_sound
+            
             self.logger.info("Created fallback beep sound")
-            
         except Exception as e:
             self.logger.error(f"Failed to create fallback sound: {e}")
 
@@ -893,3 +893,66 @@ class AIInteractionModule:
         except Exception as e:
             self.logger.error(f"Error loading sound effects: {e}")
             self.create_fallback_sound()
+
+    def initialize_openai(self):
+        """Initialize OpenAI API connection"""
+        self.has_openai_access = False
+        self.client = None
+        
+        try:
+            if not self.api_key:
+                self.logger.error("No OpenAI API key provided")
+                self.set_status("Error", "No API key available")
+                return
+            
+            # Create a base client
+            openai.api_key = self.api_key
+            self.client = OpenAI(api_key=self.api_key)
+            
+            # Test connection by listing models
+            response = self.client.models.list()
+            if response:
+                self.logger.info("OpenAI API access confirmed")
+                self.has_openai_access = True
+                self.set_status("Ready", "API connection established")
+            else:
+                self.logger.warning("OpenAI API connection test returned no models")
+                self.set_status("Warning", "API connection issue")
+        except Exception as e:
+            self.logger.error(f"OpenAI API initialization error: {e}")
+            self.set_status("Error", f"API error: {str(e)[:30]}")
+
+    def speak_text(self, text):
+        """Convert text to speech and play it"""
+        if not text:
+            self.logger.warning("Empty text provided for TTS")
+            return
+        
+        try:
+            self.logger.info(f"Converting to speech: '{text[:50]}...'")
+            
+            # Create a temporary file for the audio
+            temp_file = "response.mp3"
+            
+            # Create TTS mp3
+            tts = gTTS(text=text, lang='en', slow=False)
+            tts.save(temp_file)
+            
+            # Initialize pygame mixer if needed
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            
+            # Load and play the speech
+            speech = pygame.mixer.Sound(temp_file)
+            speech.set_volume(self.tts_volume)  # Use the configured volume
+            
+            # Play the speech
+            speech.play()
+            
+            # Wait for it to finish
+            pygame.time.wait(int(speech.get_length() * 1000))
+            
+            # Clean up
+            os.remove(temp_file)
+        except Exception as e:
+            self.logger.error(f"Error in TTS: {e}")

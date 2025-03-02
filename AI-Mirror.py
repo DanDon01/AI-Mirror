@@ -414,6 +414,10 @@ class MagicMirror:
                 dims_text = debug_font.render(f"Screen: {self.screen.get_width()}x{self.screen.get_height()}", True, (255, 0, 0))
                 self.screen.blit(dims_text, (10, self.screen.get_height() - 30))
             
+            if 'ai_interaction' in self.modules:
+                module = self.modules['ai_interaction']
+                print(f"MIRROR TRACE: AI module type: {type(module)}, Has on_button_press: {'on_button_press' in dir(module)}")
+            
             pygame.display.flip()
         except Exception as e:
             logging.error(f"Error in draw_modules: {e}")

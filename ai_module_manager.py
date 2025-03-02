@@ -59,6 +59,14 @@ class AIModuleManager:
             self.status = f"Ready ({self.active_module.__class__.__name__})"
             self.status_message = "Say 'Mirror' or press SPACE to activate"
             
+            # Force-create a new module instance for debugging
+            print("MIRROR DEBUG: Creating direct AI module instance for debugging")
+            from AI_Module import AIInteractionModule
+            self.debug_module = AIInteractionModule(ai_config)
+            self.active_module = self.debug_module  # Use this directly
+            self.status = "Debug Mode"
+            self.status_message = "Using direct module instance"
+            
         except Exception as e:
             self.logger.error(f"Failed to initialize any AI module: {e}")
             self.active_module = None
@@ -144,9 +152,14 @@ class AIModuleManager:
     
     def on_button_press(self):
         """Delegate button press to active module"""
+        print(f"MIRROR DEBUG: AIModuleManager received button press. Active module: {self.active_module}")
         if self.active_module and hasattr(self.active_module, 'on_button_press'):
             self.logger.info("Delegating button press to active module")
             self.active_module.on_button_press()
         else:
             self.logger.error("No active module or module doesn't support button press")
-            print("MIRROR DEBUG: ❌ Button press failed - no active AI module") 
+            print(f"MIRROR DEBUG: ❌ Button press failed - no active AI module. Active module: {self.active_module}")
+            
+            # Debug attributes of active module
+            if self.active_module:
+                print(f"Module methods: {[method for method in dir(self.active_module) if not method.startswith('_')]}") 
