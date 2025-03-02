@@ -675,10 +675,25 @@ class AIVoiceModule:
             
             # Get device info using arecord -l
             print("MIRROR DEBUG: 🎙️ Available audio devices (ALSA):")
-            devices_output = subprocess.check_output(["arecord", "-l"]).decode("utf-8")
-            print(devices_output)
+            try:
+                devices_output = subprocess.check_output(["arecord", "-l"]).decode("utf-8")
+                print(devices_output)
+                
+                # Look for USB audio in the output
+                usb_device = None
+                for line in devices_output.splitlines():
+                    if 'USB' in line and 'Audio' in line:
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            card = parts[0].strip().split('card ')[1].split(',')[0]
+                            device = parts[1].strip().split('device ')[1].split(':')[0]
+                            usb_device = f"hw:{card},{device}"
+                            print(f"MIRROR DEBUG: ✅ Found USB audio device: {usb_device}")
+                            break
+            except:
+                print("MIRROR DEBUG: ⚠️ Could not enumerate audio devices")
             
-            # Use the working device that you confirmed
+            # Try the device reported by the successful arecord command first
             self.alsa_device = "hw:2,0"  # Based on your working arecord command
             
             # Let's check if this device is valid
@@ -692,9 +707,25 @@ class AIVoiceModule:
             except subprocess.CalledProcessError as e:
                 print(f"MIRROR DEBUG: ⚠️ Device test failed: {e}")
                 print(f"Error output: {e.stderr.decode('utf-8')}")
-                # Try to use default device instead
-                self.alsa_device = "default"
-                print(f"MIRROR DEBUG: Falling back to default ALSA device")
+                
+                # Try the auto-detected USB device if different
+                if usb_device and usb_device != self.alsa_device:
+                    self.alsa_device = usb_device
+                    try:
+                        test_process = subprocess.run(
+                            ["arecord", "-D", self.alsa_device, "-d", "1", "-f", "S16_LE", "-c", "1", "-r", "16000", "/dev/null"],
+                            check=True, 
+                            capture_output=True
+                        )
+                        print(f"MIRROR DEBUG: ✅ Successfully tested recording with USB device {self.alsa_device}")
+                    except:
+                        # Fall back to default device
+                        self.alsa_device = "default"
+                        print(f"MIRROR DEBUG: Falling back to default ALSA device")
+                else:
+                    # Fall back to default device
+                    self.alsa_device = "default"
+                    print(f"MIRROR DEBUG: Falling back to default ALSA device")
             
             # Audio format parameters - match arecord settings
             self.format = "S16_LE"  # 16-bit signed little endian
@@ -811,11 +842,11 @@ class AIVoiceModule:
                     # Let the API know we're done sending audio
                     if hasattr(self, 'ws'):
                         complete_event = {
-                            "type": "input_audio_buffer.complete"
+                            "type": "input_audio_buffer.commit"
                         }
                         self.ws.send(json.dumps(complete_event))
                         
-                    print("MIRROR DEBUG: ✅ Done recording - sent complete event")
+                    print("MIRROR DEBUG: ✅ Done recording - sent commit event")
                     
                     # Clean up
                     self.stop_audio_stream()
@@ -931,3 +962,89 @@ class AIVoiceModule:
             
         except Exception as e:
             self.logger.error(f"Error playing audio chunk: {e}")
+
+    def initialize_hotword_detection(self):
+        """Set up hotword detection in the background"""
+        try:
+            # Import required libraries
+            import speech_recognition as sr
+            import threading
+            
+            # Create a recognizer
+            self.hotword_recognizer = sr.Recognizer()
+            
+            # Configure the microphone for hotword detection
+            # Try to get a microphone index
+            self.hotword_mic = None
+            try:
+                # Find an available microphone
+                for index, name in enumerate(sr.Microphone.list_microphone_names()):
+                    if 'usb' in name.lower() or 'mic' in name.lower():
+                        print(f"MIRROR DEBUG: ✅ Found microphone for hotword detection: {index} - {name}")
+                        self.hotword_mic = sr.Microphone(device_index=index)
+                        break
+            
+            except Exception as e:
+                self.logger.warning(f"Failed to find specific microphone: {e}")
+                print(f"MIRROR DEBUG: Using default microphone for hotword detection (error: {e})")
+                self.hotword_mic = sr.Microphone()
+            
+            # Start hotword detection in a background thread
+            self.hotword_thread = threading.Thread(target=self.hotword_detection_loop)
+            self.hotword_thread.daemon = True
+            self.hotword_thread.start()
+            
+            self.logger.info("Hotword detection initialized")
+            print("MIRROR DEBUG: ✅ Hotword detection initialized")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize hotword detection: {e}")
+            print(f"MIRROR DEBUG: ❌ Failed to initialize hotword detection: {e}")
+
+    def hotword_detection_loop(self):
+        """Listen for the 'mirror' hotword in the background"""
+        while self.running:
+            try:
+                # Skip if already recording/processing
+                if self.recording or self.processing:
+                    time.sleep(0.5)
+                    continue
+                    
+                # Use the microphone to listen for the hotword
+                with self.hotword_mic as source:
+                    try:
+                        # Adjust for ambient noise
+                        self.hotword_recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                        
+                        # Listen with short timeout
+                        audio = self.hotword_recognizer.listen(source, timeout=1, phrase_time_limit=3)
+                        
+                        # Try to recognize with Google's API
+                        text = self.hotword_recognizer.recognize_google(audio).lower()
+                        self.logger.debug(f"Heard hotword check: {text}")
+                        
+                        # Check if the hotword is in the text
+                        if "mirror" in text:
+                            self.logger.info(f"Hotword detected: {text}")
+                            print(f"MIRROR DEBUG: 🎤 Hotword detected: '{text}'")
+                            self.on_button_press()
+                            # Add delay to prevent re-triggering
+                            time.sleep(2)
+                
+                    except sr.UnknownValueError:
+                        # Normal - no speech detected
+                        pass
+                    except sr.RequestError:
+                        # Google API issue - back off
+                        time.sleep(2)
+                    except Exception as e:
+                        if "timed out" not in str(e):
+                            self.logger.warning(f"Hotword listener error: {e}")
+                            time.sleep(0.5)
+            
+            except Exception as e:
+                self.logger.warning(f"Hotword loop error: {e}")
+                time.sleep(1)
+                
+            # Small pause before next attempt
+            time.sleep(0.1)
