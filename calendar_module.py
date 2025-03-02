@@ -13,6 +13,30 @@ from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, L
 from visual_effects import VisualEffects
 import time
 
+# Google Calendar color mapping - these match the standard Google Calendar colors
+GOOGLE_CALENDAR_COLORS = {
+    '1': (166, 118, 242),  # Lavender
+    '2': (120, 147, 255),  # Sage
+    '3': (102, 178, 226),  # Grape
+    '4': (82, 183, 189),   # Flamingo
+    '5': (103, 192, 163),  # Banana
+    '6': (118, 198, 124),  # Tangerine
+    '7': (194, 151, 104),  # Peacock
+    '8': (206, 129, 116),  # Graphite
+    '9': (150, 133, 164),  # Blueberry
+    '10': (205, 133, 134), # Basil
+    '11': (225, 181, 180)  # Tomato
+}
+
+# Default colors for calendar events
+DEFAULT_CALENDAR_COLORS = [
+    (120, 180, 240),  # Blue
+    (120, 200, 120),  # Green
+    (240, 180, 120),  # Orange
+    (200, 120, 200),  # Purple
+    (240, 140, 140)   # Red
+]
+
 class CalendarModule:
     def __init__(self, config):
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']

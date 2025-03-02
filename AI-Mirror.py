@@ -292,21 +292,29 @@ class MagicMirror:
         return modules
 
     def handle_events(self):
+        """Handle pygame events and key presses"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+                if event.key == pygame.K_q:
                     self.running = False
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == pygame.K_s:
-                    self.toggle_mode()
                 elif event.key == pygame.K_d:
                     self.toggle_debug()
+                elif event.key == pygame.K_s:
+                    # Cycle through states: active -> screensaver -> sleep -> active
+                    if self.state == "active":
+                        self.change_state("screensaver")
+                    elif self.state == "screensaver":
+                        self.change_state("sleep")
+                    else:
+                        self.change_state("active")
                 elif event.key == pygame.K_SPACE:
-                    if 'ai_module' in self.modules:
-                        self.modules['ai_module'].handle_event(event)
+                    if self.state != "active":
+                        self.change_state("active")  # Pressing space always returns to active state
+                    elif 'ai_interaction' in self.modules:
+                        # Trigger AI interaction when in active state
+                        self.modules['ai_interaction'].on_button_press()
             # Add more event handling here (e.g., for voice commands or gestures)
 
     def toggle_mode(self):
@@ -322,12 +330,11 @@ class MagicMirror:
         try:
             self.screen.fill((0, 0, 0))  # Black background
             
-            # Debug layout flag - make this false to disable red boxes
-            self.debug_layout = True
-            
-            # Draw only visible modules
+            # Draw only visible modules for the current state
             for module_name, module in self.modules.items():
-                self.debug_log(f"Attempting to draw {module_name}")
+                self.debug_log(f"Checking visibility for {module_name} in state: {self.state}")
+                
+                # Check if the module should be visible in the current state
                 if self.module_manager.is_module_visible(module_name):
                     try:
                         position = self.layout_manager.get_module_position(module_name)
@@ -485,6 +492,33 @@ class MagicMirror:
         # Setup layout manager with correct dimensions
         self.layout_manager = LayoutManager(width, height)
         self.debug_layout = False  # Disable debug overlay to hide red boundary lines
+
+    def change_state(self, new_state):
+        """Change mirror state and update module visibility"""
+        if self.state == new_state:
+            return  # No change needed
+        
+        self.state = new_state
+        logging.info(f"Mirror state changed to: {new_state}")
+        
+        # Update module visibility based on state
+        if new_state == "active":
+            # In active mode, use configuration settings for module visibility
+            for module_name in self.modules:
+                visible = self.module_manager.module_config.get(module_name, {}).get('visible', True)
+                self.module_manager.set_module_visibility(module_name, visible)
+        
+        elif new_state == "screensaver":
+            # In screensaver mode, only show the retro characters module
+            for module_name in self.modules:
+                is_visible = module_name in CONFIG.get('screensaver_modules', ['retro_characters'])
+                self.module_manager.set_module_visibility(module_name, is_visible)
+        
+        elif new_state == "sleep":
+            # In sleep mode, only show the clock module
+            for module_name in self.modules:
+                is_visible = module_name in CONFIG.get('sleep_modules', ['clock'])
+                self.module_manager.set_module_visibility(module_name, is_visible)
 
 if __name__ == "__main__":
     mirror = MagicMirror()

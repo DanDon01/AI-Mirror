@@ -238,7 +238,7 @@ CONFIG = {
         'enabled': False,  # Set to True when you need detailed logging
         'log_level': 'INFO'  # Can be 'DEBUG', 'INFO', 'WARNING', 'ERROR'
     },
-    'screensaver_modules': ['retro_characters', 'clock'],
+    'screensaver_modules': ['retro_characters'],
     'sleep_modules': ['clock'],
     'visual_effects': {
         'enabled': True,
