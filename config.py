@@ -262,22 +262,9 @@ CONFIG = {
         }
     },
     'ai_interaction': {
-        'class': 'AIModuleManager',
+        'class': 'AIInteractionModule',
         'params': {
-            'config': {
-                'disable_audio': False,
-                'realtime_enabled': True,  # Set to False to force standard mode
-                'openai': {
-                    'api_key': os.getenv('OPENAI_API_KEY'),      # Standard API key
-                    'voice_api_key': os.getenv('OPENAI_VOICE_KEY'),  # Voice API key
-                    'model': 'gpt-4o'  # Use gpt-4o which works in both APIs
-                },
-                'audio': {
-                    'mic_energy_threshold': 500,
-                    'tts_volume': 0.8,
-                    'wav_volume': 0.5
-                }
-            }
+            'config': CONFIG
         }
     },
     

@@ -86,3 +86,31 @@ class ModuleManager:
                 self.initialize_module(module_name)
         
         print("MIRROR DEBUG: ✅ All modules initialized")
+
+    def initialize_module(self, module_name):
+        """Initialize a specific module"""
+        if module_name in self.modules:
+            config = self.modules[module_name]
+            if isinstance(config, dict) and 'class' in config:
+                try:
+                    # Dynamically import if needed
+                    if config['class'] == 'AIInteractionModule':
+                        from AI_Module import AIInteractionModule
+                        module_class = AIInteractionModule
+                    elif config['class'] == 'AIVoiceModule':
+                        from ai_voice_module import AIVoiceModule
+                        module_class = AIVoiceModule
+                    else:
+                        # Try to get it from globals
+                        import sys
+                        module_class = getattr(sys.modules['__main__'], config['class'], None)
+                        
+                    if module_class:
+                        # Initialize the module
+                        return module_class(**config.get('params', {}))
+                    else:
+                        self.logger.error(f"Could not find class: {config['class']}")
+                except Exception as e:
+                    self.logger.error(f"Error initializing module {module_name}: {e}")
+            
+            return None

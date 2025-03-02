@@ -91,7 +91,7 @@ from clock_module import ClockModule
 from retrocharacters_module import RetroCharactersModule 
 from module_manager import ModuleManager
 from layout_manager import LayoutManager
-from AI_Module import AIInteractionModule  # For backward compatibility
+# from AI_Module import AIInteractionModule  # Removing to prevent double loading
 
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -240,27 +240,75 @@ class MagicMirror:
             logging.debug(message)
 
     def initialize_modules(self):
-        # Make sure AIInteractionModule is available in globals, aliasing AIModuleManager
-        globals()['AIInteractionModule'] = ModuleManager
+        """Initialize modules based on config but properly handle AI modules"""
+        # Don't create aliases here - this is what's causing conflicts
+        # globals()['AIInteractionModule'] = ModuleManager
+        # globals()['AIModuleManager'] = ModuleManager
         
         modules = {}
+        ai_modules = []
+        regular_modules = []
+        
+        # First pass - identify regular vs AI modules
         for module_name, module_config in CONFIG.items():
             if isinstance(module_config, dict) and 'class' in module_config:
-                try:
-                    # Add debug logging
-                    logging.info(f"Attempting to initialize {module_name} module")
+                module_class_name = module_config['class']
+                # Check if this is an AI module
+                if 'AI' in module_class_name or module_name.lower().startswith('ai_'):
+                    ai_modules.append((module_name, module_config))
+                else:
+                    regular_modules.append((module_name, module_config))
+        
+        # Load regular modules first
+        for module_name, module_config in regular_modules:
+            try:
+                logging.info(f"Initializing regular module: {module_name}")
+                # Make sure the class exists in globals
+                if module_config['class'] in globals():
                     module_class = globals()[module_config['class']]
                     modules[module_name] = module_class(**module_config['params'])
                     logging.info(f"Successfully initialized {module_name} module")
-                except Exception as e:
-                    logging.error(f"Error initializing {module_name} module: {str(e)}")
-                    logging.error(traceback.format_exc())
+                else:
+                    logging.error(f"Module class {module_config['class']} not found")
+            except Exception as e:
+                logging.error(f"Error initializing {module_name} module: {str(e)}")
+                logging.error(traceback.format_exc())
         
-        # Verify AI module initialization
-        if 'ai_interaction' not in modules:
-            logging.warning("AI module not initialized - check config settings")
+        # Now load AI modules after a slight delay
+        logging.info("Regular modules loaded, waiting before loading AI modules...")
+        time.sleep(1)  # Short delay
         
-        print(f"Available module classes: {[cls for cls in globals().keys() if 'Module' in cls]}")
+        for module_name, module_config in ai_modules:
+            try:
+                logging.info(f"Initializing AI module: {module_name}")
+                
+                # Handle different AI module types
+                if module_config['class'] == 'AIModuleManager':
+                    # Use module_manager for new approach
+                    module_class = ModuleManager
+                elif module_config['class'] == 'AIInteractionModule':
+                    # Import dynamically to avoid conflicts
+                    from AI_Module import AIInteractionModule
+                    module_class = AIInteractionModule
+                elif module_config['class'] == 'AIVoiceModule':
+                    # Import dynamically to avoid conflicts
+                    from ai_voice_module import AIVoiceModule
+                    module_class = AIVoiceModule
+                else:
+                    # For any other AI module
+                    if module_config['class'] in globals():
+                        module_class = globals()[module_config['class']]
+                    else:
+                        logging.error(f"AI module class {module_config['class']} not found")
+                        continue
+                
+                # Initialize the module
+                modules[module_name] = module_class(**module_config['params'])
+                logging.info(f"Successfully initialized AI module: {module_name}")
+                
+            except Exception as e:
+                logging.error(f"Error initializing AI module {module_name}: {str(e)}")
+                logging.error(traceback.format_exc())
         
         return modules
 
