@@ -265,7 +265,8 @@ CONFIG = {
     'ai_interaction': {
         'class': 'AIInteractionModule',
         'params': {
-            'disable_audio': True  # First define without the circular reference
+            'use_direct_audio': True,  # Use our direct audio approach
+            'config': CONFIG  # This will be set after CONFIG is defined
         }
     },
     
