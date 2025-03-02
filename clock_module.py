@@ -24,41 +24,46 @@ class ClockModule:
             self.scroll_position = self.screen_width
 
     def draw(self, screen, position):
-        """Draw clock with scrolling text"""
+        """Draw the clock with improved scrolling across the full screen"""
         try:
-            # Extract position 
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
+            x, y = position if isinstance(position, tuple) else (position['x'], position['y'])
+            screen_width = screen.get_width()
+            
+            # Get current time and format it
+            current_time = self.get_current_time()
+            current_date = self.get_current_date()
+            
+            # Render time with larger font
+            time_text = self.time_font.render(current_time, True, self.color)
+            
+            # For scrolling effect, calculate position based on time
+            if hasattr(self, 'scroll_position'):
+                # Update scroll position (slower speed)
+                self.scroll_position -= 0.7  # Reduced speed (was likely 1 or 2)
+                
+                # Reset position when it's gone completely off left side
+                if self.scroll_position < -time_text.get_width():
+                    self.scroll_position = screen_width
             else:
-                x, y = position
+                # Initialize scroll position at the right edge of screen
+                self.scroll_position = screen_width
             
-            # Set width for scrolling calculations if not already set
-            if not hasattr(self, 'screen_width') or self.screen_width == 0:
-                self.screen_width = screen.get_width()
-                self.width = self.screen_width
+            # Draw the time text at the current scroll position
+            screen.blit(time_text, (self.scroll_position, y))
             
-            current_time = datetime.now(self.tz) if self.tz else datetime.now()
+            # If the first instance is scrolling off, draw a second instance
+            if self.scroll_position < 0:
+                # Calculate where to put the second instance
+                second_position = self.scroll_position + time_text.get_width() + screen_width
+                
+                # Only draw second instance if needed to fill gap
+                if second_position < screen_width:
+                    screen.blit(time_text, (second_position, y))
             
-            # Create time string with date for scrolling
-            date_str = self.format_date(current_time)
-            time_str = current_time.strftime(self.time_format)
-            full_text = f"{time_str} — {date_str}"
-            
-            # Create scrolling text surface
-            text_surface = self.time_font.render(full_text, True, self.color)
-            self.total_width = text_surface.get_width()
-            
-            # Draw scrolling text
-            screen.blit(text_surface, (self.scroll_position, y))
-            
-            # If text is long enough to need scrolling, add a second copy
-            if self.total_width > self.screen_width:
-                screen.blit(text_surface, (self.scroll_position + self.total_width, y))
-            
-            # Update scroll position for next frame
-            self.scroll_position -= self.scroll_speed
-            if self.scroll_position < -self.total_width:
-                self.scroll_position = 0
+            # Draw the date below the time (not scrolling)
+            date_text = self.date_font.render(current_date, True, self.color)
+            date_x = (screen_width - date_text.get_width()) // 2  # Center date
+            screen.blit(date_text, (date_x, y + self.time_font_size + 10))
             
         except Exception as e:
             logging.error(f"Error drawing clock: {e}")

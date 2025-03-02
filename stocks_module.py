@@ -42,7 +42,7 @@ class StocksModule:
         self.ticker_font = pygame.font.SysFont(FONT_NAME, 24)
         self.alert_font = pygame.font.SysFont(FONT_NAME, 32)
         self.scroll_position = 0
-        self.scroll_speed = 2
+        self.scroll_speed = 0.8  # Reduced from 2 to 0.8 for slower scrolling
         self.alerts = []
 
         self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
@@ -294,6 +294,7 @@ class StocksModule:
         try:
             ticker_height = 30
             y = screen.get_height() - ticker_height
+            screen_width = screen.get_width()
             total_width = 0
             
             # Check if we have valid data
@@ -304,9 +305,12 @@ class StocksModule:
                 text_surface.set_alpha(TRANSPARENCY)
                 
                 # Center the message
-                x_pos = (screen.get_width() - text_surface.get_width()) // 2
+                x_pos = (screen_width - text_surface.get_width()) // 2
                 screen.blit(text_surface, (x_pos, y))
                 return
+            
+            # Create a list of rendered ticker items first to get total width
+            ticker_items = []
             
             # If we have data, show the scrolling ticker
             for ticker, data in self.stock_data.items():
@@ -331,16 +335,38 @@ class StocksModule:
                 currency_symbol = '£' if ticker.endswith('.L') else '$'
                 text = f"{ticker}: {currency_symbol}{price:.2f} {arrow}{change_str}   "
                 
-                # Render and draw
+                # Render text
                 text_surface = self.ticker_font.render(text, True, color)
                 text_surface.set_alpha(TRANSPARENCY)
-                screen.blit(text_surface, (self.scroll_position + total_width, y))
+                ticker_items.append((text_surface, color))
                 total_width += text_surface.get_width()
+            
+            # If no valid items, return
+            if not ticker_items:
+                return
+            
+            # Draw all ticker items
+            current_x = self.scroll_position
+            
+            # Draw items until we fill the screen width
+            for text_surface, _ in ticker_items:
+                # Only draw if at least partially on screen
+                if current_x + text_surface.get_width() > 0 and current_x < screen_width:
+                    screen.blit(text_surface, (current_x, y))
+                current_x += text_surface.get_width()
+                
+                # If we've gone through all items but haven't filled the screen, repeat from the beginning
+                if current_x < screen_width and len(ticker_items) > 0:
+                    for repeat_surface, _ in ticker_items:
+                        screen.blit(repeat_surface, (current_x, y))
+                        current_x += repeat_surface.get_width()
+                        if current_x > screen_width:
+                            break
             
             # Scroll and reset position when needed
             self.scroll_position -= self.scroll_speed
             if self.scroll_position < -total_width:
-                self.scroll_position = screen.get_width()
+                self.scroll_position = screen_width
             
         except Exception as e:
             logging.error(f"Error drawing scrolling ticker: {e}")

@@ -484,7 +484,7 @@ class MagicMirror:
         
         # Setup layout manager with correct dimensions
         self.layout_manager = LayoutManager(width, height)
-        self.debug_layout = True  # Enable debug overlay to see boundaries
+        self.debug_layout = False  # Disable debug overlay to hide red boundary lines
 
 if __name__ == "__main__":
     mirror = MagicMirror()
