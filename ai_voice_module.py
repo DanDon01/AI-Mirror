@@ -17,6 +17,8 @@ import sys
 import base64
 import select
 import struct
+import random
+import pyaudio
 
 DEFAULT_MAX_TOKENS = 250
 
@@ -724,127 +726,65 @@ class AIVoiceModule:
             self.has_audio = False
 
     def start_audio_stream(self):
-        """Start streaming audio using the exact working command"""
+        """Start streaming audio directly from microphone to API"""
         if not hasattr(self, 'session_ready') or not self.session_ready:
             self.logger.error("Cannot start audio stream - WebSocket session not ready")
             return False
         
         try:
-            # Reset session state to prevent errors from previous interactions
-            if hasattr(self, 'response_complete'):
-                delattr(self, 'response_complete')
+            # Set up PyAudio to stream directly from microphone
+            import pyaudio
             
-            # Create a new WebSocket session for each interaction
-            self.reset_websocket_session()
-            
-            import threading
-            import subprocess
-            import base64
-            import json
-            import time
-            import os
-            
-            # Reset state
+            # Reset session state
             self.recording = True
             self.processing = False
             
-            def record_and_stream():
-                try:
-                    print("MIRROR DEBUG: 🎙️ Starting audio capture")
-                    self.set_status("Listening", "Listening via Realtime API...")
-                    
-                    # Create a unique filename for this recording
-                    temp_wav = os.path.join(os.getcwd(), f"recording_{int(time.time())}.wav")
-                    
-                    # Use the exact command that works in terminal
-                    cmd = f"cd {os.getcwd()} && arecord -D hw:2,0 -f S16_LE -c 1 -r 44100 -d 5 {temp_wav}"
-                    print(f"MIRROR DEBUG: 🎙️ Running: {cmd}")
-                    
-                    # Run in the same environment as terminal
-                    process = subprocess.run(
-                        cmd,
-                        shell=True,
-                        env={
-                            'PATH': os.environ['PATH'],
-                            'HOME': os.environ['HOME'],
-                            'USER': os.environ['USER'],
-                            'SHELL': os.environ.get('SHELL', '/bin/bash')
-                        }
-                    )
-                    
-                    if process.returncode == 0 and os.path.exists(temp_wav):
-                        print(f"MIRROR DEBUG: ✅ Recording successful: {temp_wav}")
-                        
-                        # Read the WAV file
-                        with open(temp_wav, 'rb') as f:
-                            # Skip WAV header (44 bytes)
-                            f.seek(44)
-                            audio_data = f.read()
-                        
-                        # Clean up the temporary file
-                        try:
-                            os.unlink(temp_wav)
-                        except Exception as e:
-                            print(f"MIRROR DEBUG: ⚠️ Could not delete temp file: {e}")
-                        
-                        # Stream to API in chunks
-                        chunk_size = 16384
-                        total_sent = 0
-                        
-                        for i in range(0, len(audio_data), chunk_size):
-                            chunk = audio_data[i:i+chunk_size]
-                            audio_b64 = base64.b64encode(chunk).decode('ascii')
-                            
-                            if hasattr(self, 'ws'):
-                                audio_event = {
-                                    "type": "input_audio_buffer.append",
-                                    "audio": audio_b64
-                                }
-                                self.ws.send(json.dumps(audio_event))
-                                total_sent += len(chunk)
-                                print(f"MIRROR DEBUG: 📤 Sent {len(chunk)} bytes to API")
-                        
-                        # Send commit event
-                        if hasattr(self, 'ws') and total_sent > 0:
-                            commit_event = {
-                                "type": "input_audio_buffer.commit"
-                            }
-                            self.ws.send(json.dumps(commit_event))
-                            print(f"MIRROR DEBUG: ✅ Audio committed to API ({total_sent} bytes total)")
-                            
-                            # Update status
-                            self.recording = False
-                            self.processing = True
-                            self.set_status("Processing", "Processing your request...")
-                        else:
-                            print("MIRROR DEBUG: ⚠️ No audio was sent to API")
-                            self.recording = False
-                            self.set_status("Error", "No audio captured")
-                    else:
-                        print(f"MIRROR DEBUG: ❌ Recording failed")
-                        self.recording = False
-                        self.set_status("Error", "Recording failed")
-                
-                except Exception as e:
-                    self.logger.error(f"Audio recording error: {e}")
-                    print(f"MIRROR DEBUG: ❌ Audio recording error: {str(e)}")
-                    self.set_status("Error", f"Audio error: {str(e)[:30]}")
-                    self.recording = False
-                    self.processing = False
+            print("MIRROR DEBUG: 🎙️ Starting direct audio capture from microphone")
+            self.set_status("Listening", "Listening via Realtime API...")
             
-            # Start the recording thread
-            self.audio_thread = threading.Thread(target=record_and_stream)
-            self.audio_thread.daemon = True
-            self.audio_thread.start()
+            # Create PyAudio instance
+            self.audio = pyaudio.PyAudio()
             
+            # Open audio stream directly from microphone
+            self.stream = self.audio.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=44100,
+                input=True,
+                input_device_index=2,  # Use your working microphone index
+                frames_per_buffer=4096,
+                stream_callback=self.audio_callback
+            )
+            
+            print("MIRROR DEBUG: 🎙️ Audio stream started")
             return True
             
         except Exception as e:
             self.logger.error(f"Error starting audio stream: {e}")
-            print(f"MIRROR DEBUG: ❌ Failed to start audio stream: {e}")
-            self.set_status("Error", "Failed to start audio")
+            print(f"MIRROR DEBUG: ❌ Error starting audio stream: {e}")
             self.recording = False
             return False
+        
+    def audio_callback(self, in_data, frame_count, time_info, status):
+        """Called whenever audio buffer is filled - sends data directly to API"""
+        if self.recording and self.session_ready:
+            try:
+                # Send audio chunk directly to API
+                audio_event = {
+                    "type": "input_audio_buffer.append",
+                    "data": base64.b64encode(in_data).decode('utf-8')
+                }
+                self.ws.send(json.dumps(audio_event))
+                
+                # Print less verbose debugging (every ~second rather than every chunk)
+                if random.random() < 0.05:  # Only print occasionally
+                    print(f"MIRROR DEBUG: 📤 Streaming audio... ({len(in_data)} bytes)")
+                    
+            except Exception as e:
+                print(f"MIRROR DEBUG: ❌ Error sending audio: {e}")
+        
+        # Continue recording
+        return (None, pyaudio.paContinue)
 
     def stop_audio_stream(self):
         """Stop the audio recording process and clear states"""
