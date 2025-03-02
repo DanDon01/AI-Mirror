@@ -67,15 +67,25 @@ class AIInteractionModule:
         self.tts_volume = audio_config.get('tts_volume', 0.8)
         self.wav_volume = audio_config.get('wav_volume', 0.5)
         
+        # Check if audio is disabled in config
+        self.disable_audio = kwargs.get('disable_audio', False)
+        
         # Initialize rest of the module
         self.initialize_openai()
-        self.initialize_audio_system()
-        self.load_sound_effects()
+        
+        # Only initialize audio if not disabled
+        if not self.disable_audio:
+            self.initialize_audio_system()
+            self.load_sound_effects()
+        else:
+            print("MIRROR DEBUG: 🔇 Audio disabled by configuration")
+            self.has_audio = False
+            self.status_message = "Ready (audio disabled)"
+        
         self.running = True
         
         # Initialize voice command parser
         self.command_parser = ModuleCommand()
-        self.start_hotword_detection()
 
     def load_fallback_responses(self):
         """Load fallback responses from configured file"""
@@ -138,34 +148,23 @@ class AIInteractionModule:
             self.logger.error(traceback.format_exc())
 
     def on_button_press(self):
-        """Handle software activation (Space bar or 'Mirror' hotword)"""
-        self.logger.info("Activation triggered (via spacebar or hotword)")
-        print("MIRROR DEBUG: 🎤 Voice activation triggered")
+        """Handle button press activation"""
+        self.logger.info("Activation triggered via button/spacebar")
+        print("MIRROR DEBUG: 🔘 Button activation triggered")
         
         # Skip if we're already processing
         if self.recording or self.processing:
             self.logger.info("Already processing, ignoring activation")
-            print("MIRROR DEBUG: Already processing a request")
+            print("MIRROR DEBUG: ⏳ Already processing a request")
             return
         
-        # If no audio system, we can't proceed
-        if not self.has_audio:
-            self.logger.warning("No audio system available")
-            print("MIRROR DEBUG: ❌ No audio system available")
+        # If audio is disabled, use text-only mode
+        if self.disable_audio or not self.has_audio:
+            print("MIRROR DEBUG: 🔤 Using text-only mode (audio disabled)")
+            self.process_text_input("Show me the current weather")
             return
         
-        # Update status
-        self.set_status("Listening", "Listening...")
-        
-        # Play sound effect if available
-        if 'mirror_listening' in self.sound_effects:
-            self.sound_effects['mirror_listening'].play()
-        
-        # Set recording state
-        self.recording = True
-        
-        # Start listening thread
-        threading.Thread(target=self.process_voice_input, daemon=True).start()
+        # Rest of the code for audio processing...
 
     def on_button_release(self):
         self.logger.info("Processing voice input")
@@ -428,90 +427,6 @@ class AIInteractionModule:
         # Only clean up button if it exists and has a cleanup method
         if hasattr(self, 'button') and hasattr(self.button, 'cleanup'):
             self.button.cleanup()
-
-    def start_hotword_detection(self):
-        """Start hotword detection in a separate thread"""
-        self.logger.info("Starting hotword detection loop")
-        self.hotword_thread = threading.Thread(target=self.hotword_detection_loop, daemon=True)
-        self.hotword_thread.start()
-
-    def hotword_detection_loop(self):
-        """A safer implementation of hotword detection with proper microphone handling"""
-        self.logger.info("Hotword detection loop started")
-        
-        while self.running:
-            # Don't listen if we're already talking or processing
-            if self.recording or self.processing:
-                time.sleep(0.1)
-                continue
-            
-            # Skip if audio isn't available
-            if not self.has_audio or not hasattr(self, 'microphone') or self.microphone is None:
-                time.sleep(1)
-                continue
-            
-            try:
-                # Create a fresh recognizer each time to avoid stale state
-                if not hasattr(self, 'recognizer') or self.recognizer is None:
-                    self.recognizer = sr.Recognizer()
-                    
-                # CRITICAL: Use proper context management with microphone
-                # This is the key fix for the "Audio source must be entered before adjusting" error
-                with self.microphone as source:
-                    try:
-                        # Adjust for ambient noise inside the with block
-                        self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                        
-                        # Listen with short timeout to not block too long
-                        audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=3)
-                        
-                        # Only continue if we got audio data
-                        if audio:
-                            try:
-                                # Convert to text
-                                text = self.recognizer.recognize_google(audio).lower()
-                                self.logger.debug(f"Heard: {text}")
-                                
-                                # Check for hotword
-                                if "mirror" in text:
-                                    self.logger.info(f"Hotword detected: {text}")
-                                    self.on_button_press()
-                                    time.sleep(2)  # Prevent re-triggering
-                            except sr.UnknownValueError:
-                                # No speech detected - perfectly normal
-                                pass
-                            except sr.RequestError as e:
-                                # Google API issue
-                                self.logger.warning(f"Google API error: {e}")
-                                time.sleep(1)
-                    
-                    except Exception as e:
-                        # Issues during listening inside the with block
-                        if "timed out" in str(e).lower():
-                            # This is normal - just means no speech was detected within timeout
-                            pass
-                        else:
-                            self.logger.warning(f"Listen error: {e}")
-                            time.sleep(0.1)
-            
-            except Exception as e:
-                # Issues with the microphone context itself
-                self.logger.warning(f"Microphone context error: {e}")
-                
-                # If we're getting NoneType errors, the microphone might need reinitialization
-                if "NoneType" in str(e):
-                    try:
-                        self.logger.info("Attempting to reinitialize microphone...")
-                        self.reinitialize_microphone()
-                        time.sleep(1)  # Wait a bit after reinitialization
-                    except Exception as reinit_error:
-                        self.logger.error(f"Failed to reinitialize microphone: {reinit_error}")
-                        time.sleep(5)  # Back off longer on reinit failure
-                else:
-                    time.sleep(1)  # Standard backoff for other errors
-            
-            # Brief pause before next attempt
-            time.sleep(0.1)
 
     def initialize_audio_system(self):
         """Initialize audio with hardcoded device to avoid crashes"""
