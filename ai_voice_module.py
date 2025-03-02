@@ -356,62 +356,37 @@ class AIVoiceModule:
         self.logger.info(f"Status changed to: {status} - {message}")
     
     def load_sound_effects(self):
-        """Load necessary sound effects"""
-        self.sound_effects = {}
+        """Load sound effects used by the voice module"""
         try:
-            # Initialize pygame mixer if needed
+            # Initialize pygame mixer if it's not already initialized
             if not pygame.mixer.get_init():
                 pygame.mixer.init()
             
-            # Load listening sound effect
-            sound_paths = CONFIG.get('sound_effects_path', [])
-            if not isinstance(sound_paths, list):
-                sound_paths = [sound_paths]
+            # Sound effect paths
+            sounds_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'sound_effects')
             
-            # Add default paths
-            sound_paths.extend([
-                '/home/dan/Projects/ai_mirror/assets/sound_effects',
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'sound_effects')
-            ])
+            # Sound to play when starting to listen
+            listen_sound_path = os.path.join(sounds_dir, 'mirror_listening.mp3')
+            self.logger.info(f"Loading sound effect from: {listen_sound_path}")
             
-            # Try to load the sound effect
-            for base_path in sound_paths:
-                if not base_path:
-                    continue
-                
-                listening_file = os.path.join(base_path, 'mirror_listening.mp3')
-                if os.path.exists(listening_file):
-                    self.logger.info(f"Loading sound effect from: {listening_file}")
-                    self.sound_effects['mirror_listening'] = pygame.mixer.Sound(listening_file)
-                    break
-            
-            # Create fallback sound if needed
-            if 'mirror_listening' not in self.sound_effects:
-                self.create_fallback_sound()
+            if os.path.exists(listen_sound_path):
+                self.listen_sound = pygame.mixer.Sound(listen_sound_path)
+                self.listen_sound.set_volume(0.7)  # Set to a reasonable volume
+            else:
+                self.logger.warning(f"Listen sound effect file not found: {listen_sound_path}")
+                self.listen_sound = None
                 
         except Exception as e:
             self.logger.error(f"Error loading sound effects: {e}")
-            self.create_fallback_sound()
-    
-    def create_fallback_sound(self):
-        """Create a simple beep sound"""
+            self.listen_sound = None
+
+    def play_listen_sound(self):
+        """Play the listening notification sound"""
         try:
-            # Create a simple sine wave beep
-            sample_rate = 22050
-            duration = 0.3
-            t = np.linspace(0, duration, int(sample_rate * duration), False)
-            beep = np.sin(2 * np.pi * 440 * t) * 0.5
-            
-            # Convert to 16-bit integers
-            beep = (beep * 32767).astype(np.int16)
-            
-            # Create a stereo sound
-            if pygame.mixer.get_init():
-                beep_sound = pygame.sndarray.make_sound(np.column_stack([beep, beep]))
-                self.sound_effects['mirror_listening'] = beep_sound
-                self.logger.info("Created fallback beep sound")
+            if hasattr(self, 'listen_sound') and self.listen_sound:
+                self.listen_sound.play()
         except Exception as e:
-            self.logger.error(f"Failed to create fallback sound: {e}")
+            self.logger.error(f"Error playing listen sound: {e}")
     
     def on_button_press(self):
         """Handle button press (space bar) for voice interaction"""
@@ -678,15 +653,16 @@ class AIVoiceModule:
             self.has_audio = False
 
     def start_audio_stream(self):
-        """Start streaming audio directly from the USB microphone to the Real-Time API WebSocket"""
-        if not hasattr(self, 'has_audio') or not self.has_audio or not self.session_ready:
-            self.logger.error("Cannot start audio stream - not initialized")
+        """Start streaming audio directly from the microphone to the Real-Time API WebSocket"""
+        if not hasattr(self, 'session_ready') or not self.session_ready:
+            self.logger.error("Cannot start audio stream - WebSocket session not ready")
             return False
         
         try:
             import threading
             import subprocess
             import base64
+            import json
             
             # Reset state
             self.recording = True
@@ -694,19 +670,19 @@ class AIVoiceModule:
             # Define thread function to capture and stream audio
             def stream_audio_to_websocket():
                 try:
-                    print(f"MIRROR DEBUG: 🎙️ Starting audio capture with device {self.mic_device}")
+                    print("MIRROR DEBUG: 🎙️ Starting audio capture with device default")
                     self.set_status("Listening", "Listening via Realtime API...")
                     
-                    # Play listen sound to indicate we're recording
-                    self.play_listen_sound()
+                    # Play listen sound if available
+                    if hasattr(self, 'play_listen_sound'):
+                        self.play_listen_sound()
                     
                     # Start arecord process with output to stdout that we can read
                     cmd = [
                         "arecord", 
-                        "-D", self.mic_device,
                         "-f", "S16_LE",  # 16-bit PCM
                         "-c", "1",        # Mono
-                        "-r", "44100",    # Sample rate (from your successful test)
+                        "-r", "44100",    # Sample rate
                         "-t", "raw",      # Raw format (no WAV header)
                         "-q"              # Quiet mode
                     ]
@@ -730,7 +706,12 @@ class AIVoiceModule:
                     # Read and stream audio in chunks
                     chunk_size = 4096  # Stream in chunks of 4KB
                     
-                    while self.recording:
+                    # Set a maximum recording time (10 seconds)
+                    import time
+                    start_time = time.time()
+                    max_duration = 10  # seconds
+                    
+                    while self.recording and (time.time() - start_time < max_duration):
                         audio_chunk = self.recording_process.stdout.read(chunk_size)
                         
                         if not audio_chunk:
