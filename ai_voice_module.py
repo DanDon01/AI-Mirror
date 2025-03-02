@@ -241,6 +241,12 @@ class AIVoiceModule:
                     data = json.loads(message)
                     event_type = data.get("type", "")
                     
+                    # SPECIAL CASE: Completely ignore buffer errors after response is complete
+                    if (hasattr(self, 'response_complete') and self.response_complete and 
+                        event_type == "error" and "buffer too small" in str(data.get("error", {}).get("message", ""))):
+                        print("MIRROR DEBUG: 🔇 Silently ignoring buffer error after response complete")
+                        return  # Exit early without logging
+                    
                     # Add more detailed debug info
                     print(f"\nMIRROR DEBUG: 📄 WebSocket event: {event_type}")
                     
@@ -256,14 +262,6 @@ class AIVoiceModule:
                     # Track WebSocket states
                     print(f"MIRROR DEBUG: 📄 Current states: recording={self.recording}, processing={self.processing}")
                     print(f"MIRROR DEBUG: 📄 Has response_complete: {hasattr(self, 'response_complete')}")
-                    
-                    # Ignore any events that come in after we got a complete response
-                    # This helps prevent buffer errors when the API is still expecting more audio
-                    if hasattr(self, 'response_complete') and self.response_complete:
-                        if event_type == "error" and "buffer too small" in str(data.get("error", {}).get("message", "")):
-                            # Silently ignore the "buffer too small" errors that happen after we're done
-                            print("MIRROR DEBUG: 📄 Ignoring buffer too small error after response complete")
-                            return
                     
                     # Handle session lifecycle events
                     if event_type == "session.created":
@@ -322,6 +320,11 @@ class AIVoiceModule:
                         # Set a flag to ignore subsequent buffer errors
                         self.response_complete = True
                         print("MIRROR DEBUG: 📄 Set response_complete flag to true")
+                        
+                        # Clean all audio-related state
+                        self.collected_audio = bytearray()
+                        if hasattr(self, 'current_audio_buffer'):
+                            delattr(self, 'current_audio_buffer')
                         
                         # Reset all states
                         self.recording = False
