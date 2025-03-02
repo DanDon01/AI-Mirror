@@ -22,66 +22,96 @@ class AIModuleManager:
         self.status_message = "Starting AI systems..."
         
         # Extract the AI configuration specifically
-        ai_config = config.get('ai_interaction', {}).get('params', {}).get('config', {})
+        ai_config = config.get('config', {})
         
-        # IMPORTANT: Ensure the API key is explicitly set from environment if missing
-        if 'openai' in ai_config and not ai_config['openai'].get('api_key'):
-            import os
-            api_key = os.getenv('OPENAI_API_KEY')
-            if api_key:
-                ai_config['openai']['api_key'] = api_key
-                print(f"MIRROR DEBUG: Loaded API key from environment: {api_key[:4]}...{api_key[-4:]}")
-            else:
-                print("MIRROR DEBUG: ⚠️ No OpenAI API key found in environment!")
+        # Store original config for module initialization
+        self.ai_config = ai_config
         
         # Check if realtime is enabled - get from the correct location
-        self.realtime_enabled = ai_config.get('realtime_enabled', False)
+        self.realtime_enabled = ai_config.get('realtime_enabled', True)  # Default to enabled
         self.logger.info(f"Realtime API enabled: {self.realtime_enabled}")
         
-        # Initialize AI module
+        # Initialize AI modules
         try:
-            # Always create the fallback module first to ensure we have something
-            self.logger.info("Initializing standard OpenAI module as fallback")
-            self.fallback_module = FallbackModule(ai_config)
-            self.active_module = self.fallback_module
+            # First try to initialize the realtime module if enabled
+            self.realtime_module = None
+            self.standard_module = None
             
-            # Try realtime if enabled
             if self.realtime_enabled:
                 try:
-                    self.logger.info("Attempting to initialize Realtime API module")
-                    self.realtime_module = RealtimeModule(ai_config)
+                    self.logger.info("Attempting to initialize Realtime Voice API module")
+                    print("MIRROR DEBUG: 🔄 Initializing Realtime Voice API module")
                     
-                    # Give it a moment to establish connection
-                    time.sleep(2)
+                    # Import here to avoid circular imports
+                    from ai_voice_module import AIVoiceModule
                     
-                    # Check if the module seems to have connected successfully
-                    if hasattr(self.realtime_module, 'websocket') and self.realtime_module.websocket:
-                        self.logger.info("Realtime API module initialized successfully")
+                    # Make sure config includes OPENAI_VOICE_KEY
+                    voice_config = dict(ai_config)
+                    if 'openai' in voice_config:
+                        # Ensure the voice key is used
+                        voice_config['openai']['api_key'] = voice_config['openai'].get('voice_api_key')
+                    
+                    # Initialize the voice module
+                    self.realtime_module = AIVoiceModule(voice_config)
+                    
+                    # Test if it's working
+                    if self.realtime_module.has_openai_access:
+                        self.logger.info("✅ Realtime Voice API module initialized successfully")
+                        print("MIRROR DEBUG: ✅ Realtime Voice API available - using as primary")
                         self.active_module = self.realtime_module
-                        self.status = "Ready (Realtime)"
-                        self.status_message = "Say 'Mirror' to activate"
+                        self.status = "Ready (Realtime Voice)"
                     else:
-                        self.logger.warning("Realtime API module failed to connect")
+                        self.logger.warning("Realtime Voice API module failed to connect")
+                        print("MIRROR DEBUG: ⚠️ Realtime Voice API initialization failed")
+                        # We'll try the standard module next
                 except Exception as e:
-                    self.logger.warning(f"Failed to initialize Realtime API module: {e}")
-                    # Keep using the fallback module
+                    self.logger.warning(f"Failed to initialize Realtime Voice API module: {e}")
+                    print(f"MIRROR DEBUG: ⚠️ Error initializing Realtime Voice: {e}")
             
-            self.status = f"Ready ({self.active_module.__class__.__name__})"
-            self.status_message = "Say 'Mirror' or press SPACE to activate"
+            # Initialize standard module as fallback (or primary if realtime disabled)
+            try:
+                self.logger.info("Initializing standard OpenAI module")
+                print("MIRROR DEBUG: 🔄 Initializing standard OpenAI module")
+                
+                # Import the standard module
+                from AI_Module import AIInteractionModule
+                
+                # Make sure config uses standard API key
+                standard_config = dict(ai_config)
+                if 'openai' in standard_config:
+                    # Use the standard API key
+                    standard_config['openai']['api_key'] = standard_config['openai'].get('api_key')
+                
+                # Initialize the standard module
+                self.standard_module = AIInteractionModule(standard_config)
+                
+                # If we don't have an active module yet, use the standard one
+                if not self.active_module and self.standard_module.has_openai_access:
+                    self.logger.info("Using standard OpenAI module")
+                    print("MIRROR DEBUG: ✅ Standard OpenAI API available")
+                    self.active_module = self.standard_module
+                    self.status = "Ready (Standard API)"
+                
+            except Exception as e:
+                self.logger.error(f"Failed to initialize standard OpenAI module: {e}")
+                print(f"MIRROR DEBUG: ❌ Error initializing standard module: {e}")
             
-            # Force-create a new module instance for debugging
-            print("MIRROR DEBUG: Creating direct AI module instance for debugging")
-            from AI_Module import AIInteractionModule
-            self.debug_module = AIInteractionModule(ai_config)
-            self.active_module = self.debug_module  # Use this directly
-            self.status = "Debug Mode"
-            self.status_message = "Using direct module instance"
-            
+            # If we have an active module, we're ready
+            if self.active_module:
+                self.status_message = "Say 'Mirror' or press SPACE to activate"
+                print(f"MIRROR DEBUG: ✅ Using {self.active_module.__class__.__name__} as primary AI module")
+            else:
+                self.logger.error("No AI modules could be initialized")
+                self.status = "Error"
+                self.status_message = "AI systems unavailable"
+                print("MIRROR DEBUG: ❌ No AI modules available")
+                
         except Exception as e:
             self.logger.error(f"Failed to initialize any AI module: {e}")
             self.active_module = None
             self.status = "Error"
             self.status_message = "AI systems unavailable"
+            print(f"MIRROR DEBUG: ❌ AI module initialization failed: {e}")
         
         # Start monitoring thread to check module health
         self.running = True
@@ -90,36 +120,38 @@ class AIModuleManager:
         self.monitor_thread.start()
     
     def monitor_modules(self):
-        """Monitor the health of modules and switch if necessary"""
+        """Monitor module health and switch if needed"""
         while self.running:
             try:
-                # If using realtime module and it's having issues, switch to fallback
-                if hasattr(self, 'realtime_module') and self.active_module == self.realtime_module:
-                    if (hasattr(self.realtime_module, 'status') and 
-                        "error" in self.realtime_module.status.lower()):
-                        self.logger.warning("Realtime module error detected, switching to fallback")
-                        try:
-                            if not hasattr(self, 'fallback_module'):
-                                self.fallback_module = FallbackModule(self.config)
-                            self.active_module = self.fallback_module
-                            self.status = "Ready (Fallback)"
-                            self.status_message = "Say 'Mirror' to activate"
-                        except Exception as e:
-                            self.logger.error(f"Failed to initialize fallback module: {e}")
-                            self.status = "Error"
-                            self.status_message = "AI systems unavailable"
-                            self.active_module = None
+                # If active module is realtime but not working, switch to standard
+                if (self.active_module == self.realtime_module and 
+                    (not self.realtime_module or not self.realtime_module.has_openai_access)):
+                    self.logger.warning("Realtime module lost connection - switching to standard")
+                    print("MIRROR DEBUG: ⚠️ Realtime module unavailable - switching to standard")
+                    if self.standard_module and self.standard_module.has_openai_access:
+                        self.active_module = self.standard_module
+                        self.status = "Ready (Standard API)"
                 
-                # Forward any responses from the active module to our queue
-                if self.active_module and hasattr(self.active_module, 'response_queue'):
-                    while not self.active_module.response_queue.empty():
-                        item = self.active_module.response_queue.get()
-                        self.response_queue.put(item)
+                # If active module is standard but realtime becomes available, switch back
+                elif (self.active_module == self.standard_module and self.realtime_enabled and
+                      self.realtime_module and self.realtime_module.has_openai_access):
+                    self.logger.info("Realtime module now available - switching back")
+                    print("MIRROR DEBUG: ✅ Realtime module now available - switching back")
+                    self.active_module = self.realtime_module
+                    self.status = "Ready (Realtime Voice)"
+                
+                # Update status message from active module
+                if self.active_module:
+                    if hasattr(self.active_module, 'status'):
+                        self.status = self.active_module.status
+                    if hasattr(self.active_module, 'status_message'):
+                        self.status_message = self.active_module.status_message
             
             except Exception as e:
                 self.logger.error(f"Error in module monitor: {e}")
             
-            time.sleep(1)
+            # Check every 5 seconds
+            time.sleep(5)
     
     def handle_event(self, event):
         """Forward events to the active module"""
@@ -155,8 +187,8 @@ class AIModuleManager:
         self.running = False
         if hasattr(self, 'realtime_module'):
             self.realtime_module.cleanup()
-        if hasattr(self, 'fallback_module'):
-            self.fallback_module.cleanup()
+        if hasattr(self, 'standard_module'):
+            self.standard_module.cleanup()
         if self.monitor_thread and self.monitor_thread.is_alive():
             self.monitor_thread.join(timeout=1.0)
     

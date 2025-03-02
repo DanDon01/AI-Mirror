@@ -266,10 +266,11 @@ CONFIG = {
         'params': {
             'config': {
                 'disable_audio': False,
-                'realtime_enabled': True,
+                'realtime_enabled': True,  # Set to False to force standard mode
                 'openai': {
-                    'api_key': os.getenv('OPENAI_API_KEY'),
-                    'model': 'gpt-4o-realtime-preview-2024-10-01'
+                    'api_key': os.getenv('OPENAI_API_KEY'),      # Standard API key
+                    'voice_api_key': os.getenv('OPENAI_VOICE_KEY'),  # Voice API key
+                    'model': 'gpt-4o'  # Use gpt-4o which works in both APIs
                 },
                 'audio': {
                     'mic_energy_threshold': 500,

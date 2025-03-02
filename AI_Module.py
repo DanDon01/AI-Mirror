@@ -894,32 +894,70 @@ class AIInteractionModule:
             self.create_fallback_sound()
 
     def initialize_openai(self):
-        """Initialize OpenAI API connection"""
+        """Initialize OpenAI API with support for separate regular and voice keys"""
         self.has_openai_access = False
         self.client = None
         
         try:
+            # Get config values
+            openai_config = self.config.get('openai', {})
+            
+            # First try the voice-specific key
+            self.api_key = openai_config.get('voice_api_key')
+            
+            # If not found, try regular api_key from config
             if not self.api_key:
-                self.logger.error("No OpenAI API key provided")
+                self.api_key = openai_config.get('api_key')
+                if self.api_key:
+                    print("MIRROR DEBUG: Using regular API key from config")
+            
+            # If still no key, try environment variables
+            if not self.api_key:
+                import os
+                # First try voice-specific env var
+                self.api_key = os.getenv('OPENAI_VOICE_KEY')
+                if self.api_key:
+                    print(f"MIRROR DEBUG: Using OPENAI_VOICE_KEY from environment: {self.api_key[:4]}...{self.api_key[-4:] if len(self.api_key) > 8 else ''}")
+                else:
+                    # Fall back to regular API key
+                    self.api_key = os.getenv('OPENAI_API_KEY')
+                    if self.api_key:
+                        print(f"MIRROR DEBUG: Using fallback OPENAI_API_KEY from environment: {self.api_key[:4]}...{self.api_key[-4:] if len(self.api_key) > 8 else ''}")
+            
+            if not self.api_key:
+                self.logger.error("No OpenAI API key found - checked all possible sources")
                 self.set_status("Error", "No API key available")
+                print("MIRROR DEBUG: ❌ Could not find any OpenAI API key")
                 return
             
-            # Create a base client
+            # Create OpenAI client
             openai.api_key = self.api_key
             self.client = OpenAI(api_key=self.api_key)
             
             # Test connection by listing models
+            print("MIRROR DEBUG: 🔄 Testing OpenAI API connection...")
             response = self.client.models.list()
             if response:
                 self.logger.info("OpenAI API access confirmed")
+                model_names = [model.id for model in response]
+                print(f"MIRROR DEBUG: Available models include: {model_names[:3]}...")
+                
+                # Check if we have access to the model we want to use
+                if self.model in model_names:
+                    print(f"MIRROR DEBUG: ✅ Confirmed access to requested model: {self.model}")
+                else:
+                    print(f"MIRROR DEBUG: ⚠️ Requested model '{self.model}' not found in available models")
+                    
                 self.has_openai_access = True
                 self.set_status("Ready", "API connection established")
+                print("MIRROR DEBUG: ✅ OpenAI API connection successful!")
             else:
                 self.logger.warning("OpenAI API connection test returned no models")
                 self.set_status("Warning", "API connection issue")
         except Exception as e:
             self.logger.error(f"OpenAI API initialization error: {e}")
             self.set_status("Error", f"API error: {str(e)[:30]}")
+            print(f"MIRROR DEBUG: ❌ OpenAI API error: {e}")
 
     def speak_text(self, text):
         """Convert text to speech and play it"""
