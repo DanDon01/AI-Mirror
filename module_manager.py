@@ -1,5 +1,6 @@
 import logging
 from config import CONFIG
+import time
 
 class ModuleManager:
     def __init__(self):
@@ -53,3 +54,35 @@ class ModuleManager:
             self.logger.info(f"Set {module_name} visibility to {is_visible}")
         else:
             self.logger.warning(f"Cannot set visibility - module {module_name} not found")
+
+    def initialize_modules(self):
+        """Initialize all modules in the correct order for optimal performance"""
+        print("MIRROR DEBUG: 🔄 Initializing modules in priority order")
+        
+        # Separate modules into regular and AI modules
+        regular_modules = []
+        ai_modules = []
+        
+        for module_name in self.modules:
+            # Check if this is an AI module (typically has more resource usage)
+            if 'ai_' in module_name.lower() or module_name.lower() == 'voice':
+                ai_modules.append(module_name)
+            else:
+                regular_modules.append(module_name)
+        
+        # Load regular modules first
+        for module_name in regular_modules:
+            if module_name in self.enabled_modules:
+                print(f"MIRROR DEBUG: 🔄 Initializing regular module: {module_name}")
+                self.initialize_module(module_name)
+        
+        # Then load AI modules after a brief delay
+        print("MIRROR DEBUG: 🕒 Waiting before initializing AI modules...")
+        time.sleep(2)  # Short delay to let other modules stabilize
+        
+        for module_name in ai_modules:
+            if module_name in self.enabled_modules:
+                print(f"MIRROR DEBUG: 🔄 Initializing AI module: {module_name}")
+                self.initialize_module(module_name)
+        
+        print("MIRROR DEBUG: ✅ All modules initialized")

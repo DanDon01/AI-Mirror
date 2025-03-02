@@ -43,6 +43,7 @@ class AIVoiceModule:
         self.has_openai_access = False
         self.response_queue = Queue()
         self.running = True
+        self.initialized = False
         
         # Setup API configuration
         openai_config = self.config.get('openai', {})
@@ -52,6 +53,19 @@ class AIVoiceModule:
         # Audio settings
         audio_config = self.config.get('audio', {})
         self.tts_volume = audio_config.get('tts_volume', 0.8)
+        
+        # Only perform essential setup in __init__, defer the rest to delayed init
+        print("MIRROR DEBUG: 🔄 Setting up basic AI Voice module structure")
+        
+        # Placeholder for later initialization
+        self.session_ready = False
+        
+        # Defer full initialization
+        print("MIRROR DEBUG: 🕒 Deferring full AI Voice module initialization")
+        self.set_status("Initializing", "Will initialize after other modules...")
+        
+        # Start the delayed initialization
+        threading.Timer(10.0, self.delayed_initialization).start()
         
         # Safer approach for audio hardware detection
         # Don't try to check audio devices at init time - defer to when needed
@@ -312,15 +326,26 @@ class AIVoiceModule:
     def on_button_press(self):
         """Handle button press to start voice recording"""
         try:
+            # If currently processing, stop it
             if self.recording or self.processing:
-                # Stop current recording
                 self.stop_audio_stream()
                 return
             
-            # Skip websocket entirely and use our fallback API method
-            print("MIRROR DEBUG: 🎙️ Using standard OpenAI API sequence for voice interaction")
-            self.fallback_voice_api()
+            # Check if initialization is complete
+            if not self.initialized:
+                print("MIRROR DEBUG: ⏳ Module still initializing, please wait...")
+                self.set_status("Initializing", "Please wait...")
+                return
             
+            # Check WebSocket status and decide which method to use
+            if hasattr(self, 'ws') and self.session_ready:
+                print("MIRROR DEBUG: 🎙️ Using WebSocket for voice interaction")
+                self.start_audio_stream()
+            else:
+                # Use fallback API approach
+                print("MIRROR DEBUG: 🎙️ Using standard API for voice interaction")
+                self.fallback_voice_api()
+        
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ Button press error: {e}")
             self.set_status("Error", "Button press error")
@@ -1149,4 +1174,74 @@ class AIVoiceModule:
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ Voice API error: {e}")
             self.set_status("Error", "API error")
+            return False
+
+    def delayed_initialization(self):
+        """Delayed initialization to allow other modules to connect first"""
+        try:
+            print("MIRROR DEBUG: 🔄 Starting delayed AI Voice module initialization")
+            
+            # Basic checks for audio hardware
+            print("MIRROR DEBUG: 🔍 Checking audio device usage:")
+            try:
+                result = subprocess.run(["fuser", "-v", "/dev/snd/*"], capture_output=True, text=True)
+                print(result.stdout)
+                print(result.stderr)
+            except Exception as e:
+                print(f"MIRROR DEBUG: Could not check audio device usage: {e}")
+            
+            # Initialize OpenAI
+            self.initialize_openai()
+            
+            # Load sound effects
+            self.load_sound_effects()
+            
+            # Try WebSocket connection with retries
+            self.retry_websocket_connection()
+            
+            # Mark as initialized
+            self.initialized = True
+            print("MIRROR DEBUG: ✅ AI Voice module initialization complete")
+            
+        except Exception as e:
+            import traceback
+            self.logger.error(f"Error in delayed initialization: {e}")
+            print(f"MIRROR DEBUG: ❌ Delayed initialization error: {e}")
+            print(traceback.format_exc())
+            # Still mark as initialized so we can use fallback
+            self.initialized = True
+            self.set_status("Ready", "Using fallback API")
+
+    def retry_websocket_connection(self):
+        """Attempt to establish WebSocket connection with retry pattern"""
+        try:
+            if not self.api_key:
+                print("MIRROR DEBUG: ❌ No API key for WebSocket connection")
+                return
+            
+            # Try to establish connection with decreasing frequency
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                print(f"MIRROR DEBUG: 🔄 WebSocket connection attempt {attempt}/{max_retries}")
+                
+                # Try to establish connection
+                try:
+                    if self.start_websocket_connection():
+                        print("MIRROR DEBUG: ✅ WebSocket connection successful")
+                        return True
+                except Exception as e:
+                    print(f"MIRROR DEBUG: ❌ WebSocket attempt {attempt} failed: {e}")
+                
+                # Wait before next retry with increasing delay
+                retry_delay = 5 * attempt  # 5s, 10s, 15s
+                print(f"MIRROR DEBUG: 🕒 Waiting {retry_delay}s before next attempt...")
+                time.sleep(retry_delay)
+            
+            # If we get here, all retries failed
+            print("MIRROR DEBUG: ⚠️ All WebSocket connection attempts failed")
+            print("MIRROR DEBUG: 🔄 Will use fallback API approach")
+            return False
+            
+        except Exception as e:
+            print(f"MIRROR DEBUG: ❌ Retry process failed: {e}")
             return False
