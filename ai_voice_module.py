@@ -20,6 +20,7 @@ import struct
 import random
 import pyaudio
 import socket  # For DNS testing
+import subprocess
 
 DEFAULT_MAX_TOKENS = 250
 
@@ -68,7 +69,6 @@ class AIVoiceModule:
         # Add this near the start of __init__
         print("MIRROR DEBUG: 🔍 Checking audio device usage:")
         try:
-            import subprocess
             result = subprocess.run(["fuser", "-v", "/dev/snd/*"], capture_output=True, text=True)
             print(result.stdout)
             print(result.stderr)
@@ -124,7 +124,6 @@ class AIVoiceModule:
             
             # Try a direct API call to check beta access for this specific model
             try:
-                import requests
                 headers = {
                     'Authorization': f'Bearer {self.api_key}',
                     'Content-Type': 'application/json',
@@ -221,22 +220,14 @@ class AIVoiceModule:
             import websocket
             import threading
             
-            # Test DNS resolution first
-            print("MIRROR DEBUG: 🔍 Testing DNS resolution for API endpoint...")
-            try:
-                # Try to resolve the hostname first to check DNS
-                ip_address = socket.gethostbyname("api.openai.com")
-                print(f"MIRROR DEBUG: ✅ DNS resolution successful: api.openai.com -> {ip_address}")
-                
-                # Use the regular OpenAI API endpoint with the audio conversations path
-                self.ws_url = "wss://api.openai.com/v1/audio/conversations"
-            except socket.gaierror:
-                print("MIRROR DEBUG: ⚠️ DNS resolution failed for api.openai.com")
-                print("MIRROR DEBUG: ℹ️ Using fallback direct IP connection")
-                
-                # As a last resort, try to use a direct IP connection
-                # This is OpenAI's API IP (as of Mar 2025) but could change
-                self.ws_url = "wss://104.18.6.192/v1/audio/conversations" 
+            # We'll try multiple possible endpoints since OpenAI might be changing them
+            # Based on official docs and beta status
+            possible_endpoints = [
+                "wss://api.openai.com/v1/audio/realtime",
+                "wss://api.openai.com/v1/audio/conversations",
+                "wss://realtime.api.openai.com/v1/audio",
+                "wss://beta.openai.com/v1/audio/realtime"
+            ]
             
             # Use the proper model for Realtime API
             self.realtime_model = "gpt-4o-realtime-preview-2024-10-01"
@@ -374,11 +365,15 @@ class AIVoiceModule:
                 print("MIRROR DEBUG: ✅ Connected to OpenAI Realtime API")
                 # Session will be marked as ready when we receive session.created event
             
-            # Set up the WebSocket URL and headers
+            # Add beta headers that might be required
             self.ws_headers = [
                 f"Authorization: Bearer {self.api_key}",
-                f"OpenAI-Model: {self.realtime_model}"
+                f"OpenAI-Model: {self.realtime_model}",
+                "OpenAI-Beta: realtime=v1"  # Add beta header
             ]
+            
+            # Set the URL to the first endpoint to try
+            self.ws_url = possible_endpoints[0]
             
             # Create a new WebSocket connection
             self.ws = websocket.WebSocketApp(
@@ -450,7 +445,6 @@ class AIVoiceModule:
                 return
             
             # First, run a quick audio device test
-            import subprocess
             print("MIRROR DEBUG: 🎙️ Testing audio device before starting session...")
             test_cmd = ["arecord", "-d", "1", "-f", "S16_LE", "-c", "1", "-r", "44100", "/dev/null"]
             
@@ -463,10 +457,10 @@ class AIVoiceModule:
             except Exception as e:
                 print(f"MIRROR DEBUG: ⚠️ Audio device test error: {e}")
             
-            # Create a new session for each interaction
+            # Try to create a new session for WebSocket
             if not self.reset_and_create_new_session():
-                self.set_status("Error", "Could not create API session")
-                return
+                print("MIRROR DEBUG: ❌ Failed to create WebSocket session, using fallback")
+                return self.fallback_voice_api()
             
             # Start recording
             self.start_audio_stream()
@@ -1219,4 +1213,67 @@ class AIVoiceModule:
             
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ API diagnostic failed: {e}")
+            return False
+
+    def fallback_voice_api(self):
+        """Fallback to using regular API if WebSocket connection fails"""
+        print("MIRROR DEBUG: ⚠️ WebSocket failed - using fallback API approach")
+        
+        try:
+            # First, record audio using simple arecord
+            temp_wav = os.path.join(os.getcwd(), f"recording_{int(time.time())}.wav")
+            cmd = f"arecord -d 5 -f S16_LE -r 16000 {temp_wav}"
+            subprocess.run(cmd, shell=True)
+            
+            if os.path.exists(temp_wav) and os.path.getsize(temp_wav) > 100:
+                print(f"MIRROR DEBUG: ✅ Recorded {os.path.getsize(temp_wav)} bytes of audio")
+                
+                # Use regular OpenAI API for transcription and response
+                from openai import OpenAI
+                client = OpenAI(api_key=self.api_key)
+                
+                # Transcribe the audio
+                with open(temp_wav, "rb") as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file
+                    )
+                
+                print(f"MIRROR DEBUG: 📝 Transcribed: {transcription.text}")
+                
+                # Get a response via regular chat API
+                completion = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
+                        {"role": "user", "content": transcription.text}
+                    ]
+                )
+                
+                response_text = completion.choices[0].message.content
+                print(f"MIRROR DEBUG: 💬 Response: {response_text}")
+                
+                # Generate speech from text
+                speech_file = os.path.join(os.getcwd(), "response.mp3")
+                response = client.audio.speech.create(
+                    model="tts-1",
+                    voice="alloy",
+                    input=response_text
+                )
+                response.stream_to_file(speech_file)
+                
+                # Play the audio
+                subprocess.run(["mpg123", speech_file], shell=True)
+                
+                # Clean up
+                os.remove(temp_wav)
+                os.remove(speech_file)
+                
+                return True
+            else:
+                print("MIRROR DEBUG: ❌ Failed to record audio")
+                return False
+            
+        except Exception as e:
+            print(f"MIRROR DEBUG: ❌ Fallback API failed: {e}")
             return False
