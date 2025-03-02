@@ -8,14 +8,13 @@ import threading
 import numpy as np
 from openai import OpenAI, Stream
 from config import CONFIG
-import gpiod
 from queue import Queue
 import asyncio
 import time
 import traceback
 from voice_commands import ModuleCommand
 import json
-import websockets  # New import for websocket connections
+import websockets
 from typing import Iterator
 import subprocess
 import pyaudio
@@ -24,48 +23,8 @@ import math
 DEFAULT_MODEL = "gpt-4-1106-preview"
 DEFAULT_MAX_TOKENS = 250
 
-class Button:
-    def __init__(self, chip_name="/dev/gpiochip0", pin=17, led_pin=None):
-        self.chip = gpiod.Chip(chip_name)
-        self.line = self.chip.get_line(pin)
-        self.line.request(consumer="button", type=gpiod.LINE_REQ_DIR_IN)
-        
-        # Setup LED if pin provided
-        self.has_led = False
-        if led_pin is not None:
-            try:
-                self.led_line = self.chip.get_line(led_pin)
-                self.led_line.request(consumer="led", type=gpiod.LINE_REQ_DIR_OUT)
-                self.has_led = True
-            except Exception as e:
-                print(f"Failed to initialize LED: {e}")
-
-    def read(self):
-        return self.line.get_value()  # 0 is pressed, 1 is not pressed
-        
-    def turn_led_on(self):
-        if self.has_led:
-            self.led_line.set_value(1)
-            
-    def turn_led_off(self):
-        if self.has_led:
-            self.led_line.set_value(0)
-
-    def cleanup(self):
-        if hasattr(self, 'led_line') and self.has_led:
-            self.led_line.release()
-        if hasattr(self, 'line'):
-            self.line.release()
-        if hasattr(self, 'chip'):
-            self.chip.close()
-
 class AIInteractionModule:
     def __init__(self, config):
-        # Suppress ALSA errors by setting environment variables
-        import os
-        # Set environment variables to reduce ALSA verbosity
-        os.environ['PYTHONUNBUFFERED'] = '1'  # Ensure output isn't buffered
-        
         # Initialize logging first thing
         logging.basicConfig(
             level=logging.INFO,
@@ -74,131 +33,40 @@ class AIInteractionModule:
         self.logger = logging.getLogger("AI_Module")
         self.logger.info("Initializing AI Interaction Module")
         
-        self.config = config
+        # Store config with defaults to prevent attribute errors
+        self.config = config or {}
         
-        # Add flag to track audio availability
-        self.has_audio = False
-        
-        # Check if audio is disabled in config
-        ai_config = CONFIG.get('ai_interaction', {}).get('params', {}).get('config', {})
-        if ai_config.get('disable_audio', False):
-            self.logger.info("Audio system disabled by configuration")
-            self.has_audio = False
-            # Skip audio initialization completely
-        else:
-            # Initialize audio with robust error handling
-            self.initialize_audio_system()
-        
-        # Get configuration from CONFIG object
-        ai_config = CONFIG.get('ai_interaction', {}).get('params', {}).get('config', {})
-        
-        # Initialize OpenAI with credentials check
-        self.has_openai_access = False
-        self.openai_config = ai_config.get('openai', {})
-        if self.openai_config.get('api_key'):
-            try:
-                self.client = OpenAI(api_key=self.openai_config['api_key'])
-                self.model = self.openai_config.get('model', 'gpt-4-1106-preview')
-                # Test the connection
-                response = self.client.models.list()
-                self.has_openai_access = True
-                self.logger.info("OpenAI API access confirmed")
-            except Exception as e:
-                self.logger.warning(f"OpenAI API access failed: {e}")
-                self.has_openai_access = False
-        
-        # Audio configuration from config
-        audio_config = ai_config.get('audio', {})
-        self.mic_energy_threshold = audio_config.get('mic_energy_threshold', 1000)
-        self.tts_volume = audio_config.get('tts_volume', 0.7)
-        self.wav_volume = audio_config.get('wav_volume', 0.7)
-        
-        # Skip the rest of audio initialization if no audio available
-        if not self.has_audio:
-            self.logger.warning("Audio system unavailable - voice features disabled")
-            # Initialize state variables
-            self.status = "Limited"
-            self.status_message = "Voice features unavailable"
-            self.recording = False
-            self.processing = False
-            self.listening = False
-            self.running = True
-            return
-            
-        # Initialize button with fallback
-        try:
-            self.button = Button(chip_name="/dev/gpiochip0", pin=17)
-            self.button_available = True
-        except Exception as e:
-            self.logger.error(f"Button initialization failed: {e}")
-            self.button_available = False
-            # Create a dummy button object
-            self.button = type('obj', (object,), {
-                'read': lambda: 1,
-                'turn_led_on': lambda: None,
-                'turn_led_off': lambda: None,
-                'cleanup': lambda: None
-            })
-        
-        # Initialize sound effects with correct path
-        self.sound_effects = {}
-        try:
-            # Try multiple possible paths
-            sound_paths = [
-                '/home/dan/Projects/ai_mirror/assets/sound_effects/mirror_listening.mp3',
-                '/home/Dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3',
-                '/home/dan/Projects/AI-Mirror/assets/sound_effects/mirror_listening.mp3',
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                             'assets', 'sound_effects', 'mirror_listening.mp3')
-            ]
-            
-            for sound_file in sound_paths:
-                self.logger.info(f"Trying sound file at: {sound_file}")
-                if os.path.exists(sound_file):
-                    self.sound_effects['mirror_listening'] = pygame.mixer.Sound(sound_file)
-                    self.logger.info(f"Successfully loaded mirror_listening.mp3 from {sound_file}")
-                    break
-            else:
-                self.logger.error("Sound file not found in any expected location")
-                self.create_fallback_sound()  # Create a beep sound instead
-        except Exception as e:
-            self.logger.error(f"Error loading sound: {e}")
-            self.create_fallback_sound()
-        
-        # Initialize state variables
-        self.status = "Idle"
-        self.status_message = "Say 'Mirror' or press SPACE to speak"
-        self.last_status_update = pygame.time.get_ticks()
-        self.status_duration = 5000
+        # Initialize required properties with defaults
+        self.status = "Initializing"
+        self.status_message = "Starting up..."
         self.recording = False
         self.processing = False
-        self.listening = False
-        self.last_button_state = self.button.read()
-        
-        # Threading components
-        self.processing_thread = None
+        self.has_audio = False
+        self.has_openai_access = False
         self.response_queue = Queue()
+        self.last_heard_text = ""
         
-        # Initialize command parser
-        self.command_parser = ModuleCommand()
-              
-        # Initialize pygame mixer
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
+        # Set up OpenAI configuration
+        openai_config = self.config.get('openai', {})
+        self.api_key = openai_config.get('api_key')
+        self.model = openai_config.get('model', DEFAULT_MODEL)
+        self.max_tokens = openai_config.get('max_tokens', DEFAULT_MAX_TOKENS)
         
-        # Add the running attribute
+        # Get audio settings with defaults
+        audio_config = self.config.get('audio', {})
+        self.mic_energy_threshold = audio_config.get('mic_energy_threshold', 500) 
+        self.tts_volume = audio_config.get('tts_volume', 0.8)
+        self.wav_volume = audio_config.get('wav_volume', 0.5)
+        
+        # Initialize rest of the module
+        self.initialize_openai()
+        self.initialize_audio_system()
+        self.load_sound_effects()
         self.running = True
         
-        # These should be the last lines of __init__
-        self.set_status("Idle", "Say 'Mirror' or press SPACE to speak")
-        self.logger.info("AI Module initialization complete - Listening for 'Mirror' hotword")
-        self.logger.info("Available input methods: Hotword 'Mirror' or Space bar keypress")
-
-        # Start hotword detection
-        self.hotword_listening = False
-        self.listening_thread = threading.Thread(target=self.hotword_detection_loop)
-        self.listening_thread.daemon = True
-        self.listening_thread.start()
+        # Initialize voice command parser
+        self.command_parser = ModuleCommand()
+        self.start_hotword_detection()
 
     def load_fallback_responses(self):
         """Load fallback responses from configured file"""
@@ -261,17 +129,20 @@ class AIInteractionModule:
             self.logger.error(traceback.format_exc())
 
     def on_button_press(self):
-        """Handle SPACE key or Mirror hotword activation"""
-        self.logger.info("Activation triggered, starting listening...")
+        """Handle software activation (Space bar or 'Mirror' hotword)"""
+        self.logger.info("Activation triggered (via spacebar or hotword)")
+        print("MIRROR DEBUG: 🎤 Voice activation triggered")
         
         # Skip if we're already processing
         if self.recording or self.processing:
             self.logger.info("Already processing, ignoring activation")
+            print("MIRROR DEBUG: Already processing a request")
             return
         
         # If no audio system, we can't proceed
         if not self.has_audio:
             self.logger.warning("No audio system available")
+            print("MIRROR DEBUG: ❌ No audio system available")
             return
         
         # Update status
@@ -427,7 +298,6 @@ class AIInteractionModule:
         finally:
             self.processing = False
             self.listening = False
-            self.button.turn_led_off()
             if not self.recording:
                 self.set_status("Idle", "Say 'Mirror' or press SPACE to speak")
 
@@ -458,10 +328,9 @@ class AIInteractionModule:
                 x, y = position
                 width, height = 225, 200
             
-            # Draw module background (with debugging border in debug mode)
-            if hasattr(self, 'debug_mode') and self.debug_mode:
-                pygame.draw.rect(screen, (50, 50, 100), (x, y, width, height))
-                pygame.draw.rect(screen, (100, 100, 200), (x, y, width, height), 2)
+            # Draw module background
+            pygame.draw.rect(screen, (30, 30, 40), (x, y, width, height))
+            pygame.draw.rect(screen, (50, 50, 70), (x, y, width, height), 2)
             
             # Initialize fonts if needed
             if not hasattr(self, 'debug_font'):
@@ -616,6 +485,8 @@ class AIInteractionModule:
             
             # Create recognizer with appropriate settings for a mirror environment
             self.recognizer = sr.Recognizer()
+            # Get energy threshold from config or use default
+            self.mic_energy_threshold = self.config.get('audio', {}).get('mic_energy_threshold', 500)
             self.recognizer.energy_threshold = self.mic_energy_threshold
             self.recognizer.pause_threshold = 0.8
             self.recognizer.dynamic_energy_threshold = True
@@ -645,7 +516,6 @@ class AIInteractionModule:
                 self.logger.warning(f"Could not enumerate audio devices: {e}")
             
             # Try specific device index based on arecord test
-            # Device hw:2,0 corresponds to device index 2 in PyAudio
             try:
                 print("MIRROR DEBUG: 🎤 Trying to initialize microphone with device index 2...")
                 self.logger.info("Initializing microphone with device index 2 (hw:2,0)")
@@ -661,22 +531,7 @@ class AIInteractionModule:
                     self.has_audio = True
             except Exception as e:
                 self.logger.warning(f"Failed with specific device: {e}")
-                
-                # Fall back to default device if specific one fails
-                try:
-                    print("MIRROR DEBUG: 🎤 Trying fallback to default microphone...")
-                    self.logger.info("Trying default microphone")
-                    self.microphone = sr.Microphone()
-                    
-                    with self.microphone as source:
-                        self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                        self.logger.info("Default microphone initialized successfully")
-                        print("MIRROR DEBUG: ✅ Default microphone working")
-                        self.mic_index = None
-                        self.has_audio = True
-                except Exception as e:
-                    self.logger.error(f"Default microphone failed: {e}")
-                    print(f"MIRROR DEBUG: ❌ All microphone initialization attempts failed")
+                print(f"MIRROR DEBUG: ❌ Error with microphone device 2: {e}")
                 
         except Exception as e:
             self.logger.error(f"Audio initialization error: {e}")
@@ -999,3 +854,42 @@ class AIInteractionModule:
         finally:
             self.processing = False
             self.set_status("Idle", "Say 'Mirror' or press SPACE")
+
+    def load_sound_effects(self):
+        """Load sound effects for voice interactions (simplified version without hardware)"""
+        self.sound_effects = {}
+        try:
+            # Initialize pygame mixer if not already initialized
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            
+            # Look for sound files in common locations
+            sound_paths = CONFIG.get('sound_effects_path', [])
+            if not isinstance(sound_paths, list):
+                sound_paths = [sound_paths]
+            
+            # Add default paths as fallbacks
+            sound_paths.extend([
+                '/home/dan/Projects/ai_mirror/assets/sound_effects',
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'sound_effects')
+            ])
+            
+            # Try to load listening sound
+            for base_path in sound_paths:
+                if not base_path:
+                    continue
+                
+                listening_file = os.path.join(base_path, 'mirror_listening.mp3')
+                if os.path.exists(listening_file):
+                    self.logger.info(f"Loading sound effect from: {listening_file}")
+                    self.sound_effects['mirror_listening'] = pygame.mixer.Sound(listening_file)
+                    break
+                
+            # If no listening sound was found, create a simple beep
+            if 'mirror_listening' not in self.sound_effects:
+                self.logger.warning("No listening sound found, creating synthetic sound")
+                self.create_fallback_sound()
+            
+        except Exception as e:
+            self.logger.error(f"Error loading sound effects: {e}")
+            self.create_fallback_sound()

@@ -322,8 +322,14 @@ class MagicMirror:
                     if self.state != "active":
                         self.change_state("active")  # Pressing space always returns to active state
                     elif 'ai_interaction' in self.modules:
-                        # Trigger AI interaction when in active state
-                        self.modules['ai_interaction'].on_button_press()
+                        try:
+                            logging.info("Space bar pressed - triggering AI")
+                            print("MIRROR DEBUG: Space bar pressed - triggering AI")
+                            # Get the active AI module and trigger voice input
+                            self.modules['ai_interaction'].on_button_press()
+                        except Exception as e:
+                            logging.error(f"Error triggering AI on space bar: {e}")
+                            print(f"MIRROR DEBUG: ❌ Error triggering AI: {e}")
             # Add more event handling here (e.g., for voice commands or gestures)
 
     def toggle_mode(self):

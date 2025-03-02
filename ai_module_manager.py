@@ -140,4 +140,13 @@ class AIModuleManager:
         if hasattr(self, 'fallback_module'):
             self.fallback_module.cleanup()
         if self.monitor_thread and self.monitor_thread.is_alive():
-            self.monitor_thread.join(timeout=1.0) 
+            self.monitor_thread.join(timeout=1.0)
+    
+    def on_button_press(self):
+        """Delegate button press to active module"""
+        if self.active_module and hasattr(self.active_module, 'on_button_press'):
+            self.logger.info("Delegating button press to active module")
+            self.active_module.on_button_press()
+        else:
+            self.logger.error("No active module or module doesn't support button press")
+            print("MIRROR DEBUG: ❌ Button press failed - no active AI module") 

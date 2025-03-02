@@ -116,9 +116,9 @@ class LayoutManager:
             }
         
         # AI module on right side bottom
-        self.module_positions['ai_module'] = {
+        self.module_positions['ai_interaction'] = {
             'x': right_x,
-            'y': row_y[2],
+            'y': row_y[2] + module_height + padding,  # Position below the Fitbit module
             'width': module_width,
             'height': module_height
         }
@@ -156,7 +156,7 @@ class LayoutManager:
             'calendar': {'x': 10, 'y': 500},
             'fitbit': {'x': self.screen_width - 210, 'y': 500},
             'retro_characters': {'x': 0, 'y': 0},
-            'ai_module': {'x': 10, 'y': self.screen_height - 100}
+            'ai_interaction': {'x': 10, 'y': self.screen_height - 100}
         }
         
         if module_name in default_positions:
