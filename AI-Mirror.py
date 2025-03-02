@@ -92,6 +92,7 @@ from retrocharacters_module import RetroCharactersModule
 from ai_module_manager import AIModuleManager
 from module_manager import ModuleManager 
 from layout_manager import LayoutManager
+from AI_Module import AIInteractionModule  # For backward compatibility
 
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -272,6 +273,9 @@ class MagicMirror:
             logging.debug(message)
 
     def initialize_modules(self):
+        # Make sure AIInteractionModule is available in globals, aliasing AIModuleManager
+        globals()['AIInteractionModule'] = AIModuleManager
+        
         modules = {}
         for module_name, module_config in CONFIG.items():
             if isinstance(module_config, dict) and 'class' in module_config:
@@ -288,6 +292,8 @@ class MagicMirror:
         # Verify AI module initialization
         if 'ai_interaction' not in modules:
             logging.warning("AI module not initialized - check config settings")
+        
+        print(f"Available module classes: {[cls for cls in globals().keys() if 'Module' in cls]}")
         
         return modules
 

@@ -262,7 +262,7 @@ CONFIG = {
         }
     },
     'ai_interaction': {
-        'class': 'AIInteractionModule',
+        'class': 'AIModuleManager',
         'params': {
             'config': {
                 'disable_audio': False,
