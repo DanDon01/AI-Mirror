@@ -265,8 +265,7 @@ CONFIG = {
     'ai_interaction': {
         'class': 'AIInteractionModule',
         'params': {
-            'config': CONFIG,
-            'disable_audio': True  # Force disable audio to avoid crashes
+            'disable_audio': True  # First define without the circular reference
         }
     },
     
@@ -369,5 +368,5 @@ CONFIG = {
     },
 }
 
-# After CONFIG is defined, now update the AI module params
+# After CONFIG is defined, now set the config parameter
 CONFIG['ai_interaction']['params']['config'] = CONFIG
