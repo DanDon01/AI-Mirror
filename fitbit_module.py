@@ -245,19 +245,23 @@ class FitbitModule:
         logging.info("Fitbit tokens have been saved to environment file")
 
     def draw_progress_bar(self, screen, x, y, width, height, progress, goal):
-        # Draw background
-        pygame.draw.rect(screen, (000, 000, 000), (x, y, width, height))
+        # Fix width to prevent going off-screen
+        width = min(width, 250)  # Limit max width to 250px
+        height = height * 2      # Double the height
         
-        # Calculate progress width
-        progress_width = int((progress / goal) * width)
+        # Draw background
+        pygame.draw.rect(screen, (50, 50, 50), (x, y, width, height))
+        
+        # Calculate progress width, ensuring it doesn't exceed total width
+        progress_width = min(int((progress / goal) * width), width)
         
         # Determine color based on progress
-        if progress < 5000:
-            color = (255, 0, 0)  # Red
-        elif progress < 8000:
-            color = (255, 255, 0)  # Yellow
+        if progress < goal * 0.5:
+            color = (255, 100, 100)  # Red
+        elif progress < goal * 0.8:
+            color = (255, 255, 100)  # Yellow
         else:
-            color = (0, 255, 0)  # Green
+            color = (100, 255, 100)  # Green
         
         # Draw progress
         pygame.draw.rect(screen, color, (x, y, progress_width, height))

@@ -37,8 +37,8 @@ COLOR_BG_HEADER = (40, 40, 40)           # Dark gray for headers
 COLOR_BG_HIGHLIGHT = (30, 30, 40)        # Slightly bluish dark background
 
 # Alpha versions of background colors
-COLOR_BG_MODULE_ALPHA = (20, 20, 20, 100)    # Semi-transparent module background
-COLOR_BG_HEADER_ALPHA = (40, 40, 40, 120)    # Semi-transparent header background
+COLOR_BG_MODULE_ALPHA = (20, 20, 20, 0)    # Fully transparent module background
+COLOR_BG_HEADER_ALPHA = (40, 40, 40, 0)    # Fully transparent header background
 
 # Transparency setting (0 is fully transparent, 255 is fully opaque)
 TRANSPARENCY = 215

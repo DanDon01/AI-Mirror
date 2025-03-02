@@ -166,7 +166,8 @@ class WeatherModule:
                     self.font = pygame.font.Font(None, FONT_SIZE)
 
             if self.weather_data:
-                x, y = position
+                # Adjust the starting y-position to be below the title area
+                weather_y = y + 50  # Start below title (40px header + 10px gap)
                 
                 # Get city name and country code from the weather data
                 city_name = self.weather_data['name']
@@ -199,7 +200,7 @@ class WeatherModule:
                         color = COLOR_FONT_DEFAULT
                     text_surface = self.font.render(line, True, color)
                     text_surface.set_alpha(TRANSPARENCY)
-                    screen.blit(text_surface, (x, y + i * LINE_SPACING))
+                    screen.blit(text_surface, (x, weather_y + i * LINE_SPACING))
 
                 # Update and draw weather animation
                 if self.animation:
