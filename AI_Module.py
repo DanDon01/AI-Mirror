@@ -24,17 +24,24 @@ DEFAULT_MODEL = "gpt-4-1106-preview"
 DEFAULT_MAX_TOKENS = 250
 
 class AIInteractionModule:
-    def __init__(self, config):
+    def __init__(self, config_path=None, **kwargs):
         # Initialize logging first thing
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
         )
-        self.logger = logging.getLogger("AI_Module")
+        self.logger = logging.getLogger("AI_Interaction")
         self.logger.info("Initializing AI Interaction Module")
         
-        # Store config with defaults to prevent attribute errors
-        self.config = config or {}
+        # Load config dynamically to avoid circular import
+        if config_path:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("config_module", config_path)
+            config_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(config_module)
+            self.config = config_module.CONFIG
+        else:
+            self.config = kwargs.get('config', {})
         
         # Initialize required properties with defaults
         self.status = "Initializing"

@@ -183,6 +183,7 @@ def draw_module_background_fallback(screen, x, y, module_width, module_height, p
     s.fill(COLOR_BG_HEADER_ALPHA)  # Uses the alpha from the constant
     screen.blit(s, (x-padding, y-padding))
 
+# Define CONFIG first without the circular reference
 CONFIG = {
     'screen': {
         'fullscreen': True,
@@ -263,9 +264,7 @@ CONFIG = {
     },
     'ai_interaction': {
         'class': 'AIInteractionModule',
-        'params': {
-            'config': CONFIG
-        }
+        'params': {}  # Empty for now, we'll fill it later
     },
     
     # Audio and sound effects
@@ -366,3 +365,6 @@ CONFIG = {
         },
     },
 }
+
+# After CONFIG is defined, now update the AI module params
+CONFIG['ai_interaction']['params']['config'] = CONFIG
