@@ -748,6 +748,9 @@ class AIVoiceModule:
             if hasattr(self, 'response_complete'):
                 delattr(self, 'response_complete')
             
+            # Create a new WebSocket session for each interaction
+            self.reset_websocket_session()
+            
             import threading
             import subprocess
             import base64
@@ -902,41 +905,61 @@ class AIVoiceModule:
         try:
             import tempfile
             import pygame
+            import os
             
-            # Create a temporary file for the audio chunk
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                temp_filename = temp_file.name
-                
-                # Write WAV header (simplified - adjust if needed)
+            # Create a better temporary file name for debugging
+            temp_filename = f"/tmp/mirror_audio_{int(time.time())}.wav"
+            
+            print(f"MIRROR DEBUG: 🔊 Writing {len(audio_bytes)} bytes to {temp_filename}")
+            
+            # Write WAV header (improved version)
+            with open(temp_filename, 'wb') as temp_file:
+                # WAV header
                 temp_file.write(b'RIFF')
                 temp_file.write(struct.pack('<I', 36 + len(audio_bytes)))
                 temp_file.write(b'WAVE')
+                
+                # Format chunk
                 temp_file.write(b'fmt ')
                 temp_file.write(struct.pack('<I', 16))  # Subchunk1Size
                 temp_file.write(struct.pack('<H', 1))   # PCM format
-                temp_file.write(struct.pack('<H', 1))   # Channels
+                temp_file.write(struct.pack('<H', 1))   # Mono channel
                 temp_file.write(struct.pack('<I', 24000))  # Sample rate
                 temp_file.write(struct.pack('<I', 24000 * 2))  # ByteRate
                 temp_file.write(struct.pack('<H', 2))   # BlockAlign
                 temp_file.write(struct.pack('<H', 16))  # BitsPerSample
+                
+                # Data chunk
                 temp_file.write(b'data')
                 temp_file.write(struct.pack('<I', len(audio_bytes)))
                 temp_file.write(audio_bytes)
             
-            # Initialize pygame mixer if needed
+            # Try playing with system player as a fallback
             if not pygame.mixer.get_init():
-                pygame.mixer.init(frequency=24000)
+                try:
+                    pygame.mixer.init(frequency=24000, channels=1)
+                    print("MIRROR DEBUG: 🔊 Initialized pygame mixer")
+                except Exception as mixer_err:
+                    print(f"MIRROR DEBUG: ⚠️ Could not initialize pygame mixer: {mixer_err}")
+                    os.system(f"aplay {temp_filename}")
+                    return
             
-            # Play the audio
-            sound = pygame.mixer.Sound(temp_filename)
-            sound.set_volume(self.tts_volume)
-            sound.play()
-            
-            # In a real system, we'd clean up the temp file after playing
-            # but for streaming chunks, this might be complex - consider using a queue
+            # Play with pygame if initialized
+            try:
+                sound = pygame.mixer.Sound(temp_filename)
+                sound.set_volume(self.tts_volume)
+                print(f"MIRROR DEBUG: 🔊 Playing audio with volume {self.tts_volume}")
+                sound.play()
+                # Wait for sound to finish
+                pygame.time.wait(500)  # Give it at least 500ms to start playing
+            except Exception as play_err:
+                print(f"MIRROR DEBUG: ⚠️ Could not play with pygame: {play_err}")
+                # Fallback to system player
+                os.system(f"aplay {temp_filename}")
             
         except Exception as e:
             self.logger.error(f"Error playing audio chunk: {e}")
+            print(f"MIRROR DEBUG: ❌ Error playing audio chunk: {e}")
 
     def initialize_hotword_detection(self):
         """Set up hotword detection in the background"""
@@ -1059,4 +1082,39 @@ class AIVoiceModule:
             
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ Hotword test error: {e}")
+            return False
+
+    def reset_websocket_session(self):
+        """Create a fresh WebSocket session"""
+        try:
+            # Close existing WebSocket if any
+            if hasattr(self, 'ws') and self.ws:
+                try:
+                    self.ws.close()
+                    print("MIRROR DEBUG: 🔄 Closed existing WebSocket")
+                except:
+                    pass
+            
+            # Reset session
+            self.session_ready = False
+            print("MIRROR DEBUG: 🔄 Resetting WebSocket session")
+            
+            # Start a new WebSocket connection
+            self.start_websocket_connection()
+            
+            # Wait for session to be ready
+            timeout = 5
+            start_time = time.time()
+            while not self.session_ready and time.time() - start_time < timeout:
+                time.sleep(0.1)
+            
+            if self.session_ready:
+                print("MIRROR DEBUG: ✅ New WebSocket session ready")
+                return True
+            else:
+                print("MIRROR DEBUG: ⚠️ Timed out waiting for new session")
+                return False
+        
+        except Exception as e:
+            print(f"MIRROR DEBUG: ❌ Error resetting WebSocket session: {e}")
             return False
