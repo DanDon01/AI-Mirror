@@ -207,7 +207,7 @@ class AIVoiceModule:
             self.set_status("Error", f"Voice API error: {str(e)[:30]}")
     
     def start_websocket_connection(self):
-        """Start a WebSocket connection to the OpenAI Realtime API"""
+        """Start a WebSocket connection to the OpenAI Realtime API using the correct documented endpoint"""
         if not self.api_key:
             self.logger.warning("Cannot start WebSocket - No API key or access")
             print("MIRROR DEBUG: ❌ Cannot start WebSocket - No API key")
@@ -215,23 +215,18 @@ class AIVoiceModule:
         
         try:
             self.logger.info("Initializing WebSocket connection to OpenAI Realtime API")
-            print("MIRROR DEBUG: 🔄 Starting WebSocket connection to Realtime API")
+            print("MIRROR DEBUG: 🔄 Starting WebSocket connection using official endpoint")
             
             import websocket
             import threading
             
-            # We'll try multiple possible endpoints since OpenAI might be changing them
-            # Based on official docs and beta status
-            possible_endpoints = [
-                "wss://api.openai.com/v1/audio/realtime",
-                "wss://api.openai.com/v1/audio/conversations",
-                "wss://realtime.api.openai.com/v1/audio",
-                "wss://beta.openai.com/v1/audio/realtime"
-            ]
+            # According to official docs: https://platform.openai.com/docs/api-reference/audio/websockets
+            # The correct endpoint is actually:
+            self.ws_url = "wss://api.openai.com/v1/audio/speech"
             
             # Use the proper model for Realtime API
-            self.realtime_model = "gpt-4o-realtime-preview-2024-10-01"
-            print(f"MIRROR DEBUG: Using model: {self.realtime_model} for realtime connection")
+            self.realtime_model = "gpt-4o"  # Use the base model, not the preview version
+            print(f"MIRROR DEBUG: Using model: {self.realtime_model} for connection")
             
             # Define event handlers for WebSocket
             def on_message(ws, message):
@@ -365,15 +360,11 @@ class AIVoiceModule:
                 print("MIRROR DEBUG: ✅ Connected to OpenAI Realtime API")
                 # Session will be marked as ready when we receive session.created event
             
-            # Add beta headers that might be required
+            # Set proper headers according to documentation
             self.ws_headers = [
                 f"Authorization: Bearer {self.api_key}",
-                f"OpenAI-Model: {self.realtime_model}",
-                "OpenAI-Beta: realtime=v1"  # Add beta header
+                "Content-Type: application/json"
             ]
-            
-            # Set the URL to the first endpoint to try
-            self.ws_url = possible_endpoints[0]
             
             # Create a new WebSocket connection
             self.ws = websocket.WebSocketApp(
@@ -437,33 +428,16 @@ class AIVoiceModule:
             self.logger.error(f"Error playing listen sound: {e}")
     
     def on_button_press(self):
-        """Handle button press to start voice recording"""
+        """Handle button press to start voice recording using the fallback method directly"""
         try:
             if self.recording or self.processing:
                 # Stop current recording
                 self.stop_audio_stream()
                 return
             
-            # First, run a quick audio device test
-            print("MIRROR DEBUG: 🎙️ Testing audio device before starting session...")
-            test_cmd = ["arecord", "-d", "1", "-f", "S16_LE", "-c", "1", "-r", "44100", "/dev/null"]
-            
-            try:
-                result = subprocess.run(test_cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, timeout=2)
-                if result.returncode == 0:
-                    print("MIRROR DEBUG: ✓ Audio device test successful")
-                else:
-                    print(f"MIRROR DEBUG: ⚠️ Audio device test warning: {result.stderr.decode()}")
-            except Exception as e:
-                print(f"MIRROR DEBUG: ⚠️ Audio device test error: {e}")
-            
-            # Try to create a new session for WebSocket
-            if not self.reset_and_create_new_session():
-                print("MIRROR DEBUG: ❌ Failed to create WebSocket session, using fallback")
-                return self.fallback_voice_api()
-            
-            # Start recording
-            self.start_audio_stream()
+            # Just use the fallback method directly instead of trying WebSockets
+            print("MIRROR DEBUG: 🎙️ Using standard OpenAI API sequence for voice interaction")
+            self.fallback_voice_api()
             
         except Exception as e:
             print(f"MIRROR DEBUG: ❌ Button press error: {e}")
