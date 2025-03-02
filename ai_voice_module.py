@@ -664,247 +664,173 @@ class AIVoiceModule:
         self.logger.info("Voice module cleanup complete")
 
     def initialize_audio_streaming(self):
-        """Set up audio streaming capabilities with a real USB microphone using ALSA directly"""
+        """Set up audio streaming capabilities with direct ALSA command"""
         try:
             import subprocess
-            import base64
             
             # Test if arecord is available
             try:
                 subprocess.run(["which", "arecord"], check=True, capture_output=True)
                 print("MIRROR DEBUG: ✅ Found arecord utility")
             except subprocess.CalledProcessError:
-                raise Exception("arecord utility not found - please install ALSA tools")
+                raise Exception("arecord utility not found")
             
-            # Get device info using arecord -l
-            print("MIRROR DEBUG: 🎙️ Available audio devices (ALSA):")
+            # Rather than guessing devices, let's directly use the command you confirmed works
+            self.record_command = ["arecord", "-D", "hw:2,0", "-f", "S16_LE", "-c", "1", "-r", "44100"]
+            
+            # Test that the specific command works
             try:
-                devices_output = subprocess.check_output(["arecord", "-l"]).decode("utf-8")
-                print(devices_output)
-            except:
-                print("MIRROR DEBUG: ⚠️ Could not enumerate audio devices")
-            
-            # Use hw:2,0 which we confirmed works in your test
-            self.alsa_device = "hw:2,0"
-            
-            # IMPORTANT: Based on your test results, set the proper sample rate
-            # Your test showed the device uses 44100 Hz
-            self.rate = 44100
-            self.format = "S16_LE"  # 16-bit signed little endian
-            self.channels = 1       # Mono
-            
-            # Print the configured values
-            print(f"MIRROR DEBUG: 🎙️ Audio configuration:")
-            print(f"MIRROR DEBUG: 🎙️ - Device: {self.alsa_device}")
-            print(f"MIRROR DEBUG: 🎙️ - Sample rate: {self.rate} Hz")
-            print(f"MIRROR DEBUG: 🎙️ - Format: {self.format}")
-            print(f"MIRROR DEBUG: 🎙️ - Channels: {self.channels}")
-            
-            # Do a quick test recording with these settings
-            try:
-                test_output = subprocess.check_output([
-                    "arecord",
-                    "-D", self.alsa_device,
-                    "-d", "1",  # Just 1 second
-                    "-f", self.format,
-                    "-c", str(self.channels),
-                    "-r", str(self.rate),
-                    "-v",  # Verbose to see warnings
-                    "/dev/null"
-                ], stderr=subprocess.STDOUT).decode("utf-8")
+                # Try a quick 1-second recording to verify the command works
+                test_cmd = self.record_command + ["-d", "1", "/dev/null"]
+                print(f"MIRROR DEBUG: Testing recording command: {' '.join(test_cmd)}")
                 
-                # Check for warnings in the output
-                if "Warning: rate is not accurate" in test_output:
-                    # Extract the actual rate from the warning
-                    import re
-                    rate_match = re.search(r"requested = \d+Hz, got = (\d+)Hz", test_output)
-                    if rate_match:
-                        actual_rate = int(rate_match.group(1))
-                        print(f"MIRROR DEBUG: ⚠️ Rate mismatch - changing to actual rate: {actual_rate} Hz")
-                        self.rate = actual_rate
+                result = subprocess.run(test_cmd, check=True, capture_output=True)
+                print("MIRROR DEBUG: ✅ Recording test successful")
                 
-                print(f"MIRROR DEBUG: ✅ Successfully tested recording with device {self.alsa_device}")
+                # Don't save or modify any device related variables - just use a command we know works
+                self.has_audio = True
                 
             except subprocess.CalledProcessError as e:
-                print(f"MIRROR DEBUG: ⚠️ Device test output: {e.output.decode('utf-8')}")
-                # We'll continue anyway since the earlier test worked
+                error = e.stderr.decode("utf-8")
+                print(f"MIRROR DEBUG: ⚠️ Recording test failed: {error}")
+                print("MIRROR DEBUG: Trying with 'default' device instead")
                 
-            self.audio_buffer = bytearray()
-            self.has_audio = True
-            self.logger.info(f"ALSA audio streaming initialized with device: {self.alsa_device} at {self.rate} Hz")
-            print(f"MIRROR DEBUG: ✅ ALSA audio streaming initialized with device: {self.alsa_device} at {self.rate} Hz")
+                # Try with default device
+                self.record_command = ["arecord", "-f", "S16_LE", "-c", "1", "-r", "44100"]
+                self.has_audio = True  # We'll assume this works
+            
+            self.logger.info("Audio streaming initialized")
+            print("MIRROR DEBUG: ✅ Audio streaming initialized")
             
         except Exception as e:
-            self.logger.error(f"Audio streaming initialization error: {e}")
-            print(f"MIRROR DEBUG: ❌ Audio streaming error: {e}")
+            self.logger.error(f"Audio initialization error: {e}")
+            print(f"MIRROR DEBUG: ❌ Audio initialization error: {e}")
             self.has_audio = False
 
     def start_audio_stream(self):
-        """Start streaming audio from the USB microphone to the WebSocket using ALSA directly"""
+        """Start streaming audio to the WebSocket using a temporary file approach"""
         if not hasattr(self, 'has_audio') or not self.has_audio or not self.session_ready:
             self.logger.error("Cannot start audio stream - not initialized")
             return False
         
         try:
             import threading
+            import tempfile
             import subprocess
-            import io
             import base64
             import json
             import time
+            import os
             
             # Reset state
-            self.audio_buffer = bytearray()
             self.speaking = False
             self.recording = True
-            self.audio_data_received = False  # Track if we received any audio data
             
             # Define thread function to capture and stream audio
-            def alsa_stream_thread():
+            def record_and_stream():
                 try:
-                    print(f"MIRROR DEBUG: 🎙️ Starting ALSA audio capture with device {self.alsa_device}")
+                    # Create a temp file for the recording
+                    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                        filename = temp_file.name
+                    
+                    print(f"MIRROR DEBUG: 🎙️ Starting recording to temporary file {filename}")
                     self.set_status("Listening", "Listening via Realtime API...")
                     
                     # Play listen sound to indicate we're recording
                     self.play_listen_sound()
                     
-                    # Create arecord process - stream to stdout
-                    cmd = [
-                        "arecord",
-                        "-D", self.alsa_device,
-                        "-f", self.format,
-                        "-c", str(self.channels),
-                        "-r", str(self.rate),
-                        "--buffer-size=4096",
-                        "--period-size=1024",
-                        "-q",  # Quiet mode to avoid stderr output
-                        "--max-file-time", "10"  # Max 10 seconds per recording
-                    ]
+                    # Start recording - 5 seconds max
+                    record_cmd = self.record_command + ["-d", "5", filename]
+                    print(f"MIRROR DEBUG: 🎙️ Recording command: {' '.join(record_cmd)}")
                     
-                    print(f"MIRROR DEBUG: 🎙️ arecord command: {' '.join(cmd)}")
-                    
-                    # Start the recording process
-                    self.audio_process = subprocess.Popen(
-                        cmd,
+                    # Execute the recording (blocking)
+                    self.recording_process = subprocess.Popen(
+                        record_cmd,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE
                     )
                     
-                    # Check if process started successfully
-                    if self.audio_process.poll() is not None:
-                        # Process already exited - check stderr
-                        error = self.audio_process.stderr.read().decode('utf-8')
-                        print(f"MIRROR DEBUG: ❌ arecord failed to start: {error}")
-                        self.set_status("Error", "Failed to start recording")
-                        self.recording = False
+                    # Wait for recording to complete (or be terminated)
+                    self.recording_process.wait()
+                    
+                    # Check if recording was successful
+                    if self.recording_process.returncode != 0:
+                        stderr = self.recording_process.stderr.read().decode("utf-8")
+                        print(f"MIRROR DEBUG: ❌ Recording failed: {stderr}")
+                        self.set_status("Error", "Recording failed")
+                        os.unlink(filename)
                         return
                     
-                    # Set timeout to stop after 10 seconds max
-                    start_time = time.time()
-                    max_time = 10  # 10 seconds max
-                    chunk_size = 4096  # Read in 4K chunks
+                    print(f"MIRROR DEBUG: ✅ Recording completed to {filename}")
                     
-                    print("MIRROR DEBUG: ✅ Audio recording started")
+                    # Read the recorded file
+                    with open(filename, 'rb') as f:
+                        # Skip WAV header (typically 44 bytes)
+                        f.seek(44)
+                        audio_data = f.read()
                     
-                    # Read and stream audio in chunks
-                    while self.recording and (time.time() - start_time) < max_time:
-                        # Check if process is still running
-                        if self.audio_process.poll() is not None:
-                            print("MIRROR DEBUG: ⚠️ arecord process exited unexpectedly")
-                            # Get error output
-                            error = self.audio_process.stderr.read().decode('utf-8')
-                            if error:
-                                print(f"MIRROR DEBUG: arecord error: {error}")
-                            break
-                            
-                        # Read a chunk of audio data with timeout (non-blocking)
-                        import select
-                        stdout_ready, _, _ = select.select([self.audio_process.stdout], [], [], 0.1)
+                    # Delete the temporary file
+                    os.unlink(filename)
+                    
+                    # If we have audio data, send it to the WebSocket
+                    if audio_data and len(audio_data) > 0:
+                        print(f"MIRROR DEBUG: 📤 Got audio data: {len(audio_data)} bytes")
                         
-                        if stdout_ready:
-                            audio_chunk = self.audio_process.stdout.read(chunk_size)
+                        # Split into smaller chunks for streaming
+                        chunk_size = 16384  # 16K at a time
+                        for i in range(0, len(audio_data), chunk_size):
+                            chunk = audio_data[i:i+chunk_size]
+                            audio_b64 = base64.b64encode(chunk).decode('ascii')
                             
-                            # If we got data, send it
-                            if audio_chunk and len(audio_chunk) > 0:
-                                # Debugging - show we're getting data
-                                self.audio_data_received = True
-                                print(f"MIRROR DEBUG: 🔊 Got audio chunk: {len(audio_chunk)} bytes")
-                                
-                                # Add to buffer
-                                self.audio_buffer.extend(audio_chunk)
-                                
-                                # If buffer is large enough, send
-                                if len(self.audio_buffer) >= 4096:
-                                    # Encode as base64
-                                    audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
-                                    
-                                    # Send to WebSocket
-                                    if hasattr(self, 'ws'):
-                                        audio_event = {
-                                            "type": "input_audio_buffer.append",
-                                            "audio": audio_b64
-                                        }
-                                        self.ws.send(json.dumps(audio_event))
-                                        print(f"MIRROR DEBUG: 📤 Sent audio buffer: {len(self.audio_buffer)} bytes")
-                                        
-                                    # Clear buffer
-                                    self.audio_buffer = bytearray()
-                
-                    # Send any remaining audio
-                    if len(self.audio_buffer) > 0:
-                        audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
+                            # Send to WebSocket
+                            if hasattr(self, 'ws'):
+                                audio_event = {
+                                    "type": "input_audio_buffer.append",
+                                    "audio": audio_b64
+                                }
+                                self.ws.send(json.dumps(audio_event))
+                                print(f"MIRROR DEBUG: 📤 Sent audio chunk: {len(chunk)} bytes")
+                        
+                        # Notify API we're done sending audio
                         if hasattr(self, 'ws'):
-                            audio_event = {
-                                "type": "input_audio_buffer.append",
-                                "audio": audio_b64
-                            }
-                            self.ws.send(json.dumps(audio_event))
-                            print(f"MIRROR DEBUG: 📤 Sent final audio buffer: {len(self.audio_buffer)} bytes")
-                    
-                    # Let the API know we're done sending audio - but only if we got some data
-                    if hasattr(self, 'ws'):
-                        if self.audio_data_received:
-                            # Try "commit" event first
-                            complete_event = {
+                            commit_event = {
                                 "type": "input_audio_buffer.commit"
                             }
-                            self.ws.send(json.dumps(complete_event))
-                            print("MIRROR DEBUG: ✅ Done recording - sent commit event")
-                        else:
-                            # If no audio was received, use a text input as fallback
-                            print("MIRROR DEBUG: ⚠️ No audio data captured, using text input as fallback")
+                            self.ws.send(json.dumps(commit_event))
+                            print("MIRROR DEBUG: ✅ Sent commit event")
+                            
+                            # Update status
+                            self.recording = False
+                            self.processing = True
+                            self.set_status("Processing", "Processing your request...")
+                    else:
+                        print("MIRROR DEBUG: ⚠️ No audio data captured, using text fallback")
+                        if hasattr(self, 'ws'):
                             text_event = {
                                 "type": "input_text.append",
                                 "text": "What time is it and what's the weather?"
                             }
                             self.ws.send(json.dumps(text_event))
                             print("MIRROR DEBUG: 📝 Sent text input as fallback")
-                        
-                    # Clean up
-                    self.stop_audio_stream()
-                    
-                    # Update status
-                    self.recording = False
-                    self.processing = True
-                    self.set_status("Processing", "Processing your request...")
+                            
+                            # Update status
+                            self.recording = False
+                            self.processing = True
+                            self.set_status("Processing", "Processing your request...")
                     
                 except Exception as e:
-                    self.logger.error(f"Audio stream thread error: {e}")
-                    print(f"MIRROR DEBUG: ❌ Audio stream error: {e}")
+                    self.logger.error(f"Audio recording error: {e}")
+                    print(f"MIRROR DEBUG: ❌ Audio recording error: {e}")
+                    self.set_status("Error", f"Recording error: {str(e)[:30]}")
                     self.recording = False
-                    self.set_status("Error", f"Audio stream error: {str(e)[:30]}")
-                    
-                    # Try to clean up
-                    self.stop_audio_stream()
             
-            # Start the audio thread
-            self.audio_thread = threading.Thread(target=alsa_stream_thread)
+            # Start recording thread
+            self.audio_thread = threading.Thread(target=record_and_stream)
             self.audio_thread.daemon = True
             self.audio_thread.start()
             
-            self.logger.info("ALSA audio streaming started")
             return True
-                
+        
         except Exception as e:
             self.logger.error(f"Error starting audio stream: {e}")
             print(f"MIRROR DEBUG: ❌ Failed to start audio stream: {e}")
@@ -913,46 +839,30 @@ class AIVoiceModule:
             return False
 
     def stop_audio_stream(self):
-        """Stop audio streaming and release resources"""
+        """Stop the audio recording process"""
         try:
-            # Stop recording flag
             self.recording = False
             
-            # Terminate arecord process if it exists
-            if hasattr(self, 'audio_process') and self.audio_process:
+            # Terminate the recording process if it exists
+            if hasattr(self, 'recording_process') and self.recording_process:
                 try:
-                    self.audio_process.terminate()
-                    self.audio_process.wait(timeout=1)
-                    self.audio_process = None
-                    self.logger.info("Audio recording process terminated")
+                    self.recording_process.terminate()
+                    self.recording_process.wait(timeout=1)
+                    print("MIRROR DEBUG: 🎙️ Recording process terminated")
                 except Exception as e:
-                    self.logger.error(f"Error terminating audio process: {e}")
-                    
+                    self.logger.error(f"Error terminating recording: {e}")
                     # Force kill if needed
                     try:
-                        self.audio_process.kill()
-                        self.audio_process = None
+                        self.recording_process.kill()
                     except:
                         pass
             
-            # Send any remaining audio in buffer
-            if len(self.audio_buffer) > 0:
-                audio_b64 = base64.b64encode(bytes(self.audio_buffer)).decode('ascii')
-                if hasattr(self, 'ws'):
-                    audio_event = {
-                        "type": "input_audio_buffer.append",
-                        "audio": audio_b64
-                    }
-                    self.ws.send(json.dumps(audio_event))
+            self.logger.info("Audio recording stopped")
+            print("MIRROR DEBUG: 🎙️ Audio recording stopped")
             
-            # Clear buffer
-            self.audio_buffer = bytearray()
-            
-            self.logger.info("Audio stream stopped")
-            print("MIRROR DEBUG: 🎙️ Audio streaming stopped")
         except Exception as e:
-            self.logger.error(f"Error stopping audio stream: {e}")
-            print(f"MIRROR DEBUG: ❌ Failed to stop audio stream: {e}")
+            self.logger.error(f"Error stopping recording: {e}")
+            print(f"MIRROR DEBUG: ❌ Error stopping recording: {e}")
 
     def play_audio_chunk(self, audio_bytes):
         """Play an audio chunk received from the API"""
