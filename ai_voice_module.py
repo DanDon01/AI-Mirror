@@ -117,37 +117,57 @@ class AIVoiceModule:
                     self.has_openai_access = True
                     self.set_status("Ready", "Realtime API ready")
                 else:
-                    # Try WebSocket connection as a fallback
+                    # Try WebSocket connection as a fallback - WITHOUT using timeout
                     print(f"MIRROR DEBUG: 🔄 Model API check failed, trying WebSocket connection...")
                     import websocket
+                    import threading
                     
+                    # Create variables for thread to modify
+                    self.ws_test_complete = False
+                    self.ws_test_successful = False
+                    
+                    def on_open(ws):
+                        print(f"MIRROR DEBUG: ✅ WebSocket connection to {self.realtime_model} successful!")
+                        self.ws_test_successful = True
+                        self.ws_test_complete = True
+                        ws.close()
+                    
+                    def on_error(ws, error):
+                        print(f"MIRROR DEBUG: ❌ WebSocket connection failed: {error}")
+                        self.ws_test_complete = True
+                    
+                    def on_close(ws, close_status_code, close_msg):
+                        self.ws_test_complete = True
+                    
+                    # Create WebSocket app
                     ws_url = f"wss://api.openai.com/v1/realtime?model={self.realtime_model}"
                     ws_headers = [
                         "Authorization: Bearer " + self.api_key,
                         "OpenAI-Beta: realtime=v1"
                     ]
                     
-                    def on_open(ws):
-                        print(f"MIRROR DEBUG: ✅ WebSocket connection to {self.realtime_model} successful!")
-                        self.has_openai_access = True
-                        ws.close()
-                    
-                    def on_error(ws, error):
-                        print(f"MIRROR DEBUG: ❌ WebSocket connection failed: {error}")
-                    
-                    # Create and run WebSocket app
                     ws = websocket.WebSocketApp(
                         ws_url,
                         header=ws_headers,
                         on_open=on_open,
-                        on_error=on_error
+                        on_error=on_error,
+                        on_close=on_close
                     )
                     
-                    # Try connection for a short time
-                    ws.run_forever(timeout=5)
+                    # Start WebSocket in a thread so we can set our own timeout
+                    ws_thread = threading.Thread(target=ws.run_forever)
+                    ws_thread.daemon = True
+                    ws_thread.start()
                     
-                    # Check if connection was successful
-                    if self.has_openai_access:
+                    # Wait for a maximum of 5 seconds
+                    timeout = 5
+                    start_time = time.time()
+                    while not self.ws_test_complete and time.time() - start_time < timeout:
+                        time.sleep(0.1)
+                    
+                    # Set connection flag based on result
+                    if self.ws_test_successful:
+                        self.has_openai_access = True
                         print("MIRROR DEBUG: ✅ WebSocket test confirmed Realtime API access")
                         self.set_status("Ready", "Realtime API ready (WebSocket)")
                     else:
@@ -185,12 +205,12 @@ class AIVoiceModule:
             
             # Define connection URL with the realtime model
             self.ws_url = f"wss://api.openai.com/v1/realtime?model={self.realtime_model}"
-            print(f"MIRROR DEBUG: Using specific realtime model: {self.realtime_model}")
+            print(f"MIRROR DEBUG: Using model: {self.realtime_model} for realtime connection")
             
             # Set up headers with API key and beta flag
             self.ws_headers = [
-                "Authorization: Bearer " + self.api_key,
-                "OpenAI-Beta: realtime=v1"  # This beta header is critical
+                f"Authorization: Bearer {self.api_key}",
+                "OpenAI-Beta: realtime=v1"
             ]
             
             # Track session state

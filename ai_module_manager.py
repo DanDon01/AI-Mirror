@@ -13,9 +13,54 @@ from ai_voice_module import AIVoiceModule as RealtimeModule
 
 class AIModuleManager:
     def __init__(self, config=None):
-        # Set up basic attributes
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger("ai_module_manager")
+        self.logger.info("Initializing AI Module Manager")
+        
+        # Load config
         self.config = config or {}
+        
+        # Check if realtime API should be used
+        use_realtime = self.config.get('use_realtime_api', True)
+        self.logger.info(f"Realtime API enabled: {use_realtime}")
+        
+        # Initialize the appropriate module
+        if use_realtime:
+            try:
+                self.logger.info("Attempting to initialize Realtime Voice API module")
+                print("MIRROR DEBUG: 🔄 Initializing Realtime Voice API module")
+                
+                # Import the module
+                from ai_voice_module import AIVoiceModule
+                
+                # Give the module a chance to initialize properly
+                self.ai_module = AIVoiceModule(self.config)
+                
+                # Give it a moment to connect
+                retries = 3
+                while retries > 0 and not getattr(self.ai_module, 'has_openai_access', False):
+                    print(f"MIRROR DEBUG: Waiting for Realtime API connection... ({retries} retries left)")
+                    time.sleep(2)
+                    retries -= 1
+                
+                # Check if initialization was successful
+                if not getattr(self.ai_module, 'has_openai_access', False):
+                    print("MIRROR DEBUG: ❌ Realtime API connection timed out")
+                    raise Exception("Realtime Voice API module failed to initialize")
+                
+                self.logger.info("Realtime Voice API module initialized successfully")
+                print("MIRROR DEBUG: ✅ Using Realtime Voice API module")
+                return
+            except Exception as e:
+                self.logger.warning(f"Realtime Voice API module failed to connect: {e}")
+                print(f"MIRROR DEBUG: ⚠️ Realtime Voice API initialization failed: {str(e)}")
+        
+        # Fall back to standard OpenAI module
+        self.logger.info("Initializing standard OpenAI module")
+        print("MIRROR DEBUG: 🔄 Initializing standard OpenAI module")
+        from AI_Module import AIInteractionModule
+        self.ai_module = AIInteractionModule(self.config)
+        
+        # Set up basic attributes
         self.active_module = None
         self.response_queue = Queue()
         self.status = "Initializing"
