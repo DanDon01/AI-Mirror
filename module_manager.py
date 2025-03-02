@@ -7,13 +7,16 @@ class ModuleManager:
         self.module_visibility = CONFIG.get('module_visibility', {})
         self.logger = logging.getLogger(__name__)
         
+        # Force skip ALL module initialization by overriding critical methods
         if initialized_modules:
-            # Use pre-initialized modules - COMPLETELY SKIP initialization code
             self.modules = initialized_modules
             self.enabled_modules = list(initialized_modules.keys())
-            self.logger.info("Using pre-initialized modules only.")
+            self.logger.info("Using PRE-INITIALIZED modules - NO additional initialization")
+            
+            # CRITICAL: Override these methods to completely prevent initialization
+            self.initialize_modules = lambda: None
+            self.initialize_module = lambda module_name: None
         else:
-            # Only initialize if no modules were provided
             self.modules = {}
             self.enabled_modules = CONFIG.get('enabled_modules', [])
             self.initialize_modules()

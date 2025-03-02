@@ -200,3 +200,9 @@ class LayoutManager:
             draw_module_background_fallback(screen, pos['x'], pos['y'], pos['width'], pos['height'], pos['y'] + 2)
 
         return (pos['x'], pos['y'] + title_height)
+
+    def __call__(self):
+        # At the beginning of any method that might initialize modules:
+        if hasattr(self, 'modules') and self.modules:
+            # Use existing modules instead of initializing new ones
+            pass
