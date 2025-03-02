@@ -357,7 +357,7 @@ class AIVoiceModule:
                 # Session will be marked as ready when we receive session.created event
             
             # Set up the WebSocket URL and headers
-            self.ws_url = "wss://api.openai.com/v1/audio/conversations"
+            self.ws_url = "wss://realtime.api.openai.com/v1/audio/conversations"
             self.ws_headers = [
                 f"Authorization: Bearer {self.api_key}",
                 f"OpenAI-Model: {self.realtime_model}"
@@ -435,7 +435,7 @@ class AIVoiceModule:
             # First, run a quick audio device test
             import subprocess
             print("MIRROR DEBUG: 🎙️ Testing audio device before starting session...")
-            test_cmd = ["arecord", "-D", "hw:2,0", "-d", "1", "-f", "S16_LE", "-c", "1", "-r", "44100", "/dev/null"]
+            test_cmd = ["arecord", "-d", "1", "-f", "S16_LE", "-c", "1", "-r", "44100", "/dev/null"]
             
             try:
                 result = subprocess.run(test_cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, timeout=2)
@@ -725,8 +725,8 @@ class AIVoiceModule:
                     # Create a unique filename for this recording
                     temp_wav = os.path.join(os.getcwd(), f"recording_{int(time.time())}.wav")
                     
-                    # Use the optimized command with proper buffering
-                    cmd = f"cd {os.getcwd()} && arecord -v -D hw:2,0 -f S16_LE -c 1 -r 16000 -B 10000 -d 5 {temp_wav}"
+                    # Use the default audio device instead of hw:2,0
+                    cmd = f"cd {os.getcwd()} && arecord -v -f S16_LE -c 1 -r 16000 -B 10000 -d 5 {temp_wav}"
                     print(f"MIRROR DEBUG: 🎙️ Running: {cmd}")
                     
                     # Run the command with a shell and capture stderr
