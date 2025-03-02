@@ -9,7 +9,7 @@ import sys
 
 # Import both modules
 from AI_Module import AIInteractionModule as FallbackModule
-from ai_voice_module import AIInteractionModule as RealtimeModule
+from ai_voice_module import AIVoiceModule as RealtimeModule
 
 class AIModuleManager:
     def __init__(self, config=None):
