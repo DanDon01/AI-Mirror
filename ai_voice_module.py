@@ -259,7 +259,7 @@ class AIVoiceModule:
                             }
                         }
                         ws.send(json.dumps(init_event))
-                        print("MIRROR DEBUG: �� Session configured")
+                        print("MIRROR DEBUG: ✅ Session configured")
                     
                     elif event_type == "session.updated":
                         self.logger.info("Session updated successfully")
@@ -808,11 +808,15 @@ class AIVoiceModule:
             return False
 
     def stop_audio_stream(self):
-        """Stop the audio recording process and handle any collected audio"""
+        """Stop the audio recording process and clear states"""
         try:
             # Mark that we're stopping recording
-            was_recording = self.recording
+            self.logger.info("Stopping recording early")
+            print("MIRROR DEBUG: 🛑 Stopping recording early due to second button press")
+            
+            # Set recording to false to stop the main thread's processing
             self.recording = False
+            self.stopping_deliberately = True
             
             # Terminate the recording process if it exists
             if hasattr(self, 'recording_process') and self.recording_process:
@@ -829,35 +833,15 @@ class AIVoiceModule:
                     except:
                         pass
             
-            # If we were deliberately stopped and have captured some audio,
-            # we need to send a commit event manually (outside the audio thread)
-            if was_recording and hasattr(self, 'stopping_deliberately') and self.stopping_deliberately:
-                # If we have any audio data buffered, send it now
-                if hasattr(self, 'current_audio_buffer') and self.current_audio_buffer and len(self.current_audio_buffer) > 0:
-                    try:
-                        # Send any remaining buffered audio
-                        audio_b64 = base64.b64encode(self.current_audio_buffer).decode('ascii')
-                        
-                        if hasattr(self, 'ws'):
-                            # Send the audio chunk
-                            audio_event = {
-                                "type": "input_audio_buffer.append",
-                                "audio": audio_b64
-                            }
-                            self.ws.send(json.dumps(audio_event))
-                            
-                            # Send the commit event
-                            commit_event = {
-                                "type": "input_audio_buffer.commit"
-                            }
-                            self.ws.send(json.dumps(commit_event))
-                            print("MIRROR DEBUG: ✅ Manual commit sent after early stop")
-                    except Exception as e:
-                        self.logger.error(f"Error sending final audio after stop: {e}")
-                        print(f"MIRROR DEBUG: ❌ Error sending final audio: {e}")
+            # Let the audio processing thread finish naturally
+            # DO NOT send additional commit events here
             
             self.logger.info("Audio streaming stopped")
             print("MIRROR DEBUG: 🎙️ Audio streaming stopped")
+            
+            # Update status to processing - the audio thread will handle sending data to API
+            self.processing = True
+            self.set_status("Processing", "Processing your request...")
             
         except Exception as e:
             self.logger.error(f"Error stopping audio stream: {e}")
