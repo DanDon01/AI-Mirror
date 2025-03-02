@@ -19,6 +19,7 @@ import select
 import struct
 import random
 import pyaudio
+import socket  # For DNS testing
 
 DEFAULT_MAX_TOKENS = 250
 
@@ -220,6 +221,23 @@ class AIVoiceModule:
             import websocket
             import threading
             
+            # Test DNS resolution first
+            print("MIRROR DEBUG: 🔍 Testing DNS resolution for API endpoint...")
+            try:
+                # Try to resolve the hostname first to check DNS
+                ip_address = socket.gethostbyname("api.openai.com")
+                print(f"MIRROR DEBUG: ✅ DNS resolution successful: api.openai.com -> {ip_address}")
+                
+                # Use the regular OpenAI API endpoint with the audio conversations path
+                self.ws_url = "wss://api.openai.com/v1/audio/conversations"
+            except socket.gaierror:
+                print("MIRROR DEBUG: ⚠️ DNS resolution failed for api.openai.com")
+                print("MIRROR DEBUG: ℹ️ Using fallback direct IP connection")
+                
+                # As a last resort, try to use a direct IP connection
+                # This is OpenAI's API IP (as of Mar 2025) but could change
+                self.ws_url = "wss://104.18.6.192/v1/audio/conversations" 
+            
             # Use the proper model for Realtime API
             self.realtime_model = "gpt-4o-realtime-preview-2024-10-01"
             print(f"MIRROR DEBUG: Using model: {self.realtime_model} for realtime connection")
@@ -357,7 +375,6 @@ class AIVoiceModule:
                 # Session will be marked as ready when we receive session.created event
             
             # Set up the WebSocket URL and headers
-            self.ws_url = "wss://realtime.api.openai.com/v1/audio/conversations"
             self.ws_headers = [
                 f"Authorization: Bearer {self.api_key}",
                 f"OpenAI-Model: {self.realtime_model}"
@@ -701,7 +718,7 @@ class AIVoiceModule:
             self.has_audio = False
 
     def start_audio_stream(self):
-        """Stream audio using arecord with improved buffering"""
+        """Record audio with maximum reliability and minimal dependencies"""
         if not hasattr(self, 'session_ready') or not self.session_ready:
             self.logger.error("Cannot start audio stream - WebSocket session not ready")
             return False
@@ -711,13 +728,14 @@ class AIVoiceModule:
             import subprocess
             import base64
             import time
+            import os
             
             # Reset session state
             self.recording = True
             self.processing = False
             
-            print("MIRROR DEBUG: 🎙️ Starting optimized audio capture")
-            self.set_status("Listening", "Listening via Realtime API...")
+            print("MIRROR DEBUG: 🎙️ Starting simple audio recording")
+            self.set_status("Listening", "Listening...")
             
             # Define the streaming function
             def record_and_stream():
@@ -725,100 +743,82 @@ class AIVoiceModule:
                     # Create a unique filename for this recording
                     temp_wav = os.path.join(os.getcwd(), f"recording_{int(time.time())}.wav")
                     
-                    # Use the default audio device instead of hw:2,0
-                    cmd = f"cd {os.getcwd()} && arecord -v -f S16_LE -c 1 -r 16000 -B 10000 -d 5 {temp_wav}"
+                    # Use the simplest possible recording command
+                    cmd = f"arecord -d 5 -f S16_LE -r 16000 {temp_wav}"
                     print(f"MIRROR DEBUG: 🎙️ Running: {cmd}")
                     
-                    # Run the command with a shell and capture stderr
+                    # Run the command with a shell
                     process = subprocess.run(
                         cmd,
                         shell=True,
-                        env=os.environ.copy(),
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True
                     )
                     
-                    if process.stderr:
-                        print(f"MIRROR DEBUG: 🎙️ arecord output: {process.stderr}")
-                    
-                    # Check if the file exists and has sufficient data (more than just the header)
+                    # Check if recording was successful
                     if process.returncode == 0 and os.path.exists(temp_wav):
                         file_size = os.path.getsize(temp_wav)
                         print(f"MIRROR DEBUG: ✅ Recording successful: {temp_wav} ({file_size} bytes)")
                         
-                        # Check if file has more than just the header (44 bytes)
-                        if file_size <= 100:  # WAV header + minimal audio
-                            print("MIRROR DEBUG: ⚠️ WAV file contains little or no audio data")
-                            self.recording = False
-                            self.set_status("Error", "No audio captured")
+                        # Only process if we got actual audio data
+                        if file_size > 44:  # More than just WAV header
+                            # Read the WAV file
+                            with open(temp_wav, 'rb') as f:
+                                # Skip WAV header (44 bytes)
+                                f.seek(44)
+                                audio_data = f.read()
+                            
+                            # Clean up temp file
                             try:
                                 os.remove(temp_wav)
                             except:
                                 pass
-                            return
-                        
-                        # Read the WAV file
-                        with open(temp_wav, 'rb') as f:
-                            # Skip WAV header (44 bytes)
-                            f.seek(44)
-                            audio_data = f.read()
-                        
-                        # Debug audio data size
-                        print(f"MIRROR DEBUG: 🔍 Raw audio data size: {len(audio_data)} bytes")
-                        
-                        # Clean up the temporary file immediately
-                        try:
-                            os.remove(temp_wav)
-                            print(f"MIRROR DEBUG: 🧹 Deleted temp file: {temp_wav}")
-                        except Exception as e:
-                            print(f"MIRROR DEBUG: ⚠️ Could not delete temp file: {e}")
-                        
-                        # Send all audio data at once (must be at least 100ms worth at 16kHz = 1600 bytes)
-                        if hasattr(self, 'ws') and len(audio_data) > 1600:
-                            # Base64 encode the audio
-                            encoded_audio = base64.b64encode(audio_data).decode('utf-8')
-                            print(f"MIRROR DEBUG: 📤 Sending {len(audio_data)} bytes of audio ({len(encoded_audio)} base64)")
                             
-                            # Send the audio data
-                            audio_event = {
-                                "type": "input_audio_buffer.append",
-                                "audio": encoded_audio
-                            }
-                            self.ws.send(json.dumps(audio_event))
-                            
-                            # Wait longer before committing - 0.5s instead of 0.2s
-                            # This ensures all data reaches OpenAI's servers
-                            print(f"MIRROR DEBUG: ⏱️ Waiting 0.5s before committing audio...")
-                            time.sleep(0.5)
-                            
-                            # Send commit event
-                            commit_event = {
-                                "type": "input_audio_buffer.commit"
-                            }
-                            self.ws.send(json.dumps(commit_event))
-                            print(f"MIRROR DEBUG: ✅ Audio committed to API ({len(audio_data)} bytes)")
-                            
-                            # Update status
-                            self.recording = False
-                            self.processing = True
-                            self.set_status("Processing", "Processing your request...")
+                            # Send the audio to OpenAI
+                            if hasattr(self, 'ws') and len(audio_data) > 1600:
+                                encoded_audio = base64.b64encode(audio_data).decode('utf-8')
+                                print(f"MIRROR DEBUG: 📤 Sending {len(audio_data)} bytes of audio")
+                                
+                                # Send audio data
+                                audio_event = {
+                                    "type": "input_audio_buffer.append",
+                                    "audio": encoded_audio
+                                }
+                                self.ws.send(json.dumps(audio_event))
+                                
+                                # Wait before committing
+                                time.sleep(0.5)
+                                
+                                # Send commit event
+                                commit_event = {
+                                    "type": "input_audio_buffer.commit"
+                                }
+                                self.ws.send(json.dumps(commit_event))
+                                print("MIRROR DEBUG: ✅ Audio committed")
+                                
+                                # Update status
+                                self.recording = False
+                                self.processing = True
+                                self.set_status("Processing", "Processing your request...")
+                            else:
+                                print("MIRROR DEBUG: ⚠️ WebSocket not ready or audio too short")
+                                self.recording = False
+                                self.set_status("Error", "Connection issue")
                         else:
-                            print(f"MIRROR DEBUG: ⚠️ Not enough audio data to send: {len(audio_data)} bytes")
+                            print("MIRROR DEBUG: ⚠️ Not enough audio recorded")
                             self.recording = False
-                            self.set_status("Error", "Not enough audio captured")
+                            self.set_status("Error", "No audio captured")
                     else:
-                        print(f"MIRROR DEBUG: ❌ Recording failed: return code {process.returncode}")
+                        print(f"MIRROR DEBUG: ❌ Recording failed: {process.stderr}")
                         self.recording = False
                         self.set_status("Error", "Recording failed")
                 
                 except Exception as e:
-                    self.logger.error(f"Audio recording error: {e}")
-                    print(f"MIRROR DEBUG: ❌ Audio recording error: {str(e)}")
                     import traceback
-                    print(f"MIRROR DEBUG: 🔍 Error details:\n{traceback.format_exc()}")
-                    self.set_status("Error", f"Audio error: {str(e)[:30]}")
+                    print(f"MIRROR DEBUG: ❌ Error: {e}")
+                    print(traceback.format_exc())
                     self.recording = False
-                    self.processing = False
+                    self.set_status("Error", "Recording error")
             
             # Start the recording thread
             self.audio_thread = threading.Thread(target=record_and_stream)
@@ -828,9 +828,8 @@ class AIVoiceModule:
             return True
             
         except Exception as e:
-            self.logger.error(f"Error starting audio stream: {e}")
-            print(f"MIRROR DEBUG: ❌ Failed to start audio stream: {e}")
-            self.set_status("Error", "Failed to start audio")
+            self.logger.error(f"Error starting audio: {e}")
+            print(f"MIRROR DEBUG: ❌ Error: {e}")
             self.recording = False
             return False
 
