@@ -3,6 +3,9 @@ import os
 from datetime import time
 import pygame
 
+# Initialize pygame to access font information
+pygame.font.init()
+
 # Get the directory of the current file (config.py)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -12,28 +15,60 @@ env_path = os.path.join(current_dir, '..', 'Variables.env')
 # Load the .env file
 load_dotenv(env_path)
 
-# Initialize pygame to access font information
-pygame.font.init()
+#########################################
+# GLOBAL CONSTANTS - Define these first #
+#########################################
 
-# Font settings
-FONT_NAME = "Helvetica"
-FONT_SIZE = 18
-LINE_SPACING = 25  # Add this line for consistent line spacing
+# Color Constants
+COLOR_WHITE = (255, 255, 255)
+COLOR_BLACK = (0, 0, 0)
+COLOR_FONT_DEFAULT = (240, 240, 240)     # Light grey text
+COLOR_FONT_SUBTITLE = (220, 220, 220)    # Slightly darker grey
+COLOR_FONT_BODY = (200, 200, 200)        # Main body text
+COLOR_FONT_SMALL = (180, 180, 180)       # Small text
+COLOR_PASTEL_GREEN = (152, 251, 152)     # Pale green
+COLOR_PASTEL_RED = (255, 162, 173)       # Light pink (as a pastel red)
+COLOR_PASTEL_BLUE = (173, 216, 230)      # Light blue
 
-# Color settings
-COLOR_FONT_DEFAULT = (200, 200, 200)  # Light grey
-COLOR_PASTEL_GREEN = (152, 251, 152)  # Pale green
-COLOR_PASTEL_RED = (255, 162, 173)    # Light pink (as a pastel red)
-COLOR_PASTEL_BLUE = (173, 216, 230)   # Light blue
+# Background Colors
+COLOR_BG_MODULE = (20, 20, 20)           # Almost black for module backgrounds
+COLOR_BG_HEADER = (40, 40, 40)           # Dark gray for headers
+COLOR_BG_HIGHLIGHT = (30, 30, 40)        # Slightly bluish dark background
+
+# Alpha versions of background colors
+COLOR_BG_MODULE_ALPHA = (20, 20, 20, 100)    # Semi-transparent module background
+COLOR_BG_HEADER_ALPHA = (40, 40, 40, 120)    # Semi-transparent header background
 
 # Transparency setting (0 is fully transparent, 255 is fully opaque)
 TRANSPARENCY = 215
 
-# Construct paths for asset directories
+# Font Settings
+FONT_NAME = "Helvetica"
+FONT_SIZE_TITLE = 24
+FONT_SIZE_SUBTITLE = 20
+FONT_SIZE_BODY = 16
+FONT_SIZE_SMALL = 14
+FONT_SIZE = FONT_SIZE_BODY  # For backward compatibility
+
+# Spacing and Dimensions
+LINE_SPACING = 25           # Vertical spacing between lines
+DEFAULT_PADDING = 10        # Default padding for modules
+DEFAULT_LINE_HEIGHT = 22    # Default height for lines of text
+DEFAULT_RADIUS = 15         # Default border radius for modules
+
+# Standard screen dimensions
+SCREEN_WIDTH_DEFAULT = 800
+SCREEN_HEIGHT_DEFAULT = 480
+
+# Paths for assets
 assets_dir = os.path.join(current_dir, 'assets')
 retro_icons_path = os.path.join(assets_dir, 'retro_icons')
 weather_icons_path = os.path.join(assets_dir, 'weather_icons')
-sound_effects_path = os.path.join(assets_dir, 'sound_effects')  # Changed from 'sound-effects' to 'sound_effects'
+sound_effects_path = os.path.join(assets_dir, 'sound_effects')
+
+#########################################
+# MONITOR CONFIGURATIONS                #
+#########################################
 
 # Screen Layout Configuration
 SCREEN_PADDING = 20  # Padding from screen edges
@@ -44,22 +79,26 @@ MONITOR_CONFIGS = {
     '27_portrait': {
         'resolution': (1440, 2560),  # 27" 1440p monitor in portrait
         'module_scale': 1.0,         # Base scale
-        'font_scale': 1.0           # Base font scale
+        'font_scale': 1.0            # Base font scale
     },
     '24_portrait': {
         'resolution': (1200, 1920),  # 24" 1200p monitor in portrait
         'module_scale': 0.833,       # Scale factor relative to 27"
-        'font_scale': 0.9           # Slightly smaller fonts
+        'font_scale': 0.9            # Slightly smaller fonts
     },
     '21_portrait': {
         'resolution': (768, 1024),   # 21" monitor in portrait
         'module_scale': 0.533,       # Scale factor relative to 27"
-        'font_scale': 0.8           # Even smaller fonts
+        'font_scale': 0.8            # Even smaller fonts
     }
 }
 
 # Default to 27" portrait monitor
 CURRENT_MONITOR = MONITOR_CONFIGS['27_portrait']
+
+#########################################
+# LAYOUT CONFIGURATION                  #
+#########################################
 
 # Update LAYOUT with monitor-specific scaling
 LAYOUT = {
@@ -89,40 +128,44 @@ LAYOUT = {
     # Visual styling with monitor-specific font scaling
     'fonts': {
         'title': {
-            'size': int(36 * CURRENT_MONITOR['font_scale']),
-            'color': (255, 255, 255)
+            'size': int(FONT_SIZE_TITLE * CURRENT_MONITOR['font_scale']),
+            'color': COLOR_WHITE
         },
         'subtitle': {
-            'size': int(28 * CURRENT_MONITOR['font_scale']),
-            'color': (200, 200, 200)
+            'size': int(FONT_SIZE_SUBTITLE * CURRENT_MONITOR['font_scale']),
+            'color': COLOR_FONT_SUBTITLE
         },
         'body': {
-            'size': int(24 * CURRENT_MONITOR['font_scale']),
-            'color': (180, 180, 180)
+            'size': int(FONT_SIZE_BODY * CURRENT_MONITOR['font_scale']),
+            'color': COLOR_FONT_BODY
         },
         'small': {
-            'size': int(18 * CURRENT_MONITOR['font_scale']),
-            'color': (160, 160, 160)
+            'size': int(FONT_SIZE_SMALL * CURRENT_MONITOR['font_scale']),
+            'color': COLOR_FONT_SMALL
         }
     },
     
     # Module backgrounds
     'backgrounds': {
         'title': {
-            'color': (0, 0, 0),
+            'color': COLOR_BLACK,
             'alpha': 180
         },
         'content': {
-            'color': (0, 0, 0),
+            'color': COLOR_BLACK,
             'alpha': 120
         }
     }
 }
 
+#########################################
+# MAIN CONFIGURATION                    #
+#########################################
+
 CONFIG = {
     'screen': {
         'fullscreen': True,
-        'size': (800, 480),  # Fallback size if current_monitor not set
+        'size': (SCREEN_WIDTH_DEFAULT, SCREEN_HEIGHT_DEFAULT),
         'scale': 1.0
     },
     'layout': LAYOUT,
@@ -131,6 +174,46 @@ CONFIG = {
         'frequency': 'daily'
     },
     'frame_rate': 30,
+    
+    # Module configurations
+    'clock': {
+        'class': 'ClockModule',
+        'params': {
+            'time_font_size': FONT_SIZE_TITLE,
+            'date_font_size': FONT_SIZE_SMALL,
+            'color': COLOR_FONT_DEFAULT,
+            'time_format': '%H:%M:%S',
+            'date_format': '%A, %B %d, %Y',
+            'timezone': 'local'
+        }
+    },
+    'weather': {
+        'class': 'WeatherModule',
+        'params': {
+            'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
+            'city': 'Birmingham,UK',
+            'screen_width': SCREEN_WIDTH_DEFAULT,
+            'screen_height': SCREEN_HEIGHT_DEFAULT,
+            'icons_path': weather_icons_path
+        }
+    },
+    'stocks': {
+       'class': 'StocksModule',
+       'params': {
+            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L']
+       }
+    },
+    'calendar': {
+        'class': 'CalendarModule',
+        'params': {
+            'config': {
+                'client_id': os.getenv('GOOGLE_CLIENT_ID'),
+                'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
+                'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
+                'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
+            }
+        }
+    },
     'fitbit': {
         'class': 'FitbitModule',
         'params': {
@@ -144,49 +227,11 @@ CONFIG = {
                 'time': time(5, 30)  # Update at 5:30 AM
             }
         }
-    },  
-    'stocks': {
-       'class': 'StocksModule',
-       'params': {
-            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L']
-       }
-    },
-    'weather': {
-        'class': 'WeatherModule',
-        'params': {
-            'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
-            'city': 'Birmingham,UK',
-            'screen_width': 768,
-            'screen_height': 1024,
-            'icons_path': weather_icons_path  # This line should match the parameter name in WeatherModule.__init__
-        }
-    },
-    'calendar': {
-        'class': 'CalendarModule',  # Added Calendar module class
-        'params': {
-            'config': {
-                'client_id': os.getenv('GOOGLE_CLIENT_ID'),
-                'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
-                'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
-                'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
-            }
-        }
-    },
-    'clock': {
-        'class': 'ClockModule',
-        'params': {
-            'time_font_size': 24,
-            'date_font_size': 12,
-            'color': COLOR_FONT_DEFAULT,  # Make sure this color is defined in your config
-            'time_format': '%H:%M:%S',
-            'date_format': '%A, %B %d, %Y',
-            'timezone': 'local'  # Or specify a timezone like 'Europe/London'
-        }
-    },
+    }, 
     'retro_characters': {
         'class': 'RetroCharactersModule',
         'params': {
-            'screen_size': (768, 1024),
+            'screen_size': (SCREEN_WIDTH_DEFAULT, SCREEN_HEIGHT_DEFAULT),
             'icon_size': 64,
             'icon_directory': retro_icons_path,
             'spawn_probability': 0.002,  # Increased for more frequent icons
@@ -212,12 +257,16 @@ CONFIG = {
             }
         }
     },
-    'sound_effects_path': sound_effects_path,  # Add this line
+    
+    # Audio and sound effects
+    'sound_effects_path': sound_effects_path,
     'audio': {
-        'mic_energy_threshold': 500,  # Adjust this value to increase/decrease mic sensitivity
-        'tts_volume': 0.8,  # Adjust this value between 0.0 and 1.0 for TTS volume
-        'wav_volume': 0.5,  # Adjust this value between 0.0 and 1.0 for WAV file volume
+        'mic_energy_threshold': 500,  # Adjust for mic sensitivity
+        'tts_volume': 0.8,           # Text-to-speech volume (0.0-1.0)
+        'wav_volume': 0.5,           # WAV file volume (0.0-1.0)
     },
+    
+    # Module visibility settings
     'module_visibility': {
         'clock': True,
         'weather': True,
@@ -228,18 +277,23 @@ CONFIG = {
         'ai_interaction': {
             'params': {
                 'config': {
-                    'disable_audio': True,  # Set to True to completely disable audio (prevents crashes)
-                    # ... other settings
+                    'disable_audio': True,  # Set to True to completely disable audio
                 }
             }
         }
     },
+    
+    # State-specific module settings
+    'screensaver_modules': ['retro_characters'],
+    'sleep_modules': ['clock'],
+    
+    # Debug settings
     'debug': {
         'enabled': False,  # Set to True when you need detailed logging
         'log_level': 'INFO'  # Can be 'DEBUG', 'INFO', 'WARNING', 'ERROR'
     },
-    'screensaver_modules': ['retro_characters'],
-    'sleep_modules': ['clock'],
+    
+    # Visual effects settings
     'visual_effects': {
         'enabled': True,
         'animation_speed': 1.0,  # Adjust to speed up or slow down animations
@@ -249,40 +303,44 @@ CONFIG = {
             'highlights': 255
         }
     },
+    
+    # Screen settings
     'current_monitor': {
-        'width': 800,  # Set to actual physical width of your display 
-        'height': 480,  # Set to actual physical height of your display
-        'is_portrait': False  # Set to False since the Pi should use landscape mode
+        'width': SCREEN_WIDTH_DEFAULT,
+        'height': SCREEN_HEIGHT_DEFAULT,
+        'is_portrait': False
     },
+    
+    # Module styling (consistent across all modules)
     'module_styling': {
         'font_family': FONT_NAME,
         'fonts': {
             'title': {
-                'size': 24,
-                'color': (240, 240, 240)  # Slightly off-white for titles
+                'size': FONT_SIZE_TITLE,
+                'color': COLOR_FONT_DEFAULT
             },
             'subtitle': {
-                'size': 20,
-                'color': (220, 220, 220)
+                'size': FONT_SIZE_SUBTITLE,
+                'color': COLOR_FONT_SUBTITLE
             },
             'body': {
-                'size': 16,
-                'color': (200, 200, 200)
+                'size': FONT_SIZE_BODY,
+                'color': COLOR_FONT_BODY
             },
             'small': {
-                'size': 14,
-                'color': (180, 180, 180)
+                'size': FONT_SIZE_SMALL,
+                'color': COLOR_FONT_SMALL
             }
         },
         'backgrounds': {
-            'module': (20, 20, 20),       # Almost black
-            'header': (40, 40, 40),       # Dark gray
-            'highlight': (30, 30, 40)     # Slightly bluish dark background
+            'module': COLOR_BG_MODULE,
+            'header': COLOR_BG_HEADER,
+            'highlight': COLOR_BG_HIGHLIGHT
         },
         'spacing': {
-            'line_height': 22,            # Default line spacing
-            'padding': 10                 # Default padding
+            'line_height': DEFAULT_LINE_HEIGHT,
+            'padding': DEFAULT_PADDING
         },
-        'radius': 15                      # Default corner radius
+        'radius': DEFAULT_RADIUS
     },
 }

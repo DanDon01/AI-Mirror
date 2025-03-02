@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY
 import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
+from visual_effects import VisualEffects
 
 class WeatherModule:
     def __init__(self, api_key, city, screen_width=800, screen_height=600, icons_path=None):
@@ -18,6 +19,7 @@ class WeatherModule:
         self.screen_height = screen_height
         self.animation = None
         self.icons_path = icons_path  # Add this line
+        self.effects = VisualEffects()  # Add this line
 
     def update(self):
         current_time = datetime.now()
