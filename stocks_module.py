@@ -191,9 +191,9 @@ class StocksModule:
                 self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
                 self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             
-            # Get background colors
-            bg_color = backgrounds.get('module', (20, 20, 20))
-            header_bg_color = backgrounds.get('header', (40, 40, 40))
+            # Get background colors - Use transparent backgrounds 
+            bg_color = (20, 20, 20, 100)  # Add alpha for transparency
+            header_bg_color = (40, 40, 40, 120)  # Add alpha for transparency
             
             # Draw module background
             module_width = 300
@@ -202,13 +202,18 @@ class StocksModule:
             header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)
             
             try:
-                # Draw background with rounded corners
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius)
+                # Draw background with rounded corners and transparency
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=100)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=120)
             except:
                 # Fallback if effects fail
-                pygame.draw.rect(screen, bg_color, module_rect, border_radius=10)
-                pygame.draw.rect(screen, header_bg_color, header_rect, border_radius=10)
+                s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
+                s.fill((20, 20, 20, 100))
+                screen.blit(s, (x-padding, y-padding))
+                
+                s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
+                s.fill((40, 40, 40, 120))
+                screen.blit(s, (x-padding, y-padding))
             
             # Draw title
             title_color = fonts.get('title', {}).get('color', (240, 240, 240))

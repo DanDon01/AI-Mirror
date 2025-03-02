@@ -98,59 +98,119 @@ class WeatherModule:
         return (r, g, b)
 
     def draw(self, screen, position):
-        if self.font is None:
+        """Draw weather with consistent styling"""
+        try:
+            # Extract position
+            if isinstance(position, dict):
+                x, y = position['x'], position['y']
+            else:
+                x, y = position
+            
+            # Get styling from config
+            styling = CONFIG.get('module_styling', {})
+            fonts = styling.get('fonts', {})
+            backgrounds = styling.get('backgrounds', {})
+            
+            # Get styles for drawing
+            radius = styling.get('radius', 15)
+            padding = styling.get('spacing', {}).get('padding', 10)
+            line_height = styling.get('spacing', {}).get('line_height', 22)
+            
+            # Initialize fonts if needed
+            if not hasattr(self, 'title_font'):
+                title_size = fonts.get('title', {}).get('size', 24)
+                body_size = fonts.get('body', {}).get('size', 16)
+                small_size = fonts.get('small', {}).get('size', 14)
+                
+                self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
+                self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
+                self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
+            
+            # Get background colors - Use transparent backgrounds 
+            bg_color = (20, 20, 20, 100)  # Add alpha for transparency
+            header_bg_color = (40, 40, 40, 120)  # Add alpha for transparency
+            
+            # Draw module background
+            module_width = 300
+            module_height = 200
+            module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
+            header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)
+            
             try:
-                self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+                # Draw background with rounded corners and transparency
+                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=100)
+                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=120)
             except:
-                print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
-                self.font = pygame.font.Font(None, FONT_SIZE)
-
-        if self.weather_data:
-            x, y = position
+                # Fallback if effects fail
+                s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
+                s.fill((20, 20, 20, 100))
+                screen.blit(s, (x-padding, y-padding))
+                
+                s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
+                s.fill((40, 40, 40, 120))
+                screen.blit(s, (x-padding, y-padding))
             
-            # Get city name and country code from the weather data
-            city_name = self.weather_data['name']
-            country_code = self.weather_data['sys']['country']
+            # Draw title
+            title_color = fonts.get('title', {}).get('color', (240, 240, 240))
+            title_text = self.title_font.render("Weather", True, title_color)
+            screen.blit(title_text, (x + padding, y + padding))
             
-            # Current weather
-            temp = self.weather_data['main']['temp']
-            condition = self.weather_data['weather'][0]['description'].capitalize()
-            humidity = self.weather_data['main']['humidity']
-            wind_speed = self.weather_data['wind']['speed']
-            feels_like = self.weather_data['main']['feels_like']
-            pressure = self.weather_data['main']['pressure']
-            
-            # Calculate chance of rain (this is an approximation)
-            rain_chance = self.weather_data['clouds']['all']  # Cloud coverage as a proxy for rain chance
+            # Continue with existing weather display logic but use the new fonts
+            if self.font is None:
+                try:
+                    self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
+                except:
+                    print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
+                    self.font = pygame.font.Font(None, FONT_SIZE)
 
-            lines = [
-                f"{city_name}, {country_code}: {temp:.1f}°C, {condition}",
-                f"Feels like: {feels_like:.1f}°C",
-                f"Humidity: {humidity}%",
-                f"Wind: {wind_speed} m/s",
-                f"Pressure: {pressure} hPa",
-                f"Chance of rain: {rain_chance}%"
-            ]
+            if self.weather_data:
+                x, y = position
+                
+                # Get city name and country code from the weather data
+                city_name = self.weather_data['name']
+                country_code = self.weather_data['sys']['country']
+                
+                # Current weather
+                temp = self.weather_data['main']['temp']
+                condition = self.weather_data['weather'][0]['description'].capitalize()
+                humidity = self.weather_data['main']['humidity']
+                wind_speed = self.weather_data['wind']['speed']
+                feels_like = self.weather_data['main']['feels_like']
+                pressure = self.weather_data['main']['pressure']
+                
+                # Calculate chance of rain (this is an approximation)
+                rain_chance = self.weather_data['clouds']['all']  # Cloud coverage as a proxy for rain chance
 
-            for i, line in enumerate(lines):
-                if "Feels like" in line:
-                    color = self.get_temperature_color(feels_like)
-                else:
-                    color = COLOR_FONT_DEFAULT
-                text_surface = self.font.render(line, True, color)
-                text_surface.set_alpha(TRANSPARENCY)
-                screen.blit(text_surface, (x, y + i * LINE_SPACING))
+                lines = [
+                    f"{city_name}, {country_code}: {temp:.1f}°C, {condition}",
+                    f"Feels like: {feels_like:.1f}°C",
+                    f"Humidity: {humidity}%",
+                    f"Wind: {wind_speed} m/s",
+                    f"Pressure: {pressure} hPa",
+                    f"Chance of rain: {rain_chance}%"
+                ]
 
-            # Update and draw weather animation
-            if self.animation:
-                self.animation.update()
-                self.animation.draw(screen)
+                for i, line in enumerate(lines):
+                    if "Feels like" in line:
+                        color = self.get_temperature_color(feels_like)
+                    else:
+                        color = COLOR_FONT_DEFAULT
+                    text_surface = self.font.render(line, True, color)
+                    text_surface.set_alpha(TRANSPARENCY)
+                    screen.blit(text_surface, (x, y + i * LINE_SPACING))
 
-        else:
-            error_text = "Weather data unavailable"
-            error_surface = self.font.render(error_text, True, COLOR_PASTEL_RED)
-            error_surface.set_alpha(TRANSPARENCY)
-            screen.blit(error_surface, position)
+                # Update and draw weather animation
+                if self.animation:
+                    self.animation.update()
+                    self.animation.draw(screen)
+
+            else:
+                error_text = "Weather data unavailable"
+                error_surface = self.font.render(error_text, True, COLOR_PASTEL_RED)
+                error_surface.set_alpha(TRANSPARENCY)
+                screen.blit(error_surface, position)
+        except Exception as e:
+            logging.error(f"Error drawing weather module: {e}")
 
     def cleanup(self):
         pass
