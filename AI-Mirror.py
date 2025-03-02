@@ -229,6 +229,18 @@ class MagicMirror:
         self.state = "active"
         self.font = pygame.font.Font(None, 48)
         self.module_manager = ModuleManager()
+        self.background_color = (0, 0, 0)  # Black background
+        
+        # Initialize layout manager for proper module positioning
+        self.layout_manager = LayoutManager(self.screen.get_width(), self.screen.get_height())
+        
+        # Initialize module positions using the layout manager
+        self.module_positions = {}
+        self.setup_module_positions()
+        
+        # Debug layout flag
+        self.debug_layout = CONFIG.get('debug', {}).get('show_layout', False)
+        
         # Initialize module visibility with all modules
         for module_name in self.modules.keys():
             self.module_manager.module_visibility[module_name] = True
@@ -351,8 +363,15 @@ class MagicMirror:
             for name, module in self.modules.items():
                 if name in self.module_manager.module_visibility:
                     if self.module_manager.module_visibility[name]:
-                        position = self.module_positions.get(name, (0, 0))
-                        module.draw(self.screen, position)
+                        position = self.module_positions.get(name, {'x': 0, 'y': 0})
+                        
+                        # Convert position to tuple if it's a dictionary
+                        if isinstance(position, dict) and 'x' in position and 'y' in position:
+                            pos_tuple = (position['x'], position['y'])
+                        else:
+                            pos_tuple = position
+                            
+                        module.draw(self.screen, pos_tuple)
                         
                         # Draw debug overlay if enabled
                         if self.debug_layout:
@@ -500,6 +519,53 @@ class MagicMirror:
         
         # Module visibility is handled automatically in both update_modules() and draw_modules()
         # based on the current state and the screensaver_modules/sleep_modules settings
+
+    def setup_module_positions(self):
+        """Initialize the positions of each module using the layout manager"""
+        try:
+            # Use layout manager to get positions for each module
+            for name in self.modules.keys():
+                position = self.layout_manager.get_module_position(name)
+                if position:
+                    self.module_positions[name] = position
+                    logging.info(f"Position for {name}: {position}")
+                else:
+                    logging.warning(f"No position defined for module: {name}")
+            
+            # Check if any modules don't have positions
+            missing_positions = [name for name in self.modules.keys() if name not in self.module_positions]
+            if missing_positions:
+                logging.warning(f"Modules missing positions: {missing_positions}")
+                
+                # Create fallback positions for any missing modules
+                width, height = self.screen.get_size()
+                fallback_positions = {
+                    'clock': {'x': 20, 'y': 20, 'width': 300, 'height': 100},
+                    'weather': {'x': width - 320, 'y': 20, 'width': 300, 'height': 200},
+                    'calendar': {'x': 20, 'y': 150, 'width': 400, 'height': 300},
+                    'stocks': {'x': 20, 'y': height - 150, 'width': 400, 'height': 130},
+                    'fitbit': {'x': width - 320, 'y': 240, 'width': 300, 'height': 200},
+                    'retro_characters': {'x': width//2 - 150, 'y': height//2 - 150, 'width': 300, 'height': 300},
+                    'ai_interaction': {'x': width//2 - 200, 'y': height - 200, 'width': 400, 'height': 180}
+                }
+                
+                # Apply fallbacks only for missing modules
+                for name in missing_positions:
+                    if name in fallback_positions:
+                        self.module_positions[name] = fallback_positions[name]
+                        logging.info(f"Using fallback position for {name}")
+                    else:
+                        # Generic position if no fallback defined
+                        idx = missing_positions.index(name)
+                        self.module_positions[name] = {'x': 10, 'y': 10 + idx*100, 'width': 300, 'height': 90}
+                        logging.info(f"Using generic position for {name}")
+        
+        except Exception as e:
+            logging.error(f"Error setting up module positions: {e}")
+            # Fallback to a simple layout if there's a critical error
+            for i, name in enumerate(self.modules.keys()):
+                self.module_positions[name] = {'x': 10, 'y': 10 + i*100, 'width': 300, 'height': 90}
+                logging.warning(f"Using emergency fallback position for {name} due to error")
 
 if __name__ == "__main__":
     mirror = MagicMirror()
