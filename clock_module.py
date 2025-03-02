@@ -6,6 +6,8 @@ import calendar
 
 class ClockModule:
     def __init__(self, font_file=None, time_font_size=60, date_font_size=30, color=(255, 255, 255), time_format='%H:%M:%S', date_format='%a, %b %d, %Y', timezone='local'):
+        self.time_font_size = time_font_size
+        self.date_font_size = date_font_size
         self.time_font = pygame.font.Font(font_file, time_font_size) if font_file else pygame.font.SysFont('Arial', time_font_size)
         self.date_font = pygame.font.Font(font_file, date_font_size) if font_file else pygame.font.SysFont('Arial', date_font_size)
         self.color = color
@@ -13,7 +15,7 @@ class ClockModule:
         self.date_format = date_format
         self.tz = pytz.timezone(timezone) if timezone != 'local' else None
         self.scroll_position = 0
-        self.scroll_speed = 2
+        self.scroll_speed = 0.7
         self.screen_width = 0  # This will be set in the draw method
         self.total_width = 0  # This will be calculated in the draw method
 
@@ -63,7 +65,10 @@ class ClockModule:
             # Draw the date below the time (not scrolling)
             date_text = self.date_font.render(current_date, True, self.color)
             date_x = (screen_width - date_text.get_width()) // 2  # Center date
-            screen.blit(date_text, (date_x, y + self.time_font_size + 10))
+            
+            # Use the font's get_height method instead of time_font_size
+            font_height = self.time_font.get_height()
+            screen.blit(date_text, (date_x, y + font_height + 10))
             
         except Exception as e:
             logging.error(f"Error drawing clock: {e}")
