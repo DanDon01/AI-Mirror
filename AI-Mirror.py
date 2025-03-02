@@ -185,8 +185,9 @@ class MagicMirror:
         self.running = True
         self.state = "active"
         self.font = pygame.font.Font(None, 48)
-        self.module_manager = ModuleManager()
-        self.background_color = (0, 0, 0)  # Black background
+        
+        # Create module manager to handle visibility and other module controls
+        self.module_manager = ModuleManager(initialized_modules=self.modules)
         
         # Initialize layout manager for proper module positioning
         self.layout_manager = LayoutManager(self.screen.get_width(), self.screen.get_height())

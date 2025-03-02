@@ -3,10 +3,17 @@ from config import CONFIG
 import time
 
 class ModuleManager:
-    def __init__(self):
+    def __init__(self, initialized_modules=None):
         self.module_visibility = CONFIG.get('module_visibility', {})
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"ModuleManager initialized with visibility states: {self.module_visibility}")
+        
+        # Store already initialized modules if provided
+        self.initialized_modules = initialized_modules or {}
+        
+        # Skip additional initialization if modules were provided
+        if not initialized_modules:
+            self.initialize_modules()
 
     def handle_command(self, command):
         """Handle show/hide commands for modules"""
