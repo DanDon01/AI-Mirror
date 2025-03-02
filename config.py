@@ -23,6 +23,7 @@ load_dotenv(env_path)
 COLOR_WHITE = (255, 255, 255)
 COLOR_BLACK = (0, 0, 0)
 COLOR_FONT_DEFAULT = (240, 240, 240)     # Light grey text
+COLOR_FONT_TITLE = (150, 150, 150)       # Darker grey
 COLOR_FONT_SUBTITLE = (220, 220, 220)    # Slightly darker grey
 COLOR_FONT_BODY = (200, 200, 200)        # Main body text
 COLOR_FONT_SMALL = (180, 180, 180)       # Small text
@@ -44,10 +45,10 @@ TRANSPARENCY = 215
 
 # Font Settings
 FONT_NAME = "Helvetica"
-FONT_SIZE_TITLE = 24
-FONT_SIZE_SUBTITLE = 20
-FONT_SIZE_BODY = 16
-FONT_SIZE_SMALL = 14
+FONT_SIZE_TITLE = 18
+FONT_SIZE_SUBTITLE = 16
+FONT_SIZE_BODY = 14
+FONT_SIZE_SMALL = 12
 FONT_SIZE = FONT_SIZE_BODY  # For backward compatibility
 
 # Spacing and Dimensions
@@ -58,7 +59,7 @@ DEFAULT_RADIUS = 15         # Default border radius for modules
 
 # Standard screen dimensions
 SCREEN_WIDTH_DEFAULT = 800
-SCREEN_HEIGHT_DEFAULT = 480
+SCREEN_HEIGHT_DEFAULT = 1280
 
 # Paths for assets
 assets_dir = os.path.join(current_dir, 'assets')
@@ -129,7 +130,7 @@ LAYOUT = {
     'fonts': {
         'title': {
             'size': int(FONT_SIZE_TITLE * CURRENT_MONITOR['font_scale']),
-            'color': COLOR_WHITE
+            'color': COLOR_FONT_TITLE
         },
         'subtitle': {
             'size': int(FONT_SIZE_SUBTITLE * CURRENT_MONITOR['font_scale']),
