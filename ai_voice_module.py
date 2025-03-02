@@ -753,27 +753,59 @@ class AIVoiceModule:
                     print("MIRROR DEBUG: 🎙️ Starting audio capture")
                     self.set_status("Listening", "Listening via Realtime API...")
                     
+                    # First, list available devices
+                    print("\nMIRROR DEBUG: 🎙️ Available audio devices:")
+                    try:
+                        devices = subprocess.check_output(["arecord", "-l"], text=True)
+                        print(devices)
+                        
+                        # Also show device names
+                        print("\nMIRROR DEBUG: 🎙️ Audio device names:")
+                        names = subprocess.check_output(["arecord", "-L"], text=True)
+                        print(names)
+                    except Exception as e:
+                        print(f"MIRROR DEBUG: ⚠️ Could not list devices: {e}")
+                    
                     # Create a unique filename for this recording
                     temp_wav = f"/tmp/mirror_recording_{int(time.time())}.wav"
                     
-                    # Use the exact command that worked in the terminal
-                    cmd = [
-                        "/usr/bin/arecord",
-                        "-D", "hw:2,0",
-                        "-f", "S16_LE",
-                        "-c", "1",
-                        "-r", "44100",
-                        "-d", "5",
-                        temp_wav
+                    # Try different device specifications
+                    devices_to_try = [
+                        "hw:2,0",
+                        "plughw:2,0",
+                        "plughw:Device",
+                        "default"
                     ]
                     
-                    print(f"MIRROR DEBUG: 🎙️ Recording to {temp_wav}")
+                    success = False
+                    for device in devices_to_try:
+                        print(f"\nMIRROR DEBUG: 🎙️ Trying device: {device}")
+                        
+                        cmd = [
+                            "arecord",
+                            "-D", device,
+                            "-f", "S16_LE",
+                            "-c", "1",
+                            "-r", "44100",
+                            "-d", "5",
+                            temp_wav
+                        ]
+                        
+                        print(f"MIRROR DEBUG: 🎙️ Running: {' '.join(cmd)}")
+                        
+                        try:
+                            process = subprocess.run(cmd, capture_output=True, text=True)
+                            if process.returncode == 0:
+                                print(f"MIRROR DEBUG: ✅ Successfully recorded with device {device}")
+                                success = True
+                                break
+                            else:
+                                print(f"MIRROR DEBUG: ❌ Failed with device {device}: {process.stderr}")
+                        except Exception as e:
+                            print(f"MIRROR DEBUG: ❌ Error with device {device}: {e}")
                     
-                    # Run the recording command
-                    process = subprocess.run(cmd, capture_output=True, text=True)
-                    
-                    if process.returncode != 0:
-                        print(f"MIRROR DEBUG: ❌ Recording failed: {process.stderr}")
+                    if not success:
+                        print("MIRROR DEBUG: ❌ Could not record with any device")
                         self.set_status("Error", "Recording failed")
                         self.recording = False
                         return
