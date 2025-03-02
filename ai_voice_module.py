@@ -96,20 +96,53 @@ class AIVoiceModule:
             response = self.client.models.list()
             if response:
                 model_names = [model.id for model in response]
+                print(f"MIRROR DEBUG: Available models: {', '.join(model_names[:5])}...")
                 
-                # Check if we have access to required models
-                required_models = ['gpt-4o', 'whisper-1', 'tts-1']
-                missing_models = [m for m in required_models if not any(m in name for name in model_names)]
+                # UPDATED: Check for specific models
+                self.realtime_model = 'gpt-4o-realtime-preview'
+                self.text_model = 'gpt-4o-mini'
                 
-                if missing_models:
-                    self.logger.warning(f"Missing required models: {missing_models}")
-                    print(f"MIRROR DEBUG: ⚠️ Voice API missing models: {missing_models}")
-                    self.set_status("Limited", "Limited model access")
-                else:
-                    self.logger.info("OpenAI Voice API connection successful")
-                    print("MIRROR DEBUG: ✅ OpenAI Voice API connection successful")
+                # First check for realtime model - this is our primary need
+                has_realtime_model = any(self.realtime_model in name for name in model_names)
+                if not has_realtime_model:
+                    # If not found exactly, look for any realtime model
+                    has_any_realtime = any('realtime' in name.lower() for name in model_names)
+                    if has_any_realtime:
+                        # Find the first realtime model and use it
+                        for name in model_names:
+                            if 'realtime' in name.lower():
+                                self.realtime_model = name
+                                has_realtime_model = True
+                                print(f"MIRROR DEBUG: Using alternative realtime model: {self.realtime_model}")
+                                break
+                
+                # Check for text model
+                has_text_model = any(self.text_model in name for name in model_names)
+                if not has_text_model:
+                    # Default to any gpt-4 model if mini not available
+                    if any('gpt-4' in name for name in model_names):
+                        for name in model_names:
+                            if 'gpt-4' in name and 'realtime' not in name.lower():
+                                self.text_model = name
+                                has_text_model = True
+                                print(f"MIRROR DEBUG: Using alternative text model: {self.text_model}")
+                                break
+                
+                # Report findings
+                if has_realtime_model:
+                    self.logger.info(f"OpenAI Realtime API model access confirmed: {self.realtime_model}")
+                    print(f"MIRROR DEBUG: ✅ Realtime model available: {self.realtime_model}")
                     self.has_openai_access = True
-                    self.set_status("Ready", "Voice API ready")
+                    self.set_status("Ready", "Realtime API ready")
+                else:
+                    self.logger.warning(f"Missing required Realtime model")
+                    print(f"MIRROR DEBUG: ⚠️ No realtime model available")
+                    self.set_status("Error", "Missing realtime model")
+                
+                if has_text_model:
+                    print(f"MIRROR DEBUG: ✅ Text model available: {self.text_model}")
+                else:
+                    print(f"MIRROR DEBUG: ⚠️ Preferred text model not available")
             else:
                 self.logger.warning("OpenAI Voice API connection test failed")
                 print("MIRROR DEBUG: ⚠️ OpenAI Voice API test failed")
@@ -136,8 +169,9 @@ class AIVoiceModule:
             self.logger.info("Initializing WebSocket connection to OpenAI Realtime API")
             print("MIRROR DEBUG: 🔄 Starting WebSocket connection to Realtime API")
             
-            # Define connection URL with the model
-            self.ws_url = "wss://api.openai.com/v1/realtime?model=gpt-4o"
+            # Define connection URL with the realtime model
+            self.ws_url = f"wss://api.openai.com/v1/realtime?model={self.realtime_model}"
+            print(f"MIRROR DEBUG: Using model: {self.realtime_model} for realtime connection")
             
             # Set up headers with API key and beta flag
             self.ws_headers = [
