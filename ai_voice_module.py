@@ -244,6 +244,13 @@ class AIVoiceModule:
                     # Log received event
                     self.logger.debug(f"Received event: {event_type}")
                     
+                    # Ignore any events that come in after we got a complete response
+                    # This helps prevent buffer errors when the API is still expecting more audio
+                    if hasattr(self, 'response_complete') and self.response_complete:
+                        if event_type == "error" and "buffer too small" in str(data.get("error", {}).get("message", "")):
+                            # Silently ignore the "buffer too small" errors that happen after we're done
+                            return
+                        
                     # Handle session lifecycle events
                     if event_type == "session.created":
                         self.session_ready = True
@@ -295,6 +302,9 @@ class AIVoiceModule:
                     
                     elif event_type == "response.done" or event_type == "message.complete":
                         print("\nMIRROR DEBUG: ✅ Response complete")
+                        
+                        # Set a flag to ignore subsequent buffer errors
+                        self.response_complete = True
                         
                         # Reset all states
                         self.recording = False
@@ -698,6 +708,10 @@ class AIVoiceModule:
             return False
         
         try:
+            # Reset session state to prevent errors from previous interactions
+            if hasattr(self, 'response_complete'):
+                delattr(self, 'response_complete')
+            
             import threading
             import subprocess
             import base64
