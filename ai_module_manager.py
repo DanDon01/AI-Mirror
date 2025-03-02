@@ -19,6 +19,13 @@ class AIModuleManager:
         # Load config
         self.config = config or {}
         
+        # Set up basic attributes
+        self.active_module = None  # This will be set below
+        self.response_queue = Queue()
+        self.status = "Initializing"
+        self.status_message = "Starting AI systems..."
+        self.running = True
+        
         # Check if realtime API should be used
         use_realtime = self.config.get('use_realtime_api', True)
         self.logger.info(f"Realtime API enabled: {use_realtime}")
@@ -47,6 +54,10 @@ class AIModuleManager:
                     print("MIRROR DEBUG: ❌ Realtime API connection timed out")
                     raise Exception("Realtime Voice API module failed to initialize")
                 
+                # IMPORTANT: Set the active_module attribute
+                self.active_module = self.ai_module
+                self.realtime_module = self.ai_module
+                
                 self.logger.info("Realtime Voice API module initialized successfully")
                 print("MIRROR DEBUG: ✅ Using Realtime Voice API module")
                 return
@@ -60,11 +71,9 @@ class AIModuleManager:
         from AI_Module import AIInteractionModule
         self.ai_module = AIInteractionModule(self.config)
         
-        # Set up basic attributes
-        self.active_module = None
-        self.response_queue = Queue()
-        self.status = "Initializing"
-        self.status_message = "Starting AI systems..."
+        # IMPORTANT: Set the active_module attribute for the fallback case too
+        self.active_module = self.ai_module
+        self.standard_module = self.ai_module
         
         # Extract the AI configuration specifically
         ai_config = config.get('config', {})

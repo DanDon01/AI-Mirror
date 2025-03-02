@@ -194,14 +194,9 @@ class AIVoiceModule:
             import threading
             import json
             import base64
-            import pyaudio
-            import numpy as np
             
             self.logger.info("Initializing WebSocket connection to OpenAI Realtime API")
             print("MIRROR DEBUG: 🔄 Starting WebSocket connection to Realtime API")
-            
-            # Use the specific model version you provided
-            self.realtime_model = 'gpt-4o-realtime-preview-2024-10-01'
             
             # Define connection URL with the realtime model
             self.ws_url = f"wss://api.openai.com/v1/realtime?model={self.realtime_model}"
@@ -314,14 +309,18 @@ class AIVoiceModule:
             
             def on_close(ws, close_status_code, close_msg):
                 self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
-                print(f"MIRROR DEBUG: WebSocket connection closed: {close_status_code}")
-                self.has_openai_access = False
-                self.session_ready = False
-                
-                # Stop audio stream if active
-                self.stop_audio_stream()
+                print(f"MIRROR DEBUG: WebSocket connection closed")
+                # Try to reconnect after a delay if we were running
+                if self.running:
+                    def reconnect():
+                        if self.running:
+                            print("MIRROR DEBUG: 🔄 Attempting to reconnect WebSocket...")
+                            time.sleep(5)  # Wait 5 seconds before reconnecting
+                            self.start_websocket_connection()
+                    
+                    threading.Thread(target=reconnect, daemon=True).start()
             
-            # Create WebSocket connection
+            # Create WebSocket instance
             self.ws = websocket.WebSocketApp(
                 self.ws_url,
                 header=self.ws_headers,
@@ -331,7 +330,7 @@ class AIVoiceModule:
                 on_close=on_close
             )
             
-            # Start WebSocket connection in a separate thread
+            # Start WebSocket in background thread
             self.ws_thread = threading.Thread(target=self.ws.run_forever, daemon=True)
             self.ws_thread.start()
             
@@ -340,9 +339,6 @@ class AIVoiceModule:
             # Initialize audio streaming
             self.initialize_audio_streaming()
             
-        except ImportError as e:
-            self.logger.error(f"Missing libraries: {e}")
-            print(f"MIRROR DEBUG: ❌ Missing libraries for Realtime API: {e}")
         except Exception as e:
             self.logger.error(f"Error starting WebSocket connection: {e}")
             print(f"MIRROR DEBUG: ❌ Failed to start WebSocket connection: {e}")
