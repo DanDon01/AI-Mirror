@@ -24,6 +24,16 @@ class AIModuleManager:
         # Extract the AI configuration specifically
         ai_config = config.get('ai_interaction', {}).get('params', {}).get('config', {})
         
+        # IMPORTANT: Ensure the API key is explicitly set from environment if missing
+        if 'openai' in ai_config and not ai_config['openai'].get('api_key'):
+            import os
+            api_key = os.getenv('OPENAI_API_KEY')
+            if api_key:
+                ai_config['openai']['api_key'] = api_key
+                print(f"MIRROR DEBUG: Loaded API key from environment: {api_key[:4]}...{api_key[-4:]}")
+            else:
+                print("MIRROR DEBUG: ⚠️ No OpenAI API key found in environment!")
+        
         # Check if realtime is enabled - get from the correct location
         self.realtime_enabled = ai_config.get('realtime_enabled', False)
         self.logger.info(f"Realtime API enabled: {self.realtime_enabled}")

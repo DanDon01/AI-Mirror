@@ -478,70 +478,60 @@ class AIInteractionModule:
             time.sleep(0.1)  # Prevent tight loop
 
     def initialize_audio_system(self):
-        """Initialize audio with correct device selection based on arecord test"""
+        """Initialize audio with safer device detection"""
         self.has_audio = False
         
         try:
             # Import the required modules
             import speech_recognition as sr
             
-            # Create recognizer with appropriate settings for a mirror environment
+            # Create recognizer with appropriate settings
             self.recognizer = sr.Recognizer()
             self.recognizer.energy_threshold = self.mic_energy_threshold
             self.recognizer.pause_threshold = 0.8
             self.recognizer.dynamic_energy_threshold = True
             
-            # Log available audio devices for debugging
-            self.logger.info("Checking available audio devices...")
+            # SAFER APPROACH: Skip PyAudio enumeration which is causing crashes
+            self.logger.info("Initializing microphone with safer approach")
+            print("MIRROR DEBUG: 🎤 Using safer microphone initialization")
             
-            # Try to enumerate audio devices first
+            # Try direct device initialization without enumeration
             try:
-                # Get PyAudio instance
-                p = pyaudio.PyAudio()
+                # First try with explicit device index based on your arecord test
+                print("MIRROR DEBUG: Attempting to use microphone at index 2 (hw:2,0)")
                 
-                # Log all available devices
-                info = "\n=== Available Audio Devices ===\n"
-                for i in range(p.get_device_count()):
-                    dev_info = p.get_device_info_by_index(i)
-                    info += f"Device {i}: {dev_info['name']}\n"
-                    info += f"  Input Channels: {dev_info['maxInputChannels']}\n"
-                info += "============================="
-                
-                self.logger.info(info)
-                print(info)
-                
-                # Clean up PyAudio instance
-                p.terminate()
-            except Exception as e:
-                self.logger.warning(f"Could not enumerate audio devices: {e}")
-            
-            # Try specific device index based on arecord test
-            try:
-                print("MIRROR DEBUG: 🎤 Trying to initialize microphone with device index 2...")
-                self.logger.info("Initializing microphone with device index 2 (hw:2,0)")
+                # Create microphone without adjusting for ambient noise yet
                 self.microphone = sr.Microphone(device_index=2, sample_rate=44100)
+                self.mic_index = 2
+                self.has_audio = True
+                print("MIRROR DEBUG: ✅ Microphone created with index 2")
                 
-                # Test the microphone by adjusting for ambient noise
-                with self.microphone as source:
-                    print("MIRROR DEBUG: 🎤 Testing microphone...")
-                    self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                    self.logger.info("Microphone test successful with device index 2")
-                    print("MIRROR DEBUG: ✅ Microphone initialized successfully!")
-                    self.mic_index = 2
-                    self.has_audio = True
+                # Skip ambient noise adjustment for now - it can be done later as needed
+                # This avoids potential crashes during initialization
+                
             except Exception as e:
-                self.logger.warning(f"Failed with specific device: {e}")
-                print(f"MIRROR DEBUG: ❌ Error with microphone device 2: {e}")
+                self.logger.warning(f"Failed with device index 2: {e}")
+                print(f"MIRROR DEBUG: Failed with index 2, error: {e}")
+                
+                # Fall back to default device as a last resort
+                try:
+                    print("MIRROR DEBUG: Falling back to default microphone")
+                    self.microphone = sr.Microphone(sample_rate=16000)
+                    self.mic_index = "default"
+                    self.has_audio = True
+                except Exception as e:
+                    self.logger.error(f"Failed to initialize any microphone: {e}")
+                    print(f"MIRROR DEBUG: ❌ All microphone attempts failed: {e}")
                 
         except Exception as e:
             self.logger.error(f"Audio initialization error: {e}")
             self.has_audio = False
             print(f"MIRROR DEBUG: ❌ Audio system initialization failed: {e}")
         
-        # Set up properly based on audio availability
+        # Update status based on result
         if self.has_audio:
             self.status_message = f"Ready with mic #{self.mic_index}"
-            print(f"MIRROR DEBUG: 🎙️ Audio system ready with device index {self.mic_index}")
+            print(f"MIRROR DEBUG: 🎙️ Audio system ready with device {self.mic_index}")
         else:
             self.status_message = "No audio available"
             self.logger.warning("Audio system unavailable")
@@ -714,18 +704,27 @@ class AIInteractionModule:
         self.hotword_thread.start()
 
     def process_voice_input(self):
-        """Process voice input with enhanced feedback"""
+        """Process voice input with enhanced safety"""
         self.logger.info("Starting voice input processing")
-        print("MIRROR DEBUG: Listening for your voice input...")
+        print("MIRROR DEBUG: Attempting to listen for voice input...")
         
         try:
             if not self.has_audio or not hasattr(self, 'microphone'):
                 self.logger.error("No audio system available for voice input")
                 self.set_status("Error", "No audio system available")
+                print("MIRROR DEBUG: ❌ No audio system available")
                 self.recording = False
                 return
             
             with self.microphone as source:
+                # Now try to adjust for ambient noise
+                try:
+                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    print("MIRROR DEBUG: Adjusted for ambient noise")
+                except Exception as e:
+                    print(f"MIRROR DEBUG: ⚠️ Could not adjust for ambient noise: {e}")
+                    # Continue anyway
+                    
                 self.set_status("Listening", "Speak now...")
                 print("MIRROR DEBUG: 🎤 Microphone active - speak now")
                 
