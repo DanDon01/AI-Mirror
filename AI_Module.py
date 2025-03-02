@@ -259,13 +259,31 @@ class AIInteractionModule:
             self.logger.error(traceback.format_exc())
 
     def on_button_press(self):
-        self.logger.info("Starting voice interaction")
-        if not self.recording and not self.processing:
-            # No need to control physical LED
-            self.play_sound_effect('mirror_listening')
-            self.recording = True
-            self.listening = True
-            self.set_status("Listening...", "Speak now")
+        """Handle SPACE key or Mirror hotword activation"""
+        self.logger.info("Activation triggered, starting listening...")
+        
+        # Skip if we're already processing
+        if self.recording or self.processing:
+            self.logger.info("Already processing, ignoring activation")
+            return
+        
+        # If no audio system, we can't proceed
+        if not self.has_audio:
+            self.logger.warning("No audio system available")
+            return
+        
+        # Update status
+        self.set_status("Listening", "Listening...")
+        
+        # Play sound effect if available
+        if 'mirror_listening' in self.sound_effects:
+            self.sound_effects['mirror_listening'].play()
+        
+        # Set recording state
+        self.recording = True
+        
+        # Start listening thread
+        threading.Thread(target=self.process_voice_input, daemon=True).start()
 
     def on_button_release(self):
         self.logger.info("Processing voice input")
@@ -450,111 +468,101 @@ class AIInteractionModule:
             self.button.cleanup()
 
     def hotword_detection_loop(self):
-        """Continuously listens for the hotword 'Mirror'."""
-        # Make sure we have the needed imports
-        import time
-        
-        # Skip the hotword detection completely if audio is disabled
-        if not self.has_audio:
-            self.logger.info("Hotword detection disabled - no audio system available")
-            return
-        
-        # Check for FLAC at startup and warn if not available
-        try:
-            subprocess.check_output(['flac', '--version'])
-            flac_available = True
-        except (subprocess.SubprocessError, FileNotFoundError):
-            self.logger.error("FLAC utility not found - speech recognition will not work properly")
-            self.logger.error("Please install FLAC: sudo apt-get install flac")
-            flac_available = False
-        
-        self.logger.info("🎤 Hotword detection active - listening for 'Mirror'")
+        """Continuously listen for the hotword 'mirror'"""
+        self.logger.info("Starting hotword detection loop")
         
         while self.running:
-            if not self.recording and not self.processing:
-                try:
-                    # Check if microphone exists before trying to use it
-                    if not hasattr(self, 'microphone') or self.microphone is None:
-                        time.sleep(1)
-                        continue
-                        
-                    # Make sure we're using our mock PyAudio for safety
+            # Skip if we're already in a conversation
+            if self.recording or self.processing:
+                time.sleep(0.1)
+                continue
+            
+            # Skip if audio isn't available
+            if not self.has_audio or not hasattr(self, 'microphone'):
+                time.sleep(1)
+                continue
+            
+            try:
+                self.hotword_listening = True
+                with self.microphone as source:
                     try:
-                        with self.microphone as source:
-                            self.hotword_listening = True
-                            # Use a much more generous timeout
-                            audio = self.recognizer.listen(source, 
-                                                        timeout=3, 
-                                                        phrase_time_limit=5)
+                        # Short timeout to avoid freezing
+                        self.logger.debug("Listening for hotword...")
+                        audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=3)
+                        
+                        if audio is None:
+                            continue
                             
-                            # Make sure audio isn't None
-                            if audio is None:
-                                continue
-                                
-                            try:
-                                # Use a longer timeout for Google API
-                                text = self.recognizer.recognize_google(audio, timeout=5).lower()
-                                if "mirror" in text:
-                                    self.logger.info("🎯 Hotword 'Mirror' detected!")
-                                    self.on_button_press()
-                                else:
-                                    self.logger.debug(f"Heard: {text} (not hotword)")
-                            except sr.UnknownValueError:
-                                pass  # Speech wasn't understood
-                            except sr.RequestError as e:
-                                self.logger.warning(f"Could not request results from Google: {e}")
-                                time.sleep(3)  # Wait longer on API errors
-                            except OSError as e:
-                                if "FLAC conversion utility not available" in str(e):
-                                    self.logger.error("FLAC utility missing - please install: sudo apt-get install flac")
-                                    time.sleep(10)  # Wait longer to avoid log spam
-                                else:
-                                    self.logger.error(f"OS Error in speech recognition: {e}")
-                                    time.sleep(3)
-                    except TypeError as e:
+                        try:
+                            # Use a timeout for Google API
+                            text = self.recognizer.recognize_google(audio, timeout=5).lower()
+                            self.logger.debug(f"Heard: {text}")
+                            
+                            if "mirror" in text:
+                                self.logger.info("🎯 Hotword 'Mirror' detected!")
+                                # This will start the listening flow
+                                self.on_button_press()
+                        except sr.UnknownValueError:
+                            pass  # Speech wasn't understood
+                        except sr.RequestError as e:
+                            self.logger.warning(f"RequestError: {e}")
+                            time.sleep(2)  # Back off a bit
+                    except Exception as e:
                         if "NoneType" in str(e) and "close" in str(e):
-                            self.logger.warning("Microphone close error (safely ignored)")
-                            time.sleep(1)
+                            # This is a known microphone issue, safely skip
+                            pass
                         else:
-                            raise  # Re-raise other TypeError exceptions
-                            
-                except Exception as e:
-                    # Ignore the specific NoneType error
-                    if "NoneType" in str(e) and "close" in str(e):
-                        self.logger.debug("Skipping known microphone issue - continuing")
-                        time.sleep(1)
-                    else:
-                        self.logger.error(f"Error in hotword detection: {e}")
-                        time.sleep(3)  # Wait longer on general errors
+                            self.logger.warning(f"Error in listen: {e}")
+                            time.sleep(0.5)
+            except Exception as e:
+                if "NoneType" in str(e) and "close" in str(e):
+                    # This is a known microphone issue, safely skip
+                    pass
+                else:
+                    self.logger.error(f"Error in hotword detection: {e}")
+                    time.sleep(1)
                 
-                # Always sleep a little to prevent tight loops
-                time.sleep(0.5)
+            time.sleep(0.1)  # Prevent tight loop
 
     def initialize_audio_system(self):
-        """Initialize audio with correct device index for Raspberry Pi"""
+        """Initialize audio with correct device selection"""
         self.has_audio = False
         
         try:
             # Import the required modules
             import speech_recognition as sr
             
-            # Create recognizer
+            # Create recognizer with appropriate settings for a mirror environment
             self.recognizer = sr.Recognizer()
-            self.recognizer.energy_threshold = 500
+            self.recognizer.energy_threshold = self.mic_energy_threshold
+            self.recognizer.pause_threshold = 0.8
             self.recognizer.dynamic_energy_threshold = True
             
-            # Use EXACT device index from arecord -l
-            # Card 2: USB PnP Sound Device is our microphone
-            self.mic_index = 2  # This matches your system's USB microphone
+            # First try to list available devices
+            self.logger.info("Checking available audio devices...")
             
-            # Safely initialize microphone with specific device
+            # Try specific index first, then fall back to default
             try:
-                self.microphone = sr.Microphone(device_index=self.mic_index)
-                self.has_audio = True
-                self.logger.info(f"Audio initialized with USB PnP Sound Device (card {self.mic_index})")
+                for device_index in [2, 0, None]:  # Try index 2, then 0, then None (default)
+                    try:
+                        self.logger.info(f"Trying microphone with device_index={device_index}")
+                        self.microphone = sr.Microphone(device_index=device_index)
+                        
+                        # Test the microphone by adjusting for ambient noise
+                        with self.microphone as source:
+                            self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                            self.logger.info(f"Successfully initialized microphone with index {device_index}")
+                            self.mic_index = device_index
+                            self.has_audio = True
+                            break
+                    except Exception as e:
+                        self.logger.warning(f"Failed with device index {device_index}: {e}")
+                        continue
+                    
+                if not self.has_audio:
+                    self.logger.error("Could not initialize any microphone")
             except Exception as e:
-                self.logger.error(f"Could not initialize microphone with index {self.mic_index}: {e}")
-                self.has_audio = False
+                self.logger.error(f"Error during microphone initialization: {e}")
             
         except Exception as e:
             self.logger.error(f"Audio initialization error: {e}")

@@ -72,9 +72,23 @@ class AIInteractionModule:
     async def setup_websocket(self):
         """Sets up the WebSocket connection."""
         try:
-            async with websockets.connect(self.ws_url, extra_headers=self.headers) as websocket:
+            # Set a reasonable connection timeout
+            self.logger.info(f"Connecting to realtime API at {self.ws_url}")
+            async with websockets.connect(
+                self.ws_url, 
+                extra_headers=self.headers,
+                ping_interval=20,  # Keep connection alive
+                ping_timeout=10,
+                close_timeout=5
+            ) as websocket:
                 self.websocket = websocket
                 self.logger.info("Connected to the Realtime API.")
+                
+                # Send an initial message to validate connection
+                await websocket.send(json.dumps({
+                    "type": "conversation.create"
+                }))
+                
                 await self.listen_loop()
         except Exception as e:
             self.logger.error(f"Error connecting to the Realtime API: {e}")

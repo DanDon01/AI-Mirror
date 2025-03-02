@@ -266,9 +266,10 @@ CONFIG = {
         'params': {
             'config': {
                 'disable_audio': False,
+                'realtime_enabled': True,
                 'openai': {
                     'api_key': os.getenv('OPENAI_API_KEY'),
-                    'model': 'gpt-4-1106-preview'
+                    'model': 'gpt-4o-realtime-preview-2024-10-01'
                 },
                 'audio': {
                     'mic_energy_threshold': 500,

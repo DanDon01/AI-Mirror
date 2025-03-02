@@ -21,37 +21,49 @@ class AIModuleManager:
         self.status = "Initializing"
         self.status_message = "Starting AI systems..."
         
-        # Check if realtime is enabled
-        self.realtime_enabled = config.get('ai_interaction', {}).get('realtime_enabled', False)
+        # Extract the AI configuration specifically
+        ai_config = config.get('ai_interaction', {}).get('params', {}).get('config', {})
+        
+        # Check if realtime is enabled - get from the correct location
+        self.realtime_enabled = ai_config.get('realtime_enabled', False)
+        self.logger.info(f"Realtime API enabled: {self.realtime_enabled}")
         
         # Initialize AI module
         try:
+            # Always create the fallback module first to ensure we have something
+            self.logger.info("Initializing standard OpenAI module as fallback")
+            self.fallback_module = FallbackModule(ai_config)
+            self.active_module = self.fallback_module
+            
+            # Try realtime if enabled
             if self.realtime_enabled:
-                self.logger.info("Attempting to initialize Realtime API module")
-                
                 try:
-                    self.realtime_module = RealtimeModule(self.config)
+                    self.logger.info("Attempting to initialize Realtime API module")
+                    self.realtime_module = RealtimeModule(ai_config)
+                    
+                    # Give it a moment to establish connection
+                    time.sleep(2)
+                    
+                    # Check if the module seems to have connected successfully
                     if hasattr(self.realtime_module, 'websocket') and self.realtime_module.websocket:
                         self.logger.info("Realtime API module initialized successfully")
                         self.active_module = self.realtime_module
                         self.status = "Ready (Realtime)"
                         self.status_message = "Say 'Mirror' to activate"
                     else:
-                        raise Exception("Failed to connect to Realtime API")
+                        self.logger.warning("Realtime API module failed to connect")
                 except Exception as e:
-                    self.logger.warning(f"Realtime API module failed to connect: {e}")
-                    self.active_module = None
-                
-            if not self.active_module:
-                self.logger.info("Using standard GPT-4 module")
-                self.fallback_module = FallbackModule(self.config)
-                self.active_module = self.fallback_module
-                self.status = "Ready (GPT-4)"
-                self.status_message = "Say 'Mirror' to activate"
+                    self.logger.warning(f"Failed to initialize Realtime API module: {e}")
+                    # Keep using the fallback module
+            
+            self.status = f"Ready ({self.active_module.__class__.__name__})"
+            self.status_message = "Say 'Mirror' or press SPACE to activate"
             
         except Exception as e:
             self.logger.error(f"Failed to initialize any AI module: {e}")
             self.active_module = None
+            self.status = "Error"
+            self.status_message = "AI systems unavailable"
         
         # Start monitoring thread to check module health
         self.running = True
