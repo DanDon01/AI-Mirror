@@ -345,7 +345,7 @@ class MagicMirror:
         """Draw all visible modules"""
         try:
             # Clear screen with background color
-            self.screen.fill(self.background_color)
+            self.screen.fill((0, 0, 0))  # Black background
             
             # Draw each module in the specified position
             for name, module in self.modules.items():
