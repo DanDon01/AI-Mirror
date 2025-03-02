@@ -16,6 +16,7 @@ from openai import OpenAI
 import sys
 import base64
 import select
+import struct
 
 DEFAULT_MAX_TOKENS = 250
 
@@ -274,11 +275,12 @@ class AIVoiceModule:
                             "type": "session.update",
                             "session": {
                                 "instructions": "You are a helpful assistant running on a Magic Mirror. Be concise but thorough in your responses.",
-                                "modalities": ["text"]  # Only use text for now
+                                "modalities": ["text", "audio"],  # Enable both text and audio responses
+                                "voice": "alloy"  # Use the Alloy voice
                             }
                         }
                         ws.send(json.dumps(init_event))
-                        print("MIRROR DEBUG: ✅ Session configured")
+                        print("MIRROR DEBUG: 📝 Session configured with text and audio responses")
                     
                     elif event_type == "session.updated":
                         self.logger.info("Session updated successfully")
@@ -361,6 +363,18 @@ class AIVoiceModule:
                             delattr(self, 'speech_started')
                         
                         self.set_status("Ready", "Say 'Mirror' or press SPACE")
+                    
+                    # Add an audio response handler
+                    elif event_type == "content_block.delta" and data.get("delta", {}).get("type") == "audio_delta":
+                        audio_data = data.get("delta", {}).get("audio", "")
+                        if audio_data:
+                            try:
+                                # Decode and play the audio
+                                audio_bytes = base64.b64decode(audio_data)
+                                print(f"MIRROR DEBUG: 🔊 Received {len(audio_bytes)} bytes of audio")
+                                self.play_audio_chunk(audio_bytes)
+                            except Exception as e:
+                                print(f"MIRROR DEBUG: ❌ Error playing audio: {e}")
                 
                 except Exception as e:
                     self.logger.error(f"Error processing WebSocket message: {e}")
