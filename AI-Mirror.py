@@ -305,10 +305,13 @@ class MagicMirror:
                     # Cycle through states: active -> screensaver -> sleep -> active
                     if self.state == "active":
                         self.change_state("screensaver")
+                        logging.warning("CHANGED STATE TO SCREENSAVER - Only RetroCharacters visible")
                     elif self.state == "screensaver":
                         self.change_state("sleep")
+                        logging.warning("CHANGED STATE TO SLEEP - Only Clock visible")
                     else:
                         self.change_state("active")
+                        logging.warning("CHANGED STATE TO ACTIVE - All modules visible")
                 elif event.key == pygame.K_SPACE:
                     if self.state != "active":
                         self.change_state("active")  # Pressing space always returns to active state
@@ -330,12 +333,19 @@ class MagicMirror:
         try:
             self.screen.fill((0, 0, 0))  # Black background
             
-            # Draw only visible modules for the current state
+            # Draw only modules appropriate for the current state
             for module_name, module in self.modules.items():
-                self.debug_log(f"Checking visibility for {module_name} in state: {self.state}")
+                # First check if module should be visible in current state
+                visible_in_state = True
                 
-                # Check if the module should be visible in the current state
-                if self.module_manager.is_module_visible(module_name):
+                # Apply state-specific visibility rules
+                if self.state == "screensaver" and module_name not in CONFIG.get('screensaver_modules', ['retro_characters']):
+                    visible_in_state = False
+                elif self.state == "sleep" and module_name not in CONFIG.get('sleep_modules', ['clock']):
+                    visible_in_state = False
+                    
+                # Module must be both enabled AND appropriate for the current state
+                if visible_in_state and self.module_manager.is_module_visible(module_name):
                     try:
                         position = self.layout_manager.get_module_position(module_name)
                         if position:
@@ -345,15 +355,12 @@ class MagicMirror:
                             else:
                                 pos_tuple = position
                             
-                            self.debug_log(f"Drawing {module_name} at position {pos_tuple}")
+                            self.debug_log(f"Drawing {module_name} in state {self.state}")
                             module.draw(self.screen, pos_tuple)
                         else:
                             logging.warning(f"No position defined for {module_name}")
                     except Exception as e:
-                        if not hasattr(self, f'_reported_{module_name}'):
-                            logging.error(f"Error drawing module {module_name}: {str(e)}")
-                            logging.error(traceback.format_exc())
-                            setattr(self, f'_reported_{module_name}', True)
+                        logging.error(f"Error drawing module {module_name}: {str(e)}")
             
             if hasattr(self, 'debug_layout') and getattr(self, 'debug_layout', False):
                 for name, module in self.modules.items():
