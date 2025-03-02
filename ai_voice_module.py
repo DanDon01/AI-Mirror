@@ -241,16 +241,30 @@ class AIVoiceModule:
                     data = json.loads(message)
                     event_type = data.get("type", "")
                     
-                    # Log received event
-                    self.logger.debug(f"Received event: {event_type}")
+                    # Add more detailed debug info
+                    print(f"\nMIRROR DEBUG: 📄 WebSocket event: {event_type}")
+                    
+                    # More detailed event information for specific events
+                    if "error" in event_type:
+                        error_message = data.get("error", {}).get("message", "Unknown error")
+                        error_type = data.get("error", {}).get("type", "unknown")
+                        error_code = data.get("error", {}).get("code", "none")
+                        print(f"MIRROR DEBUG: 📄 Error details: {error_message}")
+                        print(f"MIRROR DEBUG: 📄 Error type: {error_type}, code: {error_code}")
+                        print(f"MIRROR DEBUG: 📄 Full error data: {data}")
+                    
+                    # Track WebSocket states
+                    print(f"MIRROR DEBUG: 📄 Current states: recording={self.recording}, processing={self.processing}")
+                    print(f"MIRROR DEBUG: 📄 Has response_complete: {hasattr(self, 'response_complete')}")
                     
                     # Ignore any events that come in after we got a complete response
                     # This helps prevent buffer errors when the API is still expecting more audio
                     if hasattr(self, 'response_complete') and self.response_complete:
                         if event_type == "error" and "buffer too small" in str(data.get("error", {}).get("message", "")):
                             # Silently ignore the "buffer too small" errors that happen after we're done
+                            print("MIRROR DEBUG: 📄 Ignoring buffer too small error after response complete")
                             return
-                        
+                    
                     # Handle session lifecycle events
                     if event_type == "session.created":
                         self.session_ready = True
@@ -302,17 +316,17 @@ class AIVoiceModule:
                     
                     elif event_type == "response.done" or event_type == "message.complete":
                         print("\nMIRROR DEBUG: ✅ Response complete")
+                        print(f"MIRROR DEBUG: 📄 Response complete from event: {event_type}")
+                        print(f"MIRROR DEBUG: 📄 Full response data: {data}")
                         
                         # Set a flag to ignore subsequent buffer errors
                         self.response_complete = True
+                        print("MIRROR DEBUG: 📄 Set response_complete flag to true")
                         
                         # Reset all states
                         self.recording = False
                         self.processing = False
-                        if hasattr(self, 'response_started'):
-                            delattr(self, 'response_started')
-                        if hasattr(self, 'speech_started'):
-                            delattr(self, 'speech_started')
+                        print("MIRROR DEBUG: 📄 Reset recording and processing flags")
                         
                         # Put final response in queue
                         if hasattr(self, 'current_response') and self.current_response:
@@ -327,8 +341,13 @@ class AIVoiceModule:
                     
                     elif event_type == "error":
                         error_message = data.get("error", {}).get("message", "Unknown error")
+                        error_type = data.get("error", {}).get("type", "unknown")
+                        error_code = data.get("error", {}).get("code", "none")
+                        
                         self.logger.error(f"WebSocket error: {error_message}")
                         print(f"MIRROR DEBUG: ❌ Realtime API error: {error_message}")
+                        print(f"MIRROR DEBUG: 📄 Error type: {error_type}, code: {error_code}")
+                        print(f"MIRROR DEBUG: 📄 Full error data: {data}")
                         
                         # Reset states on error
                         self.recording = False
