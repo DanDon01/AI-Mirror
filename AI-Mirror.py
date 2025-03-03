@@ -4,10 +4,15 @@
 #  The main loop runs until the user closes the application
 import os
 os.environ['PYTHONUNBUFFERED'] = '1'
-os.environ['ALSA_CONFIG_PATH'] = '/usr/share/alsa/alsa.conf'
+# Remove or fix ALSA_CONFIG_PATH
+os.environ['ALSA_CONFIG_PATH'] = '/usr/share/alsa/alsa.conf'  # Use system default
 os.environ['SDL_AUDIODRIVER'] = 'alsa'
 os.environ['PYALSA_NO_CHECK'] = '1'
 
+# Rest of your imports...
+import logging
+import pygame
+from config import CONFIG
 import time
 import sys
 import ctypes

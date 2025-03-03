@@ -32,16 +32,17 @@ class AIVoiceModule:
         self.running = True
         self.response_queue = Queue()
         self.audio_enabled = True
-        self.audio_device = None
+        self.audio_device = "hw:3,0"  # Default to known working device
         
-        self.sample_rate = 24000
+        self.sample_rate = 24000  # Target rate for Realtime API
+        self.record_rate = 44100  # Native rate for hw:3,0
         self.channels = 1
-        self.format = 'S16_LE'
+        self.format = "S16_LE"
         self.chunk_size = 1024
         
-        self.api_key = self.config.get('openai', {}).get('api_key')
+        self.api_key = self.config.get("openai", {}).get("api_key")
         if not self.api_key:
-            self.api_key = os.getenv('OPENAI_API_KEY') or os.getenv('OPENAI_VOICE_KEY')
+            self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_VOICE_KEY")
             if not self.api_key:
                 self.logger.error("No OpenAI API key found in config or environment")
                 self.set_status("Error", "No API key")
@@ -79,40 +80,44 @@ class AIVoiceModule:
         }
         response = requests.get("https://api.openai.com/v1/models", headers=headers)
         if response.status_code == 200:
-            models = [m['id'] for m in response.json()['data']]
+            models = [m["id"] for m in response.json()["data"]]
             self.logger.info(f"Available models: {models}")
-            if 'gpt-4o-realtime-preview-2024-12-17' in models:
-                self.model = 'gpt-4o-realtime-preview-2024-12-17'
+            if "gpt-4o-realtime-preview-2024-12-17" in models:
+                self.model = "gpt-4o-realtime-preview-2024-12-17"
                 self.logger.info("Confirmed access to gpt-4o-realtime-preview-2024-12-17")
-            elif 'gpt-4o-mini-realtime-preview-2024-12-17' in models:
-                self.model = 'gpt-4o-mini-realtime-preview-2024-12-17'
+            elif "gpt-4o-mini-realtime-preview-2024-12-17" in models:
+                self.model = "gpt-4o-mini-realtime-preview-2024-12-17"
                 self.logger.info("Confirmed access to gpt-4o-mini-realtime-preview-2024-12-17")
             else:
-                self.model = 'gpt-4o-mini'
+                self.model = "gpt-4o-mini"
                 self.logger.warning("Realtime models not available; using gpt-4o-mini")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
-            self.model = 'gpt-4o-mini'
+            self.model = "gpt-4o-mini"
 
     def check_alsa_sanity(self):
         """Pre-check ALSA configuration for recording devices"""
         try:
             self.logger.info(f"ALSA environment: {os.environ.get('ALSA_CONFIG_PATH', 'Not set')}")
-            playback_result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
-            if playback_result.returncode == 0:
-                self.logger.info("ALSA playback devices:\n" + playback_result.stdout)
-            else:
-                self.logger.error(f"ALSA playback check failed: {playback_result.stderr}")
-            
-            record_result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
-            if record_result.returncode == 0:
-                self.logger.info("ALSA recording devices:\n" + record_result.stdout)
-                if "card 3" in record_result.stdout.lower():
-                    self.logger.info("Confirmed USB mic (card 3) is present for recording")
+            for _ in range(3):  # Retry up to 3 times
+                playback_result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5)
+                if playback_result.returncode == 0:
+                    self.logger.info("ALSA playback devices:\n" + playback_result.stdout)
                 else:
-                    self.logger.warning("USB mic (card 3) not found in ALSA recording list")
-            else:
-                self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
+                    self.logger.error(f"ALSA playback check failed: {playback_result.stderr}")
+                
+                record_result = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5)
+                if record_result.returncode == 0:
+                    self.logger.info("ALSA recording devices:\n" + record_result.stdout)
+                    if "card 3" in record_result.stdout.lower():
+                        self.logger.info("Confirmed USB mic (card 3) is present for recording")
+                        return
+                    else:
+                        self.logger.warning("USB mic (card 3) not found in ALSA recording list")
+                else:
+                    self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
+                time.sleep(1)  # Wait before retry
+            self.logger.error("Failed to detect USB mic (card 3) after retries")
         except Exception as e:
             self.logger.error(f"ALSA sanity check failed: {e}")
 
@@ -125,20 +130,22 @@ class AIVoiceModule:
             time.sleep(2)  # Wait for ALSA to settle
             for attempt in range(3):
                 self.logger.info(f"Audio test attempt {attempt + 1}/3")
-                for device in ['safe_capture', 'hw:3,0', None]:
-                    cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), '-d', '1', test_file]
-                    if device:
-                        cmd.extend(['-D', device])
-                    self.logger.info(f"Testing device: {device or 'default'} with cmd: {' '.join(cmd)}")
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                    if result.returncode == 0 and os.path.exists(test_file):
-                        self.logger.info(f"Audio test successful with {device or 'default'}")
-                        self.audio_device = device
-                        os.remove(test_file)
-                        return
-                    else:
-                        self.logger.warning(f"Audio test with {device or 'default'} failed: {result.stderr}")
-                    time.sleep(1)
+                cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", str(self.channels), "-d", "1", test_file, "-D", self.audio_device]
+                self.logger.info(f"Testing device: {self.audio_device} with cmd: {' '.join(cmd)}")
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and os.path.exists(test_file):
+                    self.logger.info(f"Audio test successful with {self.audio_device}")
+                    # Resample to 24000 Hz
+                    temp_file_resampled = os.path.join(test_dir, "test_rec_resampled.wav")
+                    subprocess.run(["sox", test_file, "-r", "24000", temp_file_resampled], check=True)
+                    os.remove(test_file)
+                    os.rename(temp_file_resampled, test_file)
+                    self.logger.info("Resampled test audio to 24000 Hz")
+                    os.remove(test_file)
+                    return
+                else:
+                    self.logger.warning(f"Audio test with {self.audio_device} failed: {result.stderr}")
+                time.sleep(1)
             self.logger.error("All audio tests failed after retries")
             self.audio_enabled = False
         except Exception as e:
@@ -236,7 +243,7 @@ class AIVoiceModule:
             self.start_recording()
 
     def start_recording(self):
-        if not hasattr(self, 'ws'):
+        if not hasattr(self, "ws"):
             self.logger.error("No WebSocket connection")
             self.set_status("Error", "No connection")
             return
@@ -252,10 +259,9 @@ class AIVoiceModule:
             self.logger.info("Streaming audio with arecord")
             temp_dir = "/home/dan/tmp"
             os.makedirs(temp_dir, exist_ok=True)
+            temp_file_raw = os.path.join(temp_dir, "mirror_rec_raw.wav")
             temp_file = os.path.join(temp_dir, "mirror_rec.wav")
-            cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), temp_file]
-            if self.audio_device:
-                cmd.extend(['-D', self.audio_device])
+            cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", str(self.channels), temp_file_raw, "-D", self.audio_device]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             start_time = time.time()
@@ -263,8 +269,11 @@ class AIVoiceModule:
                 time.sleep(0.5)
             
             process.terminate()
-            if os.path.exists(temp_file):
-                with open(temp_file, 'rb') as f:
+            if os.path.exists(temp_file_raw):
+                # Resample to 24000 Hz using sox
+                subprocess.run(["sox", temp_file_raw, "-r", "24000", temp_file], check=True)
+                os.remove(temp_file_raw)
+                with open(temp_file, "rb") as f:
                     audio_data = f.read()
                 os.remove(temp_file)
                 
@@ -272,7 +281,7 @@ class AIVoiceModule:
                     audio_data = audio_data[44:]
                     audio_event = {
                         "type": "input_audio_buffer.append",
-                        "audio": base64.b64encode(audio_data).decode('utf-8')
+                        "audio": base64.b64encode(audio_data).decode("utf-8")
                     }
                     self.ws.send(json.dumps(audio_event))
                     self.logger.debug("Audio sent")
@@ -319,8 +328,8 @@ class AIVoiceModule:
     def draw(self, screen, position):
         try:
             if isinstance(position, dict):
-                x, y = position.get('x', 0), position.get('y', 0)
-                width, height = position.get('width', 250), position.get('height', 200)
+                x, y = position.get("x", 0), position.get("y", 0)
+                width, height = position.get("width", 250), position.get("height", 200)
             else:
                 x, y = position
                 width, height = 250, 200
@@ -328,7 +337,7 @@ class AIVoiceModule:
             pygame.draw.rect(screen, (30, 30, 40), (x, y, width, height))
             pygame.draw.rect(screen, (50, 50, 150), (x, y, width, height), 2)
             
-            if not hasattr(self, 'font'):
+            if not hasattr(self, "font"):
                 self.font = pygame.font.Font(None, 24)
                 self.title_font = pygame.font.Font(None, 32)
                 
@@ -348,14 +357,14 @@ class AIVoiceModule:
 
     def cleanup(self):
         self.running = False
-        if hasattr(self, 'ws'):
+        if hasattr(self, "ws"):
             self.ws.close()
         self.logger.info("Cleanup complete")
 
 if __name__ == "__main__":
     CONFIG = {
-        'openai': {'api_key': 'your-api-key-here'},
-        'audio': {'device_index': 3}
+        "openai": {"api_key": "your-api-key-here"},
+        "audio": {"device_index": 3}
     }
     pygame.init()
     screen = pygame.display.set_mode((800, 480))
@@ -369,7 +378,7 @@ if __name__ == "__main__":
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 module.on_button_press()
         screen.fill((0, 0, 0))
-        module.draw(screen, {'x': 10, 'y': 10})
+        module.draw(screen, {"x": 10, "y": 10})
         pygame.display.flip()
         clock.tick(30)
     module.cleanup()
