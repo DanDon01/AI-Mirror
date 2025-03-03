@@ -10,6 +10,7 @@ import time
 import pyaudio
 from queue import Queue
 from config import CONFIG
+import subprocess
 
 class AIVoiceModule:
     def __init__(self, config):
@@ -30,7 +31,6 @@ class AIVoiceModule:
         self.format = pyaudio.paInt16
         self.chunk_size = 1024
         
-        # Try config first, then environment variables
         self.api_key = self.config.get('openai', {}).get('api_key')
         if not self.api_key:
             self.api_key = os.getenv('OPENAI_API_KEY') or os.getenv('OPENAI_VOICE_KEY')
@@ -40,6 +40,7 @@ class AIVoiceModule:
                 return
         
         self.ws_url = "wss://api.openai.com/v1/realtime"
+        self.pyaudio = None  # Initialize later in setup_audio
         
         threading.Thread(target=self.initialize, daemon=True).start()
 
@@ -48,6 +49,7 @@ class AIVoiceModule:
         print("MIRROR DEBUG: Starting AIVoiceModule initialization")
         try:
             self.test_api_connection()
+            self.check_alsa_sanity()
             self.setup_audio()
             self.connect_websocket()
             self.set_status("Ready", "Press SPACE to speak")
@@ -73,33 +75,50 @@ class AIVoiceModule:
             if 'gpt-4o' in models:
                 self.logger.info("Confirmed access to gpt-4o")
             else:
-                self.logger.warning("gpt-4o not available in models list")
+                self.logger.warning("gpt-4o not available; using available model")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
+
+    def check_alsa_sanity(self):
+        """Pre-check ALSA configuration"""
+        try:
+            result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                self.logger.info("ALSA device list: " + result.stdout)
+                if "card 2" in result.stdout.lower():
+                    self.logger.info("Confirmed USB mic (card 2) is present")
+                else:
+                    self.logger.warning("USB mic (card 2) not found in ALSA list")
+            else:
+                self.logger.error(f"ALSA check failed: {result.stderr}")
+        except Exception as e:
+            self.logger.error(f"ALSA sanity check failed: {e}")
 
     def setup_audio(self):
         """Setup audio input with robust device handling"""
         try:
-            p = pyaudio.PyAudio()
+            # Small delay to avoid race conditions with ALSA
+            time.sleep(1)
+            
+            self.pyaudio = pyaudio.PyAudio()
             self.logger.info("Available audio devices:")
             usb_device_index = None
-            for i in range(p.get_device_count()):
-                device_info = p.get_device_info_by_index(i)
+            for i in range(self.pyaudio.get_device_count()):
+                device_info = self.pyaudio.get_device_info_by_index(i)
                 self.logger.info(f"Device {i}: {device_info['name']}, Input Channels: {device_info['maxInputChannels']}")
                 if 'usb' in device_info['name'].lower() and device_info['maxInputChannels'] > 0:
                     usb_device_index = i
 
-            # Use configured index, fallback to USB device, then default
             self.input_device_index = self.config.get('audio', {}).get('device_index', 2)
             if usb_device_index is not None and self.input_device_index != usb_device_index:
                 self.logger.warning(f"Configured device_index {self.input_device_index} may not be USB mic; found USB at {usb_device_index}")
                 self.input_device_index = usb_device_index
-            elif p.get_device_count() == 0:
+            elif self.pyaudio.get_device_count() == 0:
                 self.logger.error("No audio devices available")
                 raise Exception("No audio devices found")
             
             try:
-                self.stream = p.open(
+                self.stream = self.pyaudio.open(
                     format=self.format,
                     channels=self.channels,
                     rate=self.sample_rate,
@@ -110,7 +129,7 @@ class AIVoiceModule:
                 self.logger.info(f"Audio stream opened with device index {self.input_device_index}")
             except ValueError as e:
                 self.logger.warning(f"Device index {self.input_device_index} invalid, trying default device: {e}")
-                self.stream = p.open(
+                self.stream = self.pyaudio.open(
                     format=self.format,
                     channels=self.channels,
                     rate=self.sample_rate,
@@ -119,14 +138,12 @@ class AIVoiceModule:
                 )
                 self.input_device_index = None
                 self.logger.info("Audio stream opened with default device")
-
-            self.pyaudio = p
         except Exception as e:
             self.logger.error(f"Audio setup failed: {e}")
             self.set_status("Error", "Audio setup failed")
-            # Clean up PyAudio instance if it was created
-            if 'p' in locals():
-                p.terminate()
+            if self.pyaudio:
+                self.pyaudio.terminate()
+                self.pyaudio = None
             raise
 
     async def websocket_handler(self):
@@ -145,7 +162,7 @@ class AIVoiceModule:
                 await websocket.send(json.dumps({
                     "type": "session.update",
                     "session": {
-                        "model": "gpt-4o",
+                        "model": "gpt-4o-mini",  # Use available model
                         "modalities": ["text", "audio"],
                         "instructions": "You are a helpful assistant for a smart mirror.",
                         "voice": "alloy",
@@ -181,7 +198,7 @@ class AIVoiceModule:
         )
         self.ws_thread.start()
         self.logger.info("WebSocket thread started")
-        time.sleep(2)  # Give it time to connect
+        time.sleep(2)
         if not self.session_ready:
             self.logger.warning("WebSocket not ready after initialization")
 
@@ -305,7 +322,7 @@ class AIVoiceModule:
         if hasattr(self, 'stream'):
             self.stream.stop_stream()
             self.stream.close()
-        if hasattr(self, 'pyaudio'):
+        if hasattr(self, 'pyaudio') and self.pyaudio:
             self.pyaudio.terminate()
         if hasattr(self, 'loop'):
             self.loop.call_soon_threadsafe(self.loop.stop)
