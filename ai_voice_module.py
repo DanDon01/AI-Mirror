@@ -1,5 +1,3 @@
-import asyncio
-import websockets
 import json
 import os
 import pygame
@@ -10,6 +8,7 @@ import time
 import subprocess
 from queue import Queue
 from config import CONFIG
+import websocket
 
 class AIVoiceModule:
     """
@@ -33,7 +32,7 @@ class AIVoiceModule:
         self.running = True
         self.response_queue = Queue()
         self.audio_enabled = True
-        self.audio_device = None  # Determined in test_audio_setup
+        self.audio_device = None
         
         self.sample_rate = 24000
         self.channels = 1
@@ -99,13 +98,13 @@ class AIVoiceModule:
         try:
             playback_result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
             if playback_result.returncode == 0:
-                self.logger.info("ALSA playback devices: " + playback_result.stdout)
+                self.logger.info("ALSA playback devices:\n" + playback_result.stdout)
             else:
                 self.logger.error(f"ALSA playback check failed: {playback_result.stderr}")
             
             record_result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
             if record_result.returncode == 0:
-                self.logger.info("ALSA recording devices: " + record_result.stdout)
+                self.logger.info("ALSA recording devices:\n" + record_result.stdout)
                 if "card 2" in record_result.stdout.lower():
                     self.logger.info("Confirmed USB mic (card 2) is present for recording")
                 else:
@@ -119,96 +118,91 @@ class AIVoiceModule:
         """Test audio setup with arecord"""
         try:
             test_file = "/tmp/test_rec.wav"
-            # Try specific device first
-            cmd = ['arecord', '-D', 'safe_capture', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-            if result.returncode == 0 and os.path.exists(test_file):
-                self.logger.info("Audio test successful with safe_capture")
-                self.audio_device = 'safe_capture'
-                os.remove(test_file)
-            else:
-                self.logger.warning(f"Audio test with safe_capture failed: {result.stderr}")
-                # Fallback to hw:2,0 directly
-                cmd = ['arecord', '-D', 'hw:2,0', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                if result.returncode == 0 and os.path.exists(test_file):
-                    self.logger.info("Audio test successful with hw:2,0")
-                    self.audio_device = 'hw:2,0'
-                    os.remove(test_file)
-                else:
-                    self.logger.error(f"Audio test with hw:2,0 failed: {result.stderr}")
-                    # Fallback to default device
-                    cmd = ['arecord', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            os.chmod("/tmp", 0o777)  # Ensure /tmp is writable
+            for attempt in range(3):
+                self.logger.info(f"Audio test attempt {attempt + 1}/3")
+                for device in ['safe_capture', 'hw:2,0', None]:
+                    cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), '-d', '1', test_file]
+                    if device:
+                        cmd.extend(['-D', device])
+                    self.logger.info(f"Testing device: {device or 'default'} with cmd: {' '.join(cmd)}")
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                     if result.returncode == 0 and os.path.exists(test_file):
-                        self.logger.info("Audio test successful with default device")
-                        self.audio_device = None
+                        self.logger.info(f"Audio test successful with {device or 'default'}")
+                        self.audio_device = device
                         os.remove(test_file)
+                        return
                     else:
-                        self.logger.error(f"Audio test with default failed: {result.stderr}")
-                        self.audio_enabled = False
+                        self.logger.warning(f"Audio test with {device or 'default'} failed: {result.stderr}")
+                    time.sleep(1)
+            self.logger.error("All audio tests failed after retries")
+            self.audio_enabled = False
         except Exception as e:
             self.logger.error(f"Audio test setup failed: {e}")
             self.audio_enabled = False
 
-    async def websocket_handler(self):
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "OpenAI-Beta": "realtime=v1"
-        }
+    def on_ws_open(self, ws):
+        self.logger.info("WebSocket connected")
+        self.ws = ws
+        # Wait for session.created in on_message
+
+    def on_ws_message(self, ws, message):
+        data = json.loads(message)
+        event_type = data.get("type")
+        self.logger.debug(f"WebSocket event: {event_type}")
         
-        try:
-            self.logger.info("Connecting to WebSocket")
-            async with websockets.connect(self.ws_url + f"?model={self.model}", header=headers) as websocket:
-                self.websocket = websocket
-                self.logger.info("WebSocket connected")
-                
-                async for message in websocket:
-                    data = json.loads(message)
-                    if data.get("type") == "session.created":
-                        self.logger.info("Session created")
-                        self.session_ready = True
-                        break
-                
-                await websocket.send(json.dumps({
-                    "type": "session.update",
-                    "session": {
-                        "model": self.model,
-                        "modalities": ["text", "audio"],
-                        "instructions": "You are a helpful assistant for a smart mirror.",
-                        "voice": "alloy",
-                        "input_audio_format": "pcm16",
-                        "output_audio_format": "pcm16"
-                    }
-                }))
-                self.logger.info("Session configured")
-                
-                async for message in websocket:
-                    data = json.loads(message)
-                    event_type = data.get("type")
-                    self.logger.debug(f"WebSocket event: {event_type}")
-                    
-                    if event_type == "session.updated":
-                        self.logger.info("Session updated successfully")
-                    elif event_type == "response.audio.delta":
-                        audio_data = base64.b64decode(data["delta"])
-                        self.play_audio(audio_data)
-                    elif event_type == "response.text.delta":
-                        self.logger.info(f"Text: {data['delta']}")
-                    elif event_type == "response.done":
-                        self.logger.info("Response completed")
-                    elif event_type == "error":
-                        self.logger.error(f"API Error: {data.get('error')}")
-        except Exception as e:
-            self.logger.error(f"WebSocket error: {e}")
-            self.session_ready = False
-            self.reconnect_websocket()
+        if event_type == "session.created":
+            self.logger.info("Session created")
+            self.session_ready = True
+            ws.send(json.dumps({
+                "type": "session.update",
+                "session": {
+                    "model": self.model,
+                    "modalities": ["text", "audio"],
+                    "instructions": "You are a helpful assistant for a smart mirror.",
+                    "voice": "alloy",
+                    "input_audio_format": "pcm16",
+                    "output_audio_format": "pcm16"
+                }
+            }))
+            self.logger.info("Session configured")
+        elif event_type == "session.updated":
+            self.logger.info("Session updated successfully")
+        elif event_type == "response.audio.delta":
+            audio_data = base64.b64decode(data["delta"])
+            self.play_audio(audio_data)
+        elif event_type == "response.text.delta":
+            self.logger.info(f"Text: {data['delta']}")
+        elif event_type == "response.done":
+            self.logger.info("Response completed")
+        elif event_type == "error":
+            self.logger.error(f"API Error: {data.get('error')}")
+
+    def on_ws_error(self, ws, error):
+        self.logger.error(f"WebSocket error: {error}")
+        self.session_ready = False
+        self.reconnect_websocket()
+
+    def on_ws_close(self, ws, close_status_code, close_msg):
+        self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
+        self.session_ready = False
+        self.reconnect_websocket()
 
     def connect_websocket_thread(self):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+        headers = [
+            f"Authorization: Bearer {self.api_key}",
+            "OpenAI-Beta: realtime=v1"
+        ]
+        ws_url = f"{self.ws_url}?model={self.model}"
         self.ws_thread = threading.Thread(
-            target=lambda: self.loop.run_until_complete(self.websocket_handler()),
+            target=lambda: websocket.WebSocketApp(
+                ws_url,
+                header=headers,
+                on_open=self.on_ws_open,
+                on_message=self.on_ws_message,
+                on_error=self.on_ws_error,
+                on_close=self.on_ws_close
+            ).run_forever(),
             daemon=True
         )
         self.ws_thread.start()
@@ -239,7 +233,7 @@ class AIVoiceModule:
             self.start_recording()
 
     def start_recording(self):
-        if not hasattr(self, 'websocket'):
+        if not hasattr(self, 'ws'):
             self.logger.error("No WebSocket connection")
             self.set_status("Error", "No connection")
             return
@@ -256,8 +250,7 @@ class AIVoiceModule:
             temp_file = "/tmp/mirror_rec.wav"
             cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), temp_file]
             if self.audio_device:
-                cmd.insert(1, '-D')
-                cmd.insert(2, self.audio_device)
+                cmd.extend(['-D', self.audio_device])
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             start_time = time.time()
@@ -276,10 +269,7 @@ class AIVoiceModule:
                         "type": "input_audio_buffer.append",
                         "audio": base64.b64encode(audio_data).decode('utf-8')
                     }
-                    asyncio.run_coroutine_threadsafe(
-                        self.websocket.send(json.dumps(audio_event)),
-                        self.loop
-                    )
+                    self.ws.send(json.dumps(audio_event))
                     self.logger.debug("Audio sent")
                     
                     response_event = {
@@ -289,10 +279,7 @@ class AIVoiceModule:
                             "instructions": "Respond naturally"
                         }
                     }
-                    asyncio.run_coroutine_threadsafe(
-                        self.websocket.send(json.dumps(response_event)),
-                        self.loop
-                    )
+                    self.ws.send(json.dumps(response_event))
                     self.logger.debug("Response requested")
         except Exception as e:
             self.logger.error(f"Streaming error: {e}")
@@ -326,8 +313,13 @@ class AIVoiceModule:
 
     def draw(self, screen, position):
         try:
-            x, y = position['x'], position['y']
-            width, height = position.get('width', 250), position.get('height', 200)
+            if isinstance(position, dict):
+                x, y = position.get('x', 0), position.get('y', 0)
+                width, height = position.get('width', 250), position.get('height', 200)
+            else:
+                x, y = position
+                width, height = 250, 200
+            
             pygame.draw.rect(screen, (30, 30, 40), (x, y, width, height))
             pygame.draw.rect(screen, (50, 50, 150), (x, y, width, height), 2)
             
@@ -351,10 +343,8 @@ class AIVoiceModule:
 
     def cleanup(self):
         self.running = False
-        if hasattr(self, 'websocket'):
-            asyncio.run_coroutine_threadsafe(self.websocket.close(), self.loop)
-        if hasattr(self, 'loop'):
-            self.loop.call_soon_threadsafe(self.loop.stop)
+        if hasattr(self, 'ws'):
+            self.ws.close()
         self.logger.info("Cleanup complete")
 
 if __name__ == "__main__":
