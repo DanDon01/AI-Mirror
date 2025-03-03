@@ -213,7 +213,7 @@ CONFIG = {
         'params': {
             'openai': {
                 'api_key': None,  # Fetched in module
-                'model': 'gpt-4o'
+                'model': None, # Fetched in module
             },
             'audio': {
                 'device_index': 2

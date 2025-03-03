@@ -13,9 +13,17 @@ from config import CONFIG
 import subprocess
 
 class AIVoiceModule:
+    """
+    Beta
+    Build low-latency, multi-modal experiences with the Realtime API.
+    The OpenAI Realtime API enables you to build low-latency, multi-modal conversational experiences 
+    with expressive voice-enabled models. These models support realtime text and audio inputs 
+    and outputs, voice activation detection, function calling, and much more.
+    """
+
     def __init__(self, config):
         self.logger = logging.getLogger("AI_Voice")
-        self.logger.info("Initializing AI Voice Module")
+        self.logger.info("Initializing AI Voice Module (Realtime API Beta)")
         
         self.config = config or {}
         self.status = "Initializing"
@@ -25,6 +33,7 @@ class AIVoiceModule:
         self.session_ready = False
         self.running = True
         self.response_queue = Queue()
+        self.audio_enabled = True
         
         self.sample_rate = 24000
         self.channels = 1
@@ -40,7 +49,7 @@ class AIVoiceModule:
                 return
         
         self.ws_url = "wss://api.openai.com/v1/realtime"
-        self.pyaudio = None  # Initialize later in setup_audio
+        self.pyaudio = None
         
         threading.Thread(target=self.initialize, daemon=True).start()
 
@@ -72,12 +81,18 @@ class AIVoiceModule:
         if response.status_code == 200:
             models = [m['id'] for m in response.json()['data']]
             self.logger.info(f"Available models: {models}")
-            if 'gpt-4o' in models:
-                self.logger.info("Confirmed access to gpt-4o")
+            if 'gpt-4o-realtime-preview-2024-12-17' in models:
+                self.model = 'gpt-4o-realtime-preview-2024-12-17'
+                self.logger.info("Confirmed access to gpt-4o-realtime-preview-2024-12-17")
+            elif 'gpt-4o-mini-realtime-preview-2024-12-17' in models:
+                self.model = 'gpt-4o-mini-realtime-preview-2024-12-17'
+                self.logger.info("Confirmed access to gpt-4o-mini-realtime-preview-2024-12-17")
             else:
-                self.logger.warning("gpt-4o not available; using available model")
+                self.model = 'gpt-4o-mini'  # Fallback
+                self.logger.warning("Realtime models not available; using gpt-4o-mini")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
+            self.model = 'gpt-4o-mini'
 
     def check_alsa_sanity(self):
         """Pre-check ALSA configuration"""
@@ -96,10 +111,12 @@ class AIVoiceModule:
 
     def setup_audio(self):
         """Setup audio input with robust device handling"""
+        if not self.audio_enabled:
+            self.logger.info("Audio disabled by configuration")
+            return
+        
         try:
-            # Small delay to avoid race conditions with ALSA
-            time.sleep(1)
-            
+            time.sleep(2)
             self.pyaudio = pyaudio.PyAudio()
             self.logger.info("Available audio devices:")
             usb_device_index = None
@@ -115,7 +132,8 @@ class AIVoiceModule:
                 self.input_device_index = usb_device_index
             elif self.pyaudio.get_device_count() == 0:
                 self.logger.error("No audio devices available")
-                raise Exception("No audio devices found")
+                self.audio_enabled = False
+                return
             
             try:
                 self.stream = self.pyaudio.open(
@@ -141,10 +159,10 @@ class AIVoiceModule:
         except Exception as e:
             self.logger.error(f"Audio setup failed: {e}")
             self.set_status("Error", "Audio setup failed")
+            self.audio_enabled = False
             if self.pyaudio:
                 self.pyaudio.terminate()
                 self.pyaudio = None
-            raise
 
     async def websocket_handler(self):
         headers = {
@@ -154,15 +172,23 @@ class AIVoiceModule:
         
         try:
             self.logger.info("Connecting to WebSocket")
-            async with websockets.connect(self.ws_url, extra_headers=headers) as websocket:
+            async with websockets.connect(f"{self.ws_url}?model={self.model}", extra_headers=headers) as websocket:
                 self.websocket = websocket
-                self.session_ready = True
                 self.logger.info("WebSocket connected")
                 
+                # Wait for session.created
+                async for message in websocket:
+                    data = json.loads(message)
+                    if data.get("type") == "session.created":
+                        self.logger.info("Session created")
+                        self.session_ready = True
+                        break
+                
+                # Send session.update
                 await websocket.send(json.dumps({
                     "type": "session.update",
                     "session": {
-                        "model": "gpt-4o-mini",  # Use available model
+                        "model": self.model,
                         "modalities": ["text", "audio"],
                         "instructions": "You are a helpful assistant for a smart mirror.",
                         "voice": "alloy",
@@ -177,11 +203,15 @@ class AIVoiceModule:
                     event_type = data.get("type")
                     self.logger.debug(f"WebSocket event: {event_type}")
                     
-                    if event_type == "response.audio.delta":
+                    if event_type == "session.updated":
+                        self.logger.info("Session updated successfully")
+                    elif event_type == "response.audio.delta":
                         audio_data = base64.b64decode(data["delta"])
                         self.play_audio(audio_data)
                     elif event_type == "response.text.delta":
                         self.logger.info(f"Text: {data['delta']}")
+                    elif event_type == "response.done":
+                        self.logger.info("Response completed")
                     elif event_type == "error":
                         self.logger.error(f"API Error: {data.get('error')}")
         except Exception as e:
@@ -215,6 +245,9 @@ class AIVoiceModule:
             self.logger.warning("WebSocket not ready")
             self.set_status("Error", "Not connected")
             return
+        if not self.audio_enabled:
+            self.logger.warning("Audio disabled, cannot record")
+            return
         if self.recording:
             self.stop_recording()
         else:
@@ -229,7 +262,7 @@ class AIVoiceModule:
         self.set_status("Listening", "Recording...")
         self.logger.info("Starting recording")
         self.audio_thread = threading.Thread(target=self.stream_audio, daemon=True)
-        self.audio_thread.start()
+        self.audio_thread.start()  # Corrected typo
 
     def stream_audio(self):
         try:
@@ -301,7 +334,7 @@ class AIVoiceModule:
                 self.font = pygame.font.Font(None, 24)
                 self.title_font = pygame.font.Font(None, 32)
                 
-            title = self.title_font.render("Voice AI", True, (150, 150, 255))
+            title = self.title_font.render("Voice AI (Beta)", True, (150, 150, 255))
             screen.blit(title, (x + 10, y + 10))
             status_text = self.font.render(f"Status: {self.status}", True, (200, 200, 200))
             screen.blit(status_text, (x + 10, y + 50))
