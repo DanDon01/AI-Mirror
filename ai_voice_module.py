@@ -246,8 +246,25 @@ class AIVoiceModule:
         if not self.running:
             return
         self.logger.info("Reconnecting WebSocket...")
+        # Close existing connection if any
+        if hasattr(self, "ws"):
+            try:
+                self.ws.close()
+            except:
+                pass
         time.sleep(2)
         self.connect_websocket_thread()
+        # Wait up to 5 seconds for connection to establish
+        wait_time = 0
+        while not self.session_ready and wait_time < 5:
+            time.sleep(0.5)
+            wait_time += 0.5
+        if self.session_ready:
+            self.logger.info("WebSocket reconnected successfully")
+            self.set_status("Ready", "Press SPACE to speak")
+        else:
+            self.logger.error("Failed to reconnect WebSocket")
+            self.set_status("Error", "Connection failed")
 
     def on_button_press(self):
         self.logger.info("Spacebar pressed")
@@ -348,18 +365,6 @@ class AIVoiceModule:
                 
                 if len(pcm_data) > 1000:  # Ensure we have enough data (> 100ms)
                     self.logger.info(f"Sending {len(pcm_data)} bytes of PCM audio data")
-                    
-                    # First create a new input bufffer
-                    create_buffer_event = {
-                        "type": "input_audio_buffer.create",
-                        "input_audio_buffer": {
-                            "format": "pcm16", 
-                            "sample_rate": 24000,
-                            "channels": 1
-                        }
-                    }
-                    self.ws.send(json.dumps(create_buffer_event))
-                    self.logger.info("Audio buffer created")
                     
                     # Send audio in chunks to avoid large messages
                     chunk_size = 32000  # Send ~1.3 second chunks
