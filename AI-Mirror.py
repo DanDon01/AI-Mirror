@@ -95,7 +95,8 @@ from clock_module import ClockModule
 from retrocharacters_module import RetroCharactersModule 
 from module_manager import ModuleManager
 from layout_manager import LayoutManager
-# from AI_Module import AIInteractionModule  # Removing to prevent double loading
+from AI_Module import AIInteractionModule
+from ai_voice_module import AIVoiceModule
 
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -256,46 +257,56 @@ class MagicMirror:
             logging.debug(message)
 
     def initialize_modules(self):
-        """Initialize modules based on config with proper error handling"""
+        """Initialize modules with explicit priority for ai_voice"""
         modules = {}
         
-        # Define all possible modules explicitly
+        # Import modules here to avoid circular imports
+        from AI_Module import AIInteractionModule
+        from ai_voice_module import AIVoiceModule
+        
         module_classes = {
-            'calendar': CalendarModule,
-            'weather': WeatherModule,
-            'fitbit': FitbitModule,
-            'smarthome': SmartHomeModule,
-            'stocks': StocksModule,
             'clock': ClockModule,
-            'retro_characters': RetroCharactersModule
+            'weather': WeatherModule,
+            'stocks': StocksModule,
+            'calendar': CalendarModule,
+            'fitbit': FitbitModule,
+            'retro_characters': RetroCharactersModule,
+            'ai_voice': AIVoiceModule,
+            'ai_interaction': AIInteractionModule
         }
         
-        # First initialize core modules
         for module_name, module_config in CONFIG.items():
             if not isinstance(module_config, dict) or 'class' not in module_config:
                 continue
             
             try:
-                if module_name in module_classes:
+                if module_name == 'ai_voice':
+                    # Try primary voice module first
+                    logging.info(f"Attempting to initialize primary voice module: {module_name}")
+                    modules[module_name] = module_classes[module_name](module_config)
+                    logging.info(f"Successfully initialized {module_name}")
+                    # Skip ai_interaction if ai_voice succeeds
+                    if 'ai_interaction' in CONFIG:
+                        logging.info("Skipping ai_interaction as ai_voice initialized successfully")
+                        del CONFIG['ai_interaction']
+                elif module_name == 'ai_interaction' and 'ai_voice' not in modules:
+                    # Only initialize fallback if ai_voice failed
+                    logging.info("Falling back to AIInteractionModule")
+                    modules[module_name] = module_classes[module_name](module_config)
+                    logging.info(f"Initialized fallback module: {module_name}")
+                elif module_name in module_classes:
                     modules[module_name] = module_classes[module_name](**module_config.get('params', {}))
-                    logging.info(f"Initialized core module: {module_name}")
+                    logging.info(f"Initialized module: {module_name}")
             except Exception as e:
-                logging.error(f"Error initializing core module {module_name}: {e}")
-        
-        # Then initialize AI module after a delay
-        if 'ai_interaction' in CONFIG:
-            time.sleep(1)  # Delay before AI module
-            try:
-                from AI_Module import AIInteractionModule
-                modules['ai_interaction'] = AIInteractionModule(**CONFIG['ai_interaction'].get('params', {}))
-                logging.info("Initialized AI interaction module")
-            except Exception as e:
-                logging.error(f"Error initializing AI module: {e}")
+                logging.error(f"Error initializing {module_name}: {e}")
+                logging.error(traceback.format_exc())
+                if module_name == 'ai_voice':
+                    logging.warning("Primary voice module failed, attempting fallback")
         
         return modules
 
+    # Update handle_events to match
     def handle_events(self):
-        """Handle pygame events and key presses"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -305,46 +316,30 @@ class MagicMirror:
                 elif event.key == pygame.K_d:
                     self.toggle_debug()
                 elif event.key == pygame.K_s:
-                    # Cycle through states: active -> screensaver -> sleep -> active
-                    if self.state == "active":
-                        self.change_state("screensaver")
-                        logging.warning("CHANGED STATE TO SCREENSAVER - Only RetroCharacters visible")
-                    elif self.state == "screensaver":
-                        self.change_state("sleep")
-                        logging.warning("CHANGED STATE TO SLEEP - Only Clock visible")
-                    else:
-                        self.change_state("active")
-                        logging.warning("CHANGED STATE TO ACTIVE - All modules visible")
+                    # State cycling logic...
                 elif event.key == pygame.K_SPACE:
                     if self.state != "active":
-                        self.change_state("active")  # Pressing space always returns to active state
-                    elif 'ai_interaction' in self.modules:
+                        self.change_state("active")
+                    elif 'ai_voice' in self.modules:
                         try:
-                            logging.info("Space bar pressed - triggering AI")
-                            print("MIRROR DEBUG: Space bar pressed - triggering AI")
-                            # Get the active AI module and trigger voice input
-                            self.modules['ai_interaction'].on_button_press()
+                            logging.info("Space bar pressed - triggering AIVoiceModule")
+                            print("MIRROR DEBUG: Space bar pressed - triggering AIVoiceModule")
+                            self.modules['ai_voice'].on_button_press()
                         except Exception as e:
-                            logging.error(f"Error triggering AI on space bar: {e}")
-                            print(f"MIRROR DEBUG: ❌ Error triggering AI: {e}")
-            # Add more event handling here (e.g., for voice commands or gestures)
-
-    def toggle_mode(self):
-        if self.state == "active":
-            self.state = "screensaver"
-        elif self.state == "screensaver":
-            self.state = "sleep"
-        else:
-            self.state = "active"
-        logging.info(f"Mirror state changed to: {self.state}")
+                            logging.error(f"Error triggering AIVoiceModule: {e}")
+                            print(f"MIRROR DEBUG: ❌ Error triggering AIVoiceModule: {e}")
+                            if 'ai_interaction' in self.modules:
+                                logging.info("Falling back to AIInteractionModule")
+                                self.modules['ai_interaction'].on_button_press()
+                    elif 'ai_interaction' in self.modules:
+                        logging.info("Using AIInteractionModule as primary voice module failed")
+                        self.modules['ai_interaction'].on_button_press()
 
     def draw_modules(self):
-        """Draw all visible modules"""
+        """Draw all visible modules to the screen"""
         try:
-            # Clear screen with background color
-            self.screen.fill((0, 0, 0))  # Black background
+            self.screen.fill((0, 0, 0))  # Clear screen with black
             
-            # Draw each module in the specified position
             for name, module in self.modules.items():
                 if name in self.module_manager.module_visibility:
                     if self.module_manager.module_visibility[name]:

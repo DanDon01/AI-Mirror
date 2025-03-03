@@ -16,31 +16,29 @@ env_path = os.path.join(current_dir, '..', 'Variables.env')
 load_dotenv(env_path)
 
 #########################################
-# GLOBAL CONSTANTS - Define these first #
+# GLOBAL CONSTANTS
 #########################################
 
 # Color Constants
 COLOR_WHITE = (255, 255, 255)
 COLOR_BLACK = (0, 0, 0)
-COLOR_FONT_DEFAULT = (240, 240, 240)     # Light grey text
-COLOR_FONT_TITLE = (150, 150, 150)       # Darker grey
-COLOR_FONT_SUBTITLE = (220, 220, 220)    # Slightly darker grey
-COLOR_FONT_BODY = (200, 200, 200)        # Main body text
-COLOR_FONT_SMALL = (180, 180, 180)       # Small text
-COLOR_PASTEL_GREEN = (152, 251, 152)     # Pale green
-COLOR_PASTEL_RED = (255, 162, 173)       # Light pink (as a pastel red)
-COLOR_PASTEL_BLUE = (173, 216, 230)      # Light blue
+COLOR_FONT_DEFAULT = (240, 240, 240)
+COLOR_FONT_TITLE = (150, 150, 150)
+COLOR_FONT_SUBTITLE = (220, 220, 220)
+COLOR_FONT_BODY = (200, 200, 200)
+COLOR_FONT_SMALL = (180, 180, 180)
+COLOR_PASTEL_GREEN = (152, 251, 152)
+COLOR_PASTEL_RED = (255, 162, 173)
+COLOR_PASTEL_BLUE = (173, 216, 230)
 
 # Background Colors
-COLOR_BG_MODULE = (20, 20, 20)           # Almost black for module backgrounds
-COLOR_BG_HEADER = (40, 40, 40)           # Dark gray for headers
-COLOR_BG_HIGHLIGHT = (30, 30, 40)        # Slightly bluish dark background
+COLOR_BG_MODULE = (20, 20, 20)
+COLOR_BG_HEADER = (40, 40, 40)
+COLOR_BG_HIGHLIGHT = (30, 30, 40)
+COLOR_BG_MODULE_ALPHA = (20, 20, 20, 0)
+COLOR_BG_HEADER_ALPHA = (40, 40, 40, 0)
 
-# Alpha versions of background colors
-COLOR_BG_MODULE_ALPHA = (20, 20, 20, 0)    # Fully transparent module background
-COLOR_BG_HEADER_ALPHA = (40, 40, 40, 0)    # Fully transparent header background
-
-# Transparency setting (0 is fully transparent, 255 is fully opaque)
+# Transparency setting
 TRANSPARENCY = 215
 
 # Font Settings
@@ -49,13 +47,13 @@ FONT_SIZE_TITLE = 18
 FONT_SIZE_SUBTITLE = 16
 FONT_SIZE_BODY = 14
 FONT_SIZE_SMALL = 12
-FONT_SIZE = FONT_SIZE_BODY  # For backward compatibility
+FONT_SIZE = FONT_SIZE_BODY
 
 # Spacing and Dimensions
-LINE_SPACING = 25           # Vertical spacing between lines
-DEFAULT_PADDING = 10        # Default padding for modules
-DEFAULT_LINE_HEIGHT = 22    # Default height for lines of text
-DEFAULT_RADIUS = 15         # Default border radius for modules
+LINE_SPACING = 25
+DEFAULT_PADDING = 10
+DEFAULT_LINE_HEIGHT = 22
+DEFAULT_RADIUS = 15
 
 # Standard screen dimensions
 SCREEN_WIDTH_DEFAULT = 800
@@ -68,122 +66,72 @@ weather_icons_path = os.path.join(assets_dir, 'weather_icons')
 sound_effects_path = os.path.join(assets_dir, 'sound_effects')
 
 #########################################
-# MONITOR CONFIGURATIONS                #
+# MONITOR CONFIGURATIONS
 #########################################
 
-# Screen Layout Configuration
-SCREEN_PADDING = 20  # Padding from screen edges
-MODULE_SPACING = 10  # Spacing between modules
+SCREEN_PADDING = 20
+MODULE_SPACING = 10
 
-# Screen configurations for different monitor sizes
 MONITOR_CONFIGS = {
     '27_portrait': {
-        'resolution': (1440, 2560),  # 27" 1440p monitor in portrait
-        'module_scale': 1.0,         # Base scale
-        'font_scale': 1.0            # Base font scale
+        'resolution': (1440, 2560),
+        'module_scale': 1.0,
+        'font_scale': 1.0
     },
     '24_portrait': {
-        'resolution': (1200, 1920),  # 24" 1200p monitor in portrait
-        'module_scale': 0.833,       # Scale factor relative to 27"
-        'font_scale': 0.9            # Slightly smaller fonts
+        'resolution': (1200, 1920),
+        'module_scale': 0.833,
+        'font_scale': 0.9
     },
     '21_portrait': {
-        'resolution': (768, 1024),   # 21" monitor in portrait
-        'module_scale': 0.533,       # Scale factor relative to 27"
-        'font_scale': 0.8            # Even smaller fonts
+        'resolution': (768, 1024),
+        'module_scale': 0.533,
+        'font_scale': 0.8
     }
 }
 
-# Default to 27" portrait monitor
 CURRENT_MONITOR = MONITOR_CONFIGS['27_portrait']
 
 #########################################
-# LAYOUT CONFIGURATION                  #
+# LAYOUT CONFIGURATION
 #########################################
 
-# Update LAYOUT with monitor-specific scaling
 LAYOUT = {
-    # Screen and general layout
     'screen_padding': int(30 * CURRENT_MONITOR['module_scale']),
     'module_spacing': int(15 * CURRENT_MONITOR['module_scale']),
-    
-    # Module dimensions (as percentage of screen)
     'module_sizes': {
-        'standard': {
-            'width': 18.75,   # percent of screen width (reduced from 25)
-            'height': 15   # percent of screen height
-        },
-        'large': {
-            'width': 18.75,  # reduced from 25
-            'height': 30
-        }
+        'standard': {'width': 18.75, 'height': 15},
+        'large': {'width': 18.75, 'height': 30}
     },
-    
-    # Module positions (as percentage of screen height)
     'sections': {
-        'top': 5,      # Clock
-        'upper': 20,   # Weather & Stocks
-        'bottom': 70   # Calendar & Fitbit
+        'top': 5,
+        'upper': 20,
+        'bottom': 70
     },
-    
-    # Visual styling with monitor-specific font scaling
     'fonts': {
-        'title': {
-            'size': int(FONT_SIZE_TITLE * CURRENT_MONITOR['font_scale']),
-            'color': COLOR_FONT_TITLE
-        },
-        'subtitle': {
-            'size': int(FONT_SIZE_SUBTITLE * CURRENT_MONITOR['font_scale']),
-            'color': COLOR_FONT_SUBTITLE
-        },
-        'body': {
-            'size': int(FONT_SIZE_BODY * CURRENT_MONITOR['font_scale']),
-            'color': COLOR_FONT_BODY
-        },
-        'small': {
-            'size': int(FONT_SIZE_SMALL * CURRENT_MONITOR['font_scale']),
-            'color': COLOR_FONT_SMALL
-        }
+        'title': {'size': int(FONT_SIZE_TITLE * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_TITLE},
+        'subtitle': {'size': int(FONT_SIZE_SUBTITLE * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_SUBTITLE},
+        'body': {'size': int(FONT_SIZE_BODY * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_BODY},
+        'small': {'size': int(FONT_SIZE_SMALL * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_SMALL}
     },
-    
-    # Module backgrounds
     'backgrounds': {
-        'title': {
-            'color': COLOR_BLACK,
-            'alpha': 180
-        },
-        'content': {
-            'color': COLOR_BLACK,
-            'alpha': 120
-        }
+        'title': {'color': COLOR_BLACK, 'alpha': 180},
+        'content': {'color': COLOR_BLACK, 'alpha': 120}
     }
 }
 
 #########################################
-# MAIN CONFIGURATION                    #
+# MAIN CONFIGURATION
 #########################################
 
 def draw_module_background_fallback(screen, x, y, module_width, module_height, padding=10):
-    """Draw fallback module background when visual effects fail.
-    This creates a consistent transparent background across all modules.
-    
-    Parameters:
-    - screen: pygame surface to draw on
-    - x, y: top-left position of the module
-    - module_width, module_height: dimensions of the module
-    - padding: padding around the module content
-    """
-    # Draw main module background
     s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
-    s.fill(COLOR_BG_MODULE_ALPHA)  # Uses the alpha from the constant
-    screen.blit(s, (x-padding, y-padding))
-    
-    # Draw header background
+    s.fill(COLOR_BG_MODULE_ALPHA)
+    screen.blit(s, (x - padding, y - padding))
     s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
-    s.fill(COLOR_BG_HEADER_ALPHA)  # Uses the alpha from the constant
-    screen.blit(s, (x-padding, y-padding))
+    s.fill(COLOR_BG_HEADER_ALPHA)
+    screen.blit(s, (x - padding, y - padding))
 
-# Define CONFIG first without the circular reference
 CONFIG = {
     'screen': {
         'fullscreen': True,
@@ -192,7 +140,7 @@ CONFIG = {
     },
     'layout': LAYOUT,
     'update_schedule': {
-        'time': time(5, 30),  # Update at 5:30 AM
+        'time': time(5, 30),
         'frequency': 'daily'
     },
     'frame_rate': 30,
@@ -220,10 +168,10 @@ CONFIG = {
         }
     },
     'stocks': {
-       'class': 'StocksModule',
-       'params': {
+        'class': 'StocksModule',
+        'params': {
             'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L']
-       }
+        }
     },
     'calendar': {
         'class': 'CalendarModule',
@@ -245,36 +193,57 @@ CONFIG = {
                 'access_token': os.getenv('FITBIT_ACCESS_TOKEN'),
                 'refresh_token': os.getenv('FITBIT_REFRESH_TOKEN'),
             },
-            'update_schedule': {
-                'time': time(5, 30)  # Update at 5:30 AM
-            }
+            'update_schedule': {'time': time(5, 30)}
         }
-    }, 
+    },
     'retro_characters': {
         'class': 'RetroCharactersModule',
         'params': {
             'screen_size': (SCREEN_WIDTH_DEFAULT, SCREEN_HEIGHT_DEFAULT),
             'icon_size': 64,
             'icon_directory': retro_icons_path,
-            'spawn_probability': 0.002,  # Increased for more frequent icons
+            'spawn_probability': 0.002,
             'fall_speed': 1,
-            'max_active_icons': 20,  # Increased for more icons on screen
+            'max_active_icons': 20,
             'rotation_speed': 1
+        }
+    },
+    'ai_voice': {
+        'class': 'AIVoiceModule',
+        'params': {
+            'openai': {
+                'api_key': os.getenv('OPENAI_VOICE_KEY'),  # Ensure this is set in Variables.env
+                'model': 'gpt-4o'  # Explicitly use gpt-4o for Realtime API
+            },
+            'audio': {
+                'device_index': 2  # Your confirmed USB mic
+            }
         }
     },
     'ai_interaction': {
         'class': 'AIInteractionModule',
         'params': {
-            'use_direct_audio': True,  # Use our direct audio approach
+            'openai': {
+                'api_key': os.getenv('OPENAI_API_KEY'),
+                'model': 'gpt-4o-mini'  # Fallback model
+            },
+            'audio': {
+                'device_index': 2,
+                'mic_energy_threshold': 500,
+                'tts_volume': 0.8,
+                'wav_volume': 0.5
+            },
+            'use_direct_audio': True,
+            'disable_audio': False  # Enable audio for fallback testing
         }
     },
     
     # Audio and sound effects
     'sound_effects_path': sound_effects_path,
     'audio': {
-        'mic_energy_threshold': 500,  # Adjust for mic sensitivity
-        'tts_volume': 0.8,           # Text-to-speech volume (0.0-1.0)
-        'wav_volume': 0.5,           # WAV file volume (0.0-1.0)
+        'mic_energy_threshold': 500,
+        'tts_volume': 0.8,
+        'wav_volume': 0.5
     },
     
     # Module visibility settings
@@ -285,13 +254,8 @@ CONFIG = {
         'calendar': True,
         'fitbit': True,
         'retro_characters': True,
-        'ai_interaction': {
-            'params': {
-                'config': {
-                    'disable_audio': True,  # Set to True to completely disable audio
-                }
-            }
-        }
+        'ai_voice': True,  # Primary voice module
+        'ai_interaction': True  # Fallback, will be toggled by ModuleManager
     },
     
     # State-specific module settings
@@ -300,14 +264,14 @@ CONFIG = {
     
     # Debug settings
     'debug': {
-        'enabled': False,  # Set to True when you need detailed logging
-        'log_level': 'INFO'  # Can be 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+        'enabled': True,  # Enabled for debugging
+        'log_level': 'DEBUG'  # Detailed logging
     },
     
     # Visual effects settings
     'visual_effects': {
         'enabled': True,
-        'animation_speed': 1.0,  # Adjust to speed up or slow down animations
+        'animation_speed': 1.0,
         'transparency': {
             'background': 180,
             'text': 220,
@@ -322,26 +286,14 @@ CONFIG = {
         'is_portrait': False
     },
     
-    # Module styling (consistent across all modules)
+    # Module styling
     'module_styling': {
         'font_family': FONT_NAME,
         'fonts': {
-            'title': {
-                'size': FONT_SIZE_TITLE,
-                'color': COLOR_FONT_DEFAULT
-            },
-            'subtitle': {
-                'size': FONT_SIZE_SUBTITLE,
-                'color': COLOR_FONT_SUBTITLE
-            },
-            'body': {
-                'size': FONT_SIZE_BODY,
-                'color': COLOR_FONT_BODY
-            },
-            'small': {
-                'size': FONT_SIZE_SMALL,
-                'color': COLOR_FONT_SMALL
-            }
+            'title': {'size': FONT_SIZE_TITLE, 'color': COLOR_FONT_DEFAULT},
+            'subtitle': {'size': FONT_SIZE_SUBTITLE, 'color': COLOR_FONT_SUBTITLE},
+            'body': {'size': FONT_SIZE_BODY, 'color': COLOR_FONT_BODY},
+            'small': {'size': FONT_SIZE_SMALL, 'color': COLOR_FONT_SMALL}
         },
         'backgrounds': {
             'module': COLOR_BG_MODULE,
@@ -354,19 +306,10 @@ CONFIG = {
         },
         'radius': DEFAULT_RADIUS,
         'module_dimensions': {
-            'standard': {
-                'width': 225,    # 75% of original 300px width
-                'height': 200,
-                'header_height': 40
-            },
-            'large': {
-                'width': 225,
-                'height': 400,
-                'header_height': 40
-            }
-        },
-    },
+            'standard': {'width': 225, 'height': 200, 'header_height': 40},
+            'large': {'width': 225, 'height': 400, 'header_height': 40}
+        }
+    }
 }
 
-# After CONFIG is defined, now set the config parameter
-CONFIG['ai_interaction']['params']['config'] = CONFIG
+# No need for circular reference anymore - all params are explicitly defined
