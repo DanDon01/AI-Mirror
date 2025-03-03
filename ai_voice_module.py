@@ -11,14 +11,6 @@ from config import CONFIG
 import websocket
 
 class AIVoiceModule:
-    """
-    Beta
-    Build low-latency, multi-modal experiences with the Realtime API.
-    The OpenAI Realtime API enables you to build low-latency, multi-modal conversational experiences 
-    with expressive voice-enabled models. These models support realtime text and audio inputs 
-    and outputs, voice activation detection, function calling, and much more.
-    """
-
     def __init__(self, config):
         self.logger = logging.getLogger("AI_Voice")
         self.logger.info("Initializing AI Voice Module (Realtime API Beta)")
@@ -32,10 +24,10 @@ class AIVoiceModule:
         self.running = True
         self.response_queue = Queue()
         self.audio_enabled = True
-        self.audio_device = "hw:3,0"  # Default to known working device
+        self.audio_device = "hw:3,0"
         
-        self.sample_rate = 24000  # Target rate for Realtime API
-        self.record_rate = 44100  # Native rate for hw:3,0
+        self.sample_rate = 24000
+        self.record_rate = 44100
         self.channels = 1
         self.format = "S16_LE"
         self.chunk_size = 1024
@@ -57,7 +49,7 @@ class AIVoiceModule:
         print("MIRROR DEBUG: Starting AIVoiceModule initialization")
         try:
             self.test_api_connection()
-            time.sleep(2)  # Wait for ALSA to stabilize
+            time.sleep(2)
             self.check_alsa_sanity()
             if self.audio_enabled:
                 self.test_audio_setup()
@@ -89,17 +81,17 @@ class AIVoiceModule:
                 self.model = "gpt-4o-mini-realtime-preview-2024-12-17"
                 self.logger.info("Confirmed access to gpt-4o-mini-realtime-preview-2024-12-17")
             else:
-                self.model = "gpt-4o-mini"
-                self.logger.warning("Realtime models not available; using gpt-4o-mini")
+                self.model = "gpt-4o-realtime-preview-2024-12-17"
+                self.logger.warning("Realtime model not found in list; forcing gpt-4o-realtime-preview-2024-12-17")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
-            self.model = "gpt-4o-mini"
+            self.model = "gpt-4o-realtime-preview-2024-12-17"
 
     def check_alsa_sanity(self):
         """Pre-check ALSA configuration for recording devices"""
         try:
             self.logger.info(f"ALSA environment: {os.environ.get('ALSA_CONFIG_PATH', 'Not set')}")
-            for _ in range(3):  # Retry up to 3 times
+            for _ in range(3):
                 playback_result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5)
                 if playback_result.returncode == 0:
                     self.logger.info("ALSA playback devices:\n" + playback_result.stdout)
@@ -116,7 +108,7 @@ class AIVoiceModule:
                         self.logger.warning("USB mic (card 3) not found in ALSA recording list")
                 else:
                     self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
-                time.sleep(1)  # Wait before retry
+                time.sleep(1)
             self.logger.error("Failed to detect USB mic (card 3) after retries")
         except Exception as e:
             self.logger.error(f"ALSA sanity check failed: {e}")
@@ -127,7 +119,7 @@ class AIVoiceModule:
             test_dir = "/home/dan/tmp"
             os.makedirs(test_dir, exist_ok=True)
             test_file = os.path.join(test_dir, "test_rec.wav")
-            time.sleep(2)  # Wait for ALSA to stabilize
+            time.sleep(2)
             env = os.environ.copy()
             env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             for attempt in range(3):
@@ -169,7 +161,7 @@ class AIVoiceModule:
                 "session": {
                     "model": self.model,
                     "modalities": ["text", "audio"],
-                    "instructions": "You are a helpful assistant for a smart mirror. Respond with both text and audio.",
+                    "instructions": "You are a helpful assistant for a smart mirror. Respond naturally with both text and audio.",
                     "voice": "alloy",
                     "input_audio_format": "pcm16",
                     "output_audio_format": "pcm16"
@@ -183,7 +175,8 @@ class AIVoiceModule:
             self.logger.info(f"Received audio delta: {len(audio_data)} bytes")
             self.play_audio(audio_data)
         elif event_type == "response.text.delta":
-            self.logger.info(f"Received text delta: {data['delta']}")
+            text = data["delta"]
+            self.logger.info(f"Received text delta: {text}")
         elif event_type == "response.done":
             self.logger.info("Response completed")
         elif event_type == "error":
@@ -198,12 +191,11 @@ class AIVoiceModule:
         self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
         self.session_ready = False
         self.reconnect_websocket()
-
     def connect_websocket_thread(self):
-        headers = [
-            f"Authorization: Bearer {self.api_key}",
-            "OpenAI-Beta: realtime=v1"
-        ]
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "OpenAI-Beta": "realtime=v1"
+        }
         ws_url = f"{self.ws_url}?model={self.model}"
         self.ws_thread = threading.Thread(
             target=lambda: websocket.WebSocketApp(
@@ -255,7 +247,6 @@ class AIVoiceModule:
         self.audio_thread.start()
 
     def stream_audio(self):
-        """Stream audio using arecord with dynamic device"""
         try:
             self.logger.info("Streaming audio with arecord")
             temp_dir = "/home/dan/tmp"
@@ -285,7 +276,7 @@ class AIVoiceModule:
                 self.logger.info(f"Resampled audio size: {len(audio_data)} bytes")
                 os.remove(temp_file)
                 
-                if len(audio_data) > 44:  # Skip WAV header
+                if len(audio_data) > 44:
                     audio_data = audio_data[44:]
                     audio_event = {
                         "type": "input_audio_buffer.append",
