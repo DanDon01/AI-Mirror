@@ -56,6 +56,7 @@ class AIVoiceModule:
         print("MIRROR DEBUG: Starting AIVoiceModule initialization")
         try:
             self.test_api_connection()
+            time.sleep(2)  # Wait for ALSA to stabilize
             self.check_alsa_sanity()
             if self.audio_enabled:
                 self.test_audio_setup()
@@ -96,6 +97,7 @@ class AIVoiceModule:
     def check_alsa_sanity(self):
         """Pre-check ALSA configuration for recording devices"""
         try:
+            self.logger.info(f"ALSA environment: {os.environ.get('ALSA_CONFIG_PATH', 'Not set')}")
             playback_result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
             if playback_result.returncode == 0:
                 self.logger.info("ALSA playback devices:\n" + playback_result.stdout)
@@ -105,7 +107,7 @@ class AIVoiceModule:
             record_result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
             if record_result.returncode == 0:
                 self.logger.info("ALSA recording devices:\n" + record_result.stdout)
-                if "card 3" in record_result.stdout.lower():  # Updated to card 3
+                if "card 3" in record_result.stdout.lower():
                     self.logger.info("Confirmed USB mic (card 3) is present for recording")
                 else:
                     self.logger.warning("USB mic (card 3) not found in ALSA recording list")
@@ -117,12 +119,13 @@ class AIVoiceModule:
     def test_audio_setup(self):
         """Test audio setup with arecord"""
         try:
-            test_file = "/tmp/test_rec.wav"
-            os.chmod("/tmp", 0o777)  # Ensure /tmp is writable
+            test_dir = "/home/dan/tmp"
+            os.makedirs(test_dir, exist_ok=True)  # Create directory if it doesn’t exist
+            test_file = os.path.join(test_dir, "test_rec.wav")
             time.sleep(2)  # Wait for ALSA to settle
             for attempt in range(3):
                 self.logger.info(f"Audio test attempt {attempt + 1}/3")
-                for device in ['safe_capture', 'hw:3,0', None]:  # Updated to hw:3,0
+                for device in ['safe_capture', 'hw:3,0', None]:
                     cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), '-d', '1', test_file]
                     if device:
                         cmd.extend(['-D', device])
@@ -247,7 +250,9 @@ class AIVoiceModule:
         """Stream audio using arecord with dynamic device"""
         try:
             self.logger.info("Streaming audio with arecord")
-            temp_file = "/tmp/mirror_rec.wav"
+            temp_dir = "/home/dan/tmp"
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_file = os.path.join(temp_dir, "mirror_rec.wav")
             cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), temp_file]
             if self.audio_device:
                 cmd.extend(['-D', self.audio_device])
@@ -350,7 +355,7 @@ class AIVoiceModule:
 if __name__ == "__main__":
     CONFIG = {
         'openai': {'api_key': 'your-api-key-here'},
-        'audio': {'device_index': 3}  # Updated to reflect card 3
+        'audio': {'device_index': 3}
     }
     pygame.init()
     screen = pygame.display.set_mode((800, 480))
