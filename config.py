@@ -211,21 +211,21 @@ CONFIG = {
     'ai_voice': {
         'class': 'AIVoiceModule',
         'params': {
-            'config': {
-                'api_voice_key': os.getenv('OPENAI_VOICE_KEY'),  # Ensure this is set in Variables.env
-                'model': 'gpt-4o'  # Explicitly use gpt-4o for Realtime API
+            'openai': {
+                'api_key': None,  # Fetched in module
+                'model': 'gpt-4o'
             },
             'audio': {
-                'device_index': 2  # Your confirmed USB mic
+                'device_index': 2
             }
         }
     },
     'ai_interaction': {
         'class': 'AIInteractionModule',
         'params': {
-            'config': {
-                'api_key': os.getenv('OPENAI_API_KEY'),
-                'model': 'gpt-4o-mini'  # Fallback model
+            'openai': {
+                'api_key': None,  # Fetched in module
+                'model': 'gpt-4o-mini'
             },
             'audio': {
                 'device_index': 2,
@@ -234,7 +234,7 @@ CONFIG = {
                 'wav_volume': 0.5
             },
             'use_direct_audio': True,
-            'disable_audio': False  # Enable audio for fallback testing
+            'disable_audio': False
         }
     },
     
@@ -254,8 +254,8 @@ CONFIG = {
         'calendar': True,
         'fitbit': True,
         'retro_characters': True,
-        'ai_voice': True,  # Primary voice module
-        'ai_interaction': True  # Fallback, will be toggled by ModuleManager
+        'ai_voice': True,
+        'ai_interaction': True
     },
     
     # State-specific module settings
@@ -264,8 +264,8 @@ CONFIG = {
     
     # Debug settings
     'debug': {
-        'enabled': True,  # Enabled for debugging
-        'log_level': 'DEBUG'  # Detailed logging
+        'enabled': True,
+        'log_level': 'DEBUG'
     },
     
     # Visual effects settings
@@ -311,5 +311,3 @@ CONFIG = {
         }
     }
 }
-
-# No need for circular reference anymore - all params are explicitly defined

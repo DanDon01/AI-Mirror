@@ -259,11 +259,6 @@ class MagicMirror:
     def initialize_modules(self):
         """Initialize modules with explicit priority for ai_voice"""
         modules = {}
-        
-        # Import modules here to avoid circular imports
-        from AI_Module import AIInteractionModule
-        from ai_voice_module import AIVoiceModule
-        
         module_classes = {
             'clock': ClockModule,
             'weather': WeatherModule,
@@ -274,23 +269,21 @@ class MagicMirror:
             'ai_voice': AIVoiceModule,
             'ai_interaction': AIInteractionModule
         }
-        
-        for module_name, module_config in CONFIG.items():
+    
+    # Work with a copy to avoid modifying CONFIG during iteration
+        config_copy = CONFIG.copy()
+    
+        for module_name, module_config in config_copy.items():
             if not isinstance(module_config, dict) or 'class' not in module_config:
                 continue
             
             try:
                 if module_name == 'ai_voice':
-                    # Try primary voice module first
                     logging.info(f"Attempting to initialize primary voice module: {module_name}")
                     modules[module_name] = module_classes[module_name](module_config)
                     logging.info(f"Successfully initialized {module_name}")
-                    # Skip ai_interaction if ai_voice succeeds
-                    if 'ai_interaction' in CONFIG:
-                        logging.info("Skipping ai_interaction as ai_voice initialized successfully")
-                        del CONFIG['ai_interaction']
+                    # Let ModuleManager handle visibility instead of deleting
                 elif module_name == 'ai_interaction' and 'ai_voice' not in modules:
-                    # Only initialize fallback if ai_voice failed
                     logging.info("Falling back to AIInteractionModule")
                     modules[module_name] = module_classes[module_name](module_config)
                     logging.info(f"Initialized fallback module: {module_name}")
@@ -302,7 +295,7 @@ class MagicMirror:
                 logging.error(traceback.format_exc())
                 if module_name == 'ai_voice':
                     logging.warning("Primary voice module failed, attempting fallback")
-        
+    
         return modules
 
     # Update handle_events to match
