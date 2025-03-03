@@ -7,6 +7,8 @@
 import os
 import time
 import sys
+import ctypes
+import ctypes.util  # Add missing import for find_library
 
 # Create a pipe to completely filter audio-related stderr messages
 real_stderr = sys.stderr
@@ -54,22 +56,22 @@ logging.basicConfig(
     ]
 )
 
-# Completely suppress ALSA errors by loading libasound with custom error handler
+# Fix ALSA Error Handling Section
 try:
     # Load the ALSA library and set error handler to quiet mode
-    alsa_lib = ctypes.CDLL(util.find_library('asound'))
+    alsa_lib = ctypes.CDLL(ctypes.util.find_library('asound') or 'libasound.so')
     # Define the silent error handler
     ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_int, 
-                                          ctypes.c_char_p, ctypes.c_int, 
-                                          ctypes.c_char_p)
+                                        ctypes.c_char_p, ctypes.c_int, 
+                                        ctypes.c_char_p)
     def py_error_handler(filename, line, function, err, fmt):
         pass  # Do nothing instead of printing errors
     # Pass the function pointer to C
     c_error_handler = ERROR_HANDLER_FUNC(py_error_handler)
     # Set the error handler
     alsa_lib.snd_lib_error_set_handler(c_error_handler)
-except:
-    pass  # If this fails, we'll try other methods
+except Exception as e:
+    logging.warning(f"Failed to set ALSA error handler: {e}")
 
 # Now import the problematic libraries
 import pygame
@@ -254,88 +256,41 @@ class MagicMirror:
             logging.debug(message)
 
     def initialize_modules(self):
-        """Initialize modules based on config but properly handle AI modules"""
+        """Initialize modules based on config with proper error handling"""
         modules = {}
-        ai_modules = []
-        regular_modules = []
         
-        # Create a dictionary to track already initialized modules
-        initialized_module_classes = {}
+        # Define all possible modules explicitly
+        module_classes = {
+            'calendar': CalendarModule,
+            'weather': WeatherModule,
+            'fitbit': FitbitModule,
+            'smarthome': SmartHomeModule,
+            'stocks': StocksModule,
+            'clock': ClockModule,
+            'retro_characters': RetroCharactersModule
+        }
         
-        # First pass - identify regular vs AI modules
+        # First initialize core modules
         for module_name, module_config in CONFIG.items():
-            if isinstance(module_config, dict) and 'class' in module_config:
-                module_class_name = module_config['class']
-                # Check if this is an AI module
-                if 'AI' in module_class_name or module_name.lower().startswith('ai_'):
-                    ai_modules.append((module_name, module_config))
-                else:
-                    regular_modules.append((module_name, module_config))
-        
-        # Load regular modules first
-        for module_name, module_config in regular_modules:
+            if not isinstance(module_config, dict) or 'class' not in module_config:
+                continue
+            
             try:
-                logging.info(f"Initializing regular module: {module_name}")
-                class_name = module_config['class']
-                
-                # Skip if this class has already been initialized
-                if class_name in initialized_module_classes:
-                    logging.info(f"Module class {class_name} already initialized, reusing")
-                    modules[module_name] = initialized_module_classes[class_name]
-                    continue
-                
-                # Make sure the class exists in globals
-                if class_name in globals():
-                    module_class = globals()[class_name]
-                    module_instance = module_class(**module_config['params'])
-                    
-                    # Set a flag to indicate this module is initialized
-                    module_instance._initialized = True
-                    
-                    modules[module_name] = module_instance
-                    initialized_module_classes[class_name] = module_instance
-                    logging.info(f"Successfully initialized {module_name} module")
-                else:
-                    logging.error(f"Module class {class_name} not found")
+                if module_name in module_classes:
+                    modules[module_name] = module_classes[module_name](**module_config.get('params', {}))
+                    logging.info(f"Initialized core module: {module_name}")
             except Exception as e:
-                logging.error(f"Error initializing {module_name} module: {str(e)}")
-                logging.error(traceback.format_exc())
+                logging.error(f"Error initializing core module {module_name}: {e}")
         
-        # Now load AI modules after a slight delay
-        logging.info("Regular modules loaded, waiting before loading AI modules...")
-        time.sleep(1)  # Short delay
-        
-        for module_name, module_config in ai_modules:
+        # Then initialize AI module after a delay
+        if 'ai_interaction' in CONFIG:
+            time.sleep(1)  # Delay before AI module
             try:
-                logging.info(f"Initializing AI module: {module_name}")
-                
-                # Handle different AI module types
-                if module_config['class'] == 'AIModuleManager':
-                    # Use module_manager for new approach
-                    module_class = ModuleManager
-                elif module_config['class'] == 'AIInteractionModule':
-                    # Import dynamically to avoid conflicts
-                    from AI_Module import AIInteractionModule
-                    module_class = AIInteractionModule
-                elif module_config['class'] == 'AIVoiceModule':
-                    # Import dynamically to avoid conflicts
-                    from ai_voice_module import AIVoiceModule
-                    module_class = AIVoiceModule
-                else:
-                    # For any other AI module
-                    if module_config['class'] in globals():
-                        module_class = globals()[module_config['class']]
-                    else:
-                        logging.error(f"AI module class {module_config['class']} not found")
-                        continue
-                
-                # Initialize the module
-                modules[module_name] = module_class(**module_config['params'])
-                logging.info(f"Successfully initialized AI module: {module_name}")
-                
+                from AI_Module import AIInteractionModule
+                modules['ai_interaction'] = AIInteractionModule(**CONFIG['ai_interaction'].get('params', {}))
+                logging.info("Initialized AI interaction module")
             except Exception as e:
-                logging.error(f"Error initializing AI module {module_name}: {str(e)}")
-                logging.error(traceback.format_exc())
+                logging.error(f"Error initializing AI module: {e}")
         
         return modules
 
@@ -476,65 +431,81 @@ class MagicMirror:
                     logging.error(f"Error updating {module_name}: {e}")
 
     def run(self):
+        """Run the main application loop with better error handling"""
         try:
-            logging.info("Starting main loop")
+            logging.info("Starting Magic Mirror main loop")
             while self.running:
-                self.handle_events()
-                self.update_modules()
-                self.draw_modules()
-                self.clock.tick(self.frame_rate)
+                try:
+                    self.handle_events()
+                    self.update_modules()
+                    self.draw_modules()
+                    self.clock.tick(self.frame_rate)
+                except Exception as e:
+                    logging.error(f"Error in main loop iteration: {e}")
+                    logging.error(traceback.format_exc())
+                    time.sleep(1)  # Prevent tight looping on errors
+        except KeyboardInterrupt:
+            logging.info("Received shutdown signal")
         except Exception as e:
-            logging.error(f"Unexpected error in main loop: {traceback.format_exc()}")
+            logging.error(f"Fatal error in main loop: {e}")
+            logging.error(traceback.format_exc())
         finally:
             self.cleanup()
-            logging.info("Shutting down Magic Mirror")
             pygame.quit()
-            sys.exit()
+            logging.info("Magic Mirror shutdown complete")
+            sys.exit(0)
 
     def cleanup(self):
-        for module in self.modules.values():
-            if hasattr(module, 'cleanup'):
-                module.cleanup()
+        """Safely clean up all resources"""
+        logging.info("Shutting down Magic Mirror")
+        
+        # Clean up modules in reverse order (AI modules first)
+        module_names = list(self.modules.keys())
+        module_names.reverse()
+        
+        for module_name in module_names:
+            try:
+                module = self.modules[module_name]
+                if hasattr(module, 'cleanup'):
+                    logging.info(f"Cleaning up module: {module_name}")
+                    module.cleanup()
+            except Exception as e:
+                logging.error(f"Error cleaning up module {module_name}: {e}")
+        
+        # Clean up pygame resources
+        pygame.mixer.quit()
+        pygame.quit()
 
     def initialize_screen(self):
-        """Force fullscreen with multiple hardware-specific options"""
-        # Set display modes for fullscreen
+        """Initialize screen with robust fullscreen handling"""
         pygame.display.set_caption("Magic Mirror")
-        pygame.mouse.set_visible(False)  # Hide cursor
+        pygame.mouse.set_visible(False)
         
-        # Get screen dimensions from config
-        config_screen = CONFIG.get('current_monitor', {})
-        width = config_screen.get('width', 800)  # Default to 800 for safety
-        height = config_screen.get('height', 480)  # Default to 480 for safety
+        width = CONFIG.get('current_monitor', {}).get('width', 800)
+        height = CONFIG.get('current_monitor', {}).get('height', 480)
         
-        # Log the configured dimensions
-        logging.info(f"Using screen dimensions: {width}x{height}")
-        
-        # Try multiple approaches to force fullscreen
-        fullscreen_flags = [
-            pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF,
-            pygame.FULLSCREEN | pygame.NOFRAME,
-            pygame.FULLSCREEN
+        # Try different display configurations
+        display_configs = [
+            (pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF, "hardware accelerated"),
+            (pygame.FULLSCREEN | pygame.NOFRAME, "no frame"),
+            (pygame.FULLSCREEN, "basic fullscreen")
         ]
         
-        for flags in fullscreen_flags:
+        self.screen = None
+        for flags, desc in display_configs:
             try:
-                logging.info(f"Trying fullscreen mode with flags: {flags}")
                 self.screen = pygame.display.set_mode((width, height), flags)
-                actual_size = self.screen.get_size()
-                logging.info(f"Screen created with size: {actual_size[0]}x{actual_size[1]}")
+                logging.info(f"Screen initialized with {desc} mode: {width}x{height}")
                 break
             except Exception as e:
-                logging.error(f"Failed to set fullscreen with flags {flags}: {e}")
+                logging.warning(f"Failed {desc} mode: {e}")
         
-        # If all fullscreen attempts failed, try a final fallback
-        if not hasattr(self, 'screen') or self.screen is None:
-            logging.warning("Fullscreen attempts failed, using basic mode")
+        if not self.screen:
+            # Final fallback
             self.screen = pygame.display.set_mode((width, height))
+            logging.warning(f"Using fallback windowed mode: {width}x{height}")
         
-        # Setup layout manager with correct dimensions
         self.layout_manager = LayoutManager(width, height)
-        self.debug_layout = False  # Disable debug overlay to hide red boundary lines
 
     def change_state(self, new_state):
         """Change mirror state and update module visibility"""
