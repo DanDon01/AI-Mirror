@@ -20,7 +20,7 @@ import subprocess
 import pyaudio
 import math
 
-DEFAULT_MODEL = "gpt-4-1106-preview"
+DEFAULT_MODEL = "gpt-4o-realtime-preview-2024-12-17"
 DEFAULT_MAX_TOKENS = 250
 
 class AIInteractionModule:
@@ -61,7 +61,7 @@ class AIInteractionModule:
         self.api_key = openai_config.get('api_key')
         
         # Use a model that's definitely available based on the logs
-        self.model = openai_config.get('model', 'gpt-4o-mini')  # Changed from DEFAULT_MODEL
+        self.model = openai_config.get('model', 'gpt-4o-realtime-preview-2024-12-17')  # Changed from DEFAULT_MODEL
         self.max_tokens = openai_config.get('max_tokens', DEFAULT_MAX_TOKENS)
         
         # Get audio settings with defaults

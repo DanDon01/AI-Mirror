@@ -225,7 +225,7 @@ CONFIG = {
         'params': {
             'openai': {
                 'api_key': None,  # Fetched in module
-                'model': 'gpt-4o-mini'
+                'model': 'gpt-4o-realtime-preview-2024-12-17'
             },
             'audio': {
                 'device_index': 2,
