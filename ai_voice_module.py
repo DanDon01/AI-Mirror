@@ -51,7 +51,8 @@ class AIVoiceModule:
         self.ws_url = "wss://api.openai.com/v1/realtime"
         self.pyaudio = None
         
-        threading.Thread(target=self.initialize, daemon=True).start()
+        # Synchronous initialization to avoid threading conflicts
+        self.initialize()
 
     def initialize(self):
         self.logger.info("Starting AIVoiceModule initialization")
@@ -60,7 +61,7 @@ class AIVoiceModule:
             self.test_api_connection()
             self.check_alsa_sanity()
             self.setup_audio()
-            self.connect_websocket()
+            self.connect_websocket_thread()
             self.set_status("Ready", "Press SPACE to speak")
             self.logger.info("AIVoiceModule initialization complete")
             print("MIRROR DEBUG: AIVoiceModule initialization complete")
@@ -88,24 +89,32 @@ class AIVoiceModule:
                 self.model = 'gpt-4o-mini-realtime-preview-2024-12-17'
                 self.logger.info("Confirmed access to gpt-4o-mini-realtime-preview-2024-12-17")
             else:
-                self.model = 'gpt-4o-mini'  # Fallback
+                self.model = 'gpt-4o-mini'
                 self.logger.warning("Realtime models not available; using gpt-4o-mini")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
             self.model = 'gpt-4o-mini'
 
     def check_alsa_sanity(self):
-        """Pre-check ALSA configuration"""
+        """Pre-check ALSA configuration for recording devices"""
         try:
-            result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                self.logger.info("ALSA device list: " + result.stdout)
-                if "card 2" in result.stdout.lower():
-                    self.logger.info("Confirmed USB mic (card 2) is present")
-                else:
-                    self.logger.warning("USB mic (card 2) not found in ALSA list")
+            # Check playback devices
+            playback_result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
+            if playback_result.returncode == 0:
+                self.logger.info("ALSA playback devices: " + playback_result.stdout)
             else:
-                self.logger.error(f"ALSA check failed: {result.stderr}")
+                self.logger.error(f"ALSA playback check failed: {playback_result.stderr}")
+            
+            # Check recording devices
+            record_result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
+            if record_result.returncode == 0:
+                self.logger.info("ALSA recording devices: " + record_result.stdout)
+                if "card 2" in record_result.stdout.lower():
+                    self.logger.info("Confirmed USB mic (card 2) is present for recording")
+                else:
+                    self.logger.warning("USB mic (card 2) not found in ALSA recording list")
+            else:
+                self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
         except Exception as e:
             self.logger.error(f"ALSA sanity check failed: {e}")
 
@@ -116,7 +125,6 @@ class AIVoiceModule:
             return
         
         try:
-            time.sleep(2)
             self.pyaudio = pyaudio.PyAudio()
             self.logger.info("Available audio devices:")
             usb_device_index = None
@@ -176,7 +184,6 @@ class AIVoiceModule:
                 self.websocket = websocket
                 self.logger.info("WebSocket connected")
                 
-                # Wait for session.created
                 async for message in websocket:
                     data = json.loads(message)
                     if data.get("type") == "session.created":
@@ -184,7 +191,6 @@ class AIVoiceModule:
                         self.session_ready = True
                         break
                 
-                # Send session.update
                 await websocket.send(json.dumps({
                     "type": "session.update",
                     "session": {
@@ -219,7 +225,7 @@ class AIVoiceModule:
             self.session_ready = False
             self.reconnect_websocket()
 
-    def connect_websocket(self):
+    def connect_websocket_thread(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.ws_thread = threading.Thread(
@@ -237,7 +243,7 @@ class AIVoiceModule:
             return
         self.logger.info("Reconnecting WebSocket...")
         time.sleep(2)
-        self.connect_websocket()
+        self.connect_websocket_thread()
 
     def on_button_press(self):
         self.logger.info("Spacebar pressed")
@@ -262,7 +268,7 @@ class AIVoiceModule:
         self.set_status("Listening", "Recording...")
         self.logger.info("Starting recording")
         self.audio_thread = threading.Thread(target=self.stream_audio, daemon=True)
-        self.audio_thread.start()  # Corrected typo
+        self.audio_thread.start()
 
     def stream_audio(self):
         try:

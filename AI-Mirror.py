@@ -279,18 +279,16 @@ class MagicMirror:
         for module_name, module_config in config_copy.items():
             if not isinstance(module_config, dict) or 'class' not in module_config:
                 continue
-            
             try:
                 if module_name == 'ai_voice':
                     logging.info(f"Attempting to initialize primary voice module: {module_name}")
                     modules[module_name] = module_classes[module_name](module_config)
                     logging.info(f"Successfully initialized {module_name}")
-                    # Let ModuleManager handle visibility instead of deleting
                 elif module_name == 'ai_interaction' and 'ai_voice' not in modules:
                     logging.info("Falling back to AIInteractionModule")
                     modules[module_name] = module_classes[module_name](module_config)
                     logging.info(f"Initialized fallback module: {module_name}")
-                elif module_name in module_classes:
+                elif module_name in module_classes and module_name != 'fitbit':  # Skip Fitbit initially
                     modules[module_name] = module_classes[module_name](**module_config.get('params', {}))
                     logging.info(f"Initialized module: {module_name}")
             except Exception as e:
@@ -298,6 +296,15 @@ class MagicMirror:
                 logging.error(traceback.format_exc())
                 if module_name == 'ai_voice':
                     logging.warning("Primary voice module failed, attempting fallback")
+    
+       # Initialize Fitbit last
+        if 'fitbit' in config_copy:
+            try:
+                logging.info("Initializing FitbitModule (delayed)")
+                modules['fitbit'] = module_classes['fitbit'](**config_copy['fitbit'].get('params', {}))
+                logging.info("Successfully initialized FitbitModule")
+            except Exception as e:
+                logging.error(f"Error initializing fitbit: {e}")
     
         return modules
 
