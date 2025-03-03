@@ -5,7 +5,7 @@
 import os
 os.environ['PYTHONUNBUFFERED'] = '1'
 # Remove or fix ALSA_CONFIG_PATH
-os.environ['ALSA_CONFIG_PATH'] = '/usr/share/alsa/alsa.conf'  # Use system default
+os.environ["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"  # Correct ALSA config path
 os.environ['SDL_AUDIODRIVER'] = 'alsa'
 os.environ['PYALSA_NO_CHECK'] = '1'
 

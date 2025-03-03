@@ -125,19 +125,20 @@ class AIVoiceModule:
         """Test audio setup with arecord"""
         try:
             test_dir = "/home/dan/tmp"
-            os.makedirs(test_dir, exist_ok=True)  # Create directory if it doesn’t exist
+            os.makedirs(test_dir, exist_ok=True)
             test_file = os.path.join(test_dir, "test_rec.wav")
-            time.sleep(2)  # Wait for ALSA to settle
+            time.sleep(2)  # Wait for ALSA to stabilize
+            env = os.environ.copy()
+            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             for attempt in range(3):
                 self.logger.info(f"Audio test attempt {attempt + 1}/3")
                 cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", str(self.channels), "-d", "1", test_file, "-D", self.audio_device]
                 self.logger.info(f"Testing device: {self.audio_device} with cmd: {' '.join(cmd)}")
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
                 if result.returncode == 0 and os.path.exists(test_file):
                     self.logger.info(f"Audio test successful with {self.audio_device}")
-                    # Resample to 24000 Hz
                     temp_file_resampled = os.path.join(test_dir, "test_rec_resampled.wav")
-                    subprocess.run(["sox", test_file, "-r", "24000", temp_file_resampled], check=True)
+                    subprocess.run(["sox", test_file, "-r", "24000", temp_file_resampled], check=True, env=env)
                     os.remove(test_file)
                     os.rename(temp_file_resampled, test_file)
                     self.logger.info("Resampled test audio to 24000 Hz")
@@ -261,8 +262,10 @@ class AIVoiceModule:
             os.makedirs(temp_dir, exist_ok=True)
             temp_file_raw = os.path.join(temp_dir, "mirror_rec_raw.wav")
             temp_file = os.path.join(temp_dir, "mirror_rec.wav")
+            env = os.environ.copy()
+            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", str(self.channels), temp_file_raw, "-D", self.audio_device]
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
             
             start_time = time.time()
             while self.recording and self.session_ready and (time.time() - start_time) < 10:
@@ -270,8 +273,7 @@ class AIVoiceModule:
             
             process.terminate()
             if os.path.exists(temp_file_raw):
-                # Resample to 24000 Hz using sox
-                subprocess.run(["sox", temp_file_raw, "-r", "24000", temp_file], check=True)
+                subprocess.run(["sox", temp_file_raw, "-r", "24000", temp_file], check=True, env=env)
                 os.remove(temp_file_raw)
                 with open(temp_file, "rb") as f:
                     audio_data = f.read()
