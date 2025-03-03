@@ -160,8 +160,7 @@ class AIVoiceModule:
     def on_ws_message(self, ws, message):
         data = json.loads(message)
         event_type = data.get("type")
-        self.logger.debug(f"WebSocket event: {event_type}")
-        
+        self.logger.info(f"WebSocket event received: {event_type}")
         if event_type == "session.created":
             self.logger.info("Session created")
             self.session_ready = True
@@ -170,7 +169,7 @@ class AIVoiceModule:
                 "session": {
                     "model": self.model,
                     "modalities": ["text", "audio"],
-                    "instructions": "You are a helpful assistant for a smart mirror.",
+                    "instructions": "You are a helpful assistant for a smart mirror. Respond with both text and audio.",
                     "voice": "alloy",
                     "input_audio_format": "pcm16",
                     "output_audio_format": "pcm16"
@@ -181,9 +180,10 @@ class AIVoiceModule:
             self.logger.info("Session updated successfully")
         elif event_type == "response.audio.delta":
             audio_data = base64.b64decode(data["delta"])
+            self.logger.info(f"Received audio delta: {len(audio_data)} bytes")
             self.play_audio(audio_data)
         elif event_type == "response.text.delta":
-            self.logger.info(f"Text: {data['delta']}")
+            self.logger.info(f"Received text delta: {data['delta']}")
         elif event_type == "response.done":
             self.logger.info("Response completed")
         elif event_type == "error":
@@ -265,6 +265,7 @@ class AIVoiceModule:
             env = os.environ.copy()
             env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", str(self.channels), temp_file_raw, "-D", self.audio_device]
+            self.logger.info(f"Running arecord command: {' '.join(cmd)}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
             
             start_time = time.time()
@@ -272,11 +273,16 @@ class AIVoiceModule:
                 time.sleep(0.5)
             
             process.terminate()
+            stderr_output = process.stderr.read().decode()
+            if stderr_output:
+                self.logger.warning(f"arecord stderr: {stderr_output}")
             if os.path.exists(temp_file_raw):
+                self.logger.info(f"Raw audio file created: {temp_file_raw}")
                 subprocess.run(["sox", temp_file_raw, "-r", "24000", temp_file], check=True, env=env)
                 os.remove(temp_file_raw)
                 with open(temp_file, "rb") as f:
                     audio_data = f.read()
+                self.logger.info(f"Resampled audio size: {len(audio_data)} bytes")
                 os.remove(temp_file)
                 
                 if len(audio_data) > 44:  # Skip WAV header
@@ -286,17 +292,19 @@ class AIVoiceModule:
                         "audio": base64.b64encode(audio_data).decode("utf-8")
                     }
                     self.ws.send(json.dumps(audio_event))
-                    self.logger.debug("Audio sent")
+                    self.logger.info("Audio sent to WebSocket")
                     
                     response_event = {
                         "type": "response.create",
                         "response": {
                             "modalities": ["text", "audio"],
-                            "instructions": "Respond naturally"
+                            "instructions": "Respond naturally with both text and audio."
                         }
                     }
                     self.ws.send(json.dumps(response_event))
-                    self.logger.debug("Response requested")
+                    self.logger.info("Response requested from API")
+            else:
+                self.logger.error(f"Raw audio file not created: {temp_file_raw}")
         except Exception as e:
             self.logger.error(f"Streaming error: {e}")
         finally:
@@ -310,15 +318,18 @@ class AIVoiceModule:
 
     def play_audio(self, audio_data):
         try:
-            self.logger.info(f"Playing {len(audio_data)} bytes")
+            self.logger.info(f"Attempting to play {len(audio_data)} bytes")
             if not pygame.mixer.get_init():
                 pygame.mixer.init(frequency=self.sample_rate, size=-16, channels=1)
+                self.logger.info("Initialized pygame mixer")
             sound = pygame.mixer.Sound(buffer=audio_data)
             sound.play()
             self.set_status("Speaking", "Playing response...")
+            self.logger.info("Audio playback started")
             while pygame.mixer.get_busy():
                 time.sleep(0.1)
             self.set_status("Ready", "Press SPACE to speak")
+            self.logger.info("Audio playback completed")
         except Exception as e:
             self.logger.error(f"Playback error: {e}")
 

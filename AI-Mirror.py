@@ -3,11 +3,11 @@
 #  It also handles toggling between active, screensaver, and sleep states, and toggling debug mode on/off
 #  The main loop runs until the user closes the application
 import os
-os.environ['PYTHONUNBUFFERED'] = '1'
-# Remove or fix ALSA_CONFIG_PATH
-os.environ["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"  # Correct ALSA config path
-os.environ['SDL_AUDIODRIVER'] = 'alsa'
-os.environ['PYALSA_NO_CHECK'] = '1'
+os.environ["PYTHONUNBUFFERED"] = "1"
+os.environ["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
+os.environ["SDL_AUDIODRIVER"] = "alsa"
+os.environ["PYALSA_NO_CHECK"] = "1"
+
 
 # Rest of your imports...
 import logging
