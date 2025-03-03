@@ -144,7 +144,6 @@ class AIVoiceModule:
     def on_ws_open(self, ws):
         self.logger.info("WebSocket connected")
         self.ws = ws
-        # Wait for session.created in on_message
 
     def on_ws_message(self, ws, message):
         data = json.loads(message)
