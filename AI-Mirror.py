@@ -316,24 +316,30 @@ class MagicMirror:
                 elif event.key == pygame.K_d:
                     self.toggle_debug()
                 elif event.key == pygame.K_s:
-                    # State cycling logic...
-                elif event.key == pygame.K_SPACE:
-                    if self.state != "active":
+                    # Cycle through states: active -> screensaver -> sleep -> active
+                    if self.state == "active":
+                        self.change_state("screensaver")
+                    elif self.state == "screensaver":
+                        self.change_state("sleep")
+                    else:  # sleep state
                         self.change_state("active")
-                    elif 'ai_voice' in self.modules:
-                        try:
-                            logging.info("Space bar pressed - triggering AIVoiceModule")
-                            print("MIRROR DEBUG: Space bar pressed - triggering AIVoiceModule")
-                            self.modules['ai_voice'].on_button_press()
-                        except Exception as e:
-                            logging.error(f"Error triggering AIVoiceModule: {e}")
-                            print(f"MIRROR DEBUG: ❌ Error triggering AIVoiceModule: {e}")
-                            if 'ai_interaction' in self.modules:
-                                logging.info("Falling back to AIInteractionModule")
-                                self.modules['ai_interaction'].on_button_press()
-                    elif 'ai_interaction' in self.modules:
-                        logging.info("Using AIInteractionModule as primary voice module failed")
-                        self.modules['ai_interaction'].on_button_press()
+                elif event.key == pygame.K_SPACE:
+                        if self.state != "active":
+                            self.change_state("active")
+                        elif 'ai_voice' in self.modules:
+                            try:
+                                logging.info("Space bar pressed - triggering AIVoiceModule")
+                                print("MIRROR DEBUG: Space bar pressed - triggering AIVoiceModule")
+                                self.modules['ai_voice'].on_button_press()
+                            except Exception as e:
+                                logging.error(f"Error triggering AIVoiceModule: {e}")
+                                print(f"MIRROR DEBUG: ❌ Error triggering AIVoiceModule: {e}")
+                                if 'ai_interaction' in self.modules:
+                                    logging.info("Falling back to AIInteractionModule")
+                                    self.modules['ai_interaction'].on_button_press()
+                        elif 'ai_interaction' in self.modules:
+                            logging.info("Using AIInteractionModule as primary voice module failed")
+                            self.modules['ai_interaction'].on_button_press()
 
     def draw_modules(self):
         """Draw all visible modules to the screen"""
