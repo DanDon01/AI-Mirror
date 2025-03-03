@@ -149,19 +149,12 @@ class AIVoiceModule:
             event_type = data.get("type")
             self.logger.info(f"WebSocket event received: {event_type}")
             
-            # Add more detailed logging for message content
-            truncated_message = message[:200] + "..." if len(message) > 200 else message
-            self.logger.debug(f"WebSocket raw message: {truncated_message}")
-            
             # Save the entire raw message for debugging
-            try:
-                debug_dir = "/home/dan/mirror_debug"
-                os.makedirs(debug_dir, exist_ok=True)
-                timestamp = time.strftime("%Y%m%d_%H%M%S_%f")[:19]
-                with open(f"{debug_dir}/ws_message_{timestamp}_{event_type}.json", "w") as f:
-                    json.dump(data, f, indent=2)
-            except Exception as e:
-                self.logger.error(f"Failed to save debug message: {e}")
+            debug_dir = "/home/dan/mirror_debug"
+            os.makedirs(debug_dir, exist_ok=True)
+            timestamp = time.strftime("%Y%m%d_%H%M%S_%f")[:19]
+            with open(f"{debug_dir}/ws_message_{timestamp}_{event_type}.json", "w") as f:
+                json.dump(data, f, indent=2)
             
             if event_type == "session.created":
                 self.logger.info("Session created")
@@ -181,31 +174,45 @@ class AIVoiceModule:
             elif event_type == "session.updated":
                 self.logger.info("Session updated successfully")
             elif event_type == "response.audio.delta":
-                try:
-                    audio_data = base64.b64decode(data["delta"])
-                    self.logger.info(f"Received audio delta: {len(audio_data)} bytes")
+                audio_data = base64.b64decode(data["delta"])
+                self.logger.info(f"Received audio delta: {len(audio_data)} bytes")
+                
+                # Save each audio chunk with better naming
+                audio_dir = "/home/dan/mirror_recordings/response_audio"
+                os.makedirs(audio_dir, exist_ok=True)
+                
+                # Use a consistent timestamp for all chunks from the same response
+                if not hasattr(self, "current_response_timestamp"):
+                    self.current_response_timestamp = time.strftime("%Y%m%d_%H%M%S")
+                    self.chunk_counter = 0
                     
-                    # Save each audio chunk
-                    audio_dir = "/home/dan/mirror_recordings/response_audio"
-                    os.makedirs(audio_dir, exist_ok=True)
-                    timestamp = time.strftime("%Y%m%d_%H%M%S_%f")[:19]
-                    chunk_file = f"{audio_dir}/audio_chunk_{timestamp}.raw"
-                    with open(chunk_file, "wb") as f:
-                        f.write(audio_data)
-                    self.logger.info(f"Saved audio chunk to {chunk_file}")
-                    
-                    self.play_audio(audio_data)
-                except Exception as e:
-                    self.logger.error(f"Error processing audio delta: {e}")
+                self.chunk_counter += 1
+                chunk_file = f"{audio_dir}/response_{self.current_response_timestamp}_chunk_{self.chunk_counter:03d}.raw"
+                
+                with open(chunk_file, "wb") as f:
+                    f.write(audio_data)
+                self.logger.info(f"Saved audio chunk to {chunk_file}")
+                
+                # Play the audio chunk
+                self.play_audio(audio_data)
+                
             elif event_type == "response.text.delta":
                 text = data["delta"]
                 self.logger.info(f"Received text delta: {text}")
             elif event_type == "response.done":
                 self.logger.info("Response completed")
+                # Reset the response timestamp for the next response
+                if hasattr(self, "current_response_timestamp"):
+                    del self.current_response_timestamp
+                    del self.chunk_counter
+                
+                # Set status back to ready
+                self.set_status("Ready", "Press SPACE to speak")
+                
             elif event_type == "error":
                 self.logger.error(f"API Error: {data.get('error')}")
         except Exception as e:
-            self.logger.error(f"Error processing WebSocket message: {e}")
+            self.logger.error(f"Error processing WebSocket message: {e}", exc_info=True)
 
     def on_ws_error(self, ws, error):
         self.logger.error(f"WebSocket error: {error}")
@@ -410,14 +417,18 @@ class AIVoiceModule:
                     # Wait a bit before committing to ensure all chunks are processed
                     time.sleep(0.5)
                     
-                    # Commit the audio buffer
+                    # IMPORTANT: First commit the buffer, THEN request a response
+                    # This is a single sequence that must happen in order
                     try:
+                        # 1. Commit the audio buffer first
                         commit_event = {"type": "input_audio_buffer.commit"}
                         self.ws.send(json.dumps(commit_event))
                         self.logger.info("Audio buffer committed")
-                        time.sleep(0.5)  # Wait for commit to be processed
                         
-                        # Request response
+                        # 2. Wait for commit to be processed
+                        time.sleep(1.0)  # Increased wait time
+                        
+                        # 3. THEN request a response
                         response_event = {
                             "type": "response.create",
                             "response": {
@@ -426,6 +437,10 @@ class AIVoiceModule:
                         }
                         self.ws.send(json.dumps(response_event))
                         self.logger.info("Response requested from API")
+                        
+                        # 4. Set status to processing while waiting for response
+                        self.set_status("Processing", "Waiting for AI response...")
+                        
                     except Exception as e:
                         self.logger.error(f"Failed to commit or request response: {e}")
                         
