@@ -211,7 +211,7 @@ CONFIG = {
     'ai_voice': {
         'class': 'AIVoiceModule',
         'params': {
-            'openai': {
+            'config': {
                 'api_key': os.getenv('OPENAI_VOICE_KEY'),  # Ensure this is set in Variables.env
                 'model': 'gpt-4o'  # Explicitly use gpt-4o for Realtime API
             },
@@ -223,7 +223,7 @@ CONFIG = {
     'ai_interaction': {
         'class': 'AIInteractionModule',
         'params': {
-            'openai': {
+            'config': {
                 'api_key': os.getenv('OPENAI_API_KEY'),
                 'model': 'gpt-4o-mini'  # Fallback model
             },
