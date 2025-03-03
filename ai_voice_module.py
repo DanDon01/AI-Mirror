@@ -7,10 +7,9 @@ import logging
 import threading
 import base64
 import time
-import pyaudio
+import subprocess
 from queue import Queue
 from config import CONFIG
-import subprocess
 
 class AIVoiceModule:
     """
@@ -37,7 +36,6 @@ class AIVoiceModule:
         
         self.sample_rate = 24000
         self.channels = 1
-        self.format = pyaudio.paInt16
         self.chunk_size = 1024
         
         self.api_key = self.config.get('openai', {}).get('api_key')
@@ -49,9 +47,7 @@ class AIVoiceModule:
                 return
         
         self.ws_url = "wss://api.openai.com/v1/realtime"
-        self.pyaudio = None
         
-        # Synchronous initialization to avoid threading conflicts
         self.initialize()
 
     def initialize(self):
@@ -60,7 +56,8 @@ class AIVoiceModule:
         try:
             self.test_api_connection()
             self.check_alsa_sanity()
-            self.setup_audio()
+            if self.audio_enabled:
+                self.test_audio_setup()
             self.connect_websocket_thread()
             self.set_status("Ready", "Press SPACE to speak")
             self.logger.info("AIVoiceModule initialization complete")
@@ -98,14 +95,12 @@ class AIVoiceModule:
     def check_alsa_sanity(self):
         """Pre-check ALSA configuration for recording devices"""
         try:
-            # Check playback devices
             playback_result = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
             if playback_result.returncode == 0:
                 self.logger.info("ALSA playback devices: " + playback_result.stdout)
             else:
                 self.logger.error(f"ALSA playback check failed: {playback_result.stderr}")
             
-            # Check recording devices
             record_result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
             if record_result.returncode == 0:
                 self.logger.info("ALSA recording devices: " + record_result.stdout)
@@ -118,59 +113,21 @@ class AIVoiceModule:
         except Exception as e:
             self.logger.error(f"ALSA sanity check failed: {e}")
 
-    def setup_audio(self):
-        """Setup audio input with robust device handling"""
-        if not self.audio_enabled:
-            self.logger.info("Audio disabled by configuration")
-            return
-        
+    def test_audio_setup(self):
+        """Test audio setup with arecord"""
         try:
-            self.pyaudio = pyaudio.PyAudio()
-            self.logger.info("Available audio devices:")
-            usb_device_index = None
-            for i in range(self.pyaudio.get_device_count()):
-                device_info = self.pyaudio.get_device_info_by_index(i)
-                self.logger.info(f"Device {i}: {device_info['name']}, Input Channels: {device_info['maxInputChannels']}")
-                if 'usb' in device_info['name'].lower() and device_info['maxInputChannels'] > 0:
-                    usb_device_index = i
-
-            self.input_device_index = self.config.get('audio', {}).get('device_index', 2)
-            if usb_device_index is not None and self.input_device_index != usb_device_index:
-                self.logger.warning(f"Configured device_index {self.input_device_index} may not be USB mic; found USB at {usb_device_index}")
-                self.input_device_index = usb_device_index
-            elif self.pyaudio.get_device_count() == 0:
-                self.logger.error("No audio devices available")
+            test_file = "/tmp/test_rec.wav"
+            cmd = ['arecord', '-D', 'hw:2,0', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and os.path.exists(test_file):
+                self.logger.info("Audio test successful with arecord")
+                os.remove(test_file)
+            else:
+                self.logger.error(f"Audio test failed: {result.stderr}")
                 self.audio_enabled = False
-                return
-            
-            try:
-                self.stream = self.pyaudio.open(
-                    format=self.format,
-                    channels=self.channels,
-                    rate=self.sample_rate,
-                    input=True,
-                    input_device_index=self.input_device_index,
-                    frames_per_buffer=self.chunk_size
-                )
-                self.logger.info(f"Audio stream opened with device index {self.input_device_index}")
-            except ValueError as e:
-                self.logger.warning(f"Device index {self.input_device_index} invalid, trying default device: {e}")
-                self.stream = self.pyaudio.open(
-                    format=self.format,
-                    channels=self.channels,
-                    rate=self.sample_rate,
-                    input=True,
-                    frames_per_buffer=self.chunk_size
-                )
-                self.input_device_index = None
-                self.logger.info("Audio stream opened with default device")
         except Exception as e:
-            self.logger.error(f"Audio setup failed: {e}")
-            self.set_status("Error", "Audio setup failed")
+            self.logger.error(f"Audio test setup failed: {e}")
             self.audio_enabled = False
-            if self.pyaudio:
-                self.pyaudio.terminate()
-                self.pyaudio = None
 
     async def websocket_handler(self):
         headers = {
@@ -271,12 +228,26 @@ class AIVoiceModule:
         self.audio_thread.start()
 
     def stream_audio(self):
+
+        """Stream audio using arecord with ALSA PCM alias"""
         try:
-            self.logger.info("Streaming audio")
-            while self.recording and self.session_ready:
-                audio_data = self.stream.read(self.chunk_size, exception_on_overflow=False)
-                self.logger.debug(f"Captured {len(audio_data)} bytes")
-                if len(audio_data) > 0:
+            self.logger.info("Streaming audio with arecord")
+            temp_file = "/tmp/mirror_rec.wav"
+            cmd = ['arecord', '-D', 'safe_capture', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), temp_file]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+            start_time = time.time()
+            while self.recording and self.session_ready and (time.time() - start_time) < 10:
+                time.sleep(0.5)
+        
+            process.terminate()
+            if os.path.exists(temp_file):
+                with open(temp_file, 'rb') as f:
+                    audio_data = f.read()
+                os.remove(temp_file)
+            
+                if len(audio_data) > 44:  # Skip WAV header
+                    audio_data = audio_data[44:]
                     audio_event = {
                         "type": "input_audio_buffer.append",
                         "audio": base64.b64encode(audio_data).decode('utf-8')
@@ -286,7 +257,7 @@ class AIVoiceModule:
                         self.loop
                     )
                     self.logger.debug("Audio sent")
-                    
+                
                     response_event = {
                         "type": "response.create",
                         "response": {
@@ -358,11 +329,6 @@ class AIVoiceModule:
         self.running = False
         if hasattr(self, 'websocket'):
             asyncio.run_coroutine_threadsafe(self.websocket.close(), self.loop)
-        if hasattr(self, 'stream'):
-            self.stream.stop_stream()
-            self.stream.close()
-        if hasattr(self, 'pyaudio') and self.pyaudio:
-            self.pyaudio.terminate()
         if hasattr(self, 'loop'):
             self.loop.call_soon_threadsafe(self.loop.stop)
         self.logger.info("Cleanup complete")
