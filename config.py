@@ -212,7 +212,7 @@ CONFIG = {
         'class': 'AIVoiceModule',
         'params': {
             'config': {
-                'api_key': os.getenv('OPENAI_VOICE_KEY'),  # Ensure this is set in Variables.env
+                'api_voice_key': os.getenv('OPENAI_VOICE_KEY'),  # Ensure this is set in Variables.env
                 'model': 'gpt-4o'  # Explicitly use gpt-4o for Realtime API
             },
             'audio': {
