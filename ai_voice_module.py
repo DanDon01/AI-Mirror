@@ -33,9 +33,11 @@ class AIVoiceModule:
         self.running = True
         self.response_queue = Queue()
         self.audio_enabled = True
+        self.audio_device = None  # Determined in test_audio_setup
         
         self.sample_rate = 24000
         self.channels = 1
+        self.format = 'S16_LE'
         self.chunk_size = 1024
         
         self.api_key = self.config.get('openai', {}).get('api_key')
@@ -117,14 +119,34 @@ class AIVoiceModule:
         """Test audio setup with arecord"""
         try:
             test_file = "/tmp/test_rec.wav"
-            cmd = ['arecord', '-D', 'hw:2,0', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
+            # Try specific device first
+            cmd = ['arecord', '-D', 'safe_capture', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             if result.returncode == 0 and os.path.exists(test_file):
-                self.logger.info("Audio test successful with arecord")
+                self.logger.info("Audio test successful with safe_capture")
+                self.audio_device = 'safe_capture'
                 os.remove(test_file)
             else:
-                self.logger.error(f"Audio test failed: {result.stderr}")
-                self.audio_enabled = False
+                self.logger.warning(f"Audio test with safe_capture failed: {result.stderr}")
+                # Fallback to hw:2,0 directly
+                cmd = ['arecord', '-D', 'hw:2,0', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and os.path.exists(test_file):
+                    self.logger.info("Audio test successful with hw:2,0")
+                    self.audio_device = 'hw:2,0'
+                    os.remove(test_file)
+                else:
+                    self.logger.error(f"Audio test with hw:2,0 failed: {result.stderr}")
+                    # Fallback to default device
+                    cmd = ['arecord', '-d', '1', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), test_file]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and os.path.exists(test_file):
+                        self.logger.info("Audio test successful with default device")
+                        self.audio_device = None
+                        os.remove(test_file)
+                    else:
+                        self.logger.error(f"Audio test with default failed: {result.stderr}")
+                        self.audio_enabled = False
         except Exception as e:
             self.logger.error(f"Audio test setup failed: {e}")
             self.audio_enabled = False
@@ -137,7 +159,7 @@ class AIVoiceModule:
         
         try:
             self.logger.info("Connecting to WebSocket")
-            async with websockets.connect(f"{self.ws_url}?model={self.model}", extra_headers=headers) as websocket:
+            async with websockets.connect(self.ws_url + f"?model={self.model}", header=headers) as websocket:
                 self.websocket = websocket
                 self.logger.info("WebSocket connected")
                 
@@ -228,24 +250,26 @@ class AIVoiceModule:
         self.audio_thread.start()
 
     def stream_audio(self):
-
-        """Stream audio using arecord with ALSA PCM alias"""
+        """Stream audio using arecord with dynamic device"""
         try:
             self.logger.info("Streaming audio with arecord")
             temp_file = "/tmp/mirror_rec.wav"
-            cmd = ['arecord', '-D', 'safe_capture', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), temp_file]
+            cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), temp_file]
+            if self.audio_device:
+                cmd.insert(1, '-D')
+                cmd.insert(2, self.audio_device)
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
+            
             start_time = time.time()
             while self.recording and self.session_ready and (time.time() - start_time) < 10:
                 time.sleep(0.5)
-        
+            
             process.terminate()
             if os.path.exists(temp_file):
                 with open(temp_file, 'rb') as f:
                     audio_data = f.read()
                 os.remove(temp_file)
-            
+                
                 if len(audio_data) > 44:  # Skip WAV header
                     audio_data = audio_data[44:]
                     audio_event = {
@@ -257,7 +281,7 @@ class AIVoiceModule:
                         self.loop
                     )
                     self.logger.debug("Audio sent")
-                
+                    
                     response_event = {
                         "type": "response.create",
                         "response": {
