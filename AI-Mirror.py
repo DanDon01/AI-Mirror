@@ -56,12 +56,18 @@ os.environ['PORTAUDIO_ENABLE_DEVICE_ENUMERATION'] = '0'  # Disable enumeration
 
 # Make sure Python logging still works by setting up a basic logger
 import logging
-# Configure logging
+# Force all loggers to INFO level
 logging.basicConfig(
-    level=logging.INFO,  # Change from DEBUG to INFO
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     handlers=[logging.StreamHandler()]
 )
+# Ensure root logger and all child loggers are at INFO
+logging.getLogger().setLevel(logging.INFO)
+for logger in logging.Logger.manager.loggerDict.values():
+    if hasattr(logger, "setLevel"):
+        logger.setLevel(logging.INFO)
+
 
 # Fix ALSA Error Handling Section
 try:
