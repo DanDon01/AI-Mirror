@@ -6,6 +6,7 @@ import threading
 import base64
 import time
 import subprocess
+import shutil
 from queue import Queue
 from config import CONFIG
 import websocket
@@ -74,15 +75,8 @@ class AIVoiceModule:
         if response.status_code == 200:
             models = [m["id"] for m in response.json()["data"]]
             self.logger.info(f"Available models: {models}")
-            if "gpt-4o-realtime-preview-2024-12-17" in models:
-                self.model = "gpt-4o-realtime-preview-2024-12-17"
-                self.logger.info("Confirmed access to gpt-4o-realtime-preview-2024-12-17")
-            elif "gpt-4o-mini-realtime-preview-2024-12-17" in models:
-                self.model = "gpt-4o-mini-realtime-preview-2024-12-17"
-                self.logger.info("Confirmed access to gpt-4o-mini-realtime-preview-2024-12-17")
-            else:
-                self.model = "gpt-4o-realtime-preview-2024-12-17"
-                self.logger.warning("Realtime model not found in list; forcing gpt-4o-realtime-preview-2024-12-17")
+            self.model = "gpt-4o-realtime-preview-2024-12-17"
+            self.logger.info("Using gpt-4o-realtime-preview-2024-12-17")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
             self.model = "gpt-4o-realtime-preview-2024-12-17"
@@ -250,9 +244,16 @@ class AIVoiceModule:
         try:
             self.logger.info("Streaming audio with arecord")
             temp_dir = "/home/dan/tmp"
+            recordings_dir = "/home/dan/mirror_recordings"
             os.makedirs(temp_dir, exist_ok=True)
+            os.makedirs(recordings_dir, exist_ok=True)
+            
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
             temp_file_raw = os.path.join(temp_dir, "mirror_rec_raw.wav")
             temp_file = os.path.join(temp_dir, "mirror_rec.wav")
+            saved_file_raw = os.path.join(recordings_dir, f"recording_raw_{timestamp}.wav")
+            saved_file_resampled = os.path.join(recordings_dir, f"recording_resampled_{timestamp}.wav")
+            
             env = os.environ.copy()
             env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", str(self.channels), temp_file_raw, "-D", self.audio_device]
@@ -269,11 +270,22 @@ class AIVoiceModule:
                 self.logger.warning(f"arecord stderr: {stderr_output}")
             if os.path.exists(temp_file_raw):
                 self.logger.info(f"Raw audio file created: {temp_file_raw}")
+                # Save a copy of the raw recording
+                shutil.copy2(temp_file_raw, saved_file_raw)
+                self.logger.info(f"Saved raw recording to: {saved_file_raw}")
+                
+                # Resample to 24000 Hz
                 subprocess.run(["sox", temp_file_raw, "-r", "24000", temp_file], check=True, env=env)
-                os.remove(temp_file_raw)
+                # Save a copy of the resampled recording
+                shutil.copy2(temp_file, saved_file_resampled)
+                self.logger.info(f"Saved resampled recording to: {saved_file_resampled}")
+                
                 with open(temp_file, "rb") as f:
                     audio_data = f.read()
                 self.logger.info(f"Resampled audio size: {len(audio_data)} bytes")
+                
+                # Clean up temp files but keep the saved copies
+                os.remove(temp_file_raw)
                 os.remove(temp_file)
                 
                 if len(audio_data) > 44:
@@ -285,11 +297,15 @@ class AIVoiceModule:
                     self.ws.send(json.dumps(audio_event))
                     self.logger.info("Audio sent to WebSocket")
                     
+                    commit_event = {"type": "input_audio_buffer.commit"}
+                    self.ws.send(json.dumps(commit_event))
+                    self.logger.info("Audio buffer committed")
+                    
                     response_event = {
                         "type": "response.create",
                         "response": {
                             "modalities": ["text", "audio"],
-                            "instructions": "Respond naturally with both text and audio."
+                            "instructions": "Respond naturally with both text and audio to the spoken input."
                         }
                     }
                     self.ws.send(json.dumps(response_event))
