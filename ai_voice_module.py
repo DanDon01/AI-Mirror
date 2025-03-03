@@ -105,10 +105,10 @@ class AIVoiceModule:
             record_result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
             if record_result.returncode == 0:
                 self.logger.info("ALSA recording devices:\n" + record_result.stdout)
-                if "card 2" in record_result.stdout.lower():
-                    self.logger.info("Confirmed USB mic (card 2) is present for recording")
+                if "card 3" in record_result.stdout.lower():  # Updated to card 3
+                    self.logger.info("Confirmed USB mic (card 3) is present for recording")
                 else:
-                    self.logger.warning("USB mic (card 2) not found in ALSA recording list")
+                    self.logger.warning("USB mic (card 3) not found in ALSA recording list")
             else:
                 self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
         except Exception as e:
@@ -119,9 +119,10 @@ class AIVoiceModule:
         try:
             test_file = "/tmp/test_rec.wav"
             os.chmod("/tmp", 0o777)  # Ensure /tmp is writable
+            time.sleep(2)  # Wait for ALSA to settle
             for attempt in range(3):
                 self.logger.info(f"Audio test attempt {attempt + 1}/3")
-                for device in ['safe_capture', 'hw:2,0', None]:
+                for device in ['safe_capture', 'hw:3,0', None]:  # Updated to hw:3,0
                     cmd = ['arecord', '-f', 'S16_LE', '-r', str(self.sample_rate), '-c', str(self.channels), '-d', '1', test_file]
                     if device:
                         cmd.extend(['-D', device])
@@ -349,7 +350,7 @@ class AIVoiceModule:
 if __name__ == "__main__":
     CONFIG = {
         'openai': {'api_key': 'your-api-key-here'},
-        'audio': {'device_index': 2}
+        'audio': {'device_index': 3}  # Updated to reflect card 3
     }
     pygame.init()
     screen = pygame.display.set_mode((800, 480))
