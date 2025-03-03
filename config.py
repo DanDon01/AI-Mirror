@@ -265,7 +265,7 @@ CONFIG = {
     # Debug settings
     'debug': {
         'enabled': True,
-        'log_level': 'DEBUG'
+        'log_level': 'INFO'
     },
     
     # Visual effects settings

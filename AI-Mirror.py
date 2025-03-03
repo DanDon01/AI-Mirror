@@ -56,13 +56,13 @@ os.environ['PORTAUDIO_ENABLE_DEVICE_ENUMERATION'] = '0'  # Disable enumeration
 
 # Make sure Python logging still works by setting up a basic logger
 import logging
-# Force all loggers to INFO level
+# Force logging to INFO level
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     handlers=[logging.StreamHandler()]
 )
-# Ensure root logger and all child loggers are at INFO
+# Explicitly set root logger and all loggers to INFO
 logging.getLogger().setLevel(logging.INFO)
 for logger in logging.Logger.manager.loggerDict.values():
     if hasattr(logger, "setLevel"):
