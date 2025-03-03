@@ -15,7 +15,7 @@ class AIVoiceModule:
     def __init__(self, config):
         self.logger = logging.getLogger("AI_Voice")
         self.logger.info("Initializing AI Voice Module")
-    
+        
         self.config = config or {}
         self.status = "Initializing"
         self.status_message = "Starting voice systems..."
@@ -24,13 +24,13 @@ class AIVoiceModule:
         self.session_ready = False
         self.running = True
         self.response_queue = Queue()
-    
+        
         self.sample_rate = 24000
         self.channels = 1
         self.format = pyaudio.paInt16
         self.chunk_size = 1024
-    
-    # Try config first, then environment variables
+        
+        # Try config first, then environment variables
         self.api_key = self.config.get('openai', {}).get('api_key')
         if not self.api_key:
             self.api_key = os.getenv('OPENAI_API_KEY') or os.getenv('OPENAI_VOICE_KEY')
@@ -38,23 +38,26 @@ class AIVoiceModule:
                 self.logger.error("No OpenAI API key found in config or environment")
                 self.set_status("Error", "No API key")
                 return
-    
+        
         self.ws_url = "wss://api.openai.com/v1/realtime"
-        self.pyaudio = pyaudio.PyAudio()
-    
+        
         threading.Thread(target=self.initialize, daemon=True).start()
 
     def initialize(self):
+        self.logger.info("Starting AIVoiceModule initialization")
+        print("MIRROR DEBUG: Starting AIVoiceModule initialization")
         try:
-            self.logger.info("Starting initialization")
             self.test_api_connection()
             self.setup_audio()
             self.connect_websocket()
             self.set_status("Ready", "Press SPACE to speak")
-            self.logger.info("Initialization complete")
+            self.logger.info("AIVoiceModule initialization complete")
+            print("MIRROR DEBUG: AIVoiceModule initialization complete")
         except Exception as e:
-            self.logger.error(f"Initialization failed: {e}")
+            self.logger.error(f"AIVoiceModule initialization failed: {e}")
             self.set_status("Error", f"Init failed: {str(e)}")
+            print(f"MIRROR DEBUG: ❌ AIVoiceModule initialization failed: {e}")
+            raise
 
     def test_api_connection(self):
         """Verify Realtime API access"""
@@ -75,23 +78,55 @@ class AIVoiceModule:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
 
     def setup_audio(self):
+        """Setup audio input with robust device handling"""
         try:
-            for i in range(self.pyaudio.get_device_count()):
-                info = self.pyaudio.get_device_info_by_index(i)
-                self.logger.info(f"Device {i}: {info['name']}")
+            p = pyaudio.PyAudio()
+            self.logger.info("Available audio devices:")
+            usb_device_index = None
+            for i in range(p.get_device_count()):
+                device_info = p.get_device_info_by_index(i)
+                self.logger.info(f"Device {i}: {device_info['name']}, Input Channels: {device_info['maxInputChannels']}")
+                if 'usb' in device_info['name'].lower() and device_info['maxInputChannels'] > 0:
+                    usb_device_index = i
+
+            # Use configured index, fallback to USB device, then default
+            self.input_device_index = self.config.get('audio', {}).get('device_index', 2)
+            if usb_device_index is not None and self.input_device_index != usb_device_index:
+                self.logger.warning(f"Configured device_index {self.input_device_index} may not be USB mic; found USB at {usb_device_index}")
+                self.input_device_index = usb_device_index
+            elif p.get_device_count() == 0:
+                self.logger.error("No audio devices available")
+                raise Exception("No audio devices found")
             
-            self.input_device_index = 2  # Confirmed working
-            self.stream = self.pyaudio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=self.input_device_index,
-                frames_per_buffer=self.chunk_size
-            )
-            self.logger.info(f"Audio stream opened on device {self.input_device_index}")
+            try:
+                self.stream = p.open(
+                    format=self.format,
+                    channels=self.channels,
+                    rate=self.sample_rate,
+                    input=True,
+                    input_device_index=self.input_device_index,
+                    frames_per_buffer=self.chunk_size
+                )
+                self.logger.info(f"Audio stream opened with device index {self.input_device_index}")
+            except ValueError as e:
+                self.logger.warning(f"Device index {self.input_device_index} invalid, trying default device: {e}")
+                self.stream = p.open(
+                    format=self.format,
+                    channels=self.channels,
+                    rate=self.sample_rate,
+                    input=True,
+                    frames_per_buffer=self.chunk_size
+                )
+                self.input_device_index = None
+                self.logger.info("Audio stream opened with default device")
+
+            self.pyaudio = p
         except Exception as e:
             self.logger.error(f"Audio setup failed: {e}")
+            self.set_status("Error", "Audio setup failed")
+            # Clean up PyAudio instance if it was created
+            if 'p' in locals():
+                p.terminate()
             raise
 
     async def websocket_handler(self):
@@ -110,7 +145,7 @@ class AIVoiceModule:
                 await websocket.send(json.dumps({
                     "type": "session.update",
                     "session": {
-                        "model": "gpt-4o",  # Explicitly use gpt-4o
+                        "model": "gpt-4o",
                         "modalities": ["text", "audio"],
                         "instructions": "You are a helpful assistant for a smart mirror.",
                         "voice": "alloy",
@@ -270,7 +305,8 @@ class AIVoiceModule:
         if hasattr(self, 'stream'):
             self.stream.stop_stream()
             self.stream.close()
-        self.pyaudio.terminate()
+        if hasattr(self, 'pyaudio'):
+            self.pyaudio.terminate()
         if hasattr(self, 'loop'):
             self.loop.call_soon_threadsafe(self.loop.stop)
         self.logger.info("Cleanup complete")

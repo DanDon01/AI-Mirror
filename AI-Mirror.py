@@ -2,9 +2,12 @@
 #  This code is responsible for initializing the modules, handling events, updating the modules, and drawing the modules on the screen
 #  It also handles toggling between active, screensaver, and sleep states, and toggling debug mode on/off
 #  The main loop runs until the user closes the application
-
-# Block JACK server completely
 import os
+os.environ['PYTHONUNBUFFERED'] = '1'
+os.environ['ALSA_CONFIG_PATH'] = '/usr/share/alsa/alsa.conf'
+os.environ['SDL_AUDIODRIVER'] = 'alsa'
+os.environ['PYALSA_NO_CHECK'] = '1'
+
 import time
 import sys
 import ctypes
