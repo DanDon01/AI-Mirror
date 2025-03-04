@@ -184,8 +184,8 @@ class AIVoiceModule:
                         "voice": "echo",  # Java's voice
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16",
-                        "input_audio_transcription": {"model": "whisper-1"}
-                        # Omit turn_detection, let server default
+                        "input_audio_transcription": {"model": "whisper-1"},
+                        "turn_detection": None
                     }
                 })
                 self.logger.info("Session configured with Whisper transcription")
