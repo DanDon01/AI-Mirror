@@ -61,7 +61,7 @@ class AIVoiceModule:
             if self.audio_enabled:
                 self.test_audio_setup()
             self.connect_websocket_thread()
-            time.sleep(2)  # Wait for session to stabilize
+            time.sleep(5)  # Wait for session to stabilize
             self.set_status("Ready", "Press SPACE to speak")
             self.logger.info("AIVoiceModule initialization complete")
             print("MIRROR DEBUG: AIVoiceModule initialization complete")
@@ -184,7 +184,7 @@ class AIVoiceModule:
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16",
                         "input_audio_transcription": {"model": "whisper-1"},  # Explicitly set Whisper
-                     #   "turn_detection": None
+                        "turn_detection": None
                     }
                 })
                 self.logger.info("Session configured with Whisper transcription")
@@ -411,7 +411,7 @@ class AIVoiceModule:
                 
                 self.send_ws_message({"type": "input_audio_buffer.commit"})
                 self.logger.info("Audio buffer committed")
-                time.sleep(1)
+                time.sleep(2)
                 timeout = time.time() + 5
                 while not self.transcript_received and time.time() < timeout and self.session_ready:
                     self.logger.info("Waiting for transcription...")
