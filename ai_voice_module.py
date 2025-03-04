@@ -179,7 +179,7 @@ class AIVoiceModule:
                         "voice": "alloy",
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16",
-                        "turn_detection": None  # Disable VAD for manual control
+                        "turn_detection": None  # Disable VAD
                     }
                 })
                 self.logger.info("Session configured with VAD disabled")
@@ -221,9 +221,10 @@ class AIVoiceModule:
                         self.logger.warning(f"Server error detected, retrying response.create (attempt {self.retry_count}/3)")
                         self.retry_response_create()
                     else:
-                        self.logger.error("Max retries reached, giving up")
+                        self.logger.error("Max retries reached, reconnecting WebSocket")
+                        self.reconnect_websocket()
                         self.retry_count = 0
-                        self.set_status("Error", "Failed after retries")
+                        self.set_status("Error", "Failed after retries, reconnected")
                 else:
                     self.retry_count = 0
                 if hasattr(self, "current_response_timestamp"):
@@ -260,10 +261,10 @@ class AIVoiceModule:
         self.session_ready = False
         self.reconnect_websocket()
     def connect_websocket_thread(self):
-        headers = [
-            f"Authorization: Bearer {self.api_key}",
-            "OpenAI-Beta: realtime=v1"
-        ]
+        headers = {
+            f"Authorization": f"Bearer {self.api_key}",
+            "OpenAI-Beta": "realtime=v1",
+        }
         ws_url = f"{self.ws_url}?model={self.model}"
         self.logger.info(f"Connecting to WebSocket URL: {ws_url}")
         
@@ -420,7 +421,7 @@ class AIVoiceModule:
                 shutil.copy2(temp_file_pcm, pcm_saved)
                 self.logger.info(f"Saved PCM data: {pcm_saved} ({os.path.getsize(temp_file_pcm)} bytes)")
                 
-                with open(temp_file_pcm, "rb") as f:
+                with open(pcm_saved, "rb") as f:
                     pcm_data = f.read()
                     
                 if len(pcm_data) > 4800:
@@ -443,18 +444,9 @@ class AIVoiceModule:
                         self.logger.info(f"Audio chunk {(i // chunk_size) + 1}/{total_chunks} sent ({len(chunk)} bytes)")
                         time.sleep(0.25)
                     
-                    # Wait for speech detection to complete
-                    timeout = time.time() + 10
-                    while self.speech_detected and time.time() < timeout and self.session_ready:
-                        self.logger.info("Waiting for speech to stop...")
-                        time.sleep(0.5)
-                    if self.speech_detected:
-                        self.logger.warning("Speech detection timeout, proceeding anyway")
-                    
                     self.send_ws_message({"type": "input_audio_buffer.commit"})
                     self.logger.info("Audio buffer committed")
                     
-                    # Wait for commit confirmation
                     timeout = time.time() + 5
                     while not self.buffer_committed and time.time() < timeout and self.session_ready:
                         self.logger.info("Waiting for buffer commit confirmation...")
@@ -462,7 +454,7 @@ class AIVoiceModule:
                     if not self.buffer_committed:
                         self.logger.warning("Buffer commit timeout, proceeding anyway")
                     
-                    time.sleep(1.0)  # Extra buffer before response
+                    time.sleep(1.0)
                     self.send_ws_message({
                         "type": "response.create",
                         "response": {
