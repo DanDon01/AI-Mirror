@@ -405,8 +405,8 @@ class AIVoiceModule:
                 self.set_status("Error", "No connection")
                 return
                 
-            self.logger.info("Using pre-recorded audio: /home/dan/test.wav")
-            with open("/home/dan/test.wav", "rb") as f:
+            self.logger.info("Using pre-recorded audio: /home/dan/test_spedup.wav")
+            with open("/home/dan/test_spedup.wav", "rb") as f:
                 pcm_data = f.read()
             
             if len(pcm_data) > 4800:
