@@ -81,11 +81,11 @@ class AIVoiceModule:
         if response.status_code == 200:
             models = [m["id"] for m in response.json()["data"]]
             self.logger.info(f"Available models: {models}")
-            self.model = "gpt-4o-realtime-preview-2024-10-01"
-            self.logger.info("Using gpt-4o-realtime-preview-2024-10-01")
+            self.model = "gpt-4o-realtime-preview-2024-12-17"
+            self.logger.info("Using gpt-4o-realtime-preview-2024-12-17")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
-            self.model = "gpt-4o-realtime-preview-2024-10-01"
+            self.model = "gpt-4o-realtime-preview-2024-12-17"
 
     def check_alsa_sanity(self):
         try:
