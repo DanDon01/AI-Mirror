@@ -42,6 +42,9 @@ class AIVoiceModule:
         
         self.ws_url = "wss://api.openai.com/v1/realtime"
         self.send_queue = Queue()
+        self.speech_detected = False
+        self.buffer_committed = False
+        self.retry_count = 0
         
         self.initialize()
 
@@ -175,12 +178,22 @@ class AIVoiceModule:
                         "instructions": "You are a helpful assistant for a smart mirror. Always respond with both text and audio.",
                         "voice": "alloy",
                         "input_audio_format": "pcm16",
-                        "output_audio_format": "pcm16"
+                        "output_audio_format": "pcm16",
+                        "turn_detection": None  # Disable VAD for manual control
                     }
                 })
-                self.logger.info("Session configured")
+                self.logger.info("Session configured with VAD disabled")
             elif event_type == "session.updated":
                 self.logger.info("Session updated successfully")
+            elif event_type == "input_audio_buffer.speech_started":
+                self.logger.info("Speech detected in audio buffer")
+                self.speech_detected = True
+            elif event_type == "input_audio_buffer.speech_stopped":
+                self.logger.info("Speech stopped in audio buffer")
+                self.speech_detected = False
+            elif event_type == "input_audio_buffer.committed":
+                self.logger.info("Audio buffer successfully committed")
+                self.buffer_committed = True
             elif event_type == "response.audio.delta":
                 self.logger.info("Received audio delta from API")
                 audio_data = base64.b64decode(data.get("delta", ""))
@@ -202,6 +215,17 @@ class AIVoiceModule:
             elif event_type == "response.done":
                 self.logger.info("Response completed")
                 self.logger.info(f"Full response data: {json.dumps(data, indent=2)}")
+                if data.get("response", {}).get("status") == "failed" and "server_error" in json.dumps(data):
+                    self.retry_count += 1
+                    if self.retry_count <= 3:
+                        self.logger.warning(f"Server error detected, retrying response.create (attempt {self.retry_count}/3)")
+                        self.retry_response_create()
+                    else:
+                        self.logger.error("Max retries reached, giving up")
+                        self.retry_count = 0
+                        self.set_status("Error", "Failed after retries")
+                else:
+                    self.retry_count = 0
                 if hasattr(self, "current_response_timestamp"):
                     del self.current_response_timestamp
                     del self.chunk_counter
@@ -210,6 +234,21 @@ class AIVoiceModule:
                 self.logger.error(f"API Error: {data.get('error')}")
         except Exception as e:
             self.logger.error(f"Error processing WebSocket message: {e}", exc_info=True)
+
+    def retry_response_create(self):
+        delay = 2 * self.retry_count
+        self.logger.info(f"Retrying response.create in {delay}s (attempt {self.retry_count}/3)")
+        time.sleep(delay)
+        self.send_ws_message({"type": "input_audio_buffer.clear"})
+        time.sleep(0.5)
+        self.send_ws_message({
+            "type": "response.create",
+            "response": {
+                "modalities": ["audio", "text"],
+                "instructions": "Respond with audio and text to the user's query."
+            }
+        })
+        self.set_status("Processing", f"Retrying AI response (attempt {self.retry_count}/3)...")
 
     def on_ws_error(self, ws, error):
         self.logger.error(f"WebSocket error: {error}")
@@ -220,7 +259,6 @@ class AIVoiceModule:
         self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
         self.session_ready = False
         self.reconnect_websocket()
-
     def connect_websocket_thread(self):
         headers = [
             f"Authorization: Bearer {self.api_key}",
@@ -311,6 +349,9 @@ class AIVoiceModule:
             self.set_status("Error", "No connection")
             return
         self.recording = True
+        self.speech_detected = False
+        self.buffer_committed = False
+        self.retry_count = 0
         self.set_status("Listening", "Recording...")
         self.logger.info("Starting recording")
         self.audio_thread = threading.Thread(target=self.stream_audio, daemon=True)
@@ -334,7 +375,7 @@ class AIVoiceModule:
             saved_file = os.path.join(recordings_dir, f"recording_{timestamp}.wav")
             
             env = os.environ.copy()
-            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"  # Fixed: Removed extra bracket
+            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             
             min_record_time = 6
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", temp_file_raw, "-D", self.audio_device]
@@ -400,15 +441,32 @@ class AIVoiceModule:
                         }
                         self.send_ws_message(audio_event)
                         self.logger.info(f"Audio chunk {(i // chunk_size) + 1}/{total_chunks} sent ({len(chunk)} bytes)")
-                        time.sleep(0.1)
+                        time.sleep(0.25)
+                    
+                    # Wait for speech detection to complete
+                    timeout = time.time() + 10
+                    while self.speech_detected and time.time() < timeout and self.session_ready:
+                        self.logger.info("Waiting for speech to stop...")
+                        time.sleep(0.5)
+                    if self.speech_detected:
+                        self.logger.warning("Speech detection timeout, proceeding anyway")
                     
                     self.send_ws_message({"type": "input_audio_buffer.commit"})
                     self.logger.info("Audio buffer committed")
-                    time.sleep(1.5)
+                    
+                    # Wait for commit confirmation
+                    timeout = time.time() + 5
+                    while not self.buffer_committed and time.time() < timeout and self.session_ready:
+                        self.logger.info("Waiting for buffer commit confirmation...")
+                        time.sleep(0.5)
+                    if not self.buffer_committed:
+                        self.logger.warning("Buffer commit timeout, proceeding anyway")
+                    
+                    time.sleep(1.0)  # Extra buffer before response
                     self.send_ws_message({
                         "type": "response.create",
                         "response": {
-                            "modalities": ["audio", "text"],  # Order flipped to prioritize audio
+                            "modalities": ["audio", "text"],
                             "instructions": "Respond with audio and text to the user's query."
                         }
                     })
@@ -426,6 +484,8 @@ class AIVoiceModule:
             self.set_status("Error", f"Streaming failed: {str(e)}")
         finally:
             self.recording = False
+            self.speech_detected = False
+            self.buffer_committed = False
             if not self.session_ready:
                 self.reconnect_websocket()
             else:
