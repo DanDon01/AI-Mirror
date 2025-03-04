@@ -7,7 +7,7 @@ import base64
 import time
 import subprocess
 import shutil
-from queue import Queue
+from queue import Queue, Empty  # Updated import to include Empty
 import websocket
 
 class AIVoiceModule:
@@ -99,20 +99,23 @@ class AIVoiceModule:
                     return
                 else:
                     self.logger.warning("USB mic (card 3) not found in ALSA recording list")
-                    # Test arecord to confirm device functionality despite listing issue
-                    test_file = "/home/dan/tmp/test_alsa_check.wav"
-                    cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", "-d", "1", test_file, "-D", self.audio_device]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                    if result.returncode == 0 and os.path.exists(test_file):
-                        self.logger.info(f"ALSA test recording succeeded with {self.audio_device}, proceeding despite listing issue")
-                        os.remove(test_file)
-                        return
-                    else:
-                        self.logger.error(f"ALSA test recording failed: {result.stderr}")
             else:
                 self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
-            self.logger.error("Failed to confirm USB mic functionality")
-            self.audio_enabled = False
+
+            # Test arecord with environment to confirm device functionality
+            test_file = "/home/dan/tmp/test_alsa_check.wav"
+            env = os.environ.copy()
+            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
+            cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", "-d", "1", test_file, "-D", self.audio_device]
+            self.logger.info(f"Testing arecord with cmd: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
+            if result.returncode == 0 and os.path.exists(test_file):
+                self.logger.info(f"ALSA test recording succeeded with {self.audio_device}, proceeding despite listing issue")
+                os.remove(test_file)
+                return
+            else:
+                self.logger.error(f"ALSA test recording failed: {result.stderr}")
+                self.audio_enabled = False
         except Exception as e:
             self.logger.error(f"ALSA sanity check failed: {e}")
             self.audio_enabled = False
@@ -159,7 +162,6 @@ class AIVoiceModule:
             event_type = data.get("type")
             self.logger.info(f"WebSocket event received: {event_type}")
             
-            # Save raw message for debugging
             debug_dir = "/home/dan/mirror_debug"
             os.makedirs(debug_dir, exist_ok=True)
             timestamp = time.strftime("%Y%m%d_%H%M%S_%f")[:19]
@@ -262,7 +264,7 @@ class AIVoiceModule:
                 self.ws.send(json.dumps(message))
                 self.logger.info(f"Sent message: {message.get('type')}")
                 self.send_queue.task_done()
-            except Queue.Empty:
+            except Empty:  # Fixed to use queue.Empty
                 continue
             except Exception as e:
                 self.logger.error(f"Send loop error: {e}")
@@ -337,7 +339,7 @@ class AIVoiceModule:
             saved_file = os.path.join(recordings_dir, f"recording_{timestamp}.wav")
             
             env = os.environ.copy()
-            env["ALSA_CONFIG_PATH"] = ["/usr/share/alsa/alsa.conf"]
+            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             
             min_record_time = 5
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", temp_file_raw, "-D", self.audio_device]
