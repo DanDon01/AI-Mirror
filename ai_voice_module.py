@@ -174,6 +174,7 @@ class AIVoiceModule:
             if event_type == "session.created":
                 self.logger.info("Session created")
                 self.session_ready = True
+                
                 self.send_ws_message({
                     "type": "session.update",
                     "session": {
@@ -182,17 +183,13 @@ class AIVoiceModule:
                         "instructions": "You are a helpful assistant for a smart mirror.",
                         "voice": "alloy",
                         "input_audio_format": "pcm16",
-                        "input_audio": {
-                            "sample_rate": 24000
-                        },
                         "output_audio_format": "pcm16",
                         "output_audio": {
                             "sample_rate": 24000
-                        },
-                        "input_audio_transcription": {"model": "whisper-1"}
+                        }
                     }
                 })
-                self.logger.info("Session configured with explicit audio parameters")
+                self.logger.info("Session configured with correct parameters")
             elif event_type == "session.updated":
                 self.logger.info("Session updated successfully")
             elif event_type == "input_audio_buffer.speech_started":
