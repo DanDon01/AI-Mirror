@@ -45,6 +45,7 @@ class AIVoiceModule:
         self.speech_detected = False
         self.buffer_committed = False
         self.retry_count = 0
+        self.reconnecting = False  # Prevent multiple reconnects
         
         self.initialize()
 
@@ -77,11 +78,11 @@ class AIVoiceModule:
         if response.status_code == 200:
             models = [m["id"] for m in response.json()["data"]]
             self.logger.info(f"Available models: {models}")
-            self.model = "gpt-4o-realtime-preview-2024-12-17"
-            self.logger.info("Using gpt-4o-realtime-preview-2024-12-17")
+            self.model = "gpt-4o-realtime-preview-2024-10-01"  # Switch to stable model
+            self.logger.info("Using gpt-4o-realtime-preview-2024-10-01")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
-            self.model = "gpt-4o-realtime-preview-2024-12-17"
+            self.model = "gpt-4o-realtime-preview-2024-10-01"
 
     def check_alsa_sanity(self):
         try:
@@ -154,6 +155,18 @@ class AIVoiceModule:
     def on_ws_open(self, ws):
         self.logger.info("WebSocket connected")
         self.ws = ws
+        # Send initial text prompt to prime the conversation
+        self.send_ws_message({
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Hello! I’m ready to talk."}]
+            }
+        })
+        self.send_ws_message({
+            "type": "response.create"
+        })
 
     def on_ws_message(self, ws, message):
         try:
@@ -179,7 +192,7 @@ class AIVoiceModule:
                         "voice": "alloy",
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16",
-                        "turn_detection": None  # Disable VAD
+                        "turn_detection": None
                     }
                 })
                 self.logger.info("Session configured with VAD disabled")
@@ -254,16 +267,19 @@ class AIVoiceModule:
     def on_ws_error(self, ws, error):
         self.logger.error(f"WebSocket error: {error}")
         self.session_ready = False
-        self.reconnect_websocket()
+        if not self.reconnecting:
+            self.reconnect_websocket()
 
     def on_ws_close(self, ws, close_status_code, close_msg):
         self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
         self.session_ready = False
-        self.reconnect_websocket()
+        if not self.reconnecting:
+            self.reconnect_websocket()
+
     def connect_websocket_thread(self):
         headers = {
-            f"Authorization": f"Bearer {self.api_key}",
-            "OpenAI-Beta": "realtime=v1",
+            "Authorization": f"Bearer {self.api_key}",
+            "OpenAI-Beta": "realtime=v1"
         }
         ws_url = f"{self.ws_url}?model={self.model}"
         self.logger.info(f"Connecting to WebSocket URL: {ws_url}")
@@ -303,20 +319,26 @@ class AIVoiceModule:
                 continue
             except Exception as e:
                 self.logger.error(f"Send loop error: {e}")
-                self.reconnect_websocket()
+                if not self.reconnecting:
+                    self.reconnect_websocket()
 
     def send_ws_message(self, data):
         self.send_queue.put(data)
 
     def reconnect_websocket(self):
-        if not self.running:
+        if not self.running or self.reconnecting:
             return
+        self.reconnecting = True
         self.logger.info("Reconnecting WebSocket...")
         if hasattr(self, "ws"):
             try:
                 self.ws.close()
             except:
                 pass
+        if hasattr(self, "ws_thread") and self.ws_thread.is_alive():
+            self.ws_thread.join(timeout=2)
+        if hasattr(self, "ws_thread_send") and self.ws_thread_send.is_alive():
+            self.ws_thread_send.join(timeout=2)
         time.sleep(2)
         self.connect_websocket_thread()
         wait_time = 0
@@ -329,6 +351,7 @@ class AIVoiceModule:
         else:
             self.logger.error("Failed to reconnect WebSocket")
             self.set_status("Error", "Connection failed")
+        self.reconnecting = False
 
     def on_button_press(self):
         self.logger.info("Spacebar pressed")
@@ -419,7 +442,7 @@ class AIVoiceModule:
                 
                 pcm_saved = os.path.join(recordings_dir, f"recording_pcm_{timestamp}.raw")
                 shutil.copy2(temp_file_pcm, pcm_saved)
-                self.logger.info(f"Saved PCM data: {pcm_saved} ({os.path.getsize(temp_file_pcm)} bytes)")
+                self.logger.info(f"Saved PCM data: {pcm_saved} ({os.path.getsize(pcm_saved)} bytes)")
                 
                 with open(pcm_saved, "rb") as f:
                     pcm_data = f.read()
@@ -478,7 +501,7 @@ class AIVoiceModule:
             self.recording = False
             self.speech_detected = False
             self.buffer_committed = False
-            if not self.session_ready:
+            if not self.session_ready and not self.reconnecting:
                 self.reconnect_websocket()
             else:
                 self.set_status("Processing", "Generating response...")
@@ -564,7 +587,7 @@ class AIVoiceModule:
                 pass
         if hasattr(self, "audio_thread") and self.audio_thread.is_alive():
             self.audio_thread.join(timeout=2)
-        if self.ws_thread_send and self.ws_thread_send.is_alive():
+        if hasattr(self, "ws_thread_send") and self.ws_thread_send.is_alive():
             self.ws_thread_send.join(timeout=2)
         if pygame.mixer.get_init():
             pygame.mixer.quit()
