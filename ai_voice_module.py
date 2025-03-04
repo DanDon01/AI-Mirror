@@ -9,6 +9,7 @@ import subprocess
 import shutil
 from queue import Queue, Empty
 import websocket
+import wave  # New import for WAV file writing
 
 class AIVoiceModule:
     def __init__(self, config):
@@ -44,7 +45,7 @@ class AIVoiceModule:
         self.send_queue = Queue()
         self.speech_detected = False
         self.buffer_committed = False
-        self.transcript_received = False  # New flag for waiting on transcription
+        self.transcript_received = False
         self.retry_count = 0
         self.reconnecting = False
         self.audio_chunks = []
@@ -61,7 +62,7 @@ class AIVoiceModule:
             if self.audio_enabled:
                 self.test_audio_setup()
             self.connect_websocket_thread()
-            time.sleep(5)  # Wait for session to stabilize
+            time.sleep(2)
             self.set_status("Ready", "Press SPACE to speak")
             self.logger.info("AIVoiceModule initialization complete")
             print("MIRROR DEBUG: AIVoiceModule initialization complete")
@@ -81,11 +82,11 @@ class AIVoiceModule:
         if response.status_code == 200:
             models = [m["id"] for m in response.json()["data"]]
             self.logger.info(f"Available models: {models}")
-            self.model = "gpt-4o-realtime-preview-2024-12-17"
-            self.logger.info("Using gpt-4o-realtime-preview-2024-12-17")
+            self.model = "gpt-4o-mini-realtime-preview"  # Java's model
+            self.logger.info("Using gpt-4o-mini-realtime-preview")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
-            self.model = "gpt-4o-realtime-preview-2024-12-17"
+            self.model = "gpt-4o-mini-realtime-preview"
 
     def check_alsa_sanity(self):
         try:
@@ -174,22 +175,20 @@ class AIVoiceModule:
             if event_type == "session.created":
                 self.logger.info("Session created")
                 self.session_ready = True
-                
                 self.send_ws_message({
                     "type": "session.update",
                     "session": {
                         "model": self.model,
                         "modalities": ["text", "audio"],
-                        "instructions": "You are a helpful assistant for a smart mirror.",
-                        "voice": "alloy",
+                        "instructions": "You are a helpful assistant for a smart mirror. Always respond with both text and audio.",
+                        "voice": "echo",  # Java's voice
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16",
-                        "output_audio": {
-                            "sample_rate": 24000
-                        }
+                        "input_audio_transcription": {"model": "whisper-1"}
+                        # Omit turn_detection, let server default
                     }
                 })
-                self.logger.info("Session configured with correct parameters")
+                self.logger.info("Session configured with Whisper transcription")
             elif event_type == "session.updated":
                 self.logger.info("Session updated successfully")
             elif event_type == "input_audio_buffer.speech_started":
@@ -278,7 +277,7 @@ class AIVoiceModule:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "OpenAI-Beta": "realtime=v1",
-            "Sec-WebSocket-Protocol": "realtime"  # Added per suggestion
+            "Sec-WebSocket-Protocol": "realtime"
         }
         ws_url = f"{self.ws_url}?model={self.model}"
         self.logger.info(f"Connecting to WebSocket URL: {ws_url}")
@@ -370,13 +369,34 @@ class AIVoiceModule:
         self.recording = True
         self.speech_detected = False
         self.buffer_committed = False
-        self.transcript_received = False  # Reset for new recording
+        self.transcript_received = False
         self.retry_count = 0
         self.audio_chunks = []
         self.set_status("Listening", "Recording...")
         self.logger.info("Starting recording")
         self.audio_thread = threading.Thread(target=self.stream_audio, daemon=True)
         self.audio_thread.start()
+
+    def save_sent_audio(self, chunks, timestamp):
+        """Save the exact audio sent to the API as a WAV file."""
+        recordings_dir = "/home/dan/mirror_recordings"
+        os.makedirs(recordings_dir, exist_ok=True)
+        sent_audio_file = os.path.join(recordings_dir, f"sent_audio_{timestamp}.wav")
+        
+        # Reassemble raw PCM data from chunks
+        pcm_data = b""
+        for chunk in chunks:
+            pcm_data += base64.b64decode(chunk["audio"])
+        
+        # Write as WAV file
+        with wave.open(sent_audio_file, "wb") as wav_file:
+            wav_file.setnchannels(self.channels)
+            wav_file.setsampwidth(2)  # 16-bit = 2 bytes
+            wav_file.setframerate(self.sample_rate)
+            wav_file.writeframes(pcm_data)
+        
+        self.logger.info(f"Saved sent audio to {sent_audio_file} ({len(pcm_data)} bytes)")
+        return sent_audio_file
 
     def stream_audio(self):
         try:
@@ -385,84 +405,49 @@ class AIVoiceModule:
                 self.set_status("Error", "No connection")
                 return
                 
-            # Initialize the test audio if not already done
-            if not hasattr(self, "test_audio_pcm"):
-                self.initialize_audio()
-                
-            pcm_data = self.test_audio_pcm
+            self.logger.info("Using pre-recorded audio: /home/dan/test.wav")
+            with open("/home/dan/test.wav", "rb") as f:
+                pcm_data = f.read()
             
-            if len(pcm_data) > 4800:  # At least 200ms at 24kHz
+            if len(pcm_data) > 4800:
                 self.logger.info(f"PCM data size: {len(pcm_data)} bytes")
-                
-                # Create a copy of the full PCM data for later comparison
-                debug_dir = "/home/dan/mirror_debug"
-                os.makedirs(debug_dir, exist_ok=True)
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                
-                # Save the original PCM data
-                with open(f"{debug_dir}/original_pcm_{timestamp}.raw", "wb") as f:
-                    f.write(pcm_data)
-                self.logger.info(f"Saved original PCM to {debug_dir}/original_pcm_{timestamp}.raw")
-                
-                # Also save as WAV for easy listening
-                self.save_pcm_as_wav(pcm_data, f"{debug_dir}/original_pcm_{timestamp}.wav")
-                
-                # Initialize an array to store sent chunks for reassembly
-                sent_chunks = []
-                
-                # First, clear any existing buffer
-                self.send_ws_message({"type": "input_audio_buffer.clear"})
-                time.sleep(1.0)  # Wait longer for clearing
-                
-                # Send in smaller chunks with longer delays
-                chunk_size = 8000  # Smaller chunks = 333ms each
+                chunk_size = 16000
                 total_chunks = (len(pcm_data) + chunk_size - 1) // chunk_size
-                
                 for i in range(0, len(pcm_data), chunk_size):
                     chunk = pcm_data[i:i + chunk_size]
-                    # Store the chunk before encoding
-                    sent_chunks.append(chunk)
-                    
+                    self.audio_chunks.append({
+                        "audio": base64.b64encode(chunk).decode("utf-8"),
+                        "size": len(chunk)
+                    })
+                    self.logger.info(f"Accumulated chunk {(i // chunk_size) + 1}/{total_chunks} ({len(chunk)} bytes)")
+                
+                # Save the sent audio before transmission
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                sent_audio_file = self.save_sent_audio(self.audio_chunks, timestamp)
+                
+                self.send_ws_message({"type": "input_audio_buffer.clear"})
+                time.sleep(0.5)
+                for chunk in self.audio_chunks:
                     self.send_ws_message({
                         "type": "input_audio_buffer.append",
-                        "audio": base64.b64encode(chunk).decode("utf-8")
+                        "audio": chunk["audio"]
                     })
-                    self.logger.info(f"Sent chunk {(i // chunk_size) + 1}/{total_chunks} ({len(chunk)} bytes)")
-                    time.sleep(0.5)  # Longer delay between chunks
+                    self.logger.info(f"Sent chunk ({chunk['size']} bytes)")
+                    time.sleep(0.25)
                 
-                # Reassemble and save the sent audio chunks
-                reassembled_pcm = b''.join(sent_chunks)
-                with open(f"{debug_dir}/sent_pcm_{timestamp}.raw", "wb") as f:
-                    f.write(reassembled_pcm)
-                self.logger.info(f"Saved reassembled sent chunks to {debug_dir}/sent_pcm_{timestamp}.raw")
-                
-                # Also save as WAV for easy listening
-                self.save_pcm_as_wav(reassembled_pcm, f"{debug_dir}/sent_pcm_{timestamp}.wav")
-                
-                # Wait before committing
-                time.sleep(1.0)
                 self.send_ws_message({"type": "input_audio_buffer.commit"})
                 self.logger.info("Audio buffer committed")
-                
-                # Wait for transcription (up to 10 seconds)
-                transcription_timeout = time.time() + 10
-                while time.time() < transcription_timeout:
-                    if self.transcript_received:
-                        self.logger.info("Transcription received, proceeding")
-                        break
-                    time.sleep(0.5)
-                    self.logger.info("Waiting for transcription...")
-                
-                # Wait longer before requesting response
-                time.sleep(3.0)
-                
-                # Use a simpler response request format
+                time.sleep(1.0)
                 self.send_ws_message({
-                    "type": "response.create"
+                    "type": "response.create",
+                    "response": {
+                        "modalities": ["audio", "text"],
+                        "instructions": "Respond with audio and text to the user's query."
+                    }
                 })
-                
-                self.logger.info("Simple response requested")
+                self.logger.info("Response requested")
                 self.set_status("Processing", "Waiting for AI response...")
+                
         except Exception as e:
             self.logger.error(f"Streaming error: {str(e)}", exc_info=True)
             self.set_status("Error", f"Streaming failed: {str(e)}")
@@ -563,123 +548,6 @@ class AIVoiceModule:
         if pygame.mixer.get_init():
             pygame.mixer.quit()
         self.logger.info("Cleanup complete")
-
-    def initialize_audio(self):
-        try:
-            subprocess.run([
-                "sox", "/home/dan/test.wav",
-                "-r", "24000",  # Sample rate must be 24000Hz
-                "-c", "1",      # Mono
-                "-b", "16",     # 16-bit 
-                "-e", "signed-integer",
-                "/home/dan/test_converted.wav"
-            ], check=True)
-            
-            with open("/home/dan/test_converted.wav", "rb") as f:
-                f.seek(44)
-                self.test_audio_pcm = f.read()
-                
-            self.logger.info(f"Prepared test audio: {len(self.test_audio_pcm)} bytes at 24kHz")
-        except Exception as e:
-            self.logger.error(f"Failed to prepare test audio: {e}")
-
-    def save_pcm_as_wav(self, pcm_data, output_file):
-        """Convert raw PCM data to WAV format for easy playback"""
-        try:
-            # Create a simple WAV header
-            sample_rate = 24000  # Match your PCM data
-            channels = 1         # Mono
-            bits_per_sample = 16 # 16-bit
-            
-            # WAV header components
-            riff = b'RIFF'
-            wave = b'WAVE'
-            fmt = b'fmt '
-            data = b'data'
-            
-            # Calculate sizes
-            data_size = len(pcm_data)
-            fmt_chunk_size = 16  # PCM format
-            file_size = 36 + data_size  # Header (36 bytes) + data
-            
-            # Build the header
-            header = bytearray()
-            
-            # RIFF chunk
-            header.extend(riff)
-            header.extend(file_size.to_bytes(4, byteorder='little'))
-            header.extend(wave)
-            
-            # fmt chunk
-            header.extend(fmt)
-            header.extend(fmt_chunk_size.to_bytes(4, byteorder='little'))
-            header.extend((1).to_bytes(2, byteorder='little'))  # PCM format
-            header.extend(channels.to_bytes(2, byteorder='little'))
-            header.extend(sample_rate.to_bytes(4, byteorder='little'))
-            byte_rate = sample_rate * channels * (bits_per_sample // 8)
-            header.extend(byte_rate.to_bytes(4, byteorder='little'))
-            block_align = channels * (bits_per_sample // 8)
-            header.extend(block_align.to_bytes(2, byteorder='little'))
-            header.extend(bits_per_sample.to_bytes(2, byteorder='little'))
-            
-            # data chunk
-            header.extend(data)
-            header.extend(data_size.to_bytes(4, byteorder='little'))
-            
-            # Write header + data to file
-            with open(output_file, 'wb') as f:
-                f.write(header)
-                f.write(pcm_data)
-                
-            self.logger.info(f"Saved PCM as WAV: {output_file}")
-        except Exception as e:
-            self.logger.error(f"Failed to save PCM as WAV: {e}")
-
-    def diagnose_audio_issues(self, pcm_file):
-        """Check audio file for common issues that might prevent transcription"""
-        try:
-            # Get audio statistics using sox
-            self.logger.info(f"Diagnosing audio file: {pcm_file}")
-            result = subprocess.run(
-                ["sox", "--i", "-s", pcm_file],
-                capture_output=True, 
-                text=True, 
-                check=True
-            )
-            self.logger.info(f"Audio stats:\n{result.stdout}")
-            
-            # Check volume levels with sox stat
-            vol_result = subprocess.run(
-                ["sox", pcm_file, "-n", "stat"],
-                capture_output=True,
-                text=True
-            )
-            self.logger.info(f"Volume stats:\n{vol_result.stderr}")  # sox outputs to stderr
-            
-            # Look for specific issues in the output
-            if "Volume adjustment" in vol_result.stderr:
-                vol_lines = vol_result.stderr.split('\n')
-                for line in vol_lines:
-                    if "RMS" in line:
-                        rms_parts = line.split()
-                        if len(rms_parts) > 2:
-                            rms_level = float(rms_parts[2])
-                            if rms_level < -30:
-                                self.logger.warning(f"Audio is very quiet (RMS: {rms_level}dB)")
-                                self.logger.info("Consider normalizing audio with: sox input.wav output.wav norm")
-            
-            # Look for silence or noise levels
-            silence_result = subprocess.run(
-                ["sox", pcm_file, "-n", "silence", "1", "0.1", "1%"],
-                capture_output=True,
-                text=True
-            )
-            if silence_result.returncode != 0:
-                self.logger.warning("Audio contains long periods of silence")
-            
-            self.logger.info("Audio diagnosis complete")
-        except Exception as e:
-            self.logger.error(f"Audio diagnosis failed: {e}")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
