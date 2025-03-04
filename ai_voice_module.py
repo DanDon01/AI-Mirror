@@ -458,7 +458,7 @@ class AIVoiceModule:
                 shutil.copy2(temp_file_pcm, pcm_saved)
                 self.logger.info(f"Saved PCM data: {pcm_saved} ({os.path.getsize(pcm_saved)} bytes)")
                 
-                with open(pcm_saved, "rb") as f:
+                with open("/home/dan/test.wav", "rb") as f:
                     pcm_data = f.read()
                     
                 if len(pcm_data) > 4800:
