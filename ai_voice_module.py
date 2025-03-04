@@ -7,7 +7,7 @@ import base64
 import time
 import subprocess
 import shutil
-from queue import Queue, Empty  # Updated import to include Empty
+from queue import Queue, Empty
 import websocket
 
 class AIVoiceModule:
@@ -26,8 +26,8 @@ class AIVoiceModule:
         self.audio_enabled = True
         self.audio_device = "hw:3,0"
         
-        self.sample_rate = 24000  # API expects 24000 Hz
-        self.record_rate = 44100  # Your mic records at 44100 Hz
+        self.sample_rate = 24000
+        self.record_rate = 44100
         self.channels = 1
         self.format = "S16_LE"
         self.chunk_size = 1024
@@ -41,7 +41,7 @@ class AIVoiceModule:
                 return
         
         self.ws_url = "wss://api.openai.com/v1/realtime"
-        self.send_queue = Queue()  # For thread-safe WebSocket sending
+        self.send_queue = Queue()
         
         self.initialize()
 
@@ -65,7 +65,6 @@ class AIVoiceModule:
             raise
 
     def test_api_connection(self):
-        """Verify Realtime API access"""
         import requests
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -82,7 +81,6 @@ class AIVoiceModule:
             self.model = "gpt-4o-realtime-preview-2024-12-17"
 
     def check_alsa_sanity(self):
-        """Pre-check ALSA configuration for recording devices"""
         try:
             self.logger.info(f"ALSA environment: {os.environ.get('ALSA_CONFIG_PATH', 'Not set')}")
             playback_result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5)
@@ -102,7 +100,6 @@ class AIVoiceModule:
             else:
                 self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
 
-            # Test arecord with environment to confirm device functionality
             test_file = "/home/dan/tmp/test_alsa_check.wav"
             env = os.environ.copy()
             env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
@@ -121,7 +118,6 @@ class AIVoiceModule:
             self.audio_enabled = False
 
     def test_audio_setup(self):
-        """Test audio setup with arecord"""
         try:
             test_dir = "/home/dan/tmp"
             os.makedirs(test_dir, exist_ok=True)
@@ -176,7 +172,7 @@ class AIVoiceModule:
                     "session": {
                         "model": self.model,
                         "modalities": ["text", "audio"],
-                        "instructions": "You are a helpful assistant for a smart mirror. Respond with both text and audio.",
+                        "instructions": "You are a helpful assistant for a smart mirror. Respond with both text and audio to all queries.",
                         "voice": "alloy",
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16"
@@ -205,6 +201,7 @@ class AIVoiceModule:
                 self.logger.info(f"Received text delta: {text}")
             elif event_type == "response.done":
                 self.logger.info("Response completed")
+                self.logger.info(f"Full response data: {json.dumps(data, indent=2)}")
                 if hasattr(self, "current_response_timestamp"):
                     del self.current_response_timestamp
                     del self.chunk_counter
@@ -254,7 +251,6 @@ class AIVoiceModule:
             self.logger.warning("WebSocket not ready after initialization timeout")
 
     def _send_loop(self):
-        """Handles sending messages from the queue."""
         while self.running:
             try:
                 if not self.session_ready or not hasattr(self, "ws"):
@@ -264,14 +260,13 @@ class AIVoiceModule:
                 self.ws.send(json.dumps(message))
                 self.logger.info(f"Sent message: {message.get('type')}")
                 self.send_queue.task_done()
-            except Empty:  # Fixed to use queue.Empty
+            except Empty:
                 continue
             except Exception as e:
                 self.logger.error(f"Send loop error: {e}")
                 self.reconnect_websocket()
 
     def send_ws_message(self, data):
-        """Enqueue a message to be sent."""
         self.send_queue.put(data)
 
     def reconnect_websocket(self):
@@ -339,9 +334,9 @@ class AIVoiceModule:
             saved_file = os.path.join(recordings_dir, f"recording_{timestamp}.wav")
             
             env = os.environ.copy()
-            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
+            env["ALSA_CONFIG_PATH"] = ["/usr/share/alsa/alsa.conf"]
             
-            min_record_time = 5
+            min_record_time = 6  # Ensure sufficient audio
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", temp_file_raw, "-D", self.audio_device]
             self.logger.info(f"Running arecord command: {' '.join(cmd)}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
@@ -387,12 +382,13 @@ class AIVoiceModule:
                 with open(temp_file_pcm, "rb") as f:
                     pcm_data = f.read()
                     
-                if len(pcm_data) > 4800:
+                if len(pcm_data) > 4800:  # At least 200ms
                     self.logger.info(f"PCM data size: {len(pcm_data)} bytes")
                     self.send_ws_message({"type": "input_audio_buffer.clear"})
-                    time.sleep(0.2)
+                    time.sleep(0.5)  # Increased delay for buffer clear
                     
                     chunk_size = 16000
+                    total_chunks = (len(pcm_data) + chunk_size - 1) // chunk_size
                     for i in range(0, len(pcm_data), chunk_size):
                         if not self.session_ready:
                             self.logger.error("WebSocket connection lost")
@@ -403,18 +399,20 @@ class AIVoiceModule:
                             "audio": base64.b64encode(chunk).decode("utf-8")
                         }
                         self.send_ws_message(audio_event)
-                        self.logger.info(f"Audio chunk {(i // chunk_size) + 1}/{len(pcm_data) // chunk_size + 1} sent ({len(chunk)} bytes)")
+                        self.logger.info(f"Audio chunk {(i // chunk_size) + 1}/{total_chunks} sent ({len(chunk)} bytes)")
                         time.sleep(0.1)
                     
-                    time.sleep(0.5)
                     self.send_ws_message({"type": "input_audio_buffer.commit"})
                     self.logger.info("Audio buffer committed")
-                    time.sleep(1.0)
+                    time.sleep(1.5)  # Increased delay to ensure commit is processed
                     self.send_ws_message({
                         "type": "response.create",
-                        "response": {"modalities": ["text", "audio"]}
+                        "response": {
+                            "modalities": ["text", "audio"],
+                            "instructions": "Provide a response with both text and audio output."
+                        }
                     })
-                    self.logger.info("Response requested from API")
+                    self.logger.info("Response requested from API with forced audio output")
                     self.set_status("Processing", "Waiting for AI response...")
                 
                 for f in [temp_file_raw, temp_file_pcm]:
