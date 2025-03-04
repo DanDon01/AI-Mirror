@@ -412,14 +412,14 @@ class AIVoiceModule:
                 self.send_ws_message({"type": "input_audio_buffer.commit"})
                 self.logger.info("Audio buffer committed")
                 time.sleep(1)
-          #      timeout = time.time() + 5
-          #      while not self.transcript_received and time.time() < timeout and self.session_ready:
-          #          self.logger.info("Waiting for transcription...")
-          #          time.sleep(0.5)
-          #      if not self.transcript_received:
-          #          self.logger.warning("Transcription timeout, proceeding anyway")
-          #      
-          #      time.sleep(1.0)
+                timeout = time.time() + 5
+                while not self.transcript_received and time.time() < timeout and self.session_ready:
+                    self.logger.info("Waiting for transcription...")
+                    time.sleep(0.5)
+                if not self.transcript_received:
+                    self.logger.warning("Transcription timeout, proceeding anyway")
+                
+                time.sleep(5.0)
                 self.send_ws_message({
                     "type": "response.create",
                     "response": {
