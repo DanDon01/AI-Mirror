@@ -172,7 +172,7 @@ class AIVoiceModule:
                     "session": {
                         "model": self.model,
                         "modalities": ["text", "audio"],
-                        "instructions": "You are a helpful assistant for a smart mirror. Respond with both text and audio to all queries.",
+                        "instructions": "You are a helpful assistant for a smart mirror. Always respond with both text and audio.",
                         "voice": "alloy",
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16"
@@ -334,9 +334,9 @@ class AIVoiceModule:
             saved_file = os.path.join(recordings_dir, f"recording_{timestamp}.wav")
             
             env = os.environ.copy()
-            env["ALSA_CONFIG_PATH"] = ["/usr/share/alsa/alsa.conf"]
+            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"  # Fixed: Removed extra bracket
             
-            min_record_time = 6  # Ensure sufficient audio
+            min_record_time = 6
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", temp_file_raw, "-D", self.audio_device]
             self.logger.info(f"Running arecord command: {' '.join(cmd)}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
@@ -382,10 +382,10 @@ class AIVoiceModule:
                 with open(temp_file_pcm, "rb") as f:
                     pcm_data = f.read()
                     
-                if len(pcm_data) > 4800:  # At least 200ms
+                if len(pcm_data) > 4800:
                     self.logger.info(f"PCM data size: {len(pcm_data)} bytes")
                     self.send_ws_message({"type": "input_audio_buffer.clear"})
-                    time.sleep(0.5)  # Increased delay for buffer clear
+                    time.sleep(0.5)
                     
                     chunk_size = 16000
                     total_chunks = (len(pcm_data) + chunk_size - 1) // chunk_size
@@ -404,15 +404,15 @@ class AIVoiceModule:
                     
                     self.send_ws_message({"type": "input_audio_buffer.commit"})
                     self.logger.info("Audio buffer committed")
-                    time.sleep(1.5)  # Increased delay to ensure commit is processed
+                    time.sleep(1.5)
                     self.send_ws_message({
                         "type": "response.create",
                         "response": {
-                            "modalities": ["text", "audio"],
-                            "instructions": "Provide a response with both text and audio output."
+                            "modalities": ["audio", "text"],  # Order flipped to prioritize audio
+                            "instructions": "Respond with audio and text to the user's query."
                         }
                     })
-                    self.logger.info("Response requested from API with forced audio output")
+                    self.logger.info("Response requested from API")
                     self.set_status("Processing", "Waiting for AI response...")
                 
                 for f in [temp_file_raw, temp_file_pcm]:
