@@ -45,7 +45,8 @@ class AIVoiceModule:
         self.speech_detected = False
         self.buffer_committed = False
         self.retry_count = 0
-        self.reconnecting = False  # Prevent multiple reconnects
+        self.reconnecting = False
+        self.audio_chunks = []  # Accumulate chunks here
         
         self.initialize()
 
@@ -59,6 +60,8 @@ class AIVoiceModule:
             if self.audio_enabled:
                 self.test_audio_setup()
             self.connect_websocket_thread()
+            time.sleep(2)  # Wait for session to stabilize
+            self.send_initial_prompt()
             self.set_status("Ready", "Press SPACE to speak")
             self.logger.info("AIVoiceModule initialization complete")
             print("MIRROR DEBUG: AIVoiceModule initialization complete")
@@ -78,7 +81,7 @@ class AIVoiceModule:
         if response.status_code == 200:
             models = [m["id"] for m in response.json()["data"]]
             self.logger.info(f"Available models: {models}")
-            self.model = "gpt-4o-realtime-preview-2024-10-01"  # Switch to stable model
+            self.model = "gpt-4o-realtime-preview-2024-10-01"
             self.logger.info("Using gpt-4o-realtime-preview-2024-10-01")
         else:
             self.logger.error(f"API test failed: {response.status_code} - {response.text}")
@@ -155,7 +158,12 @@ class AIVoiceModule:
     def on_ws_open(self, ws):
         self.logger.info("WebSocket connected")
         self.ws = ws
-        # Send initial text prompt to prime the conversation
+
+    def send_initial_prompt(self):
+        if not self.session_ready:
+            self.logger.warning("Session not ready, skipping initial prompt")
+            return
+        self.logger.info("Sending initial conversation prompt")
         self.send_ws_message({
             "type": "conversation.item.create",
             "item": {
@@ -164,8 +172,13 @@ class AIVoiceModule:
                 "content": [{"type": "input_text", "text": "Hello! I’m ready to talk."}]
             }
         })
+        time.sleep(1)  # Wait for item to process
         self.send_ws_message({
-            "type": "response.create"
+            "type": "response.create",
+            "response": {
+                "modalities": ["text", "audio"],
+                "instructions": "Respond with a greeting and confirm you’re ready."
+            }
         })
 
     def on_ws_message(self, ws, message):
@@ -376,6 +389,7 @@ class AIVoiceModule:
         self.speech_detected = False
         self.buffer_committed = False
         self.retry_count = 0
+        self.audio_chunks = []  # Reset chunk accumulator
         self.set_status("Listening", "Recording...")
         self.logger.info("Starting recording")
         self.audio_thread = threading.Thread(target=self.stream_audio, daemon=True)
@@ -449,22 +463,25 @@ class AIVoiceModule:
                     
                 if len(pcm_data) > 4800:
                     self.logger.info(f"PCM data size: {len(pcm_data)} bytes")
-                    self.send_ws_message({"type": "input_audio_buffer.clear"})
-                    time.sleep(0.5)
-                    
                     chunk_size = 16000
                     total_chunks = (len(pcm_data) + chunk_size - 1) // chunk_size
                     for i in range(0, len(pcm_data), chunk_size):
-                        if not self.session_ready:
-                            self.logger.error("WebSocket connection lost")
-                            break
                         chunk = pcm_data[i:i + chunk_size]
-                        audio_event = {
+                        self.audio_chunks.append({
+                            "audio": base64.b64encode(chunk).decode("utf-8"),
+                            "size": len(chunk)
+                        })
+                        self.logger.info(f"Accumulated audio chunk {(i // chunk_size) + 1}/{total_chunks} ({len(chunk)} bytes)")
+                    
+                    # Send accumulated chunks
+                    self.send_ws_message({"type": "input_audio_buffer.clear"})
+                    time.sleep(0.5)
+                    for chunk in self.audio_chunks:
+                        self.send_ws_message({
                             "type": "input_audio_buffer.append",
-                            "audio": base64.b64encode(chunk).decode("utf-8")
-                        }
-                        self.send_ws_message(audio_event)
-                        self.logger.info(f"Audio chunk {(i // chunk_size) + 1}/{total_chunks} sent ({len(chunk)} bytes)")
+                            "audio": chunk["audio"]
+                        })
+                        self.logger.info(f"Sent accumulated chunk ({chunk['size']} bytes)")
                         time.sleep(0.25)
                     
                     self.send_ws_message({"type": "input_audio_buffer.commit"})
@@ -501,6 +518,7 @@ class AIVoiceModule:
             self.recording = False
             self.speech_detected = False
             self.buffer_committed = False
+            self.audio_chunks = []
             if not self.session_ready and not self.reconnecting:
                 self.reconnect_websocket()
             else:
