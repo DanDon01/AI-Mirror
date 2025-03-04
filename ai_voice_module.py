@@ -36,7 +36,7 @@ class AIVoiceModule:
         if not self.api_key:
             self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_VOICE_KEY")
             if not self.api_key:
-                self.logger.error("No OpenAI API key found in config or environment")
+                self.logger.error("No OpenAI API key found")
                 self.set_status("Error", "No API key")
                 return
         
@@ -46,7 +46,7 @@ class AIVoiceModule:
         self.buffer_committed = False
         self.retry_count = 0
         self.reconnecting = False
-        self.audio_chunks = []  # Accumulate chunks here
+        self.audio_chunks = []
         
         self.initialize()
 
@@ -61,7 +61,7 @@ class AIVoiceModule:
                 self.test_audio_setup()
             self.connect_websocket_thread()
             time.sleep(2)  # Wait for session to stabilize
-            self.send_initial_prompt()
+            # Skip initial prompt to test bare session
             self.set_status("Ready", "Press SPACE to speak")
             self.logger.info("AIVoiceModule initialization complete")
             print("MIRROR DEBUG: AIVoiceModule initialization complete")
@@ -100,10 +100,10 @@ class AIVoiceModule:
             if record_result.returncode == 0:
                 self.logger.info("ALSA recording devices:\n" + record_result.stdout)
                 if "card 3" in record_result.stdout.lower():
-                    self.logger.info("Confirmed USB mic (card 3) is present for recording")
+                    self.logger.info("Confirmed USB mic (card 3)")
                     return
                 else:
-                    self.logger.warning("USB mic (card 3) not found in ALSA recording list")
+                    self.logger.warning("USB mic (card 3) not found")
             else:
                 self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
 
@@ -111,14 +111,14 @@ class AIVoiceModule:
             env = os.environ.copy()
             env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
             cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", "-d", "1", test_file, "-D", self.audio_device]
-            self.logger.info(f"Testing arecord with cmd: {' '.join(cmd)}")
+            self.logger.info(f"Testing arecord: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
             if result.returncode == 0 and os.path.exists(test_file):
-                self.logger.info(f"ALSA test recording succeeded with {self.audio_device}, proceeding despite listing issue")
+                self.logger.info(f"ALSA test succeeded with {self.audio_device}")
                 os.remove(test_file)
                 return
             else:
-                self.logger.error(f"ALSA test recording failed: {result.stderr}")
+                self.logger.error(f"ALSA test failed: {result.stderr}")
                 self.audio_enabled = False
         except Exception as e:
             self.logger.error(f"ALSA sanity check failed: {e}")
@@ -147,9 +147,9 @@ class AIVoiceModule:
                     os.remove(test_file)
                     return
                 else:
-                    self.logger.warning(f"Audio test with {self.audio_device} failed: {result.stderr}")
+                    self.logger.warning(f"Audio test failed: {result.stderr}")
                 time.sleep(1)
-            self.logger.error("All audio tests failed after retries")
+            self.logger.error("All audio tests failed")
             self.audio_enabled = False
         except Exception as e:
             self.logger.error(f"Audio test setup failed: {e}")
@@ -158,28 +158,6 @@ class AIVoiceModule:
     def on_ws_open(self, ws):
         self.logger.info("WebSocket connected")
         self.ws = ws
-
-    def send_initial_prompt(self):
-        if not self.session_ready:
-            self.logger.warning("Session not ready, skipping initial prompt")
-            return
-        self.logger.info("Sending initial conversation prompt")
-        self.send_ws_message({
-            "type": "conversation.item.create",
-            "item": {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": "Hello! I’m ready to talk."}]
-            }
-        })
-        time.sleep(1)  # Wait for item to process
-        self.send_ws_message({
-            "type": "response.create",
-            "response": {
-                "modalities": ["text", "audio"],
-                "instructions": "Respond with a greeting and confirm you’re ready."
-            }
-        })
 
     def on_ws_message(self, ws, message):
         try:
@@ -212,16 +190,16 @@ class AIVoiceModule:
             elif event_type == "session.updated":
                 self.logger.info("Session updated successfully")
             elif event_type == "input_audio_buffer.speech_started":
-                self.logger.info("Speech detected in audio buffer")
+                self.logger.info("Speech detected")
                 self.speech_detected = True
             elif event_type == "input_audio_buffer.speech_stopped":
-                self.logger.info("Speech stopped in audio buffer")
+                self.logger.info("Speech stopped")
                 self.speech_detected = False
             elif event_type == "input_audio_buffer.committed":
-                self.logger.info("Audio buffer successfully committed")
+                self.logger.info("Audio buffer committed")
                 self.buffer_committed = True
             elif event_type == "response.audio.delta":
-                self.logger.info("Received audio delta from API")
+                self.logger.info("Received audio delta")
                 audio_data = base64.b64decode(data.get("delta", ""))
                 self.logger.info(f"Decoded audio chunk: {len(audio_data)} bytes")
                 audio_dir = "/home/dan/mirror_recordings/response_audio"
@@ -244,13 +222,14 @@ class AIVoiceModule:
                 if data.get("response", {}).get("status") == "failed" and "server_error" in json.dumps(data):
                     self.retry_count += 1
                     if self.retry_count <= 3:
-                        self.logger.warning(f"Server error detected, retrying response.create (attempt {self.retry_count}/3)")
+                        self.logger.warning(f"Server error, retrying (attempt {self.retry_count}/3)")
                         self.retry_response_create()
                     else:
-                        self.logger.error("Max retries reached, reconnecting WebSocket")
-                        self.reconnect_websocket()
+                        self.logger.error("Max retries reached, will reconnect on next failure")
                         self.retry_count = 0
-                        self.set_status("Error", "Failed after retries, reconnected")
+                        self.set_status("Error", "Failed after retries")
+                        # Defer reconnect to avoid thread join issue
+                        threading.Thread(target=self.reconnect_websocket, daemon=True).start()
                 else:
                     self.retry_count = 0
                 if hasattr(self, "current_response_timestamp"):
@@ -281,13 +260,13 @@ class AIVoiceModule:
         self.logger.error(f"WebSocket error: {error}")
         self.session_ready = False
         if not self.reconnecting:
-            self.reconnect_websocket()
+            threading.Thread(target=self.reconnect_websocket, daemon=True).start()
 
     def on_ws_close(self, ws, close_status_code, close_msg):
         self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
         self.session_ready = False
         if not self.reconnecting:
-            self.reconnect_websocket()
+            threading.Thread(target=self.reconnect_websocket, daemon=True).start()
 
     def connect_websocket_thread(self):
         headers = {
@@ -316,7 +295,7 @@ class AIVoiceModule:
         while not self.session_ready and time.time() - start_time < 10:
             time.sleep(0.5)
         if not self.session_ready:
-            self.logger.warning("WebSocket not ready after initialization timeout")
+            self.logger.warning("WebSocket not ready after timeout")
 
     def _send_loop(self):
         while self.running:
@@ -333,7 +312,7 @@ class AIVoiceModule:
             except Exception as e:
                 self.logger.error(f"Send loop error: {e}")
                 if not self.reconnecting:
-                    self.reconnect_websocket()
+                    threading.Thread(target=self.reconnect_websocket, daemon=True).start()
 
     def send_ws_message(self, data):
         self.send_queue.put(data)
@@ -348,10 +327,6 @@ class AIVoiceModule:
                 self.ws.close()
             except:
                 pass
-        if hasattr(self, "ws_thread") and self.ws_thread.is_alive():
-            self.ws_thread.join(timeout=2)
-        if hasattr(self, "ws_thread_send") and self.ws_thread_send.is_alive():
-            self.ws_thread_send.join(timeout=2)
         time.sleep(2)
         self.connect_websocket_thread()
         wait_time = 0
@@ -373,7 +348,7 @@ class AIVoiceModule:
             self.set_status("Error", "Not connected")
             return
         if not self.audio_enabled:
-            self.logger.warning("Audio disabled, cannot record")
+            self.logger.warning("Audio disabled")
             return
         if self.recording:
             self.stop_recording()
@@ -389,7 +364,7 @@ class AIVoiceModule:
         self.speech_detected = False
         self.buffer_committed = False
         self.retry_count = 0
-        self.audio_chunks = []  # Reset chunk accumulator
+        self.audio_chunks = []
         self.set_status("Listening", "Recording...")
         self.logger.info("Starting recording")
         self.audio_thread = threading.Thread(target=self.stream_audio, daemon=True)
@@ -398,118 +373,56 @@ class AIVoiceModule:
     def stream_audio(self):
         try:
             if not hasattr(self, "ws") or not self.session_ready:
-                self.logger.error("No active WebSocket session before recording")
+                self.logger.error("No active WebSocket session")
                 self.set_status("Error", "No connection")
                 return
                 
-            self.logger.info("Streaming audio with arecord")
-            temp_dir = "/home/dan/tmp"
-            recordings_dir = "/home/dan/mirror_recordings"
-            os.makedirs(temp_dir, exist_ok=True)
-            os.makedirs(recordings_dir, exist_ok=True)
+            self.logger.info("Using pre-recorded audio: /home/dan/test.wav")
+            with open("/home/dan/test.wav", "rb") as f:
+                pcm_data = f.read()
             
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            temp_file_raw = os.path.join(temp_dir, f"mirror_rec_{timestamp}.wav")
-            saved_file = os.path.join(recordings_dir, f"recording_{timestamp}.wav")
-            
-            env = os.environ.copy()
-            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
-            
-            min_record_time = 6
-            cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", temp_file_raw, "-D", self.audio_device]
-            self.logger.info(f"Running arecord command: {' '.join(cmd)}")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-            
-            start_time = time.time()
-            while self.recording and self.session_ready and (time.time() - start_time) < 60:
-                elapsed = time.time() - start_time
-                if elapsed < min_record_time:
-                    self.set_status("Listening", f"Recording... ({min_record_time-elapsed:.1f}s)")
-                else:
-                    self.set_status("Listening", "Recording... (press SPACE to stop)")
-                time.sleep(0.1)
-            
-            process.terminate()
-            process.wait(timeout=2)
-            
-            if os.path.exists(temp_file_raw):
-                file_size = os.path.getsize(temp_file_raw)
-                self.logger.info(f"Raw recording: {temp_file_raw} ({file_size} bytes)")
-                shutil.copy2(temp_file_raw, saved_file)
-                self.logger.info(f"Saved copy of recording to: {saved_file}")
-                
-                temp_file_pcm = os.path.join(temp_dir, f"mirror_rec_{timestamp}.raw")
-                convert_cmd = [
-                    "sox", temp_file_raw,
-                    "-r", str(self.sample_rate),
-                    "-c", "1",
-                    "-b", "16",
-                    "-e", "signed-integer",
-                    "-t", "raw",
-                    temp_file_pcm
-                ]
-                self.logger.info(f"Converting audio: {' '.join(convert_cmd)}")
-                result = subprocess.run(convert_cmd, capture_output=True, text=True, env=env)
-                if result.returncode != 0:
-                    self.logger.error(f"Audio conversion failed: {result.stderr}")
-                    return
-                
-                pcm_saved = os.path.join(recordings_dir, f"recording_pcm_{timestamp}.raw")
-                shutil.copy2(temp_file_pcm, pcm_saved)
-                self.logger.info(f"Saved PCM data: {pcm_saved} ({os.path.getsize(pcm_saved)} bytes)")
-                
-                with open("/home/dan/test.wav", "rb") as f:
-                    pcm_data = f.read()
-                    
-                if len(pcm_data) > 4800:
-                    self.logger.info(f"PCM data size: {len(pcm_data)} bytes")
-                    chunk_size = 16000
-                    total_chunks = (len(pcm_data) + chunk_size - 1) // chunk_size
-                    for i in range(0, len(pcm_data), chunk_size):
-                        chunk = pcm_data[i:i + chunk_size]
-                        self.audio_chunks.append({
-                            "audio": base64.b64encode(chunk).decode("utf-8"),
-                            "size": len(chunk)
-                        })
-                        self.logger.info(f"Accumulated audio chunk {(i // chunk_size) + 1}/{total_chunks} ({len(chunk)} bytes)")
-                    
-                    # Send accumulated chunks
-                    self.send_ws_message({"type": "input_audio_buffer.clear"})
-                    time.sleep(0.5)
-                    for chunk in self.audio_chunks:
-                        self.send_ws_message({
-                            "type": "input_audio_buffer.append",
-                            "audio": chunk["audio"]
-                        })
-                        self.logger.info(f"Sent accumulated chunk ({chunk['size']} bytes)")
-                        time.sleep(0.25)
-                    
-                    self.send_ws_message({"type": "input_audio_buffer.commit"})
-                    self.logger.info("Audio buffer committed")
-                    
-                    timeout = time.time() + 5
-                    while not self.buffer_committed and time.time() < timeout and self.session_ready:
-                        self.logger.info("Waiting for buffer commit confirmation...")
-                        time.sleep(0.5)
-                    if not self.buffer_committed:
-                        self.logger.warning("Buffer commit timeout, proceeding anyway")
-                    
-                    time.sleep(1.0)
-                    self.send_ws_message({
-                        "type": "response.create",
-                        "response": {
-                            "modalities": ["audio", "text"],
-                            "instructions": "Respond with audio and text to the user's query."
-                        }
+            if len(pcm_data) > 4800:
+                self.logger.info(f"PCM data size: {len(pcm_data)} bytes")
+                chunk_size = 16000
+                total_chunks = (len(pcm_data) + chunk_size - 1) // chunk_size
+                for i in range(0, len(pcm_data), chunk_size):
+                    chunk = pcm_data[i:i + chunk_size]
+                    self.audio_chunks.append({
+                        "audio": base64.b64encode(chunk).decode("utf-8"),
+                        "size": len(chunk)
                     })
-                    self.logger.info("Response requested from API")
-                    self.set_status("Processing", "Waiting for AI response...")
+                    self.logger.info(f"Accumulated chunk {(i // chunk_size) + 1}/{total_chunks} ({len(chunk)} bytes)")
                 
-                for f in [temp_file_raw, temp_file_pcm]:
-                    if os.path.exists(f):
-                        os.remove(f)
-            else:
-                self.logger.error(f"Raw recording file not found: {temp_file_raw}")
+                self.send_ws_message({"type": "input_audio_buffer.clear"})
+                time.sleep(0.5)
+                for chunk in self.audio_chunks:
+                    self.send_ws_message({
+                        "type": "input_audio_buffer.append",
+                        "audio": chunk["audio"]
+                    })
+                    self.logger.info(f"Sent chunk ({chunk['size']} bytes)")
+                    time.sleep(0.25)
+                
+                self.send_ws_message({"type": "input_audio_buffer.commit"})
+                self.logger.info("Audio buffer committed")
+                
+                timeout = time.time() + 5
+                while not self.buffer_committed and time.time() < timeout and self.session_ready:
+                    self.logger.info("Waiting for commit confirmation...")
+                    time.sleep(0.5)
+                if not self.buffer_committed:
+                    self.logger.warning("Commit timeout, proceeding")
+                
+                time.sleep(1.0)
+                self.send_ws_message({
+                    "type": "response.create",
+                    "response": {
+                        "modalities": ["audio", "text"],
+                        "instructions": "Respond with audio and text to the user's query."
+                    }
+                })
+                self.logger.info("Response requested")
+                self.set_status("Processing", "Waiting for AI response...")
                 
         except Exception as e:
             self.logger.error(f"Streaming error: {str(e)}", exc_info=True)
@@ -520,7 +433,7 @@ class AIVoiceModule:
             self.buffer_committed = False
             self.audio_chunks = []
             if not self.session_ready and not self.reconnecting:
-                self.reconnect_websocket()
+                threading.Thread(target=self.reconnect_websocket, daemon=True).start()
             else:
                 self.set_status("Processing", "Generating response...")
 
@@ -533,13 +446,13 @@ class AIVoiceModule:
         try:
             self.logger.info(f"Attempting to play {len(audio_data)} bytes")
             if len(audio_data) < 100:
-                self.logger.warning(f"Audio data too small to play: {len(audio_data)} bytes")
+                self.logger.warning(f"Audio data too small: {len(audio_data)} bytes")
                 return
                 
             if not pygame.mixer.get_init():
                 try:
                     pygame.mixer.init(frequency=self.sample_rate, size=-16, channels=1)
-                    self.logger.info("Initialized pygame mixer with 24000 Hz, 16-bit, mono")
+                    self.logger.info("Initialized pygame mixer: 24000 Hz, 16-bit, mono")
                 except Exception as e:
                     self.logger.error(f"Failed to initialize pygame mixer: {e}")
                     return
