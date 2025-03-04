@@ -180,11 +180,11 @@ class AIVoiceModule:
                         "model": self.model,
                         "modalities": ["text", "audio"],
                         "instructions": "You are a helpful assistant for a smart mirror. Always respond with both text and audio.",
-                        "voice": "alloy",
+                        "voice": "echo",
                         "input_audio_format": "pcm16",
                         "output_audio_format": "pcm16",
                         "input_audio_transcription": {"model": "whisper-1"},  # Explicitly set Whisper
-                        "turn_detection": None
+                     #   "turn_detection": None
                     }
                 })
                 self.logger.info("Session configured with Whisper transcription")
@@ -411,15 +411,15 @@ class AIVoiceModule:
                 
                 self.send_ws_message({"type": "input_audio_buffer.commit"})
                 self.logger.info("Audio buffer committed")
-                
-                timeout = time.time() + 5
-                while not self.transcript_received and time.time() < timeout and self.session_ready:
-                    self.logger.info("Waiting for transcription...")
-                    time.sleep(0.5)
-                if not self.transcript_received:
-                    self.logger.warning("Transcription timeout, proceeding anyway")
-                
-                time.sleep(1.0)
+                time.sleep(1)
+          #      timeout = time.time() + 5
+          #      while not self.transcript_received and time.time() < timeout and self.session_ready:
+          #          self.logger.info("Waiting for transcription...")
+          #          time.sleep(0.5)
+          #      if not self.transcript_received:
+          #          self.logger.warning("Transcription timeout, proceeding anyway")
+          #      
+          #      time.sleep(1.0)
                 self.send_ws_message({
                     "type": "response.create",
                     "response": {
