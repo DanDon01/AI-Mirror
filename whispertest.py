@@ -8,7 +8,7 @@ from dotenv import load_dotenv  # For loading .env file
 import openai
 
 # Load environment variables from environment.env outside the Git folder
-env_path = Path(__file__).parent.parent / "environment.env"  # Adjust path as needed
+env_path = Path(__file__).parent.parent / "Variables.env"  # Adjust path as needed
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 else:
