@@ -65,8 +65,8 @@ class AudioTester:
 
     def run_tests(self):
         # Test with normal 10s test.wav
-        normal_audio_path = "/home/dan/test.wav"
-        self.logger.info("Testing normal-speed audio:")
+        normal_audio_path = "/home/dan/test_slow.wav"
+        self.logger.info("Testing Slow-speed audio:")
         self.transcribe_audio(normal_audio_path)
 
         # Test with sped-up test_spedup.wav
