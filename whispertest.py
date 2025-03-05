@@ -1,20 +1,29 @@
 #!/usr/bin/env python
-import os
+
 import time
 from pathlib import Path
+import os
 import openai
 
-def __init__(self, config):
-        self.api_key = self.config.get("openai", {}).get("api_key")
-        if not self.api_key:
-            self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_VOICE_KEY")
-            if not self.api_key:
-                self.logger.error("No OpenAI API key found")
-                self.set_status("Error", "No API key")
-                return
-            
-# Initialize OpenAI client (assumes OPENAI_API_KEY in env)
-openai_client = openai.OpenAI()            
+def get_api_key(config=None):
+    """Fetch OpenAI API key from config or environment variables."""
+    if config and isinstance(config, dict):
+        api_key = config.get("openai", {}).get("api_key")
+        if api_key:
+            return api_key
+    return os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_VOICE_KEY")
+
+# Config matching your AIVoiceModule
+CONFIG = {
+    "openai": {"api_key": "your-api-key-here"},
+    "audio": {"device_index": 3}
+}
+
+# Initialize OpenAI client
+api_key = get_api_key(CONFIG)
+if not api_key:
+    raise ValueError("No OpenAI API key found in config or environment variables")
+openai_client = openai.OpenAI(api_key=api_key)
 
 def transcribe_audio(audio_file_path: str) -> None:
     """Transcribe an audio file using Whisper via the standard OpenAI API."""
@@ -48,7 +57,7 @@ def main() -> None:
     transcribe_audio(spedup_audio_path)
 
     # Optional: Test with a sent_audio_<timestamp>.wav from your last run
-    # Replace <timestamp> with the actual value from your log
+    # Replace <timestamp> with the actual value from your log (e.g., from 23:55:10 run)
     sent_audio_path = "/home/dan/mirror_recordings/sent_audio_20250304_235510.wav"  # Example
     print("\nTesting sent audio from Realtime API:")
     transcribe_audio(sent_audio_path)
