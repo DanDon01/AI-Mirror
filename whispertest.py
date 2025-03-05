@@ -1,11 +1,20 @@
 #!/usr/bin/env python
-
+import os
 import time
 from pathlib import Path
 import openai
 
+def __init__(self, config):
+        self.api_key = self.config.get("openai", {}).get("api_key")
+        if not self.api_key:
+            self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_VOICE_KEY")
+            if not self.api_key:
+                self.logger.error("No OpenAI API key found")
+                self.set_status("Error", "No API key")
+                return
+            
 # Initialize OpenAI client (assumes OPENAI_API_KEY in env)
-openai_client = openai.OpenAI()
+openai_client = openai.OpenAI()            
 
 def transcribe_audio(audio_file_path: str) -> None:
     """Transcribe an audio file using Whisper via the standard OpenAI API."""
