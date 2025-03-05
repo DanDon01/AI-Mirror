@@ -4,23 +4,23 @@ import time
 from pathlib import Path
 import os
 import logging
-from dotenv import load_dotenv  # For loading .env file
+from dotenv import load_dotenv
 import openai
 
-# Load environment variables from environment.env outside the Git folder
-env_path = Path(__file__).parent.parent / "Variables.env"  # Adjust path as needed
+# Load environment variables from environment.env
+env_path = Path(__file__).parent.parent / "Variables.env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 else:
     print(f"Warning: {env_path} not found. Relying on system environment variables.")
 
-# Set up logging like AIVoiceModule
+# Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 logger = logging.getLogger("AudioTest")
 
-# Config matching your AIVoiceModule (optional, can be empty if using .env)
+# Config (optional, can be empty if using .env)
 CONFIG = {
-    "openai": {"api_key": None},  # Will override with .env if present
+    "openai": {"api_key": None},
     "audio": {"device_index": 3}
 }
 
@@ -29,13 +29,14 @@ class AudioTester:
         self.logger = logger
         self.config = config or {}
         
-        # Fetch API key like AIVoiceModule
+        # Fetch API key, prioritize OPENAI_VOICE_KEY
         self.api_key = self.config.get("openai", {}).get("api_key")
         if not self.api_key:
-            self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_VOICE_KEY")
+            self.api_key = os.getenv("OPENAI_VOICE_KEY") or os.getenv("OPENAI_API_KEY")  # Swapped order
             if not self.api_key:
                 self.logger.error("No OpenAI API key found in config or environment variables")
                 raise ValueError("No OpenAI API key found in config or environment variables")
+        self.logger.info(f"Using API key: {'OPENAI_VOICE_KEY' if self.api_key == os.getenv('OPENAI_VOICE_KEY') else 'OPENAI_API_KEY'} (partial: {self.api_key[:4]}...)")
         
         # Initialize OpenAI client
         self.client = openai.OpenAI(api_key=self.api_key)
@@ -64,18 +65,17 @@ class AudioTester:
 
     def run_tests(self):
         # Test with normal 10s test.wav
-        normal_audio_path = "/home/dan/test.wav"  # 10s, PCM16, 24 kHz, mono
+        normal_audio_path = "/home/dan/test.wav"
         self.logger.info("Testing normal-speed audio:")
         self.transcribe_audio(normal_audio_path)
 
         # Test with sped-up test_spedup.wav
-        spedup_audio_path = "/home/dan/test_spedup.wav"  # 5s, sped-up, PCM16, 24 kHz, mono
+        spedup_audio_path = "/home/dan/test_spedup.wav"
         self.logger.info("Testing sped-up audio:")
         self.transcribe_audio(spedup_audio_path)
 
-        # Test with sent_audio_<timestamp>.wav from your last run
-        # Replace <timestamp> with the actual value from your log (e.g., from 23:55:10 run)
-        sent_audio_path = "/home/dan/mirror_recordings/sent_audio_20250304_235510.wav"  # Example
+        # Test with sent_audio_<timestamp>.wav (update with latest timestamp)
+        sent_audio_path = "/home/dan/mirror_recordings/sent_audio_20250304_235510.wav"  # Example, adjust
         self.logger.info("Testing sent audio from Realtime API:")
         self.transcribe_audio(sent_audio_path)
 
