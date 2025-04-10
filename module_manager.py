@@ -1,25 +1,57 @@
 import logging
 from config import CONFIG
 import time
+import traceback
 
 class ModuleManager:
     def __init__(self, initialized_modules=None):
         self.module_visibility = CONFIG.get('module_visibility', {})
         self.logger = logging.getLogger(__name__)
         
-        # Force skip ALL module initialization by overriding critical methods
+        self.modules = {}
+        self.enabled_modules = CONFIG.get('enabled_modules', [])
+        
         if initialized_modules:
             self.modules = initialized_modules
             self.enabled_modules = list(initialized_modules.keys())
-            self.logger.info("Using PRE-INITIALIZED modules - NO additional initialization")
+            self.logger.info("Using PRE-INITIALIZED modules from MagicMirror")
             
-            # CRITICAL: Override these methods to completely prevent initialization
-            self.initialize_modules = lambda: None
-            self.initialize_module = lambda module_name: None
+            # Initialize visibility based on provided modules
+            for module_name in self.modules:
+                self.module_visibility[module_name] = True
+            
+            # Check if AIVoiceModule is present and functional
+            self.verify_voice_module()
         else:
-            self.modules = {}
-            self.enabled_modules = CONFIG.get('enabled_modules', [])
             self.initialize_modules()
+
+    def verify_voice_module(self):
+        """Verify if AIVoiceModule is working; fall back to AIInteractionModule if needed"""
+        if 'ai_voice' in self.modules:
+            try:
+                # Test if AIVoiceModule is initialized and functional
+                if hasattr(self.modules['ai_voice'], 'session_ready') and self.modules['ai_voice'].session_ready:
+                    self.logger.info("AIVoiceModule is functional - using as primary voice interface")
+                    if 'ai_interaction' in self.modules:
+                        self.module_visibility['ai_interaction'] = False  # Hide fallback
+                else:
+                    self.logger.warning("AIVoiceModule not ready - checking fallback")
+                    self.fallback_to_interaction()
+            except Exception as e:
+                self.logger.error(f"AIVoiceModule verification failed: {e}")
+                self.fallback_to_interaction()
+        elif 'ai_interaction' in self.modules:
+            self.logger.info("No AIVoiceModule present - using AIInteractionModule as default")
+            self.module_visibility['ai_interaction'] = True
+
+    def fallback_to_interaction(self):
+        """Activate AIInteractionModule as fallback if AIVoiceModule fails"""
+        if 'ai_interaction' in self.modules:
+            self.logger.info("Falling back to AIInteractionModule")
+            self.module_visibility['ai_voice'] = False
+            self.module_visibility['ai_interaction'] = True
+        else:
+            self.logger.error("No AIInteractionModule available for fallback")
 
     def handle_command(self, command):
         """Handle show/hide commands for modules"""
@@ -69,68 +101,71 @@ class ModuleManager:
             self.logger.warning(f"Cannot set visibility - module {module_name} not found")
 
     def initialize_modules(self):
-        """Initialize all modules in the correct order for optimal performance"""
+        """Initialize modules with priority for AI voice modules"""
+        self.logger.info("Initializing modules in priority order")
         print("MIRROR DEBUG: 🔄 Initializing modules in priority order")
         
-        # Separate modules into regular and AI modules
-        regular_modules = []
-        ai_modules = []
+        # Priority order: ai_voice first, then ai_interaction, then others
+        priority_modules = ['ai_voice', 'ai_interaction']
+        regular_modules = [m for m in self.enabled_modules if m not in priority_modules]
         
-        for module_name in self.modules:
-            # Check if this is an AI module (typically has more resource usage)
-            if 'ai_' in module_name.lower() or module_name.lower() == 'voice':
-                ai_modules.append(module_name)
-            else:
-                regular_modules.append(module_name)
-        
-        # Load regular modules first
-        for module_name in regular_modules:
-            if module_name in self.enabled_modules:
-                print(f"MIRROR DEBUG: 🔄 Initializing regular module: {module_name}")
+        # Try AI voice modules first
+        for module_name in priority_modules:
+            if module_name in self.enabled_modules and module_name not in self.modules:
                 self.initialize_module(module_name)
+                if module_name == 'ai_voice' and module_name in self.modules:
+                    # If ai_voice succeeds, skip ai_interaction
+                    if 'ai_interaction' in self.enabled_modules:
+                        self.logger.info("AIVoiceModule initialized successfully - skipping AIInteractionModule")
+                        self.enabled_modules.remove('ai_interaction')
+                    break
+                elif module_name == 'ai_interaction':
+                    self.logger.info("Using AIInteractionModule as fallback")
         
-        # Then load AI modules after a brief delay
-        print("MIRROR DEBUG: 🕒 Waiting before initializing AI modules...")
-        time.sleep(2)  # Short delay to let other modules stabilize
-        
-        for module_name in ai_modules:
-            if module_name in self.enabled_modules:
-                print(f"MIRROR DEBUG: 🔄 Initializing AI module: {module_name}")
+        # Initialize regular modules
+        for module_name in regular_modules:
+            if module_name not in self.modules:
                 self.initialize_module(module_name)
         
         print("MIRROR DEBUG: ✅ All modules initialized")
 
     def initialize_module(self, module_name):
-        """Initialize a specific module with safety check"""
-        if module_name in self.modules:
-            module_instance = self.modules.get(module_name)
+        """Initialize a specific module"""
+        if module_name not in self.enabled_modules:
+            return
+        
+        config = CONFIG.get(module_name, {})
+        if not isinstance(config, dict) or 'class' not in config:
+            self.logger.warning(f"No valid config for {module_name}")
+            return
+        
+        try:
+            if config['class'] == 'AIVoiceModule':
+                from ai_voice_module import AIVoiceModule
+                module_class = AIVoiceModule
+            elif config['class'] == 'AIInteractionModule':
+                from AI_Module import AIInteractionModule
+                module_class = AIInteractionModule
+            else:
+                module_class = globals().get(config['class'])
             
-            # If the module already has an _initialized flag, don't re-initialize
-            if hasattr(module_instance, '_initialized') and module_instance._initialized:
-                self.logger.info(f"Module {module_name} already initialized, skipping")
-                return module_instance
-            
-            config = self.modules[module_name]
-            if isinstance(config, dict) and 'class' in config:
-                try:
-                    # Dynamically import if needed
-                    if config['class'] == 'AIInteractionModule':
-                        from AI_Module import AIInteractionModule
-                        module_class = AIInteractionModule
-                    elif config['class'] == 'AIVoiceModule':
-                        from ai_voice_module import AIVoiceModule
-                        module_class = AIVoiceModule
-                    else:
-                        # Try to get it from globals
-                        import sys
-                        module_class = getattr(sys.modules['__main__'], config['class'], None)
-                        
-                    if module_class:
-                        # Initialize the module
-                        return module_class(**config.get('params', {}))
-                    else:
-                        self.logger.error(f"Could not find class: {config['class']}")
-                except Exception as e:
-                    self.logger.error(f"Error initializing module {module_name}: {e}")
-            
-            return None
+            if module_class:
+                self.logger.info(f"Initializing {module_name}")
+                print(f"MIRROR DEBUG: 🔄 Initializing {module_name}")
+                instance = module_class(**config.get('params', {}))
+                self.modules[module_name] = instance
+                self.module_visibility[module_name] = True
+                self.logger.info(f"Successfully initialized {module_name}")
+            else:
+                self.logger.error(f"Class {config['class']} not found for {module_name}")
+        except Exception as e:
+            self.logger.error(f"Error initializing {module_name}: {e}")
+            self.logger.error(traceback.format_exc())
+            if module_name == 'ai_voice':
+                self.logger.warning("AIVoiceModule failed - will attempt fallback")
+
+if __name__ == "__main__":
+    # Test setup
+    logging.basicConfig(level=logging.INFO)
+    manager = ModuleManager()
+    print(manager.modules)
