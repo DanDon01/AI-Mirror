@@ -1,4 +1,4 @@
-﻿# Ignore virtual environment
+# Ignore virtual environment
 venv/
 /venv
 
@@ -18,3 +18,4 @@ Thumbs.db
 
 # Ignore the log file
 magic_mirror.log
+__pycache__/config.cpython-312.pyc
