@@ -206,7 +206,9 @@ class WeatherModule:
                 error_text = "Weather data unavailable"
                 error_surface = self.font.render(error_text, True, COLOR_PASTEL_RED)
                 error_surface.set_alpha(TRANSPARENCY)
-                screen.blit(error_surface, position)
+                # Use extracted coordinates instead of the raw position
+                # tuple/dict so the fallback aligns with other elements
+                screen.blit(error_surface, (x, y))
         except Exception as e:
             logging.error(f"Error drawing weather module: {e}")
 
