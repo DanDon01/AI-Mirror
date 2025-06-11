@@ -237,6 +237,14 @@ CONFIG = {
             'disable_audio': False
         }
     },
+    'eleven_voice': {
+        'class': 'ElevenVoice',
+        'params': {
+            'api_key': os.getenv('ELEVENLABS_API_KEY', 'your-eleven-api-key'),
+            'voice_id': os.getenv('ELEVENLABS_VOICE_ID', 'your-voice-id'),
+            'openai_key': os.getenv('OPENAI_API_KEY', 'your-openai-api-key')
+        }
+    },
     
     # Audio and sound effects
     'sound_effects_path': sound_effects_path,

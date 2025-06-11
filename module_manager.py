@@ -26,23 +26,25 @@ class ModuleManager:
             self.initialize_modules()
 
     def verify_voice_module(self):
-        """Verify if AIVoiceModule is working; fall back to AIInteractionModule if needed"""
-        if 'ai_voice' in self.modules:
-            try:
-                # Test if AIVoiceModule is initialized and functional
-                if hasattr(self.modules['ai_voice'], 'session_ready') and self.modules['ai_voice'].session_ready:
-                    self.logger.info("AIVoiceModule is functional - using as primary voice interface")
-                    if 'ai_interaction' in self.modules:
-                        self.module_visibility['ai_interaction'] = False  # Hide fallback
-                else:
-                    self.logger.warning("AIVoiceModule not ready - checking fallback")
-                    self.fallback_to_interaction()
-            except Exception as e:
-                self.logger.error(f"AIVoiceModule verification failed: {e}")
-                self.fallback_to_interaction()
-        elif 'ai_interaction' in self.modules:
-            self.logger.info("No AIVoiceModule present - using AIInteractionModule as default")
-            self.module_visibility['ai_interaction'] = True
+        """Verify if voice module is working; try alternatives if needed"""
+        voice_modules = ['eleven_voice', 'ai_voice']
+        
+        for module_name in voice_modules:
+            if module_name in self.modules:
+                try:
+                    if module_name == 'eleven_voice' or (hasattr(self.modules[module_name], 'session_ready') and 
+                        self.modules[module_name].session_ready):
+                        self.logger.info(f"{module_name} is functional - using as primary voice interface")
+                        # Hide other voice modules
+                        for other_module in voice_modules:
+                            if other_module != module_name:
+                                self.module_visibility[other_module] = False
+                        return
+                except Exception as e:
+                    self.logger.error(f"{module_name} verification failed: {e}")
+                    continue
+        
+        self.fallback_to_interaction()
 
     def fallback_to_interaction(self):
         """Activate AIInteractionModule as fallback if AIVoiceModule fails"""
@@ -146,6 +148,9 @@ class ModuleManager:
             elif config['class'] == 'AIInteractionModule':
                 from AI_Module import AIInteractionModule
                 module_class = AIInteractionModule
+            elif config['class'] == 'ElevenVoice':
+                from elevenvoice_module import ElevenVoice
+                module_class = ElevenVoice
             else:
                 module_class = globals().get(config['class'])
             
