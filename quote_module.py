@@ -11,12 +11,9 @@ import json
 import random
 from datetime import datetime, date
 from config import (
-    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_TITLE,
-    COLOR_FONT_BODY, COLOR_FONT_SMALL, COLOR_BG_MODULE_ALPHA,
-    COLOR_BG_HEADER_ALPHA, TRANSPARENCY,
+    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
+    COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY,
 )
-from visual_effects import VisualEffects
-from config import draw_module_background_fallback
 
 logger = logging.getLogger("Quote")
 
@@ -45,7 +42,6 @@ class QuoteModule:
                          Format: [{"q": "quote text", "a": "author"}, ...]
         """
         self.quotes_file = quotes_file or os.path.join(_PROJECT_DIR, "data", "quotes.json")
-        self.effects = VisualEffects()
         self.current_quote = None
         self.current_author = None
         self.last_fetch_date = None
@@ -53,6 +49,8 @@ class QuoteModule:
         self.quote_font = None
         self.author_font = None
         self._wrapped_lines = []
+        from module_base import SurfaceCache
+        self._surface_cache = SurfaceCache()
 
     def _init_fonts(self):
         if self.title_font is None:
@@ -138,59 +136,62 @@ class QuoteModule:
         try:
             if isinstance(position, dict):
                 x, y = position["x"], position["y"]
-                width = position.get("width", 225)
+                width = position.get("width", 300)
                 height = position.get("height", 200)
             else:
                 x, y = position
-                width, height = 225, 200
+                width, height = 300, 200
 
             self._init_fonts()
 
-            styling = CONFIG.get("module_styling", {})
-            radius = styling.get("radius", 15)
-            padding = styling.get("spacing", {}).get("padding", 10)
-
-            # Background
-            module_rect = pygame.Rect(x - padding, y - padding, width, height)
-            header_rect = pygame.Rect(x - padding, y - padding, width, 40)
-            try:
-                self.effects.draw_rounded_rect(screen, module_rect, COLOR_BG_MODULE_ALPHA, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, COLOR_BG_HEADER_ALPHA, radius=radius, alpha=0)
-            except Exception:
-                draw_module_background_fallback(screen, x, y, width, height, padding)
-
-            # Title
-            title_surf = self.title_font.render("Quote of the Day", True, COLOR_FONT_TITLE)
-            screen.blit(title_surf, (x + padding, y + padding))
-
-            draw_y = y + 50
+            from module_base import ModuleDrawHelper
+            draw_y = ModuleDrawHelper.draw_module_title(
+                screen, "Quote", x, y, width
+            )
 
             if not self.current_quote:
                 empty = self.quote_font.render("Loading...", True, COLOR_FONT_SMALL)
                 screen.blit(empty, (x, draw_y))
                 return
 
-            # Word-wrap the quote
-            text_width = width - padding * 2 - 10
+            # Word-wrap the quote (cached until quote changes)
+            text_width = width - 20
             if not self._wrapped_lines:
                 self._wrapped_lines = self._word_wrap(self.current_quote, self.quote_font, text_width)
 
-            # Draw opening quote mark
-            mark = self.quote_font.render('"', True, COLOR_FONT_SMALL)
+            quote_hash = self.current_quote[:30] + (self.current_author or "")
+
+            # Opening quote mark
+            mark = self._surface_cache.get_or_render(
+                "quote_mark",
+                lambda: self.quote_font.render('"', True, COLOR_FONT_SMALL),
+                quote_hash,
+            )
             screen.blit(mark, (x, draw_y - 2))
 
-            # Draw wrapped quote lines
-            for line in self._wrapped_lines:
-                line_surf = self.quote_font.render(line, True, COLOR_FONT_BODY)
-                line_surf.set_alpha(TRANSPARENCY)
-                screen.blit(line_surf, (x + 10, draw_y))
-                draw_y += 20
+            for i, line in enumerate(self._wrapped_lines):
+                def _render_line(l=line):
+                    s = self.quote_font.render(l, True, COLOR_FONT_BODY)
+                    s.set_alpha(TRANSPARENCY)
+                    return s
 
-            # Draw author
+                line_surf = self._surface_cache.get_or_render(
+                    f"quote_line_{i}", _render_line, quote_hash
+                )
+                screen.blit(line_surf, (x + 10, draw_y))
+                draw_y += 22
+
             draw_y += 5
             author_text = f"-- {self.current_author}"
-            author_surf = self.author_font.render(author_text, True, COLOR_FONT_SMALL)
-            author_surf.set_alpha(TRANSPARENCY)
+
+            def _render_author():
+                s = self.author_font.render(author_text, True, COLOR_FONT_SMALL)
+                s.set_alpha(TRANSPARENCY)
+                return s
+
+            author_surf = self._surface_cache.get_or_render(
+                "quote_author", _render_author, quote_hash
+            )
             screen.blit(author_surf, (x + 20, draw_y))
 
         except Exception as e:

@@ -19,41 +19,62 @@ load_dotenv(env_path)
 # GLOBAL CONSTANTS
 #########################################
 
-# Color Constants
+# Mirror-optimized color palette
+# Pure black = transparent through two-way mirror glass
 COLOR_WHITE = (255, 255, 255)
 COLOR_BLACK = (0, 0, 0)
-COLOR_FONT_DEFAULT = (240, 240, 240)
-COLOR_FONT_TITLE = (150, 150, 150)
-COLOR_FONT_SUBTITLE = (220, 220, 220)
-COLOR_FONT_BODY = (200, 200, 200)
-COLOR_FONT_SMALL = (180, 180, 180)
-COLOR_PASTEL_GREEN = (152, 251, 152)
-COLOR_PASTEL_RED = (255, 162, 173)
-COLOR_PASTEL_BLUE = (173, 216, 230)
 
-# Background Colors
-COLOR_BG_MODULE = (20, 20, 20)
-COLOR_BG_HEADER = (40, 40, 40)
-COLOR_BG_HIGHLIGHT = (30, 30, 40)
-COLOR_BG_MODULE_ALPHA = (20, 20, 20, 0)
-COLOR_BG_HEADER_ALPHA = (40, 40, 40, 0)
+# Text hierarchy: bright on black for mirror readability
+COLOR_TEXT_PRIMARY = (230, 230, 230)
+COLOR_TEXT_SECONDARY = (160, 160, 160)
+COLOR_TEXT_DIM = (100, 100, 100)
+COLOR_TEXT_ACCENT = (100, 180, 255)
 
-# Transparency setting
-TRANSPARENCY = 215
+# Accent colors (used sparingly for status/indicators)
+COLOR_ACCENT_BLUE = (70, 130, 220)
+COLOR_ACCENT_GREEN = (80, 200, 120)
+COLOR_ACCENT_RED = (220, 80, 80)
+COLOR_ACCENT_AMBER = (240, 180, 40)
 
-# Font Settings
-FONT_NAME = "Helvetica"
-FONT_SIZE_TITLE = 18
-FONT_SIZE_SUBTITLE = 16
-FONT_SIZE_BODY = 14
-FONT_SIZE_SMALL = 12
+# Separator lines (subtle dividers between sections)
+COLOR_SEPARATOR = (40, 40, 40)
+
+# Legacy aliases -- modules import these names
+COLOR_FONT_DEFAULT = COLOR_TEXT_PRIMARY
+COLOR_FONT_TITLE = COLOR_TEXT_DIM
+COLOR_FONT_SUBTITLE = COLOR_TEXT_SECONDARY
+COLOR_FONT_BODY = COLOR_TEXT_PRIMARY
+COLOR_FONT_SMALL = COLOR_TEXT_SECONDARY
+COLOR_PASTEL_GREEN = COLOR_ACCENT_GREEN
+COLOR_PASTEL_RED = COLOR_ACCENT_RED
+COLOR_PASTEL_BLUE = COLOR_ACCENT_BLUE
+
+# Module backgrounds: fully transparent on mirror (no visible boxes)
+COLOR_BG_MODULE = (0, 0, 0)
+COLOR_BG_HEADER = (0, 0, 0)
+COLOR_BG_HIGHLIGHT = (0, 0, 0)
+COLOR_BG_MODULE_ALPHA = (0, 0, 0, 0)
+COLOR_BG_HEADER_ALPHA = (0, 0, 0, 0)
+
+# Text transparency (high = more visible, critical for mirror readability)
+TRANSPARENCY = 240
+
+# Font Settings -- larger sizes for mirror readability at arm's length
+# SysFont tries each name in order, picks first available
+FONT_NAME = "segoeui,dejavusans,freesans,arial"
+FONT_SIZE_CLOCK = 72
+FONT_SIZE_TITLE = 28
+FONT_SIZE_SUBTITLE = 22
+FONT_SIZE_BODY = 18
+FONT_SIZE_SMALL = 14
+FONT_SIZE_TICKER = 20
 FONT_SIZE = FONT_SIZE_BODY
 
 # Spacing and Dimensions
-LINE_SPACING = 25
-DEFAULT_PADDING = 10
-DEFAULT_LINE_HEIGHT = 22
-DEFAULT_RADIUS = 15
+LINE_SPACING = 30
+DEFAULT_PADDING = 12
+DEFAULT_LINE_HEIGHT = 28
+DEFAULT_RADIUS = 0  # No rounded rects on transparent backgrounds
 
 # Standard screen dimensions
 SCREEN_WIDTH_DEFAULT = 800
@@ -77,17 +98,23 @@ MONITOR_CONFIGS = {
     '27_portrait': {
         'resolution': (1440, 2560),
         'module_scale': 1.0,
-        'font_scale': 1.0
+        'font_scale': 1.0,
+        'left_col_width': 320,
+        'right_col_width': 320,
     },
     '24_portrait': {
         'resolution': (1200, 1920),
         'module_scale': 0.833,
-        'font_scale': 0.9
+        'font_scale': 0.85,
+        'left_col_width': 265,
+        'right_col_width': 265,
     },
     '21_portrait': {
         'resolution': (768, 1024),
         'module_scale': 0.533,
-        'font_scale': 0.8
+        'font_scale': 0.65,
+        'left_col_width': 170,
+        'right_col_width': 170,
     }
 }
 
@@ -122,16 +149,49 @@ LAYOUT = {
 }
 
 #########################################
+# ZONE-BASED LAYOUT (V2 - Mirror Optimized)
+#########################################
+
+LAYOUT_V2 = {
+    'zones': {
+        'top_bar': {'y': 0, 'height': 80},
+        'bottom_bar': {'height': 50},
+        'left_column': {'x': 0, 'width_pct': 0.22},
+        'right_column': {'width_pct': 0.22},
+        'center': {'width_pct': 0.56},
+    },
+    'left_modules': ['weather', 'calendar', 'countdown'],
+    'right_modules': ['news', 'quote', 'fitbit', 'openclaw'],
+    'top_bar_modules': ['clock'],
+    'bottom_bar_modules': ['stocks'],
+    'center_overlay_modules': ['ai_interaction', 'ai_voice', 'eleven_voice'],
+    'fullscreen_overlay_modules': ['retro_characters'],
+    'module_gap': 15,
+    'edge_padding': 15,
+}
+
+#########################################
+# ANIMATION SETTINGS
+#########################################
+
+ANIMATION = {
+    'fade_duration_ms': 400,
+    'state_transition_ms': 800,
+    'headline_fade_ms': 300,
+    'notification_display_ms': 5000,
+    'notification_fade_ms': 500,
+    'scroll_speed_clock': 0.5,
+    'scroll_speed_ticker': 1.0,
+    'pulse_speed_alert': 2.0,
+}
+
+#########################################
 # MAIN CONFIGURATION
 #########################################
 
 def draw_module_background_fallback(screen, x, y, module_width, module_height, padding=10):
-    s = pygame.Surface((module_width, module_height), pygame.SRCALPHA)
-    s.fill(COLOR_BG_MODULE_ALPHA)
-    screen.blit(s, (x - padding, y - padding))
-    s = pygame.Surface((module_width, 40), pygame.SRCALPHA)
-    s.fill(COLOR_BG_HEADER_ALPHA)
-    screen.blit(s, (x - padding, y - padding))
+    """No-op: mirror UI has no module backgrounds (black = transparent)."""
+    pass
 
 CONFIG = {
     'screen': {
@@ -150,9 +210,9 @@ CONFIG = {
     'clock': {
         'class': 'ClockModule',
         'params': {
-            'time_font_size': FONT_SIZE_TITLE,
-            'date_font_size': FONT_SIZE_SMALL,
-            'color': COLOR_FONT_DEFAULT,
+            'time_font_size': FONT_SIZE_CLOCK,
+            'date_font_size': FONT_SIZE_BODY,
+            'color': COLOR_TEXT_PRIMARY,
             'time_format': '%H:%M:%S',
             'date_format': '%A, %B %d, %Y',
             'timezone': 'local'
@@ -338,24 +398,29 @@ CONFIG = {
     'module_styling': {
         'font_family': FONT_NAME,
         'fonts': {
-            'title': {'size': FONT_SIZE_TITLE, 'color': COLOR_FONT_DEFAULT},
-            'subtitle': {'size': FONT_SIZE_SUBTITLE, 'color': COLOR_FONT_SUBTITLE},
-            'body': {'size': FONT_SIZE_BODY, 'color': COLOR_FONT_BODY},
-            'small': {'size': FONT_SIZE_SMALL, 'color': COLOR_FONT_SMALL}
+            'title': {'size': FONT_SIZE_TITLE, 'color': COLOR_TEXT_DIM},
+            'subtitle': {'size': FONT_SIZE_SUBTITLE, 'color': COLOR_TEXT_SECONDARY},
+            'body': {'size': FONT_SIZE_BODY, 'color': COLOR_TEXT_PRIMARY},
+            'small': {'size': FONT_SIZE_SMALL, 'color': COLOR_TEXT_SECONDARY}
         },
         'backgrounds': {
-            'module': COLOR_BG_MODULE,
-            'header': COLOR_BG_HEADER,
-            'highlight': COLOR_BG_HIGHLIGHT
+            'module': None,
+            'header': None,
+            'highlight': None
         },
+        'separator_color': COLOR_SEPARATOR,
         'spacing': {
             'line_height': DEFAULT_LINE_HEIGHT,
             'padding': DEFAULT_PADDING
         },
         'radius': DEFAULT_RADIUS,
         'module_dimensions': {
-            'standard': {'width': 225, 'height': 200, 'header_height': 40},
-            'large': {'width': 225, 'height': 400, 'header_height': 40}
+            'standard': {'width': 300, 'height': 250, 'header_height': 0},
+            'large': {'width': 300, 'height': 500, 'header_height': 0}
         }
-    }
+    },
+
+    # Layout V2 and animation references
+    'layout_v2': LAYOUT_V2,
+    'animation': ANIMATION
 }

@@ -9,12 +9,9 @@ import logging
 import time as time_module
 from datetime import datetime, timedelta
 from config import (
-    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_TITLE,
-    COLOR_FONT_BODY, COLOR_FONT_SMALL, COLOR_BG_MODULE_ALPHA,
-    COLOR_BG_HEADER_ALPHA, TRANSPARENCY,
+    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
+    COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_TEXT_DIM,
 )
-from visual_effects import VisualEffects
-from config import draw_module_background_fallback
 
 logger = logging.getLogger("News")
 
@@ -38,9 +35,9 @@ class NewsModule:
         self.feeds = feeds or DEFAULT_FEEDS
         self.rotation_interval = rotation_interval
         self.max_headlines = max_headlines
-        self.effects = VisualEffects()
-
         self.headlines = []
+        self._known_titles = set()
+        self._notify = None
         self.current_index = 0
         self.last_rotation = time_module.time()
         self.last_fetch = datetime.min
@@ -89,10 +86,22 @@ class NewsModule:
                 logger.warning(f"Failed to fetch feed {feed_config['name']}: {e}")
 
         if new_headlines:
+            # Push notification for truly new headlines
+            if self._notify and self._known_titles:
+                for h in new_headlines[:2]:
+                    if h['title'] not in self._known_titles:
+                        self._notify(h['title'], duration_ms=6000)
+                        break  # One notification per fetch cycle
+
+            self._known_titles = {h['title'] for h in new_headlines}
             self.headlines = new_headlines[:self.max_headlines]
             logger.info(f"Fetched {len(self.headlines)} headlines from {len(self.feeds)} feeds")
         else:
             logger.warning("No headlines fetched from any feed")
+
+    def set_notification_callback(self, callback):
+        """Register a callback for center-screen notifications."""
+        self._notify = callback
 
     def _word_wrap(self, text, font, max_width):
         """Wrap text to fit within max_width pixels."""
@@ -126,33 +135,18 @@ class NewsModule:
         try:
             if isinstance(position, dict):
                 x, y = position["x"], position["y"]
-                width = position.get("width", 225)
+                width = position.get("width", 300)
                 height = position.get("height", 200)
             else:
                 x, y = position
-                width, height = 225, 200
+                width, height = 300, 200
 
             self._init_fonts()
 
-            styling = CONFIG.get("module_styling", {})
-            radius = styling.get("radius", 15)
-            padding = styling.get("spacing", {}).get("padding", 10)
-
-            # Background
-            module_rect = pygame.Rect(x - padding, y - padding, width, height)
-            header_rect = pygame.Rect(x - padding, y - padding, width, 40)
-            try:
-                self.effects.draw_rounded_rect(screen, module_rect, COLOR_BG_MODULE_ALPHA, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, COLOR_BG_HEADER_ALPHA, radius=radius, alpha=0)
-            except Exception:
-                draw_module_background_fallback(screen, x, y, width, height, padding)
-
-            # Title with headline count
-            count_text = f" ({len(self.headlines)})" if self.headlines else ""
-            title_surf = self.title_font.render(f"News{count_text}", True, COLOR_FONT_TITLE)
-            screen.blit(title_surf, (x + padding, y + padding))
-
-            draw_y = y + 50
+            from module_base import ModuleDrawHelper
+            draw_y = ModuleDrawHelper.draw_module_title(
+                screen, "News", x, y, width
+            )
 
             if not self.headlines:
                 empty = self.headline_font.render("Loading headlines...", True, COLOR_FONT_SMALL)
@@ -178,13 +172,14 @@ class NewsModule:
             source_surf.set_alpha(TRANSPARENCY)
             screen.blit(source_surf, (x, draw_y))
 
-            # Draw dots indicator for headline position
-            draw_y += 20
-            dot_count = min(len(self.headlines), 8)
-            dot_start_x = x
-            for i in range(dot_count):
-                color = (200, 200, 200) if i == self.current_index else (80, 80, 80)
-                pygame.draw.circle(screen, color, (dot_start_x + i * 12 + 4, draw_y + 4), 3)
+            # Thin progress bar showing position in headlines
+            draw_y += 15
+            bar_width = min(width, 120)
+            segment_w = bar_width // max(len(self.headlines), 1)
+            for i in range(len(self.headlines)):
+                color = (200, 200, 200) if i == self.current_index else (40, 40, 40)
+                sx = x + i * (segment_w + 2)
+                pygame.draw.rect(screen, color, (sx, draw_y, segment_w, 2))
 
         except Exception as e:
             logger.error(f"Error drawing news module: {e}")

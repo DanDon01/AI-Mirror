@@ -9,12 +9,9 @@ import logging
 import math
 from datetime import datetime, timedelta
 from config import (
-    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_TITLE,
-    COLOR_FONT_BODY, COLOR_FONT_SMALL, COLOR_BG_MODULE_ALPHA,
-    COLOR_BG_HEADER_ALPHA, TRANSPARENCY,
+    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
+    COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY,
 )
-from visual_effects import VisualEffects
-from config import draw_module_background_fallback
 
 logger = logging.getLogger("Countdown")
 
@@ -29,9 +26,10 @@ class CountdownModule:
                     Example: [{'name': 'Christmas', 'date': '2026-12-25'}]
         """
         self.events = events or []
-        self.effects = VisualEffects()
         self.timer_end = None
         self.timer_label = None
+        self._notify = None
+        self._timer_notified = False
         self.title_font = None
         self.body_font = None
         self.small_font = None
@@ -47,10 +45,15 @@ class CountdownModule:
             self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
             self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
 
+    def set_notification_callback(self, callback):
+        """Register a callback for center-screen notifications."""
+        self._notify = callback
+
     def set_timer(self, seconds, label="Timer"):
         """Start a countdown timer for the given number of seconds."""
         self.timer_end = datetime.now() + timedelta(seconds=seconds)
         self.timer_label = label
+        self._timer_notified = False
         logger.info(f"Timer set: {label} for {seconds}s")
 
     def cancel_timer(self):
@@ -91,38 +94,33 @@ class CountdownModule:
         return remaining
 
     def update(self):
-        pass
+        # Push center notification when timer completes
+        remaining = self._get_timer_remaining()
+        if remaining is not None and remaining <= 0 and not self._timer_notified:
+            self._timer_notified = True
+            if self._notify:
+                self._notify(
+                    f"{self.timer_label}: TIME UP!",
+                    color=(255, 120, 120),
+                    duration_ms=8000,
+                )
 
     def draw(self, screen, position):
         try:
             if isinstance(position, dict):
                 x, y = position["x"], position["y"]
-                width = position.get("width", 225)
+                width = position.get("width", 300)
                 height = position.get("height", 200)
             else:
                 x, y = position
-                width, height = 225, 200
+                width, height = 300, 200
 
             self._init_fonts()
 
-            styling = CONFIG.get("module_styling", {})
-            radius = styling.get("radius", 15)
-            padding = styling.get("spacing", {}).get("padding", 10)
-
-            # Background
-            module_rect = pygame.Rect(x - padding, y - padding, width, height)
-            header_rect = pygame.Rect(x - padding, y - padding, width, 40)
-            try:
-                self.effects.draw_rounded_rect(screen, module_rect, COLOR_BG_MODULE_ALPHA, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, COLOR_BG_HEADER_ALPHA, radius=radius, alpha=0)
-            except Exception:
-                draw_module_background_fallback(screen, x, y, width, height, padding)
-
-            # Title
-            title_surf = self.title_font.render("Countdowns", True, COLOR_FONT_TITLE)
-            screen.blit(title_surf, (x + padding, y + padding))
-
-            draw_y = y + 50
+            from module_base import ModuleDrawHelper
+            draw_y = ModuleDrawHelper.draw_module_title(
+                screen, "Countdowns", x, y, width
+            )
 
             # Active timer
             timer_remaining = self._get_timer_remaining()

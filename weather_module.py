@@ -40,6 +40,9 @@ class WeatherModule:
         self.effects = VisualEffects()
         self._geo_cache = None  # Cache lat/lon for Open-Meteo
         self.weather_source = None  # Track which API provided data
+        from module_base import SurfaceCache
+        self._surface_cache = SurfaceCache()
+        self._last_data_hash = None
 
     def _geocode_city(self):
         """Convert city name to lat/lon using Open-Meteo geocoding API."""
@@ -241,114 +244,84 @@ class WeatherModule:
         return (r, g, b)
 
     def draw(self, screen, position):
-        """Draw weather with consistent styling"""
+        """Draw weather module -- no background, floating text on black."""
         try:
-            # Extract position
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
+                width = position.get('width', 300)
+                height = position.get('height', 300)
             else:
                 x, y = position
-            
-            # Get styling from config
+                width, height = 300, 300
+
             styling = CONFIG.get('module_styling', {})
             fonts = styling.get('fonts', {})
-            backgrounds = styling.get('backgrounds', {})
-            
-            # Get styles for drawing
-            radius = styling.get('radius', 15)
-            padding = styling.get('spacing', {}).get('padding', 10)
-            line_height = styling.get('spacing', {}).get('line_height', 22)
-            
-            # Initialize fonts if needed
-            if not hasattr(self, 'title_font'):
-                title_size = fonts.get('title', {}).get('size', 24)
-                body_size = fonts.get('body', {}).get('size', 16)
-                small_size = fonts.get('small', {}).get('size', 14)
-                
-                self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
-                self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
-                self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
-            
-            # Get background colors - Use transparent backgrounds 
-            bg_color = COLOR_BG_MODULE_ALPHA
-            header_bg_color = COLOR_BG_HEADER_ALPHA
-            
-            # Draw module background
-            module_width = 225  # Reduced from 300 by 25%
-            module_height = 200
-            module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
-            header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)
-            
-            try:
-                # Draw background with rounded corners and transparency
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
-            except Exception:
-                # Fallback if effects fail
-                draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
-            
-            # Draw title
-            title_color = fonts.get('title', {}).get('color', (240, 240, 240))
-            title_text = self.title_font.render("Weather", True, title_color)
-            screen.blit(title_text, (x + padding, y + padding))
-            
-            # Continue with existing weather display logic but use the new fonts
+            padding = styling.get('spacing', {}).get('padding', 12)
+            line_height = styling.get('spacing', {}).get('line_height', 28)
+
+            if not hasattr(self, 'title_font') or self.title_font is None:
+                from module_base import ModuleDrawHelper
+                title_f, body_f, small_f = ModuleDrawHelper.get_fonts()
+                self.title_font = title_f
+                self.body_font = body_f
+                self.small_font = small_f
+
             if self.font is None:
-                try:
-                    self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
-                except Exception:
-                    logging.warning(f"Font '{FONT_NAME}' not found. Using default font.")
-                    self.font = pygame.font.Font(None, FONT_SIZE)
+                self.font = self.body_font
+
+            # Title label
+            from module_base import ModuleDrawHelper
+            draw_y = ModuleDrawHelper.draw_module_title(
+                screen, "Weather", x, y, width
+            )
 
             if self.weather_data:
-                # Adjust the starting y-position to be below the title area
-                weather_y = y + 50  # Start below title (40px header + 10px gap)
-                
-                # Get city name and country code from the weather data
                 city_name = self.weather_data['name']
                 country_code = self.weather_data['sys']['country']
-                
-                # Current weather
                 temp = self.weather_data['main']['temp']
                 condition = self.weather_data['weather'][0]['description'].capitalize()
                 humidity = self.weather_data['main']['humidity']
                 wind_speed = self.weather_data['wind']['speed']
                 feels_like = self.weather_data['main']['feels_like']
-                pressure = self.weather_data['main']['pressure']
-                
-                # Calculate chance of rain (this is an approximation)
-                rain_chance = self.weather_data['clouds']['all']  # Cloud coverage as a proxy for rain chance
+                rain_chance = self.weather_data['clouds']['all']
+
+                data_hash = f"{city_name}{temp}{condition}{humidity}{wind_speed}{feels_like}{rain_chance}"
 
                 lines = [
-                    f"{city_name}, {country_code}: {temp:.1f}°C, {condition}",
-                    f"Feels like: {feels_like:.1f}°C",
-                    f"Humidity: {humidity}%",
-                    f"Wind: {wind_speed} m/s",
-                    f"Pressure: {pressure} hPa",
-                    f"Chance of rain: {rain_chance}%"
+                    (f"{city_name}, {country_code}", COLOR_FONT_DEFAULT),
+                    (f"{temp:.1f}C  {condition}", self.get_temperature_color(temp)),
+                    (f"Feels {feels_like:.1f}C", self.get_temperature_color(feels_like)),
+                    (f"Humidity {humidity}%", COLOR_FONT_BODY),
+                    (f"Wind {wind_speed} m/s", COLOR_FONT_BODY),
+                    (f"Rain {rain_chance}%", COLOR_FONT_BODY),
                 ]
 
-                for i, line in enumerate(lines):
-                    if "Feels like" in line:
-                        color = self.get_temperature_color(feels_like)
-                    else:
-                        color = fonts.get('body', {}).get('color', COLOR_FONT_DEFAULT)
-                    text_surface = self.body_font.render(line, True, color)
-                    text_surface.set_alpha(TRANSPARENCY)
-                    screen.blit(text_surface, (x, weather_y + i * LINE_SPACING))
+                for i, (text, color) in enumerate(lines):
+                    if draw_y > y + height - line_height:
+                        break
 
-                # Update and draw weather animation
+                    def _render(t=text, c=color):
+                        s = self.body_font.render(t, True, c)
+                        s.set_alpha(TRANSPARENCY)
+                        return s
+
+                    surf = self._surface_cache.get_or_render(
+                        f"weather_line_{i}", _render, data_hash
+                    )
+                    screen.blit(surf, (x, draw_y))
+                    draw_y += line_height
+
+                # Weather animation constrained to module area
                 if self.animation:
                     self.animation.update()
+                    clip = screen.get_clip()
+                    screen.set_clip(pygame.Rect(x, y, width, height))
                     self.animation.draw(screen)
-
+                    screen.set_clip(clip)
             else:
-                error_text = "Weather data unavailable"
-                error_surface = self.font.render(error_text, True, COLOR_PASTEL_RED)
-                error_surface.set_alpha(TRANSPARENCY)
-                # Use extracted coordinates instead of the raw position
-                # tuple/dict so the fallback aligns with other elements
-                screen.blit(error_surface, (x, y))
+                err = self.body_font.render("Weather unavailable", True, COLOR_PASTEL_RED)
+                err.set_alpha(TRANSPARENCY)
+                screen.blit(err, (x, draw_y))
         except Exception as e:
             logging.error(f"Error drawing weather module: {e}")
 

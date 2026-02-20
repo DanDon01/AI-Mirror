@@ -1,96 +1,126 @@
+"""Clock module for AI-Mirror top bar.
+
+Displays scrolling time across full width with static date right-aligned.
+Renders as the top bar of the mirror interface with a thin separator below.
+"""
+
 import pygame
 import logging
+import calendar
 from datetime import datetime
 import pytz
-import calendar
+from config import (
+    FONT_NAME, FONT_SIZE_CLOCK, FONT_SIZE_BODY, FONT_SIZE_SMALL,
+    COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
+    COLOR_SEPARATOR, TRANSPARENCY, ANIMATION,
+)
+
+logger = logging.getLogger("Clock")
+
 
 class ClockModule:
-    def __init__(self, font_file=None, time_font_size=60, date_font_size=30, color=(255, 255, 255), time_format='%H:%M:%S', date_format='%a, %b %d, %Y', timezone='local'):
-        self.time_font_size = time_font_size
-        self.date_font_size = date_font_size
-        self.time_font = pygame.font.Font(font_file, time_font_size) if font_file else pygame.font.SysFont('Arial', time_font_size)
-        self.date_font = pygame.font.Font(font_file, date_font_size) if font_file else pygame.font.SysFont('Arial', date_font_size)
-        self.color = color
+    def __init__(self, font_file=None, time_font_size=None, date_font_size=None,
+                 color=None, time_format='%H:%M:%S', date_format='%a, %b %d, %Y',
+                 timezone='local', **kwargs):
+        size = time_font_size or FONT_SIZE_CLOCK
+        date_size = date_font_size or FONT_SIZE_BODY
+        self.time_font = pygame.font.SysFont(FONT_NAME, size)
+        self.date_font = pygame.font.SysFont(FONT_NAME, date_size)
+        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_SMALL)
+        self.color = color or COLOR_TEXT_PRIMARY
         self.time_format = time_format
         self.date_format = date_format
         self.tz = pytz.timezone(timezone) if timezone != 'local' else None
+
         self.scroll_position = 0
-        self.scroll_speed = 0.7
-        self.screen_width = 0  # This will be set in the draw method
-        self.total_width = 0  # This will be calculated in the draw method
+        self.scroll_speed = ANIMATION.get('scroll_speed_clock', 0.5)
+        self.screen_width = 0
+        self.total_width = 0
+
+        # Status indicators set by main loop
+        self._status_text = ""
+
+    def set_status_indicators(self, text):
+        """Set status text displayed in the top bar (e.g. weather summary)."""
+        self._status_text = text
 
     def update(self):
-        # Update scroll position
         self.scroll_position -= self.scroll_speed
         if self.total_width > 0 and self.scroll_position < -self.total_width:
             self.scroll_position = self.screen_width
 
     def draw(self, screen, position):
-        """Draw the clock with improved scrolling across the full screen"""
+        """Draw top bar: scrolling time, static date, separator line."""
         try:
-            x, y = position if isinstance(position, tuple) else (position['x'], position['y'])
-            screen_width = screen.get_width()
-            
-            # Get current time and format it
+            if isinstance(position, dict):
+                x, y = position['x'], position['y']
+                width = position.get('width', screen.get_width())
+                height = position.get('height', 80)
+            else:
+                x, y = position
+                width = screen.get_width()
+                height = 80
+
+            self.screen_width = width
             current_time = self.get_current_time()
             current_date = self.get_current_date()
-            
-            # Render time with larger font
-            time_text = self.time_font.render(current_time, True, self.color)
-            
-            # For scrolling effect, calculate position based on time
-            if hasattr(self, 'scroll_position'):
-                # Update scroll position (slower speed)
-                self.scroll_position -= 0.7  # Reduced speed (was likely 1 or 2)
-                
-                # Reset position when it's gone completely off left side
-                if self.scroll_position < -time_text.get_width():
-                    self.scroll_position = screen_width
-            else:
-                # Initialize scroll position at the right edge of screen
-                self.scroll_position = screen_width
-            
-            # Draw the time text at the current scroll position
-            screen.blit(time_text, (self.scroll_position, y))
-            
-            # If the first instance is scrolling off, draw a second instance
+
+            # Scrolling time (large font)
+            time_surf = self.time_font.render(current_time, True, self.color)
+            time_surf.set_alpha(TRANSPARENCY)
+            self.total_width = time_surf.get_width()
+
+            self.scroll_position -= self.scroll_speed
+            if self.scroll_position < -time_surf.get_width():
+                self.scroll_position = width
+
+            time_y = y + (height - time_surf.get_height() - 10) // 2
+            screen.blit(time_surf, (self.scroll_position, time_y))
+
+            # Seamless wrap: draw second copy when scrolling off
             if self.scroll_position < 0:
-                # Calculate where to put the second instance
-                second_position = self.scroll_position + time_text.get_width() + screen_width
-                
-                # Only draw second instance if needed to fill gap
-                if second_position < screen_width:
-                    screen.blit(time_text, (second_position, y))
-            
-            # Draw the date below the time (not scrolling)
-            date_text = self.date_font.render(current_date, True, self.color)
-            date_x = (screen_width - date_text.get_width()) // 2  # Center date
-            
-            # Use the font's get_height method instead of time_font_size
-            font_height = self.time_font.get_height()
-            screen.blit(date_text, (date_x, y + font_height + 10))
-            
+                second_x = self.scroll_position + time_surf.get_width() + width
+                if second_x < width:
+                    screen.blit(time_surf, (second_x, time_y))
+
+            # Date (right-aligned, static)
+            date_surf = self.date_font.render(current_date, True, COLOR_TEXT_SECONDARY)
+            date_surf.set_alpha(TRANSPARENCY)
+            date_x = width - date_surf.get_width() - 20
+            date_y = y + height - date_surf.get_height() - 12
+            screen.blit(date_surf, (date_x, date_y))
+
+            # Status text (right side, small)
+            if self._status_text:
+                status_surf = self.status_font.render(
+                    self._status_text, True, COLOR_TEXT_DIM
+                )
+                status_surf.set_alpha(TRANSPARENCY)
+                screen.blit(status_surf, (date_x, y + 8))
+
+            # Thin separator line at bottom of top bar
+            sep_y = y + height - 1
+            pygame.draw.line(
+                screen, COLOR_SEPARATOR, (0, sep_y), (width, sep_y), 1
+            )
+
         except Exception as e:
-            logging.error(f"Error drawing clock: {e}")
+            logger.error(f"Error drawing clock: {e}")
 
     def format_date(self, date):
-        # Custom date formatting to match "Tues, Sept 03, 2024" format
-        day_abbr = calendar.day_abbr[date.weekday()][:4]  # Get first 4 letters of day name
+        day_abbr = calendar.day_abbr[date.weekday()][:4]
         month_abbr = date.strftime("%b")
         if month_abbr == "Sep":
             month_abbr = "Sept"
         return f"{day_abbr}, {month_abbr} {date.strftime('%d')}, {date.strftime('%Y')}"
 
-    def cleanup(self):
-        # No cleanup needed for this module
-        pass
-
     def get_current_time(self):
-        """Get formatted time string"""
-        current_time = datetime.now(self.tz) if self.tz else datetime.now()
-        return current_time.strftime(self.time_format)
+        now = datetime.now(self.tz) if self.tz else datetime.now()
+        return now.strftime(self.time_format)
 
     def get_current_date(self):
-        """Get formatted date string"""
-        current_time = datetime.now(self.tz) if self.tz else datetime.now()
-        return self.format_date(current_time)
+        now = datetime.now(self.tz) if self.tz else datetime.now()
+        return self.format_date(now)
+
+    def cleanup(self):
+        pass

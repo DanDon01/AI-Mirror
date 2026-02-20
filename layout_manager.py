@@ -1,241 +1,143 @@
-import pygame
-from config import CONFIG, FONT_NAME
+"""Zone-based layout manager for AI-Mirror.
+
+Positions modules in edge-hugging zones around a clear center mirror area.
+Top bar: scrolling clock + status. Bottom bar: scrolling stock ticker.
+Left/right columns: stacked info modules. Center: clear for reflection.
+"""
+
 import logging
-from visual_effects import VisualEffects
-from config import draw_module_background_fallback
+from config import CONFIG, LAYOUT_V2, CURRENT_MONITOR
+
+logger = logging.getLogger("Layout")
+
 
 class LayoutManager:
     def __init__(self, screen_width, screen_height):
-        # Get configured screen size from CONFIG
         config_screen = CONFIG.get('current_monitor', {})
         config_width = config_screen.get('width')
         config_height = config_screen.get('height')
-        
-        # Use config values if available (override passed parameters)
+
         if config_width and config_height:
-            logging.info(f"Using screen dimensions from config: {config_width}x{config_height}")
             self.screen_width = config_width
             self.screen_height = config_height
         else:
-            logging.info(f"Using passed screen dimensions: {screen_width}x{screen_height}")
             self.screen_width = screen_width
             self.screen_height = screen_height
-        
-        self.layout = CONFIG['layout']
-        self.scale = CONFIG['screen']['scale']
+
+        self.layout = LAYOUT_V2
         self.module_positions = {}
         self.calculate_positions()
-
-        # Initialize visual effects in __init__
-        self.effects = VisualEffects()
+        logger.info(
+            f"Layout initialized: {self.screen_width}x{self.screen_height}, "
+            f"{len(self.module_positions)} positions calculated"
+        )
 
     def calculate_positions(self):
-        """Recalculate positions with even narrower modules to fit screen"""
-        # Log dimensions to see what we're working with
-        logging.info(f"Screen dimensions: {self.screen_width}x{self.screen_height}")
-        
-        # Get module dimensions from config
-        standard_dims = CONFIG.get('module_styling', {}).get('module_dimensions', {}).get('standard', {})
-        module_height = standard_dims.get('height', 200)
-        module_width = standard_dims.get('width', 225)
-        
-        # Use spacing from config
-        padding = CONFIG.get('module_styling', {}).get('spacing', {}).get('padding', 10)
-        side_margin = padding * 2  # Or define in config
-        
-        # Force narrower modules for very small displays
-        # Assume minimum 700px width display
-        module_width = min(int((self.screen_width - (3 * side_margin)) / 2), 250)
-        
-        # Check if we need to adjust again for very narrow screens
-        if module_width * 2 + 3 * side_margin > self.screen_width:
-            module_width = (self.screen_width - (3 * side_margin)) // 2
-            logging.info(f"Forced module width to {module_width}px for narrow screen")
-        
-        # Calculate vertical positions (3 rows)
-        row_y = [
-            padding + 50,  # First row (after clock)
-            padding + module_height + 30 + 50,  # Second row
-            padding + (module_height + 30) * 2 + 50  # Third row
-        ]
-        
-        # Calculate horizontal positions
-        left_x = side_margin
-        right_x = self.screen_width - side_margin - module_width
-        
-        # Log the calculated positions for debugging
-        logging.info(f"Left edge: {left_x}, Right edge: {right_x}, Module width: {module_width}")
-        logging.info(f"Screen width check: right edge({right_x}) + module width({module_width}) = {right_x + module_width}")
-        
-        # Assign module positions
-        # Clock spans the top
+        """Calculate zone-based module positions for mirror layout."""
+        w = self.screen_width
+        h = self.screen_height
+        zones = self.layout['zones']
+        gap = self.layout.get('module_gap', 15)
+        edge_pad = self.layout.get('edge_padding', 15)
+
+        # Zone dimensions
+        top_h = zones['top_bar']['height']
+        bottom_h = zones['bottom_bar']['height']
+        # Use percentage of actual screen width, capped by monitor config max
+        left_pct = int(w * zones['left_column']['width_pct'])
+        right_pct = int(w * zones['right_column']['width_pct'])
+        left_max = CURRENT_MONITOR.get('left_col_width', left_pct)
+        right_max = CURRENT_MONITOR.get('right_col_width', right_pct)
+        left_w = min(left_pct, left_max)
+        right_w = min(right_pct, right_max)
+
+        # Column vertical bounds (between top bar and bottom bar)
+        col_top = top_h + gap
+        col_bottom = h - bottom_h - gap
+
+        # Top bar: full width
         self.module_positions['clock'] = {
-            'x': 0,
-            'y': 5,
-            'width': self.screen_width,
-            'height': 50
+            'x': 0, 'y': 0,
+            'width': w, 'height': top_h,
         }
-        
-        # Left side modules
-        self.module_positions['weather'] = {
-            'x': left_x,
-            'y': row_y[0],
-            'width': module_width,
-            'height': module_height
-        }
-        
+
+        # Bottom bar: full width, anchored to bottom
         self.module_positions['stocks'] = {
-            'x': left_x,
-            'y': row_y[1],
-            'width': module_width,
-            'height': module_height
+            'x': 0, 'y': h - bottom_h,
+            'width': w, 'height': bottom_h,
         }
-        
-        self.module_positions['calendar'] = {
-            'x': left_x,
-            'y': row_y[2],
-            'width': module_width,
-            'height': module_height
-        }
-        
-        # Right side modules
-        self.module_positions['fitbit'] = {
-            'x': right_x,
-            'y': row_y[0],
-            'width': module_width,
-            'height': module_height
-        }
-        
-        # Skip placeholder module if screen is too narrow
-        if right_x + module_width <= self.screen_width - 10:
-            self.module_positions['placeholder'] = {
-                'x': right_x,
-                'y': row_y[1],
-                'width': module_width,
-                'height': module_height
+
+        # Left column: stacked modules
+        left_modules = self.layout.get('left_modules', [])
+        left_positions = self._stack_column(
+            left_modules, edge_pad, left_w, col_top, col_bottom, gap
+        )
+        self.module_positions.update(left_positions)
+
+        # Right column: stacked modules
+        right_modules = self.layout.get('right_modules', [])
+        right_x = w - right_w - edge_pad
+        right_positions = self._stack_column(
+            right_modules, right_x, right_w, col_top, col_bottom, gap
+        )
+        self.module_positions.update(right_positions)
+
+        # Center overlay modules (AI/voice): centered on screen
+        center_x = left_w + edge_pad + gap
+        center_w = w - left_w - right_w - (edge_pad + gap) * 2
+        center_y = h // 3
+        for name in self.layout.get('center_overlay_modules', []):
+            self.module_positions[name] = {
+                'x': center_x, 'y': center_y,
+                'width': center_w, 'height': 200,
             }
-        
-        # AI module on right side bottom
-        self.module_positions['ai_interaction'] = {
-            'x': right_x,
-            'y': row_y[2] + module_height + padding,  # Position below the Fitbit module
-            'width': module_width,
-            'height': module_height
-        }
-        
-        # New modules - right side, row 2 and below
-        self.module_positions['countdown'] = {
-            'x': right_x,
-            'y': row_y[1],
-            'width': module_width,
-            'height': module_height
-        }
 
-        self.module_positions['quote'] = {
-            'x': left_x,
-            'y': row_y[2] + module_height + padding,
-            'width': module_width,
-            'height': module_height
-        }
+        # Fullscreen overlay (retro characters, screensaver)
+        for name in self.layout.get('fullscreen_overlay_modules', []):
+            self.module_positions[name] = {
+                'x': 0, 'y': 0,
+                'width': w, 'height': h,
+            }
 
-        self.module_positions['news'] = {
-            'x': right_x,
-            'y': row_y[2],
-            'width': module_width,
-            'height': module_height
-        }
+        for name, pos in self.module_positions.items():
+            logger.info(
+                f"  {name}: ({pos['x']},{pos['y']}) "
+                f"{pos['width']}x{pos['height']}"
+            )
 
-        self.module_positions['openclaw'] = {
-            'x': right_x,
-            'y': row_y[2] + module_height + padding,
-            'width': module_width,
-            'height': module_height
-        }
+    def _stack_column(self, module_names, x, width, top_y, bottom_y, gap):
+        """Stack modules vertically within a column zone.
 
-        # Retro characters is full screen
-        self.module_positions['retro_characters'] = {
-            'x': 0,
-            'y': 0,
-            'width': self.screen_width,
-            'height': self.screen_height
-        }
-        
-        # Log calculated positions
-        for module_name, pos in self.module_positions.items():
-            logging.info(f"{module_name}: (x={pos['x']}, y={pos['y']}), size={pos['width']}x{pos['height']}")
+        Distributes available vertical space equally among modules.
+        """
+        positions = {}
+        count = len(module_names)
+        if count == 0:
+            return positions
+
+        available = bottom_y - top_y
+        module_h = (available - (count - 1) * gap) // count
+        current_y = top_y
+
+        for name in module_names:
+            positions[name] = {
+                'x': x, 'y': current_y,
+                'width': width, 'height': module_h,
+            }
+            current_y += module_h + gap
+
+        return positions
 
     def get_module_position(self, module_name):
-        """Get the position for a specific module, ensuring proper return format"""
-        # First check configured positions
-        if hasattr(self, 'module_positions') and module_name in self.module_positions:
-            position = self.module_positions[module_name]
-            
-            # Ensure position is a dictionary with x/y keys
-            if isinstance(position, dict) and 'x' in position and 'y' in position:
-                return position
-            # Handle tuple format (x, y)
-            elif isinstance(position, tuple) and len(position) == 2:
-                return {'x': position[0], 'y': position[1]}
-        
-        # Fall back to defaults
-        default_positions = {
-            'clock': {'x': 10, 'y': 10},
-            'weather': {'x': 10, 'y': 100},
-            'stocks': {'x': 10, 'y': 300},
-            'calendar': {'x': 10, 'y': 500},
-            'fitbit': {'x': self.screen_width - 210, 'y': 500},
-            'retro_characters': {'x': 0, 'y': 0},
-            'ai_interaction': {'x': 10, 'y': self.screen_height - 100},
-            'countdown': {'x': self.screen_width - 210, 'y': 300},
-            'quote': {'x': 10, 'y': 700},
-            'news': {'x': self.screen_width - 210, 'y': 700},
-            'openclaw': {'x': self.screen_width - 210, 'y': 900}
-        }
-        
-        if module_name in default_positions:
-            return default_positions[module_name]
-        
-        # Last resort - top left corner
-        return {'x': 10, 'y': 10}
+        """Get position for a module, with fallback defaults."""
+        if module_name in self.module_positions:
+            return self.module_positions[module_name]
 
-    def draw_module_background(self, screen, module_name, title):
-        pos = self.module_positions.get(module_name)
-        if not pos:
-            return
+        # Fallback: place unknown modules in top-left
+        logger.warning(f"No position for module: {module_name}")
+        return {'x': 10, 'y': 10, 'width': 300, 'height': 200}
 
-        # Get styling from config
-        bg_style = self.layout['backgrounds']
-        fonts = self.layout['fonts']
-
-        # Draw content background
-        bg_surface = pygame.Surface((pos['width'], pos['height']))
-        bg_surface.fill(bg_style['content']['color'])
-        bg_surface.set_alpha(bg_style['content']['alpha'])
-        screen.blit(bg_surface, (pos['x'], pos['y']))
-
-        # Draw title bar
-        title_height = int((fonts['title']['size'] + 10) * self.scale)
-        title_surface = pygame.Surface((pos['width'], title_height))
-        title_surface.fill(bg_style['title']['color'])
-        title_surface.set_alpha(bg_style['title']['alpha'])
-        screen.blit(title_surface, (pos['x'], pos['y']))
-
-        # Draw title text
-        font = pygame.font.SysFont(FONT_NAME, fonts['title']['size'])
-        title_text = font.render(title, True, fonts['title']['color'])
-        text_x = pos['x'] + (pos['width'] - title_text.get_width()) // 2
-        screen.blit(title_text, (text_x, pos['y'] + 2))
-
-        try:
-            self.effects.draw_rounded_rect(screen, (pos['x'], pos['y'], pos['width'], pos['height']), bg_style['content']['color'], radius=10, alpha=0)
-            self.effects.draw_rounded_rect(screen, (pos['x'], pos['y'], pos['width'], title_height), bg_style['title']['color'], radius=10, alpha=0)
-        except Exception:
-            draw_module_background_fallback(screen, pos['x'], pos['y'], pos['width'], pos['height'], pos['y'] + 2)
-
-        return (pos['x'], pos['y'] + title_height)
-
-    def __call__(self):
-        # At the beginning of any method that might initialize modules:
-        if hasattr(self, 'modules') and self.modules:
-            # Use existing modules instead of initializing new ones
-            pass
+    def get_zone(self, zone_name):
+        """Get the bounds of a layout zone."""
+        zones = self.layout.get('zones', {})
+        return zones.get(zone_name, {})

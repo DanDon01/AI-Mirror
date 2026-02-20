@@ -183,6 +183,17 @@ class MagicMirror:
         self.module_positions = {}
         self.setup_module_positions()
 
+        # Animation manager for fade transitions and center notifications
+        from animation_manager import AnimationManager
+        self.animation_manager = AnimationManager(
+            self.screen.get_width(), self.screen.get_height()
+        )
+
+        # Wire notification callbacks for modules that support them
+        for name, module in self.modules.items():
+            if hasattr(module, 'set_notification_callback'):
+                module.set_notification_callback(self.animation_manager.push_notification)
+
         # Initialize module visibility
         for module_name in self.modules.keys():
             self.module_manager.module_visibility[module_name] = True
@@ -304,54 +315,119 @@ class MagicMirror:
                         self.modules['ai_interaction'].on_button_press()
 
     def draw_modules(self):
-        """Draw all visible modules to the screen."""
+        """Draw all visible modules in z-order for mirror layout.
+
+        Draw order: black fill -> left/right columns -> bottom bar (ticker)
+        -> top bar (clock) -> center overlays -> debug overlay -> flip.
+        """
         try:
             self.screen.fill((0, 0, 0))
 
-            for name, module in self.modules.items():
-                if name in self.module_manager.module_visibility:
-                    if self.module_manager.module_visibility[name]:
-                        position = self.module_positions.get(name, {'x': 0, 'y': 0})
+            # Advance animation timers
+            self.animation_manager.update()
 
-                        if isinstance(position, dict) and 'x' in position and 'y' in position:
-                            pos_tuple = (position['x'], position['y'])
-                        else:
-                            pos_tuple = position
+            layout_v2 = CONFIG.get('layout_v2', {})
+            left_names = layout_v2.get('left_modules', [])
+            right_names = layout_v2.get('right_modules', [])
+            center_names = layout_v2.get('center_overlay_modules', [])
+            fullscreen_names = layout_v2.get('fullscreen_overlay_modules', [])
 
-                        module.draw(self.screen, pos_tuple)
+            # 1) Left and right column modules
+            for name in left_names + right_names:
+                self._draw_module(name)
 
-                        if self.debug_layout:
-                            try:
-                                pos = position
-                                width = pos.get('width', 200)
-                                height = pos.get('height', 100)
-                                pygame.draw.rect(self.screen, (255, 0, 0),
-                                                (pos['x'], pos['y'], width, height), 2)
-                                font = pygame.font.Font(None, 24)
-                                text = font.render(name, True, (255, 0, 0))
-                                self.screen.blit(text, (pos['x'], pos['y'] - 20))
-                            except Exception as e:
-                                logging.debug(f"Debug overlay error for {name}: {e}")
+            # 2) Bottom bar: stock ticker (uses special draw method)
+            if 'stocks' in self.modules and self.module_manager.is_module_visible('stocks'):
+                stocks = self.modules['stocks']
+                if hasattr(stocks, 'draw_scrolling_ticker'):
+                    stocks.draw_scrolling_ticker(self.screen)
+                else:
+                    self._draw_module('stocks')
 
+            # 3) Top bar: clock
+            self._draw_module('clock')
+
+            # 4) Fullscreen overlays (retro characters - screensaver)
+            for name in fullscreen_names:
+                self._draw_module(name)
+
+            # 5) Center overlays (AI/voice - only when active)
+            for name in center_names:
+                self._draw_module(name)
+
+            # 6) Draw any remaining modules not in layout zones
+            drawn = set(['clock', 'stocks'] + left_names + right_names
+                        + center_names + fullscreen_names)
+            for name in self.modules:
+                if name not in drawn:
+                    self._draw_module(name)
+
+            # 7) Center notifications (on top of everything)
+            self.animation_manager.draw_notifications(self.screen)
+
+            # Debug overlay
             if self.debug_layout:
-                pygame.draw.rect(self.screen, (255, 0, 0),
-                                (0, 0, self.screen.get_width(), self.screen.get_height()), 1)
-                center_x = self.screen.get_width() // 2
-                center_y = self.screen.get_height() // 2
-                pygame.draw.line(self.screen, (255, 0, 0),
-                                (center_x, 0), (center_x, self.screen.get_height()), 1)
-                pygame.draw.line(self.screen, (255, 0, 0),
-                                (0, center_y), (self.screen.get_width(), center_y), 1)
-                debug_font = pygame.font.Font(None, 24)
-                dims_text = debug_font.render(
-                    f"Screen: {self.screen.get_width()}x{self.screen.get_height()}",
-                    True, (255, 0, 0))
-                self.screen.blit(dims_text, (10, self.screen.get_height() - 30))
+                self._draw_debug_overlay()
 
             pygame.display.flip()
         except Exception as e:
             logging.error(f"Error in draw_modules: {e}")
             logging.error(traceback.format_exc())
+
+    def _draw_module(self, name):
+        """Draw a single module if it exists and is visible.
+
+        Applies per-module fade alpha from the animation manager.
+        When a module is mid-fade, it renders to a temp surface first.
+        """
+        if name not in self.modules:
+            return
+        if not self.module_manager.is_module_visible(name):
+            return
+
+        position = self.module_positions.get(name, {'x': 0, 'y': 0})
+        module = self.modules[name]
+
+        alpha = self.animation_manager.get_module_alpha(name)
+        if alpha <= 0:
+            return  # Fully faded out
+
+        if self.animation_manager.is_module_fading(name):
+            # Render to temp surface and apply alpha
+            w = position.get('width', 300)
+            h = position.get('height', 300)
+            temp = pygame.Surface((w, h), pygame.SRCALPHA)
+            temp_pos = dict(position, x=0, y=0)
+            module.draw(temp, temp_pos)
+            temp.set_alpha(alpha)
+            self.screen.blit(temp, (position.get('x', 0), position.get('y', 0)))
+        else:
+            module.draw(self.screen, position)
+
+        if self.debug_layout:
+            try:
+                w = position.get('width', 200)
+                h = position.get('height', 100)
+                pygame.draw.rect(self.screen, (255, 0, 0),
+                                (position['x'], position['y'], w, h), 1)
+                font = pygame.font.Font(None, 20)
+                text = font.render(name, True, (255, 0, 0))
+                self.screen.blit(text, (position['x'], position['y'] - 14))
+            except Exception as e:
+                logging.debug(f"Debug overlay error for {name}: {e}")
+
+    def _draw_debug_overlay(self):
+        """Draw debug grid and screen dimensions."""
+        sw = self.screen.get_width()
+        sh = self.screen.get_height()
+        red = (255, 0, 0)
+        pygame.draw.rect(self.screen, red, (0, 0, sw, sh), 1)
+        cx, cy = sw // 2, sh // 2
+        pygame.draw.line(self.screen, red, (cx, 0), (cx, sh), 1)
+        pygame.draw.line(self.screen, red, (0, cy), (sw, cy), 1)
+        debug_font = pygame.font.Font(None, 20)
+        dims = debug_font.render(f"{sw}x{sh}", True, red)
+        self.screen.blit(dims, (10, sh - 20))
 
     def toggle_debug(self):
         """Toggle debug mode on/off."""
@@ -384,6 +460,18 @@ class MagicMirror:
                         module.update()
                 except Exception as e:
                     logging.error(f"Error updating {module_name}: {e}")
+
+        # Feed weather summary to clock top-bar status line
+        if 'clock' in self.modules and 'weather' in self.modules:
+            weather = self.modules['weather']
+            clock = self.modules['clock']
+            if hasattr(clock, 'set_status_indicators') and weather.weather_data:
+                try:
+                    temp = weather.weather_data['main']['temp']
+                    cond = weather.weather_data['weather'][0]['description']
+                    clock.set_status_indicators(f"{temp:.0f}C  {cond}")
+                except Exception:
+                    pass
 
     def run(self):
         """Run the main application loop."""
@@ -459,10 +547,12 @@ class MagicMirror:
         self.layout_manager = LayoutManager(width, height)
 
     def change_state(self, new_state):
-        """Change mirror state and update module visibility."""
+        """Change mirror state with fade transition."""
         if self.state == new_state:
             return
+        old_state = self.state
         self.state = new_state
+        self.animation_manager.begin_state_transition(old_state, new_state)
         logging.info(f"Mirror state changed to: {new_state}")
 
     def setup_module_positions(self):
@@ -485,18 +575,20 @@ class MagicMirror:
                 logging.warning(f"Modules missing positions: {missing_positions}")
 
                 width, height = self.screen.get_size()
+                col_w = int(width * 0.22)
+                right_x = width - col_w - 15
                 fallback_positions = {
-                    'clock': {'x': 20, 'y': 20, 'width': 300, 'height': 100},
-                    'weather': {'x': width - 320, 'y': 20, 'width': 300, 'height': 200},
-                    'calendar': {'x': 20, 'y': 150, 'width': 400, 'height': 300},
-                    'stocks': {'x': 20, 'y': height - 150, 'width': 400, 'height': 130},
-                    'fitbit': {'x': width - 320, 'y': 240, 'width': 300, 'height': 200},
-                    'retro_characters': {'x': width // 2 - 150, 'y': height // 2 - 150, 'width': 300, 'height': 300},
-                    'ai_interaction': {'x': width // 2 - 200, 'y': height - 200, 'width': 400, 'height': 180},
-                    'countdown': {'x': width - 320, 'y': 460, 'width': 300, 'height': 200},
-                    'quote': {'x': 20, 'y': height - 370, 'width': 300, 'height': 200},
-                    'news': {'x': width - 320, 'y': 680, 'width': 300, 'height': 200},
-                    'openclaw': {'x': width - 320, 'y': 900, 'width': 300, 'height': 200}
+                    'clock': {'x': 0, 'y': 0, 'width': width, 'height': 80},
+                    'stocks': {'x': 0, 'y': height - 50, 'width': width, 'height': 50},
+                    'weather': {'x': 15, 'y': 95, 'width': col_w, 'height': 250},
+                    'calendar': {'x': 15, 'y': 360, 'width': col_w, 'height': 250},
+                    'countdown': {'x': 15, 'y': 625, 'width': col_w, 'height': 250},
+                    'news': {'x': right_x, 'y': 95, 'width': col_w, 'height': 200},
+                    'quote': {'x': right_x, 'y': 310, 'width': col_w, 'height': 200},
+                    'fitbit': {'x': right_x, 'y': 525, 'width': col_w, 'height': 200},
+                    'openclaw': {'x': right_x, 'y': 740, 'width': col_w, 'height': 200},
+                    'retro_characters': {'x': 0, 'y': 0, 'width': width, 'height': height},
+                    'ai_interaction': {'x': col_w + 30, 'y': height // 3, 'width': width - col_w * 2 - 60, 'height': 200},
                 }
 
                 for name in missing_positions:

@@ -9,8 +9,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 from google_auth_oauthlib.flow import Flow
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA, DEFAULT_RADIUS, DEFAULT_PADDING, DEFAULT_LINE_HEIGHT
-from visual_effects import VisualEffects
+from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY
 import time
 
 # Google Calendar color mapping - these match the standard Google Calendar colors
@@ -49,16 +48,8 @@ class CalendarModule:
         self.env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
         self.load_tokens()
         
-        # Add visual enhancement properties
-        self.effects = VisualEffects()
         self.last_update_time = time.time()
-        self.event_fade_in = {}  # Store fade-in progress for each event
-        self.header_pulse_speed = 0.3
-        
-        # Background colors
-        self.bg_color = COLOR_BG_MODULE_ALPHA
-        self.header_bg_color = COLOR_BG_HEADER_ALPHA
-        self.today_bg_color = (0, 40, 80, 180)  # Bluish for today's events
+        self.today_highlight_color = (0, 40, 80, 120)
 
     def load_tokens(self):
         load_dotenv(self.env_file)
@@ -149,105 +140,68 @@ class CalendarModule:
             self.events = None
 
     def draw(self, screen, position):
-        """Draw calendar with proper Google Calendar colors and consistent styling"""
+        """Draw calendar with floating text on black -- no background."""
         try:
-            # Extract x,y coordinates
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
+                width = position.get('width', 300)
+                height = position.get('height', 300)
             else:
                 x, y = position
-            
-            # Get styling from config
+                width, height = 300, 300
+
             styling = CONFIG.get('module_styling', {})
-            fonts = styling.get('fonts', {})
-            backgrounds = styling.get('backgrounds', {})
-            
-            # Get module dimensions from config
-            module_dims = styling.get('module_dimensions', {}).get('large', {})
-            module_width = module_dims.get('width', 225)
-            module_height = module_dims.get('height', 400)
-            header_height = module_dims.get('header_height', 40)
-            
-            # Get styles for drawing
-            radius = styling.get('radius', DEFAULT_RADIUS)
-            padding = styling.get('spacing', {}).get('padding', DEFAULT_PADDING)
-            line_height = styling.get('spacing', {}).get('line_height', DEFAULT_LINE_HEIGHT)
-            
-            # Initialize fonts if not already done
+            line_height = styling.get('spacing', {}).get('line_height', 28)
+
             if not self.font:
-                title_size = fonts.get('title', {}).get('size', 24)
-                body_size = fonts.get('body', {}).get('size', 16)
-                small_size = fonts.get('small', {}).get('size', 14)
-                
-                self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
-                self.font = pygame.font.SysFont(FONT_NAME, body_size)
-                self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
+                from module_base import ModuleDrawHelper
+                title_f, body_f, small_f = ModuleDrawHelper.get_fonts()
+                self.title_font = title_f
+                self.font = body_f
+                self.small_font = small_f
+
+            from module_base import ModuleDrawHelper
+            current_y = ModuleDrawHelper.draw_module_title(
+                screen, "Calendar", x, y, width
+            )
             
-            # Get background colors from config
-            bg_color = COLOR_BG_MODULE_ALPHA
-            header_bg_color = COLOR_BG_HEADER_ALPHA
-            
-            # Draw module background using config dimensions
-            module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
-            header_rect = pygame.Rect(x-padding, y-padding, module_width, header_height)
-            
-            # Draw background and header
-            try:
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
-            except Exception as e:
-                from config import draw_module_background_fallback
-                draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
-            
-            # Draw title using colors from config
-            title_color = fonts.get('title', {}).get('color', COLOR_FONT_DEFAULT)
-            title_surface = self.title_font.render("Calendar", True, title_color)
-            screen.blit(title_surface, (x + padding, y + padding))
-            
-            # Draw calendar events
-            current_y = y + header_height + 5  # Start below title
-            
-            # Debug message if no events
             if not self.events:
-                debug_color = fonts.get('body', {}).get('color', (200, 200, 200))
-                debug_text = self.font.render("No calendar events", True, debug_color)
-                screen.blit(debug_text, (x + padding, current_y))
+                debug_text = self.font.render("No calendar events", True, COLOR_TEXT_SECONDARY)
+                debug_text.set_alpha(TRANSPARENCY)
+                screen.blit(debug_text, (x, current_y))
                 return
             
-            # Draw events with proper Google Colors but consistent font styling
-            for event in self.events[:8]:  # Limit to 8 events
+            for event in self.events[:6]:
+                if current_y > y + height - line_height:
+                    break
                 try:
-                    # Get event color from colorId if available
                     event_color = self.get_event_color(event)
-                    
+
                     # Check if event is today
                     is_today = False
                     start = event.get('start', {})
                     if 'dateTime' in start:
                         try:
                             dt = datetime.datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                            today = datetime.datetime.now().date()
-                            is_today = dt.date() == today
+                            is_today = dt.date() == datetime.datetime.now().date()
                         except Exception:
                             pass
                     elif 'date' in start:
                         try:
                             dt = datetime.datetime.fromisoformat(start['date'])
-                            today = datetime.datetime.now().date()
-                            is_today = dt.date() == today
+                            is_today = dt.date() == datetime.datetime.now().date()
                         except Exception:
                             pass
-                    
-                    # Draw background for today's events
+
+                    # Subtle highlight for today's events
                     if is_today:
-                        # Create background rect for the entire event
-                        today_rect = pygame.Rect(x + 5, current_y, module_width - 10, 35)
-                        pygame.draw.rect(screen, self.today_bg_color, today_rect, border_radius=3)
-                    
-                    # Draw colored indicator bar
-                    indicator_rect = pygame.Rect(x + 5, current_y + 2, 5, 25)
-                    pygame.draw.rect(screen, event_color, indicator_rect, border_radius=2)
-                    
+                        today_surf = pygame.Surface((width, 36), pygame.SRCALPHA)
+                        today_surf.fill(self.today_highlight_color)
+                        screen.blit(today_surf, (x, current_y))
+
+                    # Thin color indicator bar
+                    pygame.draw.rect(screen, event_color, (x, current_y + 2, 3, 22))
+
                     # Format start time/date
                     start = event.get('start', {})
                     if 'dateTime' in start:
@@ -257,36 +211,26 @@ class CalendarModule:
                         except Exception:
                             date_str = start['dateTime'][:16].replace('T', ' ')
                     else:
-                        # All-day event
                         date_str = "All day"
-                    
-                    # Draw event time with adjusted position (after indicator)
-                    small_color = fonts.get('small', {}).get('color', (180, 180, 180))
-                    date_surface = self.small_font.render(date_str, True, small_color)
-                    screen.blit(date_surface, (x + 15, current_y))
-                    
-                    # Draw event title with color influence
+
+                    date_surface = self.small_font.render(date_str, True, COLOR_TEXT_DIM)
+                    date_surface.set_alpha(TRANSPARENCY)
+                    screen.blit(date_surface, (x + 10, current_y))
+
+                    # Event title
                     title = event.get('summary', 'No title')
-                    if len(title) > 28:
-                        title = title[:25] + "..."
-                    
-                    # Use event color for title, but maintain consistent brightness level
+                    max_chars = max(20, (width - 15) // 8)
+                    if len(title) > max_chars:
+                        title = title[:max_chars - 3] + "..."
                     title_surface = self.font.render(title, True, event_color)
-                    screen.blit(title_surface, (x + 15, current_y + 18))
-                    
-                    current_y += 40
-                    
-                    # Draw a separator line (50% shorter)
-                    line_width = (module_width - 30) // 2  # 50% of available width
-                    line_start_x = x + 5
-                    line_end_x = line_start_x + line_width
-                    pygame.draw.line(screen, (50, 50, 50), 
-                        (line_start_x, current_y - 5), 
-                        (line_end_x, current_y - 5), 1)
+                    title_surface.set_alpha(TRANSPARENCY)
+                    screen.blit(title_surface, (x + 10, current_y + 16))
+
+                    current_y += 38
+
                 except Exception as e:
-                    # If specific event drawing fails, log and continue to next event
                     logging.error(f"Error drawing event: {e}")
-                    current_y += 30
+                    current_y += 28
         
         except Exception as e:
             logging.error(f"Error drawing calendar: {e}")

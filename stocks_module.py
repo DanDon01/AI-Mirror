@@ -3,7 +3,7 @@ import pygame
 import logging
 from datetime import datetime, timedelta
 from pytz import timezone
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA, draw_module_background_fallback  # Import font settings and color constants from config
+from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG
 from visual_effects import VisualEffects
 import time
 import math
@@ -56,10 +56,13 @@ class StocksModule:
         self.header_pulse_speed = 0.3
         self.alert_pulse_speed = 0.8
         
-        # Add background properties
-        self.bg_color = COLOR_BG_MODULE_ALPHA
-        self.header_bg_color = COLOR_BG_HEADER_ALPHA
-        self.alert_bg_color = (60, 20, 20)  # No alpha, handled in draw_rounded_rect
+        self.alert_bg_color = (60, 20, 20)
+        self._notify = None
+        self._prev_changes = {}  # Track previous changes for notification dedup
+
+    def set_notification_callback(self, callback):
+        """Register a callback for center-screen notifications."""
+        self._notify = callback
 
     def update(self):
         """Update stock data with minimal API calls to avoid rate limiting"""
@@ -99,6 +102,24 @@ class StocksModule:
             
             self.last_update = current_time
             self.logger.info("Stock data update complete")
+
+            # Push center notification for big movers (>5%)
+            if self._notify:
+                for ticker, data in self.stock_data.items():
+                    pct = data.get('percent_change', 0)
+                    if isinstance(pct, (int, float)) and abs(pct) >= 5:
+                        prev = self._prev_changes.get(ticker)
+                        if prev is None or abs(prev) < 5:
+                            arrow = "UP" if pct > 0 else "DOWN"
+                            color = COLOR_PASTEL_GREEN if pct > 0 else COLOR_PASTEL_RED
+                            self._notify(
+                                f"{ticker} {arrow} {abs(pct):.1f}%",
+                                color=color,
+                                duration_ms=6000,
+                            )
+                self._prev_changes = {
+                    t: d.get('percent_change', 0) for t, d in self.stock_data.items()
+                }
             
         except Exception as e:
             self.logger.error(f"Error updating stock data: {e}")
@@ -163,196 +184,150 @@ class StocksModule:
             self.logger.error(f"Batch update failed: {e}")
 
     def draw(self, screen, position):
-        """Draw stock data with consistent styling across modules"""
+        """Draw stock data -- floating text on black, no background.
+
+        This is the fallback grid view. The primary rendering path is
+        draw_scrolling_ticker() called from AI-Mirror's draw_modules().
+        """
         try:
-            # Extract position
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
+                width = position.get('width', 300)
+                height = position.get('height', 200)
             else:
                 x, y = position
-            
-            # Get styling from config
+                width, height = 300, 200
+
             styling = CONFIG.get('module_styling', {})
-            fonts = styling.get('fonts', {})
-            backgrounds = styling.get('backgrounds', {})
-            
-            # Get styles for drawing
-            radius = styling.get('radius', 15)
-            padding = styling.get('spacing', {}).get('padding', 10)
-            line_height = styling.get('spacing', {}).get('line_height', 22)
-            
-            # Initialize fonts if not already done
-            if not hasattr(self, 'title_font'):
-                title_size = fonts.get('title', {}).get('size', 24)
-                body_size = fonts.get('body', {}).get('size', 16)
-                small_size = fonts.get('small', {}).get('size', 14)
-                
-                self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
-                self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
-                self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
-            
-            # Get background colors - Use transparent backgrounds 
-            bg_color = COLOR_BG_MODULE_ALPHA
-            header_bg_color = COLOR_BG_HEADER_ALPHA
-            
-            # Draw module background
-            module_width = 225  # Reduced from 300 by 25%
-            module_height = 200
-            module_rect = pygame.Rect(x-padding, y-padding, module_width, module_height)
-            header_rect = pygame.Rect(x-padding, y-padding, module_width, 40)
-            
-            try:
-                # Draw background with rounded corners and transparency
-                self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
-            except Exception:
-                # Fallback if effects fail
-                draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
-            
-            # Draw title
-            title_color = fonts.get('title', {}).get('color', (240, 240, 240))
-            title_text = self.title_font.render("Stocks", True, title_color)
-            screen.blit(title_text, (x + padding, y + padding))
-            
-            # Draw stock data
-            current_y = y + 50  # Start below title
-            
+            line_height = styling.get('spacing', {}).get('line_height', 28)
+
+            if not hasattr(self, '_grid_fonts_ready') or not self._grid_fonts_ready:
+                from module_base import ModuleDrawHelper
+                tf, bf, sf = ModuleDrawHelper.get_fonts()
+                self.title_font = tf
+                self.body_font = bf
+                self.small_font = sf
+                self._grid_fonts_ready = True
+
+            from module_base import ModuleDrawHelper
+            current_y = ModuleDrawHelper.draw_module_title(
+                screen, "Stocks", x, y, width
+            )
+
             if not self.stock_data:
-                # No data available
-                no_data_text = self.body_font.render("No stock data available", True, fonts.get('body', {}).get('color', (200, 200, 200)))
-                screen.blit(no_data_text, (x + padding, current_y))
+                no_data = self.body_font.render("No stock data", True, (160, 160, 160))
+                no_data.set_alpha(TRANSPARENCY)
+                screen.blit(no_data, (x, current_y))
                 return
-            
-            # Draw stock data in a grid
-            col_width = 145
-            row_height = 30
-            
-            # Display a subset of stocks in a grid layout
-            stocks_to_display = list(self.stock_data.items())[:8]  # Limit to 8 stocks
-            
+
+            col_width = width // 2
+            stocks_to_display = list(self.stock_data.items())[:8]
+
             for i, (ticker, data) in enumerate(stocks_to_display):
-                # Calculate position in grid (2 columns)
                 col = i % 2
                 row = i // 2
-                
-                item_x = x + padding + (col * col_width)
-                item_y = current_y + (row * row_height)
-                
-                # Get price and change
+                item_x = x + col * col_width
+                item_y = current_y + row * 30
+
+                if item_y > y + height - 30:
+                    break
+
                 price = data.get('price', 'N/A')
                 percent_change = data.get('percent_change', 0)
-                
-                # Determine color based on change
+
                 if isinstance(percent_change, (int, float)):
                     color = self.determine_color(percent_change)
                     change_str = f"{'+' if percent_change >= 0 else ''}{percent_change:.2f}%"
-                    arrow = "▲" if percent_change > 0 else "▼" if percent_change < 0 else ""
                 else:
-                    color = fonts.get('body', {}).get('color', (200, 200, 200))
+                    color = (160, 160, 160)
                     change_str = "0.00%"
-                    arrow = ""
-                
-                # Format with proper currency symbol
-                currency_symbol = '£' if ticker.endswith('.L') else '$'
-                
-                # Draw ticker name
-                ticker_text = self.body_font.render(ticker, True, fonts.get('body', {}).get('color', (200, 200, 200)))
-                screen.blit(ticker_text, (item_x, item_y))
-                
-                # Draw price and change
+
+                currency_symbol = '\u00a3' if ticker.endswith('.L') else '$'
+
+                ticker_surf = self.body_font.render(ticker, True, (200, 200, 200))
+                ticker_surf.set_alpha(TRANSPARENCY)
+                screen.blit(ticker_surf, (item_x, item_y))
+
                 if isinstance(price, (int, float)):
-                    price_text = self.small_font.render(f"{currency_symbol}{price:.2f}", True, color)
-                    screen.blit(price_text, (item_x, item_y + 18))
-                    
-                    change_text = self.small_font.render(f"{arrow}{change_str}", True, color)
-                    screen.blit(change_text, (item_x + 80, item_y + 18))
-                else:
-                    na_text = self.small_font.render("N/A", True, fonts.get('small', {}).get('color', (180, 180, 180)))
-                    screen.blit(na_text, (item_x, item_y + 18))
-                
+                    price_surf = self.small_font.render(
+                        f"{currency_symbol}{price:.2f} {change_str}", True, color
+                    )
+                    price_surf.set_alpha(TRANSPARENCY)
+                    screen.blit(price_surf, (item_x, item_y + 16))
+
         except Exception as e:
             logging.error(f"Error drawing stocks: {e}")
             logging.error(traceback.format_exc())
 
     def draw_scrolling_ticker(self, screen):
-        """Draw a scrolling ticker at the bottom of the screen with stock data"""
+        """Draw a seamless scrolling ticker at the bottom of the screen.
+
+        Renders a thin separator line above the ticker, then loops ticker
+        items to fill the visible width with no gaps.
+        """
         try:
             ticker_height = 30
-            y = screen.get_height() - ticker_height
             screen_width = screen.get_width()
-            total_width = 0
-            
-            # Check if we have valid data
-            if not self.stock_data or all(data.get('price') == 'N/A' for data in self.stock_data.values()):
-                # Show "Market Closed" message instead of fake data
+            y = screen.get_height() - ticker_height
+
+            # Thin separator above ticker
+            pygame.draw.line(screen, (40, 40, 40), (0, y - 1), (screen_width, y - 1), 1)
+
+            if not self.stock_data or all(
+                data.get('price') == 'N/A' for data in self.stock_data.values()
+            ):
                 message = "Markets Closed - Data Unavailable"
-                text_surface = self.ticker_font.render(message, True, (200, 200, 200))
+                text_surface = self.ticker_font.render(message, True, (160, 160, 160))
                 text_surface.set_alpha(TRANSPARENCY)
-                
-                # Center the message
                 x_pos = (screen_width - text_surface.get_width()) // 2
-                screen.blit(text_surface, (x_pos, y))
+                screen.blit(text_surface, (x_pos, y + 4))
                 return
-            
-            # Create a list of rendered ticker items first to get total width
+
+            # Build rendered surfaces for each ticker
             ticker_items = []
-            
-            # If we have data, show the scrolling ticker
+            total_width = 0
             for ticker, data in self.stock_data.items():
                 price = data.get('price', 'N/A')
                 percent_change = data.get('percent_change', 0)
-                
-                # Skip items with no valid price
                 if price == 'N/A' or not isinstance(price, (int, float)):
                     continue
-                
-                # Format change as string with sign
+
                 if isinstance(percent_change, (int, float)):
                     change_str = f"{'+' if percent_change >= 0 else ''}{percent_change:.2f}%"
-                    arrow = "▲" if percent_change > 0 else "▼" if percent_change < 0 else ""
+                    arrow = " \u25b2" if percent_change > 0 else " \u25bc" if percent_change < 0 else ""
                     color = self.determine_color(percent_change)
                 else:
                     change_str = "0.00%"
                     arrow = ""
-                    color = (180, 180, 180)  # Default gray
-                
-                # Format with proper currency symbol
-                currency_symbol = '£' if ticker.endswith('.L') else '$'
-                text = f"{ticker}: {currency_symbol}{price:.2f} {arrow}{change_str}   "
-                
-                # Render text
-                text_surface = self.ticker_font.render(text, True, color)
-                text_surface.set_alpha(TRANSPARENCY)
-                ticker_items.append((text_surface, color))
-                total_width += text_surface.get_width()
-            
-            # If no valid items, return
+                    color = (160, 160, 160)
+
+                currency = '\u00a3' if ticker.endswith('.L') else '$'
+                text = f"  {ticker}  {currency}{price:.2f}{arrow} {change_str}  "
+
+                surf = self.ticker_font.render(text, True, color)
+                surf.set_alpha(TRANSPARENCY)
+                ticker_items.append(surf)
+                total_width += surf.get_width()
+
             if not ticker_items:
                 return
-            
-            # Draw all ticker items
-            current_x = self.scroll_position
-            
-            # Draw items until we fill the screen width
-            for text_surface, _ in ticker_items:
-                # Only draw if at least partially on screen
-                if current_x + text_surface.get_width() > 0 and current_x < screen_width:
-                    screen.blit(text_surface, (current_x, y))
-                current_x += text_surface.get_width()
-                
-                # If we've gone through all items but haven't filled the screen, repeat from the beginning
-                if current_x < screen_width and len(ticker_items) > 0:
-                    for repeat_surface, _ in ticker_items:
-                        screen.blit(repeat_surface, (current_x, y))
-                        current_x += repeat_surface.get_width()
-                        if current_x > screen_width:
-                            break
-            
-            # Scroll and reset position when needed
+
+            # Seamless loop: draw enough copies to fill the screen
+            draw_x = self.scroll_position % total_width
+            if draw_x > 0:
+                draw_x -= total_width
+
+            while draw_x < screen_width:
+                for surf in ticker_items:
+                    if draw_x + surf.get_width() > 0 and draw_x < screen_width:
+                        screen.blit(surf, (draw_x, y + 4))
+                    draw_x += surf.get_width()
+
+            # Advance scroll
             self.scroll_position -= self.scroll_speed
-            if self.scroll_position < -total_width:
-                self.scroll_position = screen_width
-            
+            if self.scroll_position < -total_width * 2:
+                self.scroll_position += total_width
+
         except Exception as e:
             logging.error(f"Error drawing scrolling ticker: {e}")
 

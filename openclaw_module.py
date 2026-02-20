@@ -17,12 +17,9 @@ import threading
 import uuid
 from datetime import datetime
 from config import (
-    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_TITLE,
-    COLOR_FONT_BODY, COLOR_FONT_SMALL, COLOR_BG_MODULE_ALPHA,
-    COLOR_BG_HEADER_ALPHA, TRANSPARENCY,
+    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
+    COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY,
 )
-from visual_effects import VisualEffects
-from config import draw_module_background_fallback
 
 logger = logging.getLogger("OpenClaw")
 
@@ -79,7 +76,6 @@ class OpenClawModule:
         self.channels_display = channels_display
         self.voice_reply_enabled = voice_reply_enabled
 
-        self.effects = VisualEffects()
         self.ws = None
         self.connected = False
         self.connect_error = None
@@ -87,6 +83,7 @@ class OpenClawModule:
         self.inbox = []  # Recent messages
         self._ws_thread = None
         self._lock = threading.Lock()
+        self._notify = None
 
         self.title_font = None
         self.body_font = None
@@ -110,6 +107,10 @@ class OpenClawModule:
             self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
             self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
             self.channel_font = pygame.font.SysFont(FONT_NAME, small_size, bold=True)
+
+    def set_notification_callback(self, callback):
+        """Register a callback for center-screen notifications."""
+        self._notify = callback
 
     def _start_connection(self):
         """Start WebSocket connection in a background thread."""
@@ -242,6 +243,14 @@ class OpenClawModule:
 
             logger.info(f"Message from {sender} via {channel}: {text[:50]}")
 
+            # Push center notification
+            if self._notify:
+                ch_label = CHANNEL_LABELS.get(channel, channel)
+                self._notify(
+                    f"[{ch_label}] {sender}: {text[:40]}",
+                    color=CHANNEL_COLORS.get(channel, (180, 180, 180)),
+                )
+
     def send_reply(self, channel, recipient, text):
         """Send a reply through the Gateway back to the originating channel."""
         if not self.connected or not self.ws:
@@ -284,38 +293,23 @@ class OpenClawModule:
         try:
             if isinstance(position, dict):
                 x, y = position["x"], position["y"]
-                width = position.get("width", 225)
+                width = position.get("width", 300)
                 height = position.get("height", 200)
             else:
                 x, y = position
-                width, height = 225, 200
+                width, height = 300, 200
 
             self._init_fonts()
 
-            styling = CONFIG.get("module_styling", {})
-            radius = styling.get("radius", 15)
-            padding = styling.get("spacing", {}).get("padding", 10)
+            from module_base import ModuleDrawHelper
+            draw_y = ModuleDrawHelper.draw_module_title(
+                screen, "OpenClaw", x, y, width
+            )
 
-            # Background
-            module_rect = pygame.Rect(x - padding, y - padding, width, height)
-            header_rect = pygame.Rect(x - padding, y - padding, width, 40)
-            try:
-                self.effects.draw_rounded_rect(screen, module_rect, COLOR_BG_MODULE_ALPHA, radius=radius, alpha=0)
-                self.effects.draw_rounded_rect(screen, header_rect, COLOR_BG_HEADER_ALPHA, radius=radius, alpha=0)
-            except Exception:
-                draw_module_background_fallback(screen, x, y, width, height, padding)
-
-            # Title with connection status
-            status_color = (100, 255, 100) if self.connected else (255, 100, 100)
-            title_surf = self.title_font.render("OpenClaw", True, COLOR_FONT_TITLE)
-            screen.blit(title_surf, (x + padding, y + padding))
-
-            # Connection indicator dot
-            dot_x = x + padding + title_surf.get_width() + 8
-            dot_y = y + padding + title_surf.get_height() // 2
-            pygame.draw.circle(screen, status_color, (dot_x, dot_y), 4)
-
-            draw_y = y + 50
+            # Connection indicator dot next to title
+            status_color = (80, 200, 120) if self.connected else (220, 80, 80)
+            title_w = ModuleDrawHelper._small_font.size("OPENCLAW")[0]
+            pygame.draw.circle(screen, status_color, (x + title_w + 10, y + 8), 4)
 
             # Connection error
             if self.connect_error and not self.connected:
