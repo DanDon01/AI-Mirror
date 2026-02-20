@@ -86,7 +86,7 @@ class SunAnimation(WeatherAnimation):
 class StormAnimation(WeatherAnimation):
     def __init__(self, screen_width, screen_height):
         super().__init__(screen_width, screen_height)
-        self.cloud_image = self.load_image('thunderstorm.png')
+        self.cloud_image = self.load_image('thunder_storm.png')
         self.lightning_image = self.load_image('lightning.png')
         self.lightning_timer = 0
         self.show_lightning = False

@@ -150,6 +150,18 @@ class ModuleManager:
             elif config['class'] == 'ElevenVoice':
                 from elevenvoice_module import ElevenVoice
                 module_class = ElevenVoice
+            elif config['class'] == 'CountdownModule':
+                from countdown_module import CountdownModule
+                module_class = CountdownModule
+            elif config['class'] == 'QuoteModule':
+                from quote_module import QuoteModule
+                module_class = QuoteModule
+            elif config['class'] == 'NewsModule':
+                from news_module import NewsModule
+                module_class = NewsModule
+            elif config['class'] == 'OpenClawModule':
+                from openclaw_module import OpenClawModule
+                module_class = OpenClawModule
             else:
                 module_class = globals().get(config['class'])
             

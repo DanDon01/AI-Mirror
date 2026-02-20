@@ -123,6 +123,35 @@ class LayoutManager:
             'height': module_height
         }
         
+        # New modules - right side, row 2 and below
+        self.module_positions['countdown'] = {
+            'x': right_x,
+            'y': row_y[1],
+            'width': module_width,
+            'height': module_height
+        }
+
+        self.module_positions['quote'] = {
+            'x': left_x,
+            'y': row_y[2] + module_height + padding,
+            'width': module_width,
+            'height': module_height
+        }
+
+        self.module_positions['news'] = {
+            'x': right_x,
+            'y': row_y[2],
+            'width': module_width,
+            'height': module_height
+        }
+
+        self.module_positions['openclaw'] = {
+            'x': right_x,
+            'y': row_y[2] + module_height + padding,
+            'width': module_width,
+            'height': module_height
+        }
+
         # Retro characters is full screen
         self.module_positions['retro_characters'] = {
             'x': 0,
@@ -150,13 +179,17 @@ class LayoutManager:
         
         # Fall back to defaults
         default_positions = {
-            'clock': {'x': 10, 'y': 10}, 
+            'clock': {'x': 10, 'y': 10},
             'weather': {'x': 10, 'y': 100},
             'stocks': {'x': 10, 'y': 300},
             'calendar': {'x': 10, 'y': 500},
             'fitbit': {'x': self.screen_width - 210, 'y': 500},
             'retro_characters': {'x': 0, 'y': 0},
-            'ai_interaction': {'x': 10, 'y': self.screen_height - 100}
+            'ai_interaction': {'x': 10, 'y': self.screen_height - 100},
+            'countdown': {'x': self.screen_width - 210, 'y': 300},
+            'quote': {'x': 10, 'y': 700},
+            'news': {'x': self.screen_width - 210, 'y': 700},
+            'openclaw': {'x': self.screen_width - 210, 'y': 900}
         }
         
         if module_name in default_positions:

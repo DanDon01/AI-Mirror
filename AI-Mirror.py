@@ -86,6 +86,10 @@ from module_manager import ModuleManager
 from layout_manager import LayoutManager
 from AI_Module import AIInteractionModule
 from ai_voice_module import AIVoiceModule
+from countdown_module import CountdownModule
+from quote_module import QuoteModule
+from news_module import NewsModule
+from openclaw_module import OpenClawModule
 
 
 def ensure_valid_color(color):
@@ -226,7 +230,11 @@ class MagicMirror:
             'fitbit': FitbitModule,
             'retro_characters': RetroCharactersModule,
             'ai_voice': AIVoiceModule,
-            'ai_interaction': AIInteractionModule
+            'ai_interaction': AIInteractionModule,
+            'countdown': CountdownModule,
+            'quote': QuoteModule,
+            'news': NewsModule,
+            'openclaw': OpenClawModule
         }
 
         config_copy = CONFIG.copy()
@@ -484,7 +492,11 @@ class MagicMirror:
                     'stocks': {'x': 20, 'y': height - 150, 'width': 400, 'height': 130},
                     'fitbit': {'x': width - 320, 'y': 240, 'width': 300, 'height': 200},
                     'retro_characters': {'x': width // 2 - 150, 'y': height // 2 - 150, 'width': 300, 'height': 300},
-                    'ai_interaction': {'x': width // 2 - 200, 'y': height - 200, 'width': 400, 'height': 180}
+                    'ai_interaction': {'x': width // 2 - 200, 'y': height - 200, 'width': 400, 'height': 180},
+                    'countdown': {'x': width - 320, 'y': 460, 'width': 300, 'height': 200},
+                    'quote': {'x': 20, 'y': height - 370, 'width': 300, 'height': 200},
+                    'news': {'x': width - 320, 'y': 680, 'width': 300, 'height': 200},
+                    'openclaw': {'x': width - 320, 'y': 900, 'width': 300, 'height': 200}
                 }
 
                 for name in missing_positions:

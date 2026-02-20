@@ -35,6 +35,10 @@ AI-Mirror.py (main loop, event handling, screen init)
        stocks_module.py      - yfinance stock tickers
        calendar_module.py    - Google Calendar events
        fitbit_module.py      - Fitbit health data
+       countdown_module.py   - Event countdowns + voice timer
+       quote_module.py       - Daily quote (ZenQuotes API + local fallback)
+       news_module.py        - RSS news headlines (feedparser)
+       openclaw_module.py    - OpenClaw Gateway multi-channel inbox (remote WebSocket)
        retrocharacters_module.py - Screensaver animation
   -> Voice/AI Modules (priority order):
        elevenvoice_module.py - ElevenLabs TTS (eleven_multilingual_v2) + GPT-4o (newest)
@@ -62,6 +66,10 @@ AI-Mirror.py (main loop, event handling, screen init)
 | `calendar_module.py` | Google Calendar integration | ~250 |
 | `fitbit_module.py` | Fitbit health data | ~250 |
 | `clock_module.py` | Time/date display | ~97 |
+| `countdown_module.py` | Event countdowns + voice-activated timer | ~192 |
+| `quote_module.py` | Daily quote (ZenQuotes API / local JSON / builtin) | ~201 |
+| `news_module.py` | RSS news headlines via feedparser | ~194 |
+| `openclaw_module.py` | OpenClaw Gateway client (remote WebSocket) | ~392 |
 | `retrocharacters_module.py` | Falling retro icons screensaver | ~77 |
 | `smarthome_module.py` | Smart home stub (not yet functional) | ~91 |
 | `visual_effects.py` | Shared visual effect utilities | ~94 |
@@ -82,6 +90,8 @@ GOOGLE_ACCESS_TOKEN=
 GOOGLE_REFRESH_TOKEN=
 ELEVENLABS_API_KEY=
 ELEVENLABS_VOICE_ID=
+OPENCLAW_GATEWAY_URL=
+OPENCLAW_GATEWAY_TOKEN=
 ```
 
 ## Application States

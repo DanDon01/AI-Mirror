@@ -25,6 +25,8 @@ class FitbitModule:
         self.update_time = update_schedule.get('time')
         logging.debug(f"Update time set to: {self.update_time}")
         self.client = None
+        from visual_effects import VisualEffects
+        self.effects = VisualEffects()
         self.initialize_client()
         self.data = {
             'steps': 'N/A',

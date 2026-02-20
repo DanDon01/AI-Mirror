@@ -89,9 +89,9 @@ class StocksModule:
             try:
                 import socket
                 socket.create_connection(("yahoo.com", 443), timeout=5)
-                self.logger.info("✓ Network connectivity confirmed")
+                self.logger.info("Network connectivity confirmed")
             except Exception as e:
-                self.logger.warning(f"⚠ Network issue: {e}")
+                self.logger.warning(f"Network issue: {e}")
                 return
             
             # Update all tickers with batch fetching
@@ -119,7 +119,7 @@ class StocksModule:
                         raise Exception("No data available")
                 except Exception as e:
                     if "429" in str(e) or "Too Many Requests" in str(e):
-                        self.logger.warning("⚠ Yahoo Finance API rate limited")
+                        self.logger.warning("Yahoo Finance API rate limited")
                         self.rate_limited = True
                         self.rate_limited_time = time.time()
                         return
@@ -149,11 +149,11 @@ class StocksModule:
                         self.logger.debug(f"Fast info failed for {ticker}: {e}")
                     
                     # If we get here, we couldn't get data for this ticker
-                    self.logger.warning(f"⚠ Could not get data for {ticker}")
+                    self.logger.warning(f"Could not get data for {ticker}")
                     self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
                     
                 except Exception as e:
-                    self.logger.error(f"✗ Error fetching {ticker}: {str(e)}")
+                    self.logger.error(f"Error fetching {ticker}: {str(e)}")
                     self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
                 
                 # Add delay between processing each ticker

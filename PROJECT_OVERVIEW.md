@@ -30,6 +30,10 @@ An interactive AI-powered smart mirror built on a Raspberry Pi 5. A portrait-ori
 |  stocks_module.py       yfinance, 8 tickers, US/UK markets   |
 |  calendar_module.py     Google Calendar, OAuth2, color-coded  |
 |  fitbit_module.py       Steps, calories, sleep, heart rate    |
+|  countdown_module.py    Event countdowns + voice timer        |
+|  quote_module.py        Daily quote (ZenQuotes/local/builtin) |
+|  news_module.py         RSS headlines via feedparser           |
+|  openclaw_module.py     OpenClaw Gateway inbox (remote WS)    |
 |  retrocharacters_module.py  Falling retro icons screensaver   |
 |  smarthome_module.py    Stub - not yet functional             |
 +---------------------------------------------------------------+
@@ -63,6 +67,9 @@ An interactive AI-powered smart mirror built on a Raspberry Pi 5. A portrait-ori
 |  Google Calendar - Events via OAuth2                          |
 |  Fitbit        - Health data via OAuth2                       |
 |  Yahoo Finance - Stock quotes via yfinance                    |
+|  ZenQuotes     - Quote of the day (free, no key)              |
+|  RSS/feedparser - News headlines (free, no key)               |
+|  OpenClaw GW   - Multi-channel messaging (remote WebSocket)   |
 +---------------------------------------------------------------+
 ```
 
@@ -131,6 +138,10 @@ config.py
        |- ai_voice       OpenAI config, audio device
        |- ai_interaction Fallback AI config
        |- eleven_voice   ElevenLabs config
+       |- countdown      Event dates list
+       |- quote          Quotes file path
+       |- news           RSS feed URLs, rotation interval
+       |- openclaw       Gateway URL, token, device ID
        |- module_visibility  Show/hide per module
        |- screensaver_modules  Active during screensaver
        |- sleep_modules  Active during sleep
@@ -146,6 +157,10 @@ config.py
 - Stocks module (8 tickers, market-aware updates)
 - Calendar module (Google Calendar, OAuth2, color-coded events)
 - Fitbit module (steps, calories, sleep, heart rate)
+- Countdown module (event countdowns, voice-activated timer)
+- Quote of the Day module (ZenQuotes API, local JSON, builtin fallback)
+- News Headlines module (RSS feeds via feedparser)
+- OpenClaw module (multi-channel inbox via remote WebSocket Gateway)
 - Retro characters screensaver
 - AI voice module (WebSocket connection to OpenAI Realtime API)
 - AI interaction module (fallback GPT-4 with speech recognition)
@@ -188,6 +203,7 @@ config.py
 | Calendar | Google Calendar API | v3 |
 | Health | Fitbit API | via fitbit 0.3.1 |
 | Audio I/O | PyAudio / pygame.mixer | - |
+| News feeds | feedparser | latest |
 | WebSocket | websocket-client | - |
 | Config | python-dotenv | 1.0.1 |
 
@@ -216,6 +232,10 @@ AI-Mirror/
   stocks_module.py          Stock ticker
   calendar_module.py        Calendar events
   fitbit_module.py          Health data
+  countdown_module.py       Event countdowns + timer
+  quote_module.py           Daily quote display
+  news_module.py            RSS news headlines
+  openclaw_module.py        OpenClaw Gateway client
   retrocharacters_module.py Screensaver
   smarthome_module.py       Smart home (stub)
   visual_effects.py         Shared visual utils

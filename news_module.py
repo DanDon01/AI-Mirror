@@ -1,0 +1,193 @@
+"""News Headlines module for AI-Mirror.
+
+Displays scrolling news headlines from RSS feeds.
+Uses feedparser (no API key needed). Falls back to built-in headlines.
+"""
+
+import pygame
+import logging
+import time as time_module
+from datetime import datetime, timedelta
+from config import (
+    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_TITLE,
+    COLOR_FONT_BODY, COLOR_FONT_SMALL, COLOR_BG_MODULE_ALPHA,
+    COLOR_BG_HEADER_ALPHA, TRANSPARENCY,
+)
+from visual_effects import VisualEffects
+from config import draw_module_background_fallback
+
+logger = logging.getLogger("News")
+
+# Default RSS feeds (no API key needed)
+DEFAULT_FEEDS = [
+    {"name": "BBC", "url": "http://feeds.bbci.co.uk/news/rss.xml"},
+    {"name": "Guardian", "url": "https://www.theguardian.com/uk/rss"},
+]
+
+
+class NewsModule:
+    """Displays scrolling news headlines from RSS feeds."""
+
+    def __init__(self, feeds=None, rotation_interval=15, max_headlines=8, **kwargs):
+        """
+        Args:
+            feeds: list of dicts with 'name' and 'url' keys for RSS feeds.
+            rotation_interval: seconds between headline rotation.
+            max_headlines: maximum number of headlines to store.
+        """
+        self.feeds = feeds or DEFAULT_FEEDS
+        self.rotation_interval = rotation_interval
+        self.max_headlines = max_headlines
+        self.effects = VisualEffects()
+
+        self.headlines = []
+        self.current_index = 0
+        self.last_rotation = time_module.time()
+        self.last_fetch = datetime.min
+        self.fetch_interval = timedelta(minutes=15)
+        self.fade_alpha = 255
+        self.transitioning = False
+
+        self.title_font = None
+        self.headline_font = None
+        self.source_font = None
+
+    def _init_fonts(self):
+        if self.title_font is None:
+            styling = CONFIG.get("module_styling", {})
+            fonts = styling.get("fonts", {})
+            title_size = fonts.get("title", {}).get("size", 18)
+            body_size = fonts.get("body", {}).get("size", 14)
+            small_size = fonts.get("small", {}).get("size", 12)
+            self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
+            self.headline_font = pygame.font.SysFont(FONT_NAME, body_size)
+            self.source_font = pygame.font.SysFont(FONT_NAME, small_size)
+
+    def _fetch_headlines(self):
+        """Fetch headlines from all configured RSS feeds."""
+        try:
+            import feedparser
+        except ImportError:
+            logger.warning("feedparser not installed, using fallback headlines")
+            self.headlines = [
+                {"title": "feedparser not installed -- run: pip install feedparser", "source": "System"},
+            ]
+            return
+
+        new_headlines = []
+        for feed_config in self.feeds:
+            try:
+                feed = feedparser.parse(feed_config["url"])
+                for entry in feed.entries[:5]:
+                    new_headlines.append({
+                        "title": entry.get("title", "No title"),
+                        "source": feed_config["name"],
+                        "link": entry.get("link", ""),
+                        "published": entry.get("published", ""),
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to fetch feed {feed_config['name']}: {e}")
+
+        if new_headlines:
+            self.headlines = new_headlines[:self.max_headlines]
+            logger.info(f"Fetched {len(self.headlines)} headlines from {len(self.feeds)} feeds")
+        else:
+            logger.warning("No headlines fetched from any feed")
+
+    def _word_wrap(self, text, font, max_width):
+        """Wrap text to fit within max_width pixels."""
+        words = text.split()
+        lines = []
+        current_line = ""
+        for word in words:
+            test = f"{current_line} {word}".strip()
+            if font.size(test)[0] <= max_width:
+                current_line = test
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = word
+        if current_line:
+            lines.append(current_line)
+        return lines
+
+    def update(self):
+        now = datetime.now()
+        if now - self.last_fetch >= self.fetch_interval:
+            self._fetch_headlines()
+            self.last_fetch = now
+
+        # Rotate headlines
+        if self.headlines and (time_module.time() - self.last_rotation) >= self.rotation_interval:
+            self.current_index = (self.current_index + 1) % len(self.headlines)
+            self.last_rotation = time_module.time()
+
+    def draw(self, screen, position):
+        try:
+            if isinstance(position, dict):
+                x, y = position["x"], position["y"]
+                width = position.get("width", 225)
+                height = position.get("height", 200)
+            else:
+                x, y = position
+                width, height = 225, 200
+
+            self._init_fonts()
+
+            styling = CONFIG.get("module_styling", {})
+            radius = styling.get("radius", 15)
+            padding = styling.get("spacing", {}).get("padding", 10)
+
+            # Background
+            module_rect = pygame.Rect(x - padding, y - padding, width, height)
+            header_rect = pygame.Rect(x - padding, y - padding, width, 40)
+            try:
+                self.effects.draw_rounded_rect(screen, module_rect, COLOR_BG_MODULE_ALPHA, radius=radius, alpha=0)
+                self.effects.draw_rounded_rect(screen, header_rect, COLOR_BG_HEADER_ALPHA, radius=radius, alpha=0)
+            except Exception:
+                draw_module_background_fallback(screen, x, y, width, height, padding)
+
+            # Title with headline count
+            count_text = f" ({len(self.headlines)})" if self.headlines else ""
+            title_surf = self.title_font.render(f"News{count_text}", True, COLOR_FONT_TITLE)
+            screen.blit(title_surf, (x + padding, y + padding))
+
+            draw_y = y + 50
+
+            if not self.headlines:
+                empty = self.headline_font.render("Loading headlines...", True, COLOR_FONT_SMALL)
+                screen.blit(empty, (x, draw_y))
+                return
+
+            # Draw current headline (large, wrapped)
+            text_width = width - padding * 2 - 10
+            current = self.headlines[self.current_index]
+            lines = self._word_wrap(current["title"], self.headline_font, text_width)
+
+            for line in lines[:3]:  # Max 3 lines per headline
+                line_surf = self.headline_font.render(line, True, COLOR_FONT_BODY)
+                line_surf.set_alpha(TRANSPARENCY)
+                screen.blit(line_surf, (x, draw_y))
+                draw_y += 20
+
+            # Source and position indicator
+            draw_y += 5
+            source_text = current["source"]
+            pos_text = f"{self.current_index + 1}/{len(self.headlines)}"
+            source_surf = self.source_font.render(f"{source_text}  |  {pos_text}", True, COLOR_FONT_SMALL)
+            source_surf.set_alpha(TRANSPARENCY)
+            screen.blit(source_surf, (x, draw_y))
+
+            # Draw dots indicator for headline position
+            draw_y += 20
+            dot_count = min(len(self.headlines), 8)
+            dot_start_x = x
+            for i in range(dot_count):
+                color = (200, 200, 200) if i == self.current_index else (80, 80, 80)
+                pygame.draw.circle(screen, color, (dot_start_x + i * 12 + 4, draw_y + 4), 3)
+
+        except Exception as e:
+            logger.error(f"Error drawing news module: {e}")
+
+    def cleanup(self):
+        pass

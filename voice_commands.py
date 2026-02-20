@@ -17,7 +17,11 @@ class ModuleCommand:
             'stocks': ['stocks', 'market', 'shares'],
             'calendar': ['calendar', 'events', 'schedule'],
             'fitbit': ['fitbit', 'health', 'steps'],
-            'retro': ['retro', 'characters', 'icons']
+            'retro': ['retro', 'characters', 'icons'],
+            'countdown': ['countdown', 'timer', 'countdowns'],
+            'quote': ['quote', 'quotes', 'inspiration'],
+            'news': ['news', 'headlines', 'articles'],
+            'openclaw': ['openclaw', 'messages', 'inbox']
         }
         
         # Action keywords

@@ -246,7 +246,42 @@ CONFIG = {
             'openai_key': os.getenv('OPENAI_API_KEY', 'your-openai-api-key')
         }
     },
-    
+    'countdown': {
+        'class': 'CountdownModule',
+        'params': {
+            'events': [
+                {'name': 'Christmas', 'date': '2026-12-25'},
+                {'name': 'New Year', 'date': '2027-01-01'},
+            ]
+        }
+    },
+    'quote': {
+        'class': 'QuoteModule',
+        'params': {}
+    },
+    'news': {
+        'class': 'NewsModule',
+        'params': {
+            'feeds': [
+                {'name': 'BBC', 'url': 'http://feeds.bbci.co.uk/news/rss.xml'},
+                {'name': 'Guardian', 'url': 'https://www.theguardian.com/uk/rss'},
+            ],
+            'rotation_interval': 15,
+            'max_headlines': 8
+        }
+    },
+    'openclaw': {
+        'class': 'OpenClawModule',
+        'params': {
+            'gateway_url': os.getenv('OPENCLAW_GATEWAY_URL', ''),
+            'token': os.getenv('OPENCLAW_GATEWAY_TOKEN', ''),
+            'device_id': 'ai-mirror-pi5',
+            'notification_timeout': 10,
+            'max_inbox_messages': 5,
+            'voice_reply_enabled': True
+        }
+    },
+
     # Audio and sound effects
     'sound_effects_path': sound_effects_path,
     'audio': {
@@ -264,7 +299,11 @@ CONFIG = {
         'fitbit': True,
         'retro_characters': True,
         'ai_voice': True,
-        'ai_interaction': True
+        'ai_interaction': True,
+        'countdown': True,
+        'quote': True,
+        'news': True,
+        'openclaw': True
     },
     
     # State-specific module settings
