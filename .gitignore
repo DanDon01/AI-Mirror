@@ -1,21 +1,43 @@
-# Ignore virtual environment
+# Virtual environment
 venv/
 /venv
+.venv/
 
-# Ignore Python cache files
+# Python cache
 __pycache__/
 *.py[cod]
+*.pyo
 
-# Ignore log files
+# Log files
 *.log
 
-# Ignore environment variables file (if it contains sensitive data)
+# Environment variables / secrets
 Variables.env
+.env
 
-# Ignore any OS-specific files (optional)
+# Data directory (debug output, recordings, temp files)
+data/
+
+# Voice interaction logs
+mirror_voice_log.txt
+
+# Temporary audio files
+*.mp3
+*.wav
+!assets/**/*.mp3
+!assets/**/*.wav
+
+# OS-specific
 .DS_Store
 Thumbs.db
 
-# Ignore the log file
-magic_mirror.log
-__pycache__/config.cpython-312.pyc
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Distribution
+dist/
+build/
+*.egg-info/

@@ -196,7 +196,7 @@ class LayoutManager:
         try:
             self.effects.draw_rounded_rect(screen, (pos['x'], pos['y'], pos['width'], pos['height']), bg_style['content']['color'], radius=10, alpha=0)
             self.effects.draw_rounded_rect(screen, (pos['x'], pos['y'], pos['width'], title_height), bg_style['title']['color'], radius=10, alpha=0)
-        except:
+        except Exception:
             draw_module_background_fallback(screen, pos['x'], pos['y'], pos['width'], pos['height'], pos['y'] + 2)
 
         return (pos['x'], pos['y'] + title_height)

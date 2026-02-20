@@ -18,9 +18,9 @@ class StocksModule:
         self.stock_data = {}
         try:
             self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
-        except:
-            print("Warning: Font '{}' not found. Using default font.".format(FONT_NAME))
-            self.font = pygame.font.Font(None, FONT_SIZE)  # Fallback to default font
+        except Exception:
+            logging.warning(f"Font '{FONT_NAME}' not found. Using default font.")
+            self.font = pygame.font.Font(None, FONT_SIZE)
         self.market_timezones = {
             'US': timezone('America/New_York'),
             'UK': timezone('Europe/London')
@@ -205,7 +205,7 @@ class StocksModule:
                 # Draw background with rounded corners and transparency
                 self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
                 self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
-            except:
+            except Exception:
                 # Fallback if effects fail
                 draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
             

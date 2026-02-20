@@ -6,21 +6,17 @@ import os
 import logging
 import threading
 import numpy as np
-from openai import OpenAI, Stream
+from openai import OpenAI
 from config import CONFIG
 from queue import Queue
-import asyncio
 import time
 import traceback
 from voice_commands import ModuleCommand
 import json
-import websockets
-from typing import Iterator
-import subprocess
 import pyaudio
 import math
 
-DEFAULT_MODEL = "gpt-4o-realtime-preview-2024-12-17"
+DEFAULT_MODEL = "gpt-4o"
 DEFAULT_MAX_TOKENS = 250
 
 class AIInteractionModule:
@@ -83,7 +79,7 @@ class AIInteractionModule:
             self.initialize_audio_system()
             self.load_sound_effects()
         else:
-            print("MIRROR DEBUG: 🔇 Audio disabled by configuration")
+            self.logger.info("Audio disabled by configuration")
             self.has_audio = False
             self.status_message = "Ready (audio disabled)"
         
@@ -158,17 +154,15 @@ class AIInteractionModule:
     def on_button_press(self):
         """Handle button press activation"""
         self.logger.info("Activation triggered via button/spacebar")
-        print("MIRROR DEBUG: 🔘 Button activation triggered")
-        
+
         # Skip if we're already processing
         if self.recording or self.processing:
             self.logger.info("Already processing, ignoring activation")
-            print("MIRROR DEBUG: ⏳ Already processing a request")
             return
-        
+
         # If audio is disabled, use text-only mode
         if self.disable_audio or not self.has_audio:
-            print("MIRROR DEBUG: 🔤 Using text-only mode (audio disabled)")
+            self.logger.info("Using text-only mode (audio disabled)")
             self.process_text_input("Show me the current weather")
             return
         
@@ -186,42 +180,39 @@ class AIInteractionModule:
                 self.processing_thread.daemon = True
                 self.processing_thread.start()
 
-    async def stream_response(self, text):
-        """Stream response from OpenAI API"""
+    def stream_response(self, text):
+        """Stream response from OpenAI API (synchronous generator)."""
         try:
             if not self.client:
                 self.logger.error("No OpenAI client available")
                 yield "I'm sorry, I can't access my AI capabilities right now."
                 return
-            
-            stream = await asyncio.to_thread(
-                self.client.chat.completions.create,
+
+            stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": text}],
                 max_tokens=self.max_tokens,
                 stream=True
             )
-            
-            full_response = ""
-            async for chunk in stream:
+
+            for chunk in stream:
                 if not chunk.choices:
                     continue
-                
                 content = chunk.choices[0].delta.content
                 if content:
                     yield content
-            
+
         except Exception as e:
             self.logger.error(f"Error in streaming response: {e}")
             yield f"I'm sorry, I encountered an error: {str(e)[:50]}"
 
-    async def process_with_openai(self, text):
-        """Process text using OpenAI's streaming API"""
+    def process_with_openai(self, text):
+        """Process text using OpenAI's streaming API (synchronous)."""
         try:
             if not self.has_openai_access:
                 return self.process_with_fallback(text)
 
-            stream = await self.client.chat.completions.create(
+            stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant for a smart mirror."},
@@ -229,16 +220,16 @@ class AIInteractionModule:
                 ],
                 stream=True
             )
-            
+
             full_response = ""
-            async for chunk in stream:
+            for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
                     delta = chunk.choices[0].delta.content
                     full_response += delta
                     self.status_message = full_response[-50:]
-            
+
             return full_response
-            
+
         except Exception as e:
             self.logger.error(f"OpenAI streaming error: {str(e)}")
             return self.process_with_fallback(text)
@@ -261,15 +252,12 @@ class AIInteractionModule:
                 
         return response
 
-    async def process_audio_async_helper(self, text):
-        """Helper function to process audio asynchronously"""
+    def process_audio_async_helper(self, text):
+        """Helper function to process audio in a background thread."""
         try:
             if not self.has_openai_access:
                 return self.process_with_fallback(text)
-
-            response = await self.process_with_openai(text)
-            return response
-
+            return self.process_with_openai(text)
         except Exception as e:
             self.logger.error(f"Error in process_audio_async_helper: {str(e)}")
             return self.process_with_fallback(text)
@@ -293,11 +281,7 @@ class AIInteractionModule:
                     self.response_queue.put(('command', {'text': text, 'command': command}))
                     self.set_status("Command", f"{command['action']}ing {command['module']}")
                 else:
-                    # Create event loop and run async processing
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    full_response = loop.run_until_complete(self.process_audio_async_helper(text))
-                    loop.close()
+                    full_response = self.process_audio_async_helper(text)
                     
                     self.response_queue.put(('speech', {
                         'user_text': text,
@@ -320,20 +304,44 @@ class AIInteractionModule:
                 self.set_status("Idle", "Say 'Mirror' or press SPACE to speak")
 
     def speak_chunk(self, text_chunk):
-        """Optional: Implement real-time text-to-speech for response chunks"""
-        if len(text_chunk.strip()) > 0:  # Only process non-empty chunks
-            try:
+        """Real-time text-to-speech for response chunks.
+
+        Uses OpenAI TTS (gpt-4o-mini-tts) as primary, falls back to gTTS.
+        """
+        if not text_chunk.strip():
+            return
+
+        temp_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "temp_chunk.mp3"
+        )
+        os.makedirs(os.path.dirname(temp_file), exist_ok=True)
+
+        try:
+            if self.client and self.has_openai_access:
+                try:
+                    response = self.client.audio.speech.create(
+                        model="gpt-4o-mini-tts",
+                        voice="alloy",
+                        input=text_chunk,
+                    )
+                    response.stream_to_file(temp_file)
+                except Exception as e:
+                    self.logger.warning(f"OpenAI TTS chunk failed, falling back to gTTS: {e}")
+                    tts = gTTS(text=text_chunk, lang='en', slow=False)
+                    tts.save(temp_file)
+            else:
                 tts = gTTS(text=text_chunk, lang='en', slow=False)
-                # Save to temporary file
-                temp_file = "temp_chunk.mp3"
                 tts.save(temp_file)
-                # Play the chunk
-                pygame.mixer.music.load(temp_file)
-                pygame.mixer.music.play()
-                # Clean up
+
+            pygame.mixer.music.load(temp_file)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                pygame.time.wait(10)
+        except Exception as e:
+            self.logger.error(f"Error in speak_chunk: {e}")
+        finally:
+            if os.path.exists(temp_file):
                 os.remove(temp_file)
-            except Exception as e:
-                self.logger.error(f"Error in speak_chunk: {e}")
 
     def draw(self, screen, position):
         """Enhanced drawing with detailed status indicators"""
@@ -449,7 +457,7 @@ class AIInteractionModule:
             self.recognizer.energy_threshold = self.mic_energy_threshold
             self.recognizer.dynamic_energy_threshold = True
             
-            print("MIRROR DEBUG: 🎤 Initializing direct audio access")
+            self.logger.info("Initializing direct audio access")
             
             # Create a safer wrapper for audio input
             class DirectMicrophone(sr.AudioSource):
@@ -484,7 +492,7 @@ class AIInteractionModule:
                         self.stream.start_stream()
                         return self
                     except Exception as e:
-                        print(f"MIRROR DEBUG: Error opening audio stream: {e}")
+                        logging.error(f"Error opening audio stream: {e}")
                         if hasattr(self, 'stream') and self.stream:
                             self.stream.close()
                         if hasattr(self, 'audio') and self.audio:
@@ -503,22 +511,22 @@ class AIInteractionModule:
                 self.microphone = DirectMicrophone()
                 self.mic_index = "default"
                 self.has_audio = True
-                print("MIRROR DEBUG: ✅ Created direct microphone access with default device")
+                self.logger.info("Created direct microphone access with default device")
             except Exception as e:
-                print(f"MIRROR DEBUG: ❌ Failed with default device: {e}")
-                
+                self.logger.warning(f"Failed with default device: {e}")
+
                 # Try with explicit device index as fallback (the USB mic)
                 try:
-                    self.microphone = DirectMicrophone(device_index=2)  # Try USB mic
+                    self.microphone = DirectMicrophone(device_index=2)
                     self.mic_index = 2
                     self.has_audio = True
-                    print("MIRROR DEBUG: ✅ Created direct microphone access with device index 2")
+                    self.logger.info("Created direct microphone access with device index 2")
                 except Exception as e2:
-                    print(f"MIRROR DEBUG: ❌ All audio attempts failed: {e2}")
+                    self.logger.error(f"All audio attempts failed: {e2}")
                     self.has_audio = False
-        
+
         except Exception as e:
-            print(f"MIRROR DEBUG: ❌ Audio initialization error: {e}")
+            self.logger.error(f"Audio initialization error: {e}")
             self.has_audio = False
         
         # Update status
@@ -558,42 +566,34 @@ class AIInteractionModule:
         try:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
-                    self.logger.info("⌨️ SPACE key pressed - activating voice input")
-                    print("MIRROR DEBUG: Space bar pressed - starting listening...")
-                    
+                    self.logger.info("SPACE key pressed - activating voice input")
+
                     if not self.recording and not self.processing:
                         self.on_button_press()
                     else:
-                        print("MIRROR DEBUG: Already recording or processing - ignoring space bar")
+                        self.logger.debug("Already recording or processing - ignoring space bar")
                     
                 elif event.key == pygame.K_d:
-                    # Debug key - show audio device info
-                    print("\n=== MIRROR AUDIO DEBUG INFO ===")
+                    # Debug key - log audio device info
+                    self.logger.info("=== AUDIO DEBUG INFO ===")
                     if hasattr(self, 'mic_index'):
-                        print(f"Current microphone index: {self.mic_index}")
-                    print(f"Audio available: {self.has_audio}")
-                    print(f"OpenAI API available: {self.has_openai_access}")
-                    print(f"Current status: {self.status}")
-                    
-                    # Try to enumerate audio devices
+                        self.logger.info(f"Current microphone index: {self.mic_index}")
+                    self.logger.info(f"Audio available: {self.has_audio}")
+                    self.logger.info(f"OpenAI API available: {self.has_openai_access}")
+                    self.logger.info(f"Current status: {self.status}")
+
                     try:
                         p = pyaudio.PyAudio()
-                        print("\nAVAILABLE AUDIO DEVICES:")
                         for i in range(p.get_device_count()):
                             dev = p.get_device_info_by_index(i)
-                            print(f"Device {i}: {dev['name']}")
-                            print(f"  Max Input Channels: {dev['maxInputChannels']}")
-                            print(f"  Default Sample Rate: {dev['defaultSampleRate']}")
+                            self.logger.info(f"Device {i}: {dev['name']} (inputs: {dev['maxInputChannels']}, rate: {dev['defaultSampleRate']})")
                         p.terminate()
                     except Exception as e:
-                        print(f"Could not enumerate audio devices: {e}")
-                        
-                    print("==============================\n")
+                        self.logger.error(f"Could not enumerate audio devices: {e}")
                     
                 elif event.key == pygame.K_ESCAPE:
-                    # Use ESC to cancel recording
                     if self.recording:
-                        print("MIRROR DEBUG: Recording canceled by ESC key")
+                        self.logger.info("Recording canceled by ESC key")
                         self.recording = False
                         self.set_status("Idle", "Recording canceled")
         except Exception as e:
@@ -633,91 +633,71 @@ class AIInteractionModule:
     def process_voice_input(self):
         """Process voice input with enhanced safety"""
         self.logger.info("Starting voice input processing")
-        print("MIRROR DEBUG: Attempting to listen for voice input...")
-        
+
         try:
             if not self.has_audio or not hasattr(self, 'microphone'):
                 self.logger.error("No audio system available for voice input")
                 self.set_status("Error", "No audio system available")
-                print("MIRROR DEBUG: ❌ No audio system available")
                 self.recording = False
                 return
-            
+
             with self.microphone as source:
-                # Now try to adjust for ambient noise
                 try:
                     self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                    print("MIRROR DEBUG: Adjusted for ambient noise")
+                    self.logger.debug("Adjusted for ambient noise")
                 except Exception as e:
-                    print(f"MIRROR DEBUG: ⚠️ Could not adjust for ambient noise: {e}")
-                    # Continue anyway
-                    
+                    self.logger.warning(f"Could not adjust for ambient noise: {e}")
+
                 self.set_status("Listening", "Speak now...")
-                print("MIRROR DEBUG: 🎤 Microphone active - speak now")
-                
-                # Get audio with reasonable timeout
+                self.logger.info("Microphone active - listening")
+
                 try:
                     audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
-                    
+
                     if audio is None:
                         self.logger.warning("No audio detected")
                         self.set_status("Error", "No speech detected")
                         self.recording = False
                         return
-                        
+
                     self.set_status("Processing", "Converting speech to text...")
-                    print("MIRROR DEBUG: 🔍 Processing your speech...")
-                    
+
                     try:
-                        # Convert speech to text
                         text = self.recognizer.recognize_google(audio)
                         self.logger.info(f"User said: '{text}'")
-                        print(f"MIRROR DEBUG: 👂 Heard: '{text}'")
-                        
-                        # Store for display
                         self.last_heard_text = text
-                        
-                        # Process with AI
+
                         self.set_status("Sending", f"Sending to AI: '{text[:20]}...'")
-                        print(f"MIRROR DEBUG: 🔄 Sending to OpenAI: '{text}'")
-                        
-                        # Start AI processing in a thread
                         threading.Thread(target=self.process_with_ai, args=(text,), daemon=True).start()
-                        
+
                     except sr.UnknownValueError:
                         self.logger.warning("Speech Recognition could not understand audio")
                         self.set_status("Error", "Could not understand speech")
-                        print("MIRROR DEBUG: ❌ Could not understand your speech")
                         self.recording = False
-                        
+
                     except sr.RequestError as e:
                         self.logger.error(f"Speech Recognition service error: {e}")
                         self.set_status("Error", "Speech recognition service error")
-                        print(f"MIRROR DEBUG: ❌ Speech recognition error: {e}")
                         self.recording = False
-                        
+
                 except Exception as e:
                     self.logger.error(f"Error recording audio: {e}")
                     self.set_status("Error", "Error recording audio")
-                    print(f"MIRROR DEBUG: ❌ Error recording audio: {e}")
                     self.recording = False
-                
+
         except Exception as e:
             self.logger.error(f"Error in process_voice_input: {e}")
             self.set_status("Error", "Voice processing error")
-            print(f"MIRROR DEBUG: ❌ Voice processing error: {e}")
-            
+
         finally:
-            # Ensure we always reset recording flag
             self.recording = False
 
     def process_with_ai(self, text):
         """Process text with AI and handle response"""
         self.processing = True
-        
+
         try:
             self.set_status("Processing", "AI is thinking...")
-            print("MIRROR DEBUG: 🧠 OpenAI is processing your request...")
             
             # Check for wake word commands
             if text.lower().startswith(("mirror", "hey mirror", "ok mirror")):
@@ -735,32 +715,13 @@ class AIInteractionModule:
             
             # Stream the response from OpenAI
             response_text = ""
-            
-            # Run the streaming in an async loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            async def stream_and_collect():
-                nonlocal response_text
-                async for chunk in self.stream_response(text):
-                    response_text += chunk
-                    # Update status with last part of response
-                    self.set_status("Responding", response_text[-40:])
-                    print(f"MIRROR DEBUG: 🗣️ AI: {chunk}", end="", flush=True)
-            
-            try:
-                loop.run_until_complete(stream_and_collect())
-                print("\n")  # Add newline after streaming
-            finally:
-                loop.close()
+            for chunk in self.stream_response(text):
+                response_text += chunk
+                self.set_status("Responding", response_text[-40:])
                 
-            # Log the response
             self.logger.info(f"AI Response: '{response_text}'")
-            print(f"MIRROR DEBUG: ✅ AI response complete: '{response_text[:50]}...'")
-            
-            # Speak the response
+
             self.set_status("Speaking", "Speaking response...")
-            print("MIRROR DEBUG: 🔊 Converting to speech...")
             self.speak_text(response_text)
             
             # Add to response queue for main thread
@@ -775,7 +736,6 @@ class AIInteractionModule:
         except Exception as e:
             self.logger.error(f"Error in AI processing: {e}")
             self.set_status("Error", f"AI error: {str(e)[:30]}")
-            print(f"MIRROR DEBUG: ❌ AI processing error: {e}")
             
         finally:
             self.processing = False
@@ -794,11 +754,10 @@ class AIInteractionModule:
             if not isinstance(sound_paths, list):
                 sound_paths = [sound_paths]
             
-            # Add default paths as fallbacks
-            sound_paths.extend([
-                '/home/dan/Projects/ai_mirror/assets/sound_effects',
+            # Add project-relative path as fallback
+            sound_paths.append(
                 os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'sound_effects')
-            ])
+            )
             
             # Try to load listening sound
             for base_path in sound_paths:
@@ -829,32 +788,18 @@ class AIInteractionModule:
             # Get config values
             openai_config = self.config.get('openai', {})
             
-            # First try the voice-specific key
+            # Try voice-specific key first, then regular key, then env vars
             self.api_key = openai_config.get('voice_api_key')
-            
-            # If not found, try regular api_key from config
+
             if not self.api_key:
                 self.api_key = openai_config.get('api_key')
-                if self.api_key:
-                    print("MIRROR DEBUG: Using regular API key from config")
-            
-            # If still no key, try environment variables
+
             if not self.api_key:
-                import os
-                # First try voice-specific env var
-                self.api_key = os.getenv('OPENAI_VOICE_KEY')
-                if self.api_key:
-                    print(f"MIRROR DEBUG: Using OPENAI_VOICE_KEY from environment: {self.api_key[:4]}...{self.api_key[-4:] if len(self.api_key) > 8 else ''}")
-                else:
-                    # Fall back to regular API key
-                    self.api_key = os.getenv('OPENAI_API_KEY')
-                    if self.api_key:
-                        print(f"MIRROR DEBUG: Using fallback OPENAI_API_KEY from environment: {self.api_key[:4]}...{self.api_key[-4:] if len(self.api_key) > 8 else ''}")
-            
+                self.api_key = os.getenv('OPENAI_VOICE_KEY') or os.getenv('OPENAI_API_KEY')
+
             if not self.api_key:
-                self.logger.error("No OpenAI API key found - checked all possible sources")
+                self.logger.error("No OpenAI API key found - checked config and environment")
                 self.set_status("Error", "No API key available")
-                print("MIRROR DEBUG: ❌ Could not find any OpenAI API key")
                 return
             
             # Create OpenAI client
@@ -862,64 +807,76 @@ class AIInteractionModule:
             self.client = OpenAI(api_key=self.api_key)
             
             # Test connection by listing models
-            print("MIRROR DEBUG: 🔄 Testing OpenAI API connection...")
+            self.logger.info("Testing OpenAI API connection...")
             response = self.client.models.list()
             if response:
                 self.logger.info("OpenAI API access confirmed")
                 model_names = [model.id for model in response]
-                print(f"MIRROR DEBUG: Available models include: {model_names[:3]}...")
-                
-                # Check if we have access to the model we want to use
                 if self.model in model_names:
-                    print(f"MIRROR DEBUG: ✅ Confirmed access to requested model: {self.model}")
+                    self.logger.info(f"Confirmed access to model: {self.model}")
                 else:
-                    print(f"MIRROR DEBUG: ⚠️ Requested model '{self.model}' not found in available models")
-                    
+                    self.logger.warning(f"Requested model '{self.model}' not in available models")
+
                 self.has_openai_access = True
                 self.set_status("Ready", "API connection established")
-                print("MIRROR DEBUG: ✅ OpenAI API connection successful!")
             else:
                 self.logger.warning("OpenAI API connection test returned no models")
                 self.set_status("Warning", "API connection issue")
         except Exception as e:
             self.logger.error(f"OpenAI API initialization error: {e}")
             self.set_status("Error", f"API error: {str(e)[:30]}")
-            print(f"MIRROR DEBUG: ❌ OpenAI API error: {e}")
 
     def speak_text(self, text):
-        """Convert text to speech and play it"""
+        """Convert text to speech and play it.
+
+        Uses OpenAI TTS (gpt-4o-mini-tts) as primary, falls back to gTTS.
+        """
         if not text:
             self.logger.warning("Empty text provided for TTS")
             return
-        
+
+        temp_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "response.mp3"
+        )
+        os.makedirs(os.path.dirname(temp_file), exist_ok=True)
+
         try:
             self.logger.info(f"Converting to speech: '{text[:50]}...'")
-            
-            # Create a temporary file for the audio
-            temp_file = "response.mp3"
-            
-            # Create TTS mp3
-            tts = gTTS(text=text, lang='en', slow=False)
-            tts.save(temp_file)
-            
-            # Initialize pygame mixer if needed
+
+            # Primary: OpenAI TTS
+            if self.client and self.has_openai_access:
+                try:
+                    response = self.client.audio.speech.create(
+                        model="gpt-4o-mini-tts",
+                        voice="alloy",
+                        input=text,
+                    )
+                    response.stream_to_file(temp_file)
+                    self.logger.info("Used OpenAI TTS (gpt-4o-mini-tts)")
+                except Exception as e:
+                    self.logger.warning(f"OpenAI TTS failed, falling back to gTTS: {e}")
+                    tts = gTTS(text=text, lang='en', slow=False)
+                    tts.save(temp_file)
+            else:
+                # Fallback: gTTS
+                tts = gTTS(text=text, lang='en', slow=False)
+                tts.save(temp_file)
+
             if not pygame.mixer.get_init():
                 pygame.mixer.init()
-            
-            # Load and play the speech
+
             speech = pygame.mixer.Sound(temp_file)
-            speech.set_volume(self.tts_volume)  # Use the configured volume
-            
-            # Play the speech
+            speech.set_volume(self.tts_volume)
             speech.play()
-            
-            # Wait for it to finish
+
             pygame.time.wait(int(speech.get_length() * 1000))
-            
-            # Clean up
-            os.remove(temp_file)
+
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
         except Exception as e:
             self.logger.error(f"Error in TTS: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
 
     def reinitialize_microphone(self):
         """Reinitialize the microphone if it has failed"""
@@ -934,17 +891,13 @@ class AIInteractionModule:
             device_idx = self.config.get('audio', {}).get('device_index', None)
             
             # Create a new microphone instance
-            print(f"MIRROR DEBUG: Reinitializing microphone with index {device_idx}")
+            self.logger.info(f"Reinitializing microphone with index {device_idx}")
             self.microphone = sr.Microphone(device_index=device_idx)
-            
-            # Log success
             self.logger.info(f"Microphone reinitialized with index {device_idx}")
-            print(f"MIRROR DEBUG: ✅ Microphone reinitialized")
             
             # Ensure we have audio capability
             self.has_audio = True
             
         except Exception as e:
             self.logger.error(f"Failed to reinitialize microphone: {e}")
-            print(f"MIRROR DEBUG: ❌ Microphone reinitialization failed: {e}")
             self.has_audio = False

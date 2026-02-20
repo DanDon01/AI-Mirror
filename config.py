@@ -59,11 +59,12 @@ DEFAULT_RADIUS = 15
 SCREEN_WIDTH_DEFAULT = 800
 SCREEN_HEIGHT_DEFAULT = 1280
 
-# Paths for assets
+# Paths for assets and data
 assets_dir = os.path.join(current_dir, 'assets')
 retro_icons_path = os.path.join(assets_dir, 'retro_icons')
 weather_icons_path = os.path.join(assets_dir, 'weather_icons')
 sound_effects_path = os.path.join(assets_dir, 'sound_effects')
+data_dir = os.path.join(current_dir, 'data')
 
 #########################################
 # MONITOR CONFIGURATIONS
@@ -225,7 +226,7 @@ CONFIG = {
         'params': {
             'openai': {
                 'api_key': None,  # Fetched in module
-                'model': 'gpt-4o-realtime-preview-2024-12-17'
+                'model': 'gpt-4o'
             },
             'audio': {
                 'device_index': 2,

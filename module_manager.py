@@ -105,7 +105,6 @@ class ModuleManager:
     def initialize_modules(self):
         """Initialize modules with priority for AI voice modules"""
         self.logger.info("Initializing modules in priority order")
-        print("MIRROR DEBUG: 🔄 Initializing modules in priority order")
         
         # Priority order: ai_voice first, then ai_interaction, then others
         priority_modules = ['ai_voice', 'ai_interaction']
@@ -129,7 +128,7 @@ class ModuleManager:
             if module_name not in self.modules:
                 self.initialize_module(module_name)
         
-        print("MIRROR DEBUG: ✅ All modules initialized")
+        self.logger.info("All modules initialized")
 
     def initialize_module(self, module_name):
         """Initialize a specific module"""
@@ -156,7 +155,6 @@ class ModuleManager:
             
             if module_class:
                 self.logger.info(f"Initializing {module_name}")
-                print(f"MIRROR DEBUG: 🔄 Initializing {module_name}")
                 instance = module_class(**config.get('params', {}))
                 self.modules[module_name] = instance
                 self.module_visibility[module_name] = True

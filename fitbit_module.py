@@ -318,7 +318,7 @@ class FitbitModule:
             try:
                 self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
                 self.effects.draw_rounded_rect(screen, header_rect, bg_color, radius=radius, alpha=0)
-            except:
+            except Exception:
                 # Fallback if effects fail
                 from config import draw_module_background_fallback
                 draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
@@ -346,7 +346,7 @@ class FitbitModule:
             # Try to convert steps to int for progress bar
             try:
                 steps_int = int(steps)
-            except:
+            except Exception:
                 steps_int = 0
             
             # Draw progress bar for steps

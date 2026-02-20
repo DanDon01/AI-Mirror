@@ -8,6 +8,23 @@ from weather_animations import CloudAnimation, RainAnimation, SunAnimation, Stor
 from visual_effects import VisualEffects
 from config import draw_module_background_fallback
 
+logger = logging.getLogger("WeatherModule")
+
+# WMO Weather interpretation codes (used by Open-Meteo)
+WMO_CODES = {
+    0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+    45: "Fog", 48: "Depositing rime fog",
+    51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
+    61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+    66: "Light freezing rain", 67: "Heavy freezing rain",
+    71: "Slight snowfall", 73: "Moderate snowfall", 75: "Heavy snowfall",
+    77: "Snow grains",
+    80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
+    85: "Slight snow showers", 86: "Heavy snow showers",
+    95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
+}
+
+
 class WeatherModule:
     def __init__(self, api_key, city, screen_width=800, screen_height=600, icons_path=None):
         self.api_key = api_key
@@ -19,8 +36,122 @@ class WeatherModule:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.animation = None
-        self.icons_path = icons_path  # Add this line
-        self.effects = VisualEffects()  # Add this line
+        self.icons_path = icons_path
+        self.effects = VisualEffects()
+        self._geo_cache = None  # Cache lat/lon for Open-Meteo
+        self.weather_source = None  # Track which API provided data
+
+    def _geocode_city(self):
+        """Convert city name to lat/lon using Open-Meteo geocoding API."""
+        if self._geo_cache:
+            return self._geo_cache
+
+        city_name = self.city.split(",")[0].strip()
+        country = self.city.split(",")[1].strip() if "," in self.city else None
+
+        try:
+            url = "https://geocoding-api.open-meteo.com/v1/search"
+            params = {"name": city_name, "count": 5, "format": "json"}
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+
+            results = data.get("results", [])
+            if not results:
+                logger.warning(f"Geocoding returned no results for '{self.city}'")
+                return None
+
+            # Try to match country code if provided
+            if country:
+                for r in results:
+                    if r.get("country_code", "").upper() == country.upper():
+                        self._geo_cache = {
+                            "lat": r["latitude"],
+                            "lon": r["longitude"],
+                            "name": r.get("name", city_name),
+                            "country": r.get("country_code", country),
+                        }
+                        return self._geo_cache
+
+            # Fall back to first result
+            r = results[0]
+            self._geo_cache = {
+                "lat": r["latitude"],
+                "lon": r["longitude"],
+                "name": r.get("name", city_name),
+                "country": r.get("country_code", ""),
+            }
+            return self._geo_cache
+
+        except Exception as e:
+            logger.error(f"Geocoding failed for '{self.city}': {e}")
+            return None
+
+    def _wmo_to_main(self, code):
+        """Map WMO weather code to a simple category for animations."""
+        if code <= 1:
+            return "clear"
+        if code <= 3:
+            return "clouds"
+        if code in (45, 48):
+            return "clouds"
+        if code in range(51, 68):
+            return "rain"
+        if code in range(71, 78) or code in (85, 86):
+            return "snow"
+        if code >= 95:
+            return "thunderstorm"
+        if code in range(80, 83):
+            return "rain"
+        return "clouds"
+
+    def _fetch_open_meteo(self):
+        """Fetch current weather from Open-Meteo (no API key needed)."""
+        geo = self._geocode_city()
+        if not geo:
+            return None
+
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": geo["lat"],
+            "longitude": geo["lon"],
+            "current": ",".join([
+                "temperature_2m", "relative_humidity_2m", "apparent_temperature",
+                "weather_code", "wind_speed_10m", "pressure_msl", "cloud_cover",
+            ]),
+            "wind_speed_unit": "ms",
+        }
+
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        current = data.get("current", {})
+
+        wmo_code = current.get("weather_code", 0)
+        description = WMO_CODES.get(wmo_code, "Unknown")
+        main_condition = self._wmo_to_main(wmo_code)
+
+        # Normalise to the same dict shape the draw() method expects
+        return {
+            "name": geo["name"],
+            "sys": {"country": geo["country"]},
+            "main": {
+                "temp": current.get("temperature_2m", 0),
+                "feels_like": current.get("apparent_temperature", 0),
+                "humidity": current.get("relative_humidity_2m", 0),
+                "pressure": current.get("pressure_msl", 0),
+            },
+            "weather": [{"main": main_condition, "description": description}],
+            "wind": {"speed": current.get("wind_speed_10m", 0)},
+            "clouds": {"all": current.get("cloud_cover", 0)},
+        }
+
+    def _fetch_openweathermap(self):
+        """Fetch current weather from OpenWeatherMap (requires API key)."""
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={self.city}&appid={self.api_key}&units=metric"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
 
     def update(self):
         current_time = datetime.now()
@@ -30,26 +161,35 @@ class WeatherModule:
                 self.last_skip_log = current_time.timestamp()
             return
 
-        try:
-            url = f"http://api.openweathermap.org/data/2.5/weather?q={self.city}&appid={self.api_key}&units=metric"
-            response = requests.get(url)
-            response.raise_for_status()
-            self.weather_data = response.json()
+        # Try OpenWeatherMap first (if key exists), then Open-Meteo as fallback
+        fetched = False
 
-            # Print the city name and country returned by the API for debugging
-            print(f"Weather data received for: {self.weather_data['name']}, {self.weather_data['sys']['country']}")
+        if self.api_key:
+            try:
+                self.weather_data = self._fetch_openweathermap()
+                self.weather_source = "OpenWeatherMap"
+                fetched = True
+                logger.info(f"Weather via OpenWeatherMap for {self.weather_data['name']}")
+            except Exception as e:
+                logger.warning(f"OpenWeatherMap failed, trying Open-Meteo: {e}")
 
-            # Set animation based on weather condition
+        if not fetched:
+            try:
+                self.weather_data = self._fetch_open_meteo()
+                if self.weather_data:
+                    self.weather_source = "Open-Meteo"
+                    fetched = True
+                    logger.info(f"Weather via Open-Meteo for {self.weather_data['name']}")
+                else:
+                    logger.error("Open-Meteo returned no data")
+            except Exception as e:
+                logger.error(f"Open-Meteo also failed: {e}")
+
+        if fetched:
             self.update_animation()
-
             self.last_update = current_time
-            logging.info(f"Weather data updated successfully for {self.city}")
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to fetch weather data for {self.city}: {e}")
+        else:
             self.weather_data = None
-            self.animation = None
-        except Exception as e:
-            logging.error(f"Error updating weather for {self.city}: {e}")
             self.animation = None
 
     def update_animation(self):
@@ -143,7 +283,7 @@ class WeatherModule:
                 # Draw background with rounded corners and transparency
                 self.effects.draw_rounded_rect(screen, module_rect, bg_color, radius=radius, alpha=0)
                 self.effects.draw_rounded_rect(screen, header_rect, header_bg_color, radius=radius, alpha=0)
-            except:
+            except Exception:
                 # Fallback if effects fail
                 draw_module_background_fallback(screen, x, y, module_width, module_height, padding)
             
@@ -156,8 +296,8 @@ class WeatherModule:
             if self.font is None:
                 try:
                     self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
-                except:
-                    print(f"Warning: Font '{FONT_NAME}' not found. Using default font.")
+                except Exception:
+                    logging.warning(f"Font '{FONT_NAME}' not found. Using default font.")
                     self.font = pygame.font.Font(None, FONT_SIZE)
 
             if self.weather_data:

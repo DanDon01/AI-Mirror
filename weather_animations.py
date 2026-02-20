@@ -1,6 +1,9 @@
 import pygame
 import random
 import os
+import logging
+
+logger = logging.getLogger("WeatherAnimations")
 
 class WeatherAnimation:
     def __init__(self, screen_width, screen_height):
@@ -21,7 +24,7 @@ class WeatherAnimation:
             full_path = os.path.join(self.icon_path, filename)
             return pygame.image.load(full_path).convert_alpha()
         except pygame.error as e:
-            print(f"Error loading image {filename}: {e}")
+            logger.warning(f"Error loading image {filename}: {e}")
             # Return a dummy surface if the image can't be loaded
             return pygame.Surface((50, 50))
 

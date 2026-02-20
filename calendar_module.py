@@ -228,14 +228,14 @@ class CalendarModule:
                             dt = datetime.datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
                             today = datetime.datetime.now().date()
                             is_today = dt.date() == today
-                        except:
+                        except Exception:
                             pass
                     elif 'date' in start:
                         try:
                             dt = datetime.datetime.fromisoformat(start['date'])
                             today = datetime.datetime.now().date()
                             is_today = dt.date() == today
-                        except:
+                        except Exception:
                             pass
                     
                     # Draw background for today's events
@@ -254,7 +254,7 @@ class CalendarModule:
                         try:
                             dt = datetime.datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
                             date_str = dt.strftime('%a %H:%M')
-                        except:
+                        except Exception:
                             date_str = start['dateTime'][:16].replace('T', ' ')
                     else:
                         # All-day event
@@ -297,7 +297,7 @@ class CalendarModule:
                 error_font = pygame.font.Font(None, 24)
                 error_text = error_font.render("Calendar Error", True, (255, 50, 50))
                 screen.blit(error_text, (x + 10, y + 10))
-            except:
+            except Exception:
                 pass  # Last resort - if even error display fails
 
     def get_event_color(self, event):
@@ -319,7 +319,7 @@ class CalendarModule:
                     g = int(color_hex[3:5], 16)
                     b = int(color_hex[5:7], 16)
                     return (r, g, b)
-                except:
+                except Exception:
                     pass
         
         # Fallback to using a hash of the calendar ID for consistent colors
