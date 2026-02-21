@@ -65,38 +65,45 @@ class ClockModule:
             current_time = self.get_current_time()
             current_date = self.get_current_date()
 
-            # Scrolling time (large monospace font, cyan)
-            time_surf = self.time_font.render(current_time, True, self.color)
-            time_surf.set_alpha(TRANSPARENCY)
-            self.total_width = time_surf.get_width()
-
-            self.scroll_position -= self.scroll_speed
-            if self.scroll_position < -time_surf.get_width():
-                self.scroll_position = width
-
-            time_y = y + (height - time_surf.get_height() - 10) // 2
-            screen.blit(time_surf, (self.scroll_position, time_y))
-
-            # Seamless wrap: draw second copy when scrolling off
-            if self.scroll_position < 0:
-                second_x = self.scroll_position + time_surf.get_width() + width
-                if second_x < width:
-                    screen.blit(time_surf, (second_x, time_y))
-
-            # Date (right-aligned, static)
+            # --- Static elements first (date + weather status, top-right) ---
             date_surf = self.date_font.render(current_date, True, COLOR_TEXT_SECONDARY)
             date_surf.set_alpha(TRANSPARENCY)
             date_x = width - date_surf.get_width() - 20
             date_y = y + height - date_surf.get_height() - 12
             screen.blit(date_surf, (date_x, date_y))
 
-            # Status text (right side, small)
             if self._status_text:
                 status_surf = self.status_font.render(
                     self._status_text, True, COLOR_TEXT_DIM
                 )
                 status_surf.set_alpha(TRANSPARENCY)
                 screen.blit(status_surf, (date_x, y + 8))
+
+            # --- Scrolling time, clipped to avoid the static right corner ---
+            # The scroll region ends before the date/status block
+            scroll_limit = date_x - 20
+            time_surf = self.time_font.render(current_time, True, self.color)
+            time_surf.set_alpha(TRANSPARENCY)
+            self.total_width = time_surf.get_width()
+
+            self.scroll_position -= self.scroll_speed
+            if self.scroll_position < -time_surf.get_width():
+                self.scroll_position = scroll_limit
+
+            time_y = y + (height - time_surf.get_height() - 10) // 2
+
+            # Clip so the time never overlaps the date area
+            old_clip = screen.get_clip()
+            screen.set_clip(pygame.Rect(0, y, scroll_limit, height))
+            screen.blit(time_surf, (self.scroll_position, time_y))
+
+            # Seamless wrap
+            if self.scroll_position < 0:
+                second_x = self.scroll_position + time_surf.get_width() + scroll_limit
+                if second_x < scroll_limit:
+                    screen.blit(time_surf, (second_x, time_y))
+
+            screen.set_clip(old_clip)
 
         except Exception as e:
             logger.error(f"Error drawing clock: {e}")

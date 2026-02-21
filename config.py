@@ -167,8 +167,8 @@ LAYOUT_V2 = {
         'right_column': {'width_pct': 0.22},
         'center': {'width_pct': 0.56},
     },
-    'left_modules': ['weather', 'calendar', 'countdown'],
-    'right_modules': ['news', 'quote', 'fitbit', 'openclaw'],
+    'left_modules': ['weather', 'calendar', 'countdown', 'smarthome'],
+    'right_modules': ['quote', 'news', 'fitbit', 'openclaw'],
     'top_bar_modules': ['clock'],
     'bottom_bar_modules': ['stocks'],
     'center_overlay_modules': ['ai_interaction', 'ai_voice', 'eleven_voice'],
@@ -349,6 +349,16 @@ CONFIG = {
         }
     },
 
+    'smarthome': {
+        'class': 'SmartHomeModule',
+        'params': {
+            'ha_url': os.getenv('HA_URL', ''),
+            'ha_token': os.getenv('HA_TOKEN', ''),
+            'entities': [],  # Empty = auto-discover from HA
+            'update_interval_minutes': 2,
+        }
+    },
+
     # Audio and sound effects
     'sound_effects_path': sound_effects_path,
     'audio': {
@@ -370,7 +380,8 @@ CONFIG = {
         'countdown': True,
         'quote': True,
         'news': True,
-        'openclaw': True
+        'openclaw': True,
+        'smarthome': True
     },
     
     # State-specific module settings

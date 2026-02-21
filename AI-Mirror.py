@@ -207,6 +207,13 @@ class MagicMirror:
                 self.module_manager.module_visibility['openclaw'] = False
                 logging.info("OpenClaw hidden: no gateway URL configured")
 
+        # Auto-hide smarthome if no HA URL configured
+        if 'smarthome' in self.modules:
+            sh = self.modules['smarthome']
+            if not getattr(sh, 'ha_url', ''):
+                self.module_manager.module_visibility['smarthome'] = False
+                logging.info("SmartHome hidden: no HA URL configured")
+
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
     def setup_logging(self):
@@ -255,7 +262,8 @@ class MagicMirror:
             'countdown': CountdownModule,
             'quote': QuoteModule,
             'news': NewsModule,
-            'openclaw': OpenClawModule
+            'openclaw': OpenClawModule,
+            'smarthome': SmartHomeModule
         }
 
         config_copy = CONFIG.copy()
@@ -657,6 +665,7 @@ class MagicMirror:
                     'quote': {'x': right_x, 'y': 310, 'width': col_w, 'height': 200},
                     'fitbit': {'x': right_x, 'y': 525, 'width': col_w, 'height': 200},
                     'openclaw': {'x': right_x, 'y': 740, 'width': col_w, 'height': 200},
+                    'smarthome': {'x': 15, 'y': 890, 'width': col_w, 'height': 200},
                     'retro_characters': {'x': 0, 'y': 0, 'width': width, 'height': height},
                     'ai_interaction': {'x': col_w + 30, 'y': height // 3, 'width': width - col_w * 2 - 60, 'height': 200},
                 }

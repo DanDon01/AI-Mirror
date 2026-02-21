@@ -283,9 +283,9 @@ class WeatherModule:
                 humidity = self.weather_data['main']['humidity']
                 wind_speed = self.weather_data['wind']['speed']
                 feels_like = self.weather_data['main']['feels_like']
-                rain_chance = self.weather_data['clouds']['all']
+                cloud_cover = self.weather_data['clouds']['all']
 
-                data_hash = f"{city_name}{temp}{condition}{humidity}{wind_speed}{feels_like}{rain_chance}"
+                data_hash = f"{city_name}{temp}{condition}{humidity}{wind_speed}{feels_like}{cloud_cover}"
 
                 lines = [
                     (f"{city_name}, {country_code}", COLOR_FONT_DEFAULT),
@@ -293,7 +293,7 @@ class WeatherModule:
                     (f"Feels {feels_like:.1f}C", self.get_temperature_color(feels_like)),
                     (f"Humidity {humidity}%", COLOR_FONT_BODY),
                     (f"Wind {wind_speed} m/s", COLOR_FONT_BODY),
-                    (f"Rain {rain_chance}%", COLOR_FONT_BODY),
+                    (f"Clouds {cloud_cover}%", COLOR_FONT_BODY),
                 ]
 
                 for i, (text, color) in enumerate(lines):
