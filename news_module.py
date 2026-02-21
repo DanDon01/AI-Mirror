@@ -154,7 +154,7 @@ class NewsModule:
                 return
 
             # Draw current headline (large, wrapped)
-            text_width = width - padding * 2 - 10
+            text_width = width - 20
             current = self.headlines[self.current_index]
             lines = self._word_wrap(current["title"], self.headline_font, text_width)
 

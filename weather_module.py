@@ -311,13 +311,10 @@ class WeatherModule:
                     screen.blit(surf, (x, draw_y))
                     draw_y += line_height
 
-                # Weather animation constrained to module area
+                # Weather animation across full screen (clouds, sun, rain, etc.)
                 if self.animation:
                     self.animation.update()
-                    clip = screen.get_clip()
-                    screen.set_clip(pygame.Rect(x, y, width, height))
                     self.animation.draw(screen)
-                    screen.set_clip(clip)
             else:
                 err = self.body_font.render("Weather unavailable", True, COLOR_PASTEL_RED)
                 err.set_alpha(TRANSPARENCY)

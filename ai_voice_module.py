@@ -528,32 +528,43 @@ class AIVoiceModule:
         self.logger.info(f"Status: {status} - {message}")
 
     def draw(self, screen, position):
+        """Draw voice AI status -- only visible when active. No background."""
         try:
             if isinstance(position, dict):
                 x, y = position.get("x", 0), position.get("y", 0)
-                width, height = position.get("width", 250), position.get("height", 200)
+                width, height = position.get("width", 300), position.get("height", 200)
             else:
                 x, y = position
-                width, height = 250, 200
+                width, height = 300, 200
 
-            pygame.draw.rect(screen, (30, 30, 40), (x, y, width, height))
-            pygame.draw.rect(screen, (50, 50, 150), (x, y, width, height), 2)
+            # Only draw when actively doing something
+            if not self.recording and self.status in ("idle", "disconnected", ""):
+                return
 
-            if not hasattr(self, "font"):
-                self.font = pygame.font.Font(None, 24)
-                self.title_font = pygame.font.Font(None, 32)
+            if not hasattr(self, "_voice_font_ready") or not self._voice_font_ready:
+                from config import FONT_NAME, FONT_SIZE_BODY, FONT_SIZE_SMALL
+                self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_SMALL)
+                self.title_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_BODY)
+                self._voice_font_ready = True
 
-            title = self.title_font.render("Voice AI", True, (150, 150, 255))
-            screen.blit(title, (x + 10, y + 10))
-            status_text = self.font.render(f"Status: {self.status}", True, (200, 200, 200))
-            screen.blit(status_text, (x + 10, y + 50))
-            msg = self.status_message[:30] + "..." if len(self.status_message) > 30 else self.status_message
-            screen.blit(self.font.render(msg, True, (200, 200, 200)), (x + 10, y + 80))
+            center_x = x + width // 2
+
+            title = self.title_font.render(f"Voice: {self.status}", True, (150, 150, 255))
+            title.set_alpha(200)
+            screen.blit(title, (center_x - title.get_width() // 2, y))
+
+            if self.status_message:
+                msg = self.status_message[:40] + "..." if len(self.status_message) > 40 else self.status_message
+                msg_surf = self.font.render(msg, True, (160, 160, 160))
+                msg_surf.set_alpha(200)
+                screen.blit(msg_surf, (center_x - msg_surf.get_width() // 2, y + 28))
 
             if self.recording:
                 pulse = int(128 + 127 * (pygame.time.get_ticks() % 1000) / 1000)
-                pygame.draw.circle(screen, (255, pulse, pulse), (x + 20, y + 120), 8)
-                screen.blit(self.font.render("Recording", True, (255, pulse, pulse)), (x + 35, y + 112))
+                rec_color = (255, pulse, pulse)
+                pygame.draw.circle(screen, rec_color, (center_x - 30, y + 55), 6)
+                rec_text = self.font.render("Recording", True, rec_color)
+                screen.blit(rec_text, (center_x - 18, y + 47))
         except Exception as e:
             self.logger.error(f"Draw error: {e}")
 

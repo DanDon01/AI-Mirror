@@ -273,10 +273,8 @@ class StocksModule:
             # Thin separator above ticker
             pygame.draw.line(screen, (40, 40, 40), (0, y - 1), (screen_width, y - 1), 1)
 
-            if not self.stock_data or all(
-                data.get('price') == 'N/A' for data in self.stock_data.values()
-            ):
-                message = "Markets Closed - Data Unavailable"
+            if not self.stock_data:
+                message = "Loading stock data..."
                 text_surface = self.ticker_font.render(message, True, (160, 160, 160))
                 text_surface.set_alpha(TRANSPARENCY)
                 x_pos = (screen_width - text_surface.get_width()) // 2

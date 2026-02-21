@@ -17,7 +17,7 @@ import requests
 from dotenv import load_dotenv
 
 ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Variables.env')
-REDIRECT_URI = "http://127.0.0.1:8090"
+REDIRECT_URI = "http://localhost:8080/callback"
 SCOPES = "https://www.googleapis.com/auth/calendar.readonly"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -119,7 +119,7 @@ def full_auth(creds):
         def log_message(self, format, *args):
             pass
 
-    server = http.server.HTTPServer(('127.0.0.1', 8090), Handler)
+    server = http.server.HTTPServer(('localhost', 8080), Handler)
 
     print(f"\nOpening: {url}\n")
     webbrowser.open(url)

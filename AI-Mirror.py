@@ -197,6 +197,14 @@ class MagicMirror:
         # Initialize module visibility
         for module_name in self.modules.keys():
             self.module_manager.module_visibility[module_name] = True
+
+        # Auto-hide openclaw if no gateway configured
+        if 'openclaw' in self.modules:
+            oc = self.modules['openclaw']
+            if not getattr(oc, 'gateway_url', ''):
+                self.module_manager.module_visibility['openclaw'] = False
+                logging.info("OpenClaw hidden: no gateway URL configured")
+
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
     def setup_logging(self):
@@ -287,7 +295,7 @@ class MagicMirror:
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q:
+                if event.key in (pygame.K_q, pygame.K_ESCAPE):
                     self.running = False
                 elif event.key == pygame.K_d:
                     self.toggle_debug()
@@ -475,6 +483,9 @@ class MagicMirror:
 
     def run(self):
         """Run the main application loop."""
+        import signal
+        signal.signal(signal.SIGINT, lambda s, f: setattr(self, 'running', False))
+
         try:
             logging.info("Starting Magic Mirror main loop")
             while self.running:
@@ -483,6 +494,9 @@ class MagicMirror:
                     self.update_modules()
                     self.draw_modules()
                     self.clock.tick(self.frame_rate)
+                except KeyboardInterrupt:
+                    logging.info("Ctrl+C received")
+                    self.running = False
                 except Exception as e:
                     logging.error(f"Error in main loop iteration: {e}")
                     logging.error(traceback.format_exc())

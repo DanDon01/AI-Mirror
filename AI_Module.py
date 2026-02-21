@@ -344,84 +344,60 @@ class AIInteractionModule:
                 os.remove(temp_file)
 
     def draw(self, screen, position):
-        """Enhanced drawing with detailed status indicators"""
+        """Draw AI status -- only visible when recording or processing.
+
+        Shows minimal floating indicators, no background.
+        """
         try:
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
-                width = position.get('width', 225)
+                width = position.get('width', 300)
                 height = position.get('height', 200)
             else:
                 x, y = position
-                width, height = 225, 200
-            
-            # Draw module background
-            pygame.draw.rect(screen, (30, 30, 40), (x, y, width, height))
-            pygame.draw.rect(screen, (50, 50, 70), (x, y, width, height), 2)
-            
-            # Initialize fonts if needed
+                width, height = 300, 200
+
+            # Only draw when actively doing something
+            if not self.recording and not self.processing and self.status == "idle":
+                return
+
             if not hasattr(self, 'debug_font'):
-                self.debug_font = pygame.font.Font(None, 24)
-                self.status_font = pygame.font.Font(None, 36)
-            
-            # Draw main status
+                from config import FONT_NAME, FONT_SIZE_BODY, FONT_SIZE_SMALL
+                self.debug_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_SMALL)
+                self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_BODY)
+
+            # Center the status text
+            center_x = x + width // 2
+
+            # Status text
             status_text = self.status_font.render(f"AI: {self.status}", True, (200, 200, 200))
-            screen.blit(status_text, (x + 10, y + 10))
-            
-            # Draw status message
+            status_text.set_alpha(200)
+            screen.blit(status_text, (center_x - status_text.get_width() // 2, y))
+
             if self.status_message:
-                # Truncate message if too long
                 msg = self.status_message
-                if len(msg) > 30:
-                    msg = msg[:27] + "..."
-                
-                message_text = self.debug_font.render(msg, True, (200, 200, 200))
-                screen.blit(message_text, (x + 10, y + 50))
-            
-            # Draw connection status indicators
-            y_offset = 80
-            
-            # Mic status
-            mic_color = (0, 255, 0) if self.has_audio else (255, 0, 0)
-            pygame.draw.circle(screen, mic_color, (x + 20, y + y_offset), 8)
-            mic_text = self.debug_font.render("Mic", True, (200, 200, 200))
-            screen.blit(mic_text, (x + 35, y + y_offset - 8))
-            
-            # API status
-            api_color = (0, 255, 0) if self.has_openai_access else (255, 0, 0)
-            pygame.draw.circle(screen, api_color, (x + 20, y + y_offset + 25), 8)
-            api_text = self.debug_font.render("API", True, (200, 200, 200))
-            screen.blit(api_text, (x + 35, y + y_offset + 17))
-            
-            # Recording status
+                if len(msg) > 40:
+                    msg = msg[:37] + "..."
+                message_text = self.debug_font.render(msg, True, (160, 160, 160))
+                message_text.set_alpha(200)
+                screen.blit(message_text, (center_x - message_text.get_width() // 2, y + 30))
+
+            y_offset = 60
+
+            # Recording indicator
             if self.recording:
-                # Pulsing red circle for recording
                 pulse = int(128 + 127 * math.sin(pygame.time.get_ticks() / 200))
                 rec_color = (255, pulse, pulse)
-                pygame.draw.circle(screen, rec_color, (x + 20, y + y_offset + 50), 8)
-                rec_text = self.debug_font.render("Recording", True, (255, pulse, pulse))
-                screen.blit(rec_text, (x + 35, y + y_offset + 42))
-            
-            # Processing status
+                pygame.draw.circle(screen, rec_color, (center_x - 30, y + y_offset), 6)
+                rec_text = self.debug_font.render("Recording", True, rec_color)
+                screen.blit(rec_text, (center_x - 18, y + y_offset - 8))
+
             if self.processing:
-                # Pulsing blue circle for processing
                 pulse = int(128 + 127 * math.sin(pygame.time.get_ticks() / 300))
                 proc_color = (pulse, pulse, 255)
-                pygame.draw.circle(screen, proc_color, (x + 20, y + y_offset + 75), 8)
-                proc_text = self.debug_font.render("Processing", True, (pulse, pulse, 255))
-                screen.blit(proc_text, (x + 35, y + y_offset + 67))
-            
-            # Display last heard text if available
-            if hasattr(self, 'last_heard_text') and self.last_heard_text:
-                heard_label = self.debug_font.render("Heard:", True, (180, 180, 220))
-                screen.blit(heard_label, (x + 10, y + height - 60))
-                
-                # Truncate if needed
-                heard_text = self.last_heard_text
-                if len(heard_text) > 30:
-                    heard_text = heard_text[:27] + "..."
-                
-                text_render = self.debug_font.render(heard_text, True, (220, 220, 255))
-                screen.blit(text_render, (x + 10, y + height - 35))
+                pygame.draw.circle(screen, proc_color, (center_x - 30, y + y_offset + 20), 6)
+                proc_text = self.debug_font.render("Processing", True, proc_color)
+                screen.blit(proc_text, (center_x - 18, y + y_offset + 12))
             
         except Exception as e:
             self.logger.error(f"Error in draw: {e}")

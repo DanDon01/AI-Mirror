@@ -389,9 +389,9 @@ CONFIG = {
     
     # Screen settings
     'current_monitor': {
-        'width': SCREEN_WIDTH_DEFAULT,
-        'height': SCREEN_HEIGHT_DEFAULT,
-        'is_portrait': False
+        'width': CURRENT_MONITOR['resolution'][0],
+        'height': CURRENT_MONITOR['resolution'][1],
+        'is_portrait': True,
     },
     
     # Module styling
