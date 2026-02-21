@@ -223,8 +223,8 @@ CONFIG = {
         'params': {
             'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
             'city': 'Birmingham,UK',
-            'screen_width': SCREEN_WIDTH_DEFAULT,
-            'screen_height': SCREEN_HEIGHT_DEFAULT,
+            'screen_width': CURRENT_MONITOR['resolution'][0],
+            'screen_height': CURRENT_MONITOR['resolution'][1],
             'icons_path': weather_icons_path
         }
     },
@@ -260,7 +260,7 @@ CONFIG = {
     'retro_characters': {
         'class': 'RetroCharactersModule',
         'params': {
-            'screen_size': (SCREEN_WIDTH_DEFAULT, SCREEN_HEIGHT_DEFAULT),
+            'screen_size': CURRENT_MONITOR['resolution'],
             'icon_size': 64,
             'icon_directory': retro_icons_path,
             'spawn_probability': 0.002,

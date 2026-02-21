@@ -325,8 +325,8 @@ class MagicMirror:
     def draw_modules(self):
         """Draw all visible modules in z-order for mirror layout.
 
-        Draw order: black fill -> left/right columns -> bottom bar (ticker)
-        -> top bar (clock) -> center overlays -> debug overlay -> flip.
+        State-aware: active draws info modules, screensaver draws retro chars,
+        sleep draws clock only.
         """
         try:
             self.screen.fill((0, 0, 0))
@@ -339,38 +339,48 @@ class MagicMirror:
             right_names = layout_v2.get('right_modules', [])
             center_names = layout_v2.get('center_overlay_modules', [])
             fullscreen_names = layout_v2.get('fullscreen_overlay_modules', [])
+            screensaver_names = CONFIG.get('screensaver_modules', ['retro_characters'])
 
-            # 1) Left and right column modules
-            for name in left_names + right_names:
-                self._draw_module(name)
+            if self.state == "screensaver":
+                # Only draw screensaver overlays and clock
+                for name in fullscreen_names:
+                    if name in screensaver_names:
+                        self._draw_module(name)
+                self._draw_module('clock')
 
-            # 2) Bottom bar: stock ticker (uses special draw method)
-            if 'stocks' in self.modules and self.module_manager.is_module_visible('stocks'):
-                stocks = self.modules['stocks']
-                if hasattr(stocks, 'draw_scrolling_ticker'):
-                    stocks.draw_scrolling_ticker(self.screen)
-                else:
-                    self._draw_module('stocks')
+            elif self.state == "sleep":
+                # Clock only
+                self._draw_module('clock')
 
-            # 3) Top bar: clock
-            self._draw_module('clock')
-
-            # 4) Fullscreen overlays (retro characters - screensaver)
-            for name in fullscreen_names:
-                self._draw_module(name)
-
-            # 5) Center overlays (AI/voice - only when active)
-            for name in center_names:
-                self._draw_module(name)
-
-            # 6) Draw any remaining modules not in layout zones
-            drawn = set(['clock', 'stocks'] + left_names + right_names
-                        + center_names + fullscreen_names)
-            for name in self.modules:
-                if name not in drawn:
+            else:
+                # Active state: draw everything except screensaver
+                # 1) Left and right column modules
+                for name in left_names + right_names:
                     self._draw_module(name)
 
-            # 7) Center notifications (on top of everything)
+                # 2) Bottom bar: stock ticker
+                if 'stocks' in self.modules and self.module_manager.is_module_visible('stocks'):
+                    stocks = self.modules['stocks']
+                    if hasattr(stocks, 'draw_scrolling_ticker'):
+                        stocks.draw_scrolling_ticker(self.screen)
+                    else:
+                        self._draw_module('stocks')
+
+                # 3) Top bar: clock
+                self._draw_module('clock')
+
+                # 4) Center overlays (AI/voice - only when active)
+                for name in center_names:
+                    self._draw_module(name)
+
+                # 5) Draw any remaining modules not in layout zones
+                drawn = set(['clock', 'stocks'] + left_names + right_names
+                            + center_names + fullscreen_names)
+                for name in self.modules:
+                    if name not in drawn:
+                        self._draw_module(name)
+
+            # Center notifications (on top of everything in all states)
             self.animation_manager.draw_notifications(self.screen)
 
             # Debug overlay
@@ -438,8 +448,9 @@ class MagicMirror:
         self.screen.blit(dims, (10, sh - 20))
 
     def toggle_debug(self):
-        """Toggle debug mode on/off."""
+        """Toggle debug mode on/off (includes visible layout grid)."""
         self.debug_mode = not self.debug_mode
+        self.debug_layout = self.debug_mode
         logging.info(f"Debug mode {'enabled' if self.debug_mode else 'disabled'}")
 
     def update_modules(self):
@@ -456,13 +467,17 @@ class MagicMirror:
                     if content['ai_response']:
                         self.speech_logger.log_ai_response(content['ai_response'])
 
-        # Update visible modules
+        # Update visible modules (state-aware)
+        screensaver_names = CONFIG.get('screensaver_modules', ['retro_characters'])
+        sleep_names = CONFIG.get('sleep_modules', ['clock'])
         for module_name, module in self.modules.items():
             if self.module_manager.is_module_visible(module_name):
                 try:
-                    if self.state == "screensaver" and module_name not in CONFIG.get('screensaver_modules', ['retro_characters']):
+                    if self.state == "active" and module_name in screensaver_names:
+                        continue  # Don't update screensaver during active
+                    if self.state == "screensaver" and module_name not in screensaver_names and module_name != 'clock':
                         continue
-                    if self.state == "sleep" and module_name not in CONFIG.get('sleep_modules', []):
+                    if self.state == "sleep" and module_name not in sleep_names:
                         continue
                     if hasattr(module, 'update'):
                         module.update()
