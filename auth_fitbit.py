@@ -17,7 +17,7 @@ import urllib.parse
 from dotenv import load_dotenv
 
 ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Variables.env')
-REDIRECT_URI = "http://127.0.0.1:8080"
+REDIRECT_URI = "http://localhost:8080"
 SCOPES = "activity heartrate sleep profile"
 AUTH_URL = "https://www.fitbit.com/oauth2/authorize"
 TOKEN_URL = "https://api.fitbit.com/oauth2/token"
@@ -109,7 +109,7 @@ def full_auth(creds):
         def log_message(self, format, *args):
             pass  # Suppress request logging
 
-    server = http.server.HTTPServer(('127.0.0.1', 8080), Handler)
+    server = http.server.HTTPServer(('localhost', 8080), Handler)
 
     print(f"\nOpening: {url}\n")
     webbrowser.open(url)
