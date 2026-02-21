@@ -13,16 +13,9 @@ logger = logging.getLogger("Layout")
 
 class LayoutManager:
     def __init__(self, screen_width, screen_height):
-        config_screen = CONFIG.get('current_monitor', {})
-        config_width = config_screen.get('width')
-        config_height = config_screen.get('height')
-
-        if config_width and config_height:
-            self.screen_width = config_width
-            self.screen_height = config_height
-        else:
-            self.screen_width = screen_width
-            self.screen_height = screen_height
+        # Always trust the passed-in dimensions (actual display size)
+        self.screen_width = screen_width
+        self.screen_height = screen_height
 
         self.layout = LAYOUT_V2
         self.module_positions = {}

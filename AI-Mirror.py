@@ -194,9 +194,11 @@ class MagicMirror:
             if hasattr(module, 'set_notification_callback'):
                 module.set_notification_callback(self.animation_manager.push_notification)
 
-        # Initialize module visibility
+        # Ensure all modules have a visibility entry (don't override
+        # decisions already made by ModuleManager.verify_voice_module)
         for module_name in self.modules.keys():
-            self.module_manager.module_visibility[module_name] = True
+            if module_name not in self.module_manager.module_visibility:
+                self.module_manager.module_visibility[module_name] = True
 
         # Auto-hide openclaw if no gateway configured
         if 'openclaw' in self.modules:
@@ -547,33 +549,64 @@ class MagicMirror:
         pygame.quit()
 
     def initialize_screen(self):
-        """Initialize screen with robust fullscreen handling."""
+        """Initialize screen using native display resolution.
+
+        Auto-detects the actual display size so modules are never drawn
+        off-screen, regardless of what CURRENT_MONITOR says in config.
+        """
         pygame.display.set_caption("Magic Mirror")
         pygame.mouse.set_visible(False)
 
-        width = CONFIG.get('current_monitor', {}).get('width', 800)
-        height = CONFIG.get('current_monitor', {}).get('height', 480)
+        # Detect native display resolution before creating the surface
+        display_info = pygame.display.Info()
+        native_w = display_info.current_w
+        native_h = display_info.current_h
+        logging.info(f"Native display resolution: {native_w}x{native_h}")
 
+        config_w = CONFIG.get('current_monitor', {}).get('width', 800)
+        config_h = CONFIG.get('current_monitor', {}).get('height', 480)
+        if native_w != config_w or native_h != config_h:
+            logging.warning(
+                f"Config says {config_w}x{config_h} but display is "
+                f"{native_w}x{native_h} -- using actual display size"
+            )
+
+        # Use (0,0) to let pygame pick native resolution in fullscreen
         display_configs = [
             (pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF, "hardware accelerated"),
             (pygame.FULLSCREEN | pygame.NOFRAME, "no frame"),
-            (pygame.FULLSCREEN, "basic fullscreen")
+            (pygame.FULLSCREEN, "basic fullscreen"),
         ]
 
         self.screen = None
         for flags, desc in display_configs:
             try:
-                self.screen = pygame.display.set_mode((width, height), flags)
-                logging.info(f"Screen initialized with {desc} mode: {width}x{height}")
+                self.screen = pygame.display.set_mode((0, 0), flags)
                 break
             except Exception as e:
                 logging.warning(f"Failed {desc} mode: {e}")
 
         if not self.screen:
-            self.screen = pygame.display.set_mode((width, height))
-            logging.warning(f"Using fallback windowed mode: {width}x{height}")
+            self.screen = pygame.display.set_mode((native_w, native_h))
+            logging.warning(f"Using fallback windowed mode: {native_w}x{native_h}")
 
-        self.layout_manager = LayoutManager(width, height)
+        # Read back actual surface dimensions
+        actual_w = self.screen.get_width()
+        actual_h = self.screen.get_height()
+        logging.info(f"Screen initialized: {actual_w}x{actual_h}")
+
+        # Update CONFIG so all downstream code (layout, modules) uses real size
+        CONFIG['current_monitor']['width'] = actual_w
+        CONFIG['current_monitor']['height'] = actual_h
+
+        # Update module params that depend on screen size
+        if 'weather' in CONFIG and 'params' in CONFIG['weather']:
+            CONFIG['weather']['params']['screen_width'] = actual_w
+            CONFIG['weather']['params']['screen_height'] = actual_h
+        if 'retro_characters' in CONFIG and 'params' in CONFIG['retro_characters']:
+            CONFIG['retro_characters']['params']['screen_size'] = (actual_w, actual_h)
+
+        self.layout_manager = LayoutManager(actual_w, actual_h)
 
     def change_state(self, new_state):
         """Change mirror state with fade transition."""
