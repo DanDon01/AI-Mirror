@@ -365,6 +365,14 @@ class MagicMirror:
                     stocks = self.modules['stocks']
                     if hasattr(stocks, 'draw_scrolling_ticker'):
                         stocks.draw_scrolling_ticker(self.screen)
+                        # Debug box for ticker (not drawn via _draw_module)
+                        if self.debug_layout:
+                            pos = self.module_positions.get('stocks', {})
+                            sw = self.screen.get_width()
+                            th = 40
+                            ty = self.screen.get_height() - th
+                            pygame.draw.rect(self.screen, (255, 0, 0),
+                                            (0, ty, sw, th), 1)
                     else:
                         self._draw_module('stocks')
 

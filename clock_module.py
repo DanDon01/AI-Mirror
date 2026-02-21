@@ -1,7 +1,7 @@
 """Clock module for AI-Mirror top bar.
 
-Displays scrolling time across full width with static date right-aligned.
-Renders as the top bar of the mirror interface with a thin separator below.
+Displays time with a cool monospace digital look, static date right-aligned.
+Renders as the top bar of the mirror interface.
 """
 
 import pygame
@@ -10,9 +10,9 @@ import calendar
 from datetime import datetime
 import pytz
 from config import (
-    FONT_NAME, FONT_SIZE_CLOCK, FONT_SIZE_BODY, FONT_SIZE_SMALL,
-    COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
-    COLOR_SEPARATOR, TRANSPARENCY, ANIMATION,
+    FONT_NAME, FONT_NAME_CLOCK, FONT_SIZE_CLOCK, FONT_SIZE_BODY, FONT_SIZE_SMALL,
+    COLOR_CLOCK_FACE, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
+    TRANSPARENCY, ANIMATION,
 )
 
 logger = logging.getLogger("Clock")
@@ -24,10 +24,10 @@ class ClockModule:
                  timezone='local', **kwargs):
         size = time_font_size or FONT_SIZE_CLOCK
         date_size = date_font_size or FONT_SIZE_BODY
-        self.time_font = pygame.font.SysFont(FONT_NAME, size)
+        self.time_font = pygame.font.SysFont(FONT_NAME_CLOCK, size)
         self.date_font = pygame.font.SysFont(FONT_NAME, date_size)
         self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_SMALL)
-        self.color = color or COLOR_TEXT_PRIMARY
+        self.color = COLOR_CLOCK_FACE
         self.time_format = time_format
         self.date_format = date_format
         self.tz = pytz.timezone(timezone) if timezone != 'local' else None
@@ -50,7 +50,7 @@ class ClockModule:
             self.scroll_position = self.screen_width
 
     def draw(self, screen, position):
-        """Draw top bar: scrolling time, static date, separator line."""
+        """Draw top bar: scrolling time, static date."""
         try:
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
@@ -65,7 +65,7 @@ class ClockModule:
             current_time = self.get_current_time()
             current_date = self.get_current_date()
 
-            # Scrolling time (large font)
+            # Scrolling time (large monospace font, cyan)
             time_surf = self.time_font.render(current_time, True, self.color)
             time_surf.set_alpha(TRANSPARENCY)
             self.total_width = time_surf.get_width()
@@ -97,12 +97,6 @@ class ClockModule:
                 )
                 status_surf.set_alpha(TRANSPARENCY)
                 screen.blit(status_surf, (date_x, y + 8))
-
-            # Thin separator line at bottom of top bar
-            sep_y = y + height - 1
-            pygame.draw.line(
-                screen, COLOR_SEPARATOR, (0, sep_y), (width, sep_y), 1
-            )
 
         except Exception as e:
             logger.error(f"Error drawing clock: {e}")

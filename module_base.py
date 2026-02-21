@@ -8,7 +8,7 @@ for a unified visual style.
 import pygame
 from config import (
     CONFIG, FONT_NAME, FONT_SIZE_TITLE, FONT_SIZE_BODY, FONT_SIZE_SMALL,
-    COLOR_TEXT_DIM, COLOR_SEPARATOR, TRANSPARENCY,
+    COLOR_TEXT_DIM, COLOR_TITLE_BLUE, COLOR_SEPARATOR, TRANSPARENCY,
 )
 
 
@@ -69,7 +69,7 @@ class ModuleDrawHelper:
         """
         ModuleDrawHelper._ensure_fonts()
         title_surf = ModuleDrawHelper._small_font.render(
-            text.upper(), True, COLOR_TEXT_DIM
+            text.upper(), True, COLOR_TITLE_BLUE
         )
         title_surf.set_alpha(TRANSPARENCY)
         screen.blit(title_surf, (x, y))

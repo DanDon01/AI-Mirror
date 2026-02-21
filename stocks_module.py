@@ -65,18 +65,19 @@ class StocksModule:
         self._notify = callback
 
     def update(self):
-        """Update stock data with minimal API calls to avoid rate limiting"""
+        """Update stock data with minimal API calls to avoid rate limiting.
+
+        Fetches even on weekends so last closing prices are always shown.
+        """
         current_time = datetime.now(timezone('UTC'))
-        
+
         # Check if it's time to update (use longer intervals to reduce API calls)
-        if current_time - self.last_update < timedelta(minutes=30):  # Extend to 30 minutes
+        # On weekends, only fetch once per session (data won't change)
+        is_weekend = current_time.weekday() >= 5
+        interval = timedelta(hours=12) if is_weekend else timedelta(minutes=30)
+        if current_time - self.last_update < interval:
             return
-        
-        # Skip updates during weekends when markets are closed
-        if current_time.weekday() >= 5:  # 5=Saturday, 6=Sunday
-            self.logger.info("Skipping stock updates during weekend")
-            return
-        
+
         try:
             if not hasattr(self, 'logger'):
                 self.logger = logging.getLogger('stocks_module')
@@ -266,19 +267,16 @@ class StocksModule:
         items to fill the visible width with no gaps.
         """
         try:
-            ticker_height = 30
+            ticker_height = 40
             screen_width = screen.get_width()
             y = screen.get_height() - ticker_height
 
-            # Thin separator above ticker
-            pygame.draw.line(screen, (40, 40, 40), (0, y - 1), (screen_width, y - 1), 1)
-
             if not self.stock_data:
                 message = "Loading stock data..."
-                text_surface = self.ticker_font.render(message, True, (160, 160, 160))
+                text_surface = self.ticker_font.render(message, True, (140, 140, 140))
                 text_surface.set_alpha(TRANSPARENCY)
                 x_pos = (screen_width - text_surface.get_width()) // 2
-                screen.blit(text_surface, (x_pos, y + 4))
+                screen.blit(text_surface, (x_pos, y + 8))
                 return
 
             # Build rendered surfaces for each ticker
@@ -318,7 +316,7 @@ class StocksModule:
             while draw_x < screen_width:
                 for surf in ticker_items:
                     if draw_x + surf.get_width() > 0 and draw_x < screen_width:
-                        screen.blit(surf, (draw_x, y + 4))
+                        screen.blit(surf, (draw_x, y + 8))
                     draw_x += surf.get_width()
 
             # Advance scroll

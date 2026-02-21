@@ -24,11 +24,17 @@ load_dotenv(env_path)
 COLOR_WHITE = (255, 255, 255)
 COLOR_BLACK = (0, 0, 0)
 
-# Text hierarchy: bright on black for mirror readability
-COLOR_TEXT_PRIMARY = (230, 230, 230)
-COLOR_TEXT_SECONDARY = (160, 160, 160)
-COLOR_TEXT_DIM = (100, 100, 100)
+# Text hierarchy: soft on black for mirror readability (not harsh white)
+COLOR_TEXT_PRIMARY = (185, 185, 190)
+COLOR_TEXT_SECONDARY = (140, 140, 145)
+COLOR_TEXT_DIM = (90, 90, 95)
 COLOR_TEXT_ACCENT = (100, 180, 255)
+
+# Module title color (soft blue glow)
+COLOR_TITLE_BLUE = (70, 140, 220)
+
+# Clock face color (cool cyan for digital look)
+COLOR_CLOCK_FACE = (90, 195, 255)
 
 # Accent colors (used sparingly for status/indicators)
 COLOR_ACCENT_BLUE = (70, 130, 220)
@@ -62,6 +68,7 @@ TRANSPARENCY = 240
 # Font Settings -- larger sizes for mirror readability at arm's length
 # SysFont tries each name in order, picks first available
 FONT_NAME = "segoeui,dejavusans,freesans,arial"
+FONT_NAME_CLOCK = "consolas,dejavusansmono,liberationmono,couriernew,monospace"
 FONT_SIZE_CLOCK = 72
 FONT_SIZE_TITLE = 28
 FONT_SIZE_SUBTITLE = 22
@@ -155,7 +162,7 @@ LAYOUT = {
 LAYOUT_V2 = {
     'zones': {
         'top_bar': {'y': 0, 'height': 80},
-        'bottom_bar': {'height': 50},
+        'bottom_bar': {'height': 40},
         'left_column': {'x': 0, 'width_pct': 0.22},
         'right_column': {'width_pct': 0.22},
         'center': {'width_pct': 0.56},
