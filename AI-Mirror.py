@@ -92,6 +92,7 @@ from news_module import NewsModule
 from openclaw_module import OpenClawModule
 from sysinfo_module import SysInfoModule
 from greeting_module import GreetingModule
+from octopus_energy_module import OctopusEnergyModule
 from api_tracker import api_tracker
 
 
@@ -273,7 +274,8 @@ class MagicMirror:
             'openclaw': OpenClawModule,
             'smarthome': SmartHomeModule,
             'sysinfo': SysInfoModule,
-            'greeting': GreetingModule
+            'greeting': GreetingModule,
+            'octopus_energy': OctopusEnergyModule
         }
 
         config_copy = CONFIG.copy()
@@ -720,6 +722,7 @@ class MagicMirror:
                     'fitbit': {'x': right_x, 'y': 525, 'width': col_w, 'height': 200},
                     'openclaw': {'x': right_x, 'y': 740, 'width': col_w, 'height': 200},
                     'smarthome': {'x': 15, 'y': 890, 'width': col_w, 'height': 200},
+                    'octopus_energy': {'x': 15, 'y': 1105, 'width': col_w, 'height': 200},
                     'sysinfo': {'x': right_x, 'y': 955, 'width': col_w, 'height': 150},
                     'greeting': {'x': right_x, 'y': 95, 'width': col_w, 'height': 150},
                     'retro_characters': {'x': 0, 'y': 0, 'width': width, 'height': height},

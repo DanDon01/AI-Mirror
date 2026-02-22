@@ -167,7 +167,7 @@ LAYOUT_V2 = {
         'right_column': {'width_pct': 0.22},
         'center': {'width_pct': 0.56},
     },
-    'left_modules': ['weather', 'calendar', 'countdown', 'smarthome'],
+    'left_modules': ['weather', 'calendar', 'countdown', 'smarthome', 'octopus_energy'],
     'right_modules': ['greeting', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
     'top_bar_modules': ['clock'],
     'bottom_bar_modules': ['stocks'],
@@ -371,6 +371,13 @@ CONFIG = {
             'rotation_interval': 60,
         }
     },
+    'octopus_energy': {
+        'class': 'OctopusEnergyModule',
+        'params': {
+            'api_key': os.getenv('OCTOPUS_API_KEY', ''),
+            'account_number': os.getenv('OCTOPUS_ACCOUNT_NUMBER', ''),
+        }
+    },
 
     # Audio and sound effects
     'sound_effects_path': sound_effects_path,
@@ -396,7 +403,8 @@ CONFIG = {
         'openclaw': True,
         'smarthome': True,
         'sysinfo': True,
-        'greeting': True
+        'greeting': True,
+        'octopus_energy': True
     },
     
     # Keyboard toggles: keys 1-9, 0 map to these modules (in order)

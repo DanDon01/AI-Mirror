@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "WebFetch(domain:docs.octopus.energy)",
+      "WebFetch(domain:pypi.org)"
     ]
   }
 }
