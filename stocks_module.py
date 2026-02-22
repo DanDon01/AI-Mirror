@@ -92,17 +92,29 @@ class StocksModule:
             # Only test connection once, not for each ticker
             try:
                 import socket
-                socket.create_connection(("yahoo.com", 443), timeout=5)
+                socket.create_connection(("query1.finance.yahoo.com", 443), timeout=5)
                 self.logger.info("Network connectivity confirmed")
             except Exception as e:
                 self.logger.warning(f"Network issue: {e}")
                 return
-            
-            # Update all tickers with batch fetching
-            self.update_tickers_batch()
-            
+
+            # Try batch first, fall back to individual history queries
+            try:
+                self.update_tickers_batch()
+            except Exception as e:
+                self.logger.warning(f"Batch update failed, trying history fallback: {e}")
+
+            # If batch got no data (all N/A or empty), try history-based fallback
+            has_valid = any(
+                isinstance(d.get('price'), (int, float))
+                for d in self.stock_data.values()
+            )
+            if not has_valid:
+                self.logger.info("No valid data from batch, trying history fallback")
+                self.update_data()
+
             self.last_update = current_time
-            self.logger.info("Stock data update complete")
+            self.logger.info(f"Stock data update complete: {len(self.stock_data)} tickers")
 
             # Push center notification for big movers (>5%)
             if self._notify:

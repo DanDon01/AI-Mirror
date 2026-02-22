@@ -142,26 +142,14 @@ class SysInfoModule:
                 stats['_cpu_load_val'] = 0
 
         # Memory
-        if HAS_PSUTIL:
-            mem = psutil.virtual_memory()
-            used_gb = mem.used / (1024 ** 3)
-            total_gb = mem.total / (1024 ** 3)
-            stats['memory'] = f"{used_gb:.1f}/{total_gb:.1f}GB"
-            stats['_mem_pct'] = mem.percent
-        else:
-            stats['memory'] = "N/A"
-            stats['_mem_pct'] = 0
+        mem_info = self._get_memory()
+        stats['memory'] = mem_info.get('text', 'N/A')
+        stats['_mem_pct'] = mem_info.get('percent', 0)
 
         # Disk
-        if HAS_PSUTIL:
-            disk = psutil.disk_usage('/')
-            used_gb = disk.used / (1024 ** 3)
-            total_gb = disk.total / (1024 ** 3)
-            stats['disk'] = f"{used_gb:.1f}/{total_gb:.1f}GB"
-            stats['_disk_pct'] = disk.percent
-        else:
-            stats['disk'] = "N/A"
-            stats['_disk_pct'] = 0
+        disk_info = self._get_disk()
+        stats['disk'] = disk_info.get('text', 'N/A')
+        stats['_disk_pct'] = disk_info.get('percent', 0)
 
         # Uptime
         stats['uptime'] = _format_uptime()
@@ -171,6 +159,66 @@ class SysInfoModule:
 
         self.stats = stats
         self.last_update = now
+
+    @staticmethod
+    def _get_memory():
+        """Get memory usage. Tries psutil, then /proc/meminfo."""
+        if HAS_PSUTIL:
+            try:
+                mem = psutil.virtual_memory()
+                used_gb = mem.used / (1024 ** 3)
+                total_gb = mem.total / (1024 ** 3)
+                return {'text': f"{used_gb:.1f}/{total_gb:.1f}GB", 'percent': mem.percent}
+            except Exception:
+                pass
+
+        # Fallback: parse /proc/meminfo (Linux/Pi)
+        try:
+            info = {}
+            with open('/proc/meminfo') as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        info[parts[0].rstrip(':')] = int(parts[1])
+            total_kb = info.get('MemTotal', 0)
+            avail_kb = info.get('MemAvailable', info.get('MemFree', 0))
+            if total_kb > 0:
+                used_kb = total_kb - avail_kb
+                total_gb = total_kb / (1024 ** 2)
+                used_gb = used_kb / (1024 ** 2)
+                pct = (used_kb / total_kb) * 100
+                return {'text': f"{used_gb:.1f}/{total_gb:.1f}GB", 'percent': pct}
+        except (FileNotFoundError, ValueError, PermissionError):
+            pass
+
+        return {'text': 'N/A', 'percent': 0}
+
+    @staticmethod
+    def _get_disk():
+        """Get disk usage. Tries psutil, then os.statvfs."""
+        if HAS_PSUTIL:
+            try:
+                disk = psutil.disk_usage('/')
+                used_gb = disk.used / (1024 ** 3)
+                total_gb = disk.total / (1024 ** 3)
+                return {'text': f"{used_gb:.1f}/{total_gb:.1f}GB", 'percent': disk.percent}
+            except Exception:
+                pass
+
+        # Fallback: os.statvfs (Linux/Pi)
+        try:
+            st = os.statvfs('/')
+            total = st.f_blocks * st.f_frsize
+            free = st.f_bavail * st.f_frsize
+            used = total - free
+            total_gb = total / (1024 ** 3)
+            used_gb = used / (1024 ** 3)
+            pct = (used / total) * 100 if total > 0 else 0
+            return {'text': f"{used_gb:.1f}/{total_gb:.1f}GB", 'percent': pct}
+        except (OSError, AttributeError):
+            pass
+
+        return {'text': 'N/A', 'percent': 0}
 
     def draw(self, screen, position):
         try:
@@ -188,14 +236,16 @@ class SysInfoModule:
                 self.body_font = body_f
                 self.small_font = small_f
 
+            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "System", x, y, width
+                screen, "System", x, y, width, align=align
             )
 
             if not self.stats:
                 surf = self.small_font.render("Loading...", True, COLOR_TEXT_SECONDARY)
                 surf.set_alpha(TRANSPARENCY)
-                screen.blit(surf, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, surf, x, draw_y, width, align)
                 return
 
             data_hash = "|".join(f"{k}={v}" for k, v in self.stats.items()
@@ -232,7 +282,7 @@ class SysInfoModule:
                 surf = self._surface_cache.get_or_render(
                     f"sys_line_{i}", _render, data_hash
                 )
-                screen.blit(surf, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, surf, x, draw_y, width, align)
                 draw_y += line_height
 
         except Exception as e:

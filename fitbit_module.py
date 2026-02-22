@@ -292,67 +292,76 @@ class FitbitModule:
             label_color = COLOR_FONT_SUBTITLE
             value_color = COLOR_FONT_BODY
 
+            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+
             from module_base import ModuleDrawHelper
             current_y = ModuleDrawHelper.draw_module_title(
-                screen, "Fitbit", x, y, width
+                screen, "Fitbit", x, y, width, align=align
             )
-            
+
             # Check if we have data
             if not self.data:
                 no_data_text = self.body_font.render("No Fitbit data available", True, value_color)
-                screen.blit(no_data_text, (x + padding, current_y))
+                ModuleDrawHelper.blit_aligned(screen, no_data_text, x, current_y, width, align)
                 return
-            
+
             # Get steps and goal for progress bar
             steps = self.data.get('steps', '0')
             step_goal = 10000  # Default
             if 'goals' in self.data and 'steps' in self.data['goals']:
                 step_goal = int(self.data['goals']['steps'])
-            
+
             # Try to convert steps to int for progress bar
             try:
                 steps_int = int(steps)
             except Exception:
                 steps_int = 0
-            
+
             # Thin progress bar for steps
-            self.draw_progress_bar(screen, x, current_y, width, steps_int, step_goal)
+            bar_w = min(width, 250)
+            bar_x = x + width - bar_w if align == 'right' else x
+            self.draw_progress_bar(screen, bar_x, current_y, width, steps_int, step_goal)
             current_y += 10
-            
+
             steps_label = self.body_font.render("Steps:", True, label_color)
             steps_value = self.body_font.render(str(steps), True, value_color)
             steps_label.set_alpha(TRANSPARENCY)
             steps_value.set_alpha(TRANSPARENCY)
-            screen.blit(steps_label, (x, current_y))
-            screen.blit(steps_value, (x + steps_label.get_width() + 5, current_y))
+            combined_w = steps_label.get_width() + 5 + steps_value.get_width()
+            if align == 'right':
+                sx = x + width - combined_w
+            else:
+                sx = x
+            screen.blit(steps_label, (sx, current_y))
+            screen.blit(steps_value, (sx + steps_label.get_width() + 5, current_y))
             current_y += line_height
 
             if 'resting_heart_rate' in self.data and self.data['resting_heart_rate'] != 'N/A':
                 hr_text = f"HR: {self.data['resting_heart_rate']} bpm"
                 hr_surf = self.body_font.render(hr_text, True, value_color)
                 hr_surf.set_alpha(TRANSPARENCY)
-                screen.blit(hr_surf, (x, current_y))
+                ModuleDrawHelper.blit_aligned(screen, hr_surf, x, current_y, width, align)
                 current_y += line_height
 
             if 'sleep' in self.data and self.data['sleep'] != 'N/A':
                 sleep_text = f"Sleep: {self.data['sleep']}"
                 sleep_surf = self.body_font.render(sleep_text, True, value_color)
                 sleep_surf.set_alpha(TRANSPARENCY)
-                screen.blit(sleep_surf, (x, current_y))
+                ModuleDrawHelper.blit_aligned(screen, sleep_surf, x, current_y, width, align)
                 current_y += line_height
 
             if 'active_minutes' in self.data:
                 active_text = f"Active: {self.data['active_minutes']} min"
                 active_surf = self.body_font.render(active_text, True, value_color)
                 active_surf.set_alpha(TRANSPARENCY)
-                screen.blit(active_surf, (x, current_y))
+                ModuleDrawHelper.blit_aligned(screen, active_surf, x, current_y, width, align)
                 current_y += line_height
 
             if 'calories' in self.data and self.data['calories'] != 'N/A':
                 cal_text = f"Cal: {self.data['calories']}"
                 cal_surf = self.body_font.render(cal_text, True, value_color)
                 cal_surf.set_alpha(TRANSPARENCY)
-                screen.blit(cal_surf, (x, current_y))
+                ModuleDrawHelper.blit_aligned(screen, cal_surf, x, current_y, width, align)
             
         except Exception as e:
             logging.error(f"Error drawing Fitbit data: {e}")

@@ -300,23 +300,28 @@ class OpenClawModule:
                 width, height = 300, 200
 
             self._init_fonts()
+            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
 
             from module_base import ModuleDrawHelper
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "OpenClaw", x, y, width
+                screen, "OpenClaw", x, y, width, align=align
             )
 
             # Connection indicator dot next to title
             status_color = (80, 200, 120) if self.connected else (220, 80, 80)
             title_w = ModuleDrawHelper._small_font.size("OPENCLAW")[0]
-            pygame.draw.circle(screen, status_color, (x + title_w + 10, y + 8), 4)
+            if align == 'right':
+                dot_x = x + width - title_w - 14
+            else:
+                dot_x = x + title_w + 10
+            pygame.draw.circle(screen, status_color, (dot_x, y + 8), 4)
 
             # Connection error
             if self.connect_error and not self.connected:
                 err_text = self.connect_error[:30]
                 err_surf = self.small_font.render(err_text, True, (255, 162, 173))
                 err_surf.set_alpha(TRANSPARENCY)
-                screen.blit(err_surf, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, err_surf, x, draw_y, width, align)
                 draw_y += 20
 
             # Inbox
@@ -326,30 +331,25 @@ class OpenClawModule:
             if not inbox_copy and self.connected:
                 empty = self.body_font.render("No messages", True, COLOR_FONT_SMALL)
                 empty.set_alpha(TRANSPARENCY)
-                screen.blit(empty, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, empty, x, draw_y, width, align)
             elif not inbox_copy and not self.connected:
                 if not self.gateway_url:
                     hint = self.small_font.render("Set OPENCLAW_GATEWAY_URL", True, COLOR_FONT_SMALL)
                 else:
                     hint = self.small_font.render("Connecting...", True, COLOR_FONT_SMALL)
                 hint.set_alpha(TRANSPARENCY)
-                screen.blit(hint, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, hint, x, draw_y, width, align)
             else:
                 for msg in inbox_copy[:4]:
                     channel = msg["channel"]
                     ch_color = CHANNEL_COLORS.get(channel, (150, 150, 150))
                     ch_label = CHANNEL_LABELS.get(channel, channel[:2].upper())
 
-                    # Channel badge
+                    # Build a single line: [CH] sender  time
                     badge_surf = self.channel_font.render(f"[{ch_label}]", True, ch_color)
-                    screen.blit(badge_surf, (x, draw_y))
-
-                    # Sender
                     sender_surf = self.small_font.render(msg["sender"], True, COLOR_FONT_BODY)
                     sender_surf.set_alpha(TRANSPARENCY)
-                    screen.blit(sender_surf, (x + badge_surf.get_width() + 5, draw_y))
 
-                    # Time ago
                     ago = (datetime.now() - msg["timestamp"]).total_seconds()
                     if ago < 60:
                         time_str = "now"
@@ -358,7 +358,20 @@ class OpenClawModule:
                     else:
                         time_str = f"{int(ago // 3600)}h"
                     time_surf = self.small_font.render(time_str, True, COLOR_FONT_SMALL)
-                    screen.blit(time_surf, (x + width - padding * 2 - time_surf.get_width(), draw_y))
+
+                    if align == 'right':
+                        # Right-align: time on far right, badge+sender before it
+                        time_x = x + width - time_surf.get_width()
+                        sender_x = time_x - sender_surf.get_width() - 5
+                        badge_x = sender_x - badge_surf.get_width() - 5
+                    else:
+                        badge_x = x
+                        sender_x = x + badge_surf.get_width() + 5
+                        time_x = x + width - time_surf.get_width()
+
+                    screen.blit(badge_surf, (badge_x, draw_y))
+                    screen.blit(sender_surf, (sender_x, draw_y))
+                    screen.blit(time_surf, (time_x, draw_y))
 
                     draw_y += 16
 
@@ -368,7 +381,7 @@ class OpenClawModule:
                         preview += "..."
                     preview_surf = self.small_font.render(preview, True, COLOR_FONT_SMALL)
                     preview_surf.set_alpha(TRANSPARENCY)
-                    screen.blit(preview_surf, (x + 5, draw_y))
+                    ModuleDrawHelper.blit_aligned(screen, preview_surf, x, draw_y, width, align)
 
                     draw_y += 22
 

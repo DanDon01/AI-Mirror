@@ -320,6 +320,11 @@ class MagicMirror:
                         self.change_state("sleep")
                     else:
                         self.change_state("active")
+                elif event.key in (
+                    pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+                    pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0,
+                ):
+                    self._toggle_module_by_key(event.key)
                 elif event.key == pygame.K_SPACE:
                     if self.state != "active":
                         self.change_state("active")
@@ -474,6 +479,36 @@ class MagicMirror:
         self.debug_mode = not self.debug_mode
         self.debug_layout = self.debug_mode
         logging.info(f"Debug mode {'enabled' if self.debug_mode else 'disabled'}")
+
+    def _toggle_module_by_key(self, key):
+        """Toggle module visibility via number key (1-9, 0=10th)."""
+        key_map = {
+            pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3,
+            pygame.K_5: 4, pygame.K_6: 5, pygame.K_7: 6, pygame.K_8: 7,
+            pygame.K_9: 8, pygame.K_0: 9,
+        }
+        idx = key_map.get(key)
+        if idx is None:
+            return
+
+        toggle_list = CONFIG.get('toggle_modules', [])
+        if idx >= len(toggle_list):
+            return
+
+        module_name = toggle_list[idx]
+        if module_name not in self.modules:
+            return
+
+        current = self.module_manager.is_module_visible(module_name)
+        self.module_manager.module_visibility[module_name] = not current
+        state = "ON" if not current else "OFF"
+        logging.info(f"Toggled {module_name}: {state} (key {idx + 1})")
+
+        # Show on-screen toast via center notification
+        self.animation_manager.push_notification(
+            f"[{idx + 1}] {module_name}: {state}",
+            duration_ms=2000,
+        )
 
     def update_modules(self):
         # Check for AI commands

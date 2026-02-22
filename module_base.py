@@ -62,8 +62,11 @@ class ModuleDrawHelper:
         cls._fonts_initialized = True
 
     @staticmethod
-    def draw_module_title(screen, text, x, y, width):
+    def draw_module_title(screen, text, x, y, width, align='left'):
         """Draw a subtle module title label -- dim text, no background.
+
+        Args:
+            align: 'left' or 'right' text alignment within the module width.
 
         Returns the y-offset below the title for content to start.
         """
@@ -72,8 +75,19 @@ class ModuleDrawHelper:
             text.upper(), True, COLOR_TITLE_BLUE
         )
         title_surf.set_alpha(TRANSPARENCY)
-        screen.blit(title_surf, (x, y))
+        if align == 'right':
+            screen.blit(title_surf, (x + width - title_surf.get_width(), y))
+        else:
+            screen.blit(title_surf, (x, y))
         return y + title_surf.get_height() + 6
+
+    @staticmethod
+    def blit_aligned(screen, surf, x, y, width, align='left'):
+        """Blit a surface with left or right alignment within a column."""
+        if align == 'right':
+            screen.blit(surf, (x + width - surf.get_width(), y))
+        else:
+            screen.blit(surf, (x, y))
 
     @staticmethod
     def draw_separator(screen, x, y, width, alpha=255):

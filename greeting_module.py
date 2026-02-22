@@ -131,8 +131,10 @@ class GreetingModule:
                 self.body_font = body_f
                 self.small_font = small_f
 
+            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Mirror", x, y, width
+                screen, "Mirror", x, y, width, align=align
             )
 
             data_hash = f"{self.current_greeting}|{self.current_affirmation}"
@@ -146,7 +148,7 @@ class GreetingModule:
                 greeting_surf = self._surface_cache.get_or_render(
                     "greeting", _render_greeting, data_hash
                 )
-                screen.blit(greeting_surf, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, greeting_surf, x, draw_y, width, align)
                 draw_y += greeting_surf.get_height() + 8
 
             if self.current_affirmation:
@@ -178,7 +180,7 @@ class GreetingModule:
                     line_surf = self._surface_cache.get_or_render(
                         f"affirm_{i}", _render_line, data_hash
                     )
-                    screen.blit(line_surf, (x, draw_y))
+                    ModuleDrawHelper.blit_aligned(screen, line_surf, x, draw_y, width, align)
                     draw_y += line_surf.get_height() + 2
 
         except Exception as e:

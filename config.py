@@ -398,6 +398,13 @@ CONFIG = {
         'greeting': True
     },
     
+    # Keyboard toggles: keys 1-9, 0 map to these modules (in order)
+    'toggle_modules': [
+        'weather', 'calendar', 'countdown', 'smarthome',
+        'greeting', 'quote', 'news', 'fitbit',
+        'openclaw', 'sysinfo',
+    ],
+
     # State-specific module settings
     'screensaver_modules': ['retro_characters'],
     'sleep_modules': ['clock'],

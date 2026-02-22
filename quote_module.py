@@ -144,14 +144,16 @@ class QuoteModule:
 
             self._init_fonts()
 
+            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+
             from module_base import ModuleDrawHelper
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Quote", x, y, width
+                screen, "Quote", x, y, width, align=align
             )
 
             if not self.current_quote:
                 empty = self.quote_font.render("Loading...", True, COLOR_FONT_SMALL)
-                screen.blit(empty, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, empty, x, draw_y, width, align)
                 return
 
             # Word-wrap the quote (cached until quote changes)
@@ -167,7 +169,10 @@ class QuoteModule:
                 lambda: self.quote_font.render('"', True, COLOR_FONT_SMALL),
                 quote_hash,
             )
-            screen.blit(mark, (x, draw_y - 2))
+            if align == 'right':
+                screen.blit(mark, (x + width - mark.get_width(), draw_y - 2))
+            else:
+                screen.blit(mark, (x, draw_y - 2))
 
             for i, line in enumerate(self._wrapped_lines):
                 def _render_line(l=line):
@@ -178,7 +183,7 @@ class QuoteModule:
                 line_surf = self._surface_cache.get_or_render(
                     f"quote_line_{i}", _render_line, quote_hash
                 )
-                screen.blit(line_surf, (x + 10, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, line_surf, x, draw_y, width, align)
                 draw_y += 22
 
             draw_y += 5
@@ -192,7 +197,7 @@ class QuoteModule:
             author_surf = self._surface_cache.get_or_render(
                 "quote_author", _render_author, quote_hash
             )
-            screen.blit(author_surf, (x + 20, draw_y))
+            ModuleDrawHelper.blit_aligned(screen, author_surf, x, draw_y, width, align)
 
         except Exception as e:
             logger.error(f"Error drawing quote module: {e}")

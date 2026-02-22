@@ -67,12 +67,14 @@ class LayoutManager:
         )
         self.module_positions.update(left_positions)
 
-        # Right column: stacked modules
+        # Right column: stacked modules (right-aligned text)
         right_modules = self.layout.get('right_modules', [])
         right_x = w - right_w - edge_pad
         right_positions = self._stack_column(
             right_modules, right_x, right_w, col_top, col_bottom, gap
         )
+        for pos in right_positions.values():
+            pos['align'] = 'right'
         self.module_positions.update(right_positions)
 
         # Center overlay modules (AI/voice): centered on screen

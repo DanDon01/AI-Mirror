@@ -143,14 +143,16 @@ class NewsModule:
 
             self._init_fonts()
 
+            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+
             from module_base import ModuleDrawHelper
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "News", x, y, width
+                screen, "News", x, y, width, align=align
             )
 
             if not self.headlines:
                 empty = self.headline_font.render("Loading headlines...", True, COLOR_FONT_SMALL)
-                screen.blit(empty, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, empty, x, draw_y, width, align)
                 return
 
             # Draw current headline (large, wrapped)
@@ -161,7 +163,7 @@ class NewsModule:
             for line in lines[:3]:  # Max 3 lines per headline
                 line_surf = self.headline_font.render(line, True, COLOR_FONT_BODY)
                 line_surf.set_alpha(TRANSPARENCY)
-                screen.blit(line_surf, (x, draw_y))
+                ModuleDrawHelper.blit_aligned(screen, line_surf, x, draw_y, width, align)
                 draw_y += 20
 
             # Source and position indicator
@@ -170,15 +172,17 @@ class NewsModule:
             pos_text = f"{self.current_index + 1}/{len(self.headlines)}"
             source_surf = self.source_font.render(f"{source_text}  |  {pos_text}", True, COLOR_FONT_SMALL)
             source_surf.set_alpha(TRANSPARENCY)
-            screen.blit(source_surf, (x, draw_y))
+            ModuleDrawHelper.blit_aligned(screen, source_surf, x, draw_y, width, align)
 
             # Thin progress bar showing position in headlines
             draw_y += 15
             bar_width = min(width, 120)
             segment_w = bar_width // max(len(self.headlines), 1)
+            bar_total_w = len(self.headlines) * (segment_w + 2) - 2
+            bar_x = x + width - bar_total_w if align == 'right' else x
             for i in range(len(self.headlines)):
                 color = (200, 200, 200) if i == self.current_index else (40, 40, 40)
-                sx = x + i * (segment_w + 2)
+                sx = bar_x + i * (segment_w + 2)
                 pygame.draw.rect(screen, color, (sx, draw_y, segment_w, 2))
 
         except Exception as e:
