@@ -29,6 +29,7 @@ DEFAULT_LIMITS = {
     'openweathermap': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
     'open-meteo': {'hourly': 20, 'daily': 500, 'daily_cost': 0},
     'yahoo-finance': {'hourly': 10, 'daily': 100, 'daily_cost': 0},
+    'alpha-vantage': {'hourly': 10, 'daily': 25, 'daily_cost': 0},
     'fitbit': {'hourly': 10, 'daily': 150, 'daily_cost': 0},
     'google-calendar': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
     'zenquotes': {'hourly': 5, 'daily': 10, 'daily_cost': 0},

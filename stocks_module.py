@@ -1,213 +1,490 @@
-import yfinance as yf
+"""Stock ticker module for AI-Mirror.
+
+Loads watchlist from documentation/Portfolio_Watchlist_DDMMYYYY.csv.
+Primary data source: Alpha Vantage GLOBAL_QUOTE (free tier, 25 calls/day).
+Fallback: yfinance.
+
+Fetch scheduling:
+  - Non-blocking queue: processes 1 ticker per update() call (no main-loop freeze).
+  - 3 daily windows: UK open+30m, US open+30m, US close-30m.
+  - AV budget rotates across rounds so all tickers get AV data over time.
+  - yfinance fills any tickers AV cannot cover.
+"""
+
+import os
+import csv
+import glob
+import requests
 import pygame
 import logging
+import time
+import traceback
 from datetime import datetime, timedelta
-from pytz import timezone
-from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG
+from pytz import timezone as pytz_tz
+from config import (
+    FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT,
+    COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING,
+    TRANSPARENCY, CONFIG,
+)
 from visual_effects import VisualEffects
 from api_tracker import api_tracker
-import time
-import math
-import traceback
 
-# Color constants
-COLOR_HEADER = (240, 240, 240)  # White for headers
+logger = logging.getLogger("stocks")
+
+_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+_CSV_DIR = os.path.join(_PROJECT_DIR, 'documentation')
+
+# Alpha Vantage free tier: 25/day.  Keep 1 spare.
+AV_DAILY_BUDGET = 24
+AV_CALL_INTERVAL = 13   # seconds between AV requests (~5/min)
+YF_CALL_INTERVAL = 2    # seconds between yfinance requests
+
+# Exchange suffixes to strip (not London)
+_STRIP_SUFFIXES = ('.O', '.K', '.PK')
+
+
+def _normalize_csv_symbol(raw_symbol, exchange):
+    """Convert a CSV symbol + exchange to (ticker, metadata dict)."""
+    raw_symbol = raw_symbol.strip().strip('"')
+    exchange = exchange.strip().strip('"')
+
+    # Crypto pair (e.g. BTC/USD)
+    if '/' in raw_symbol:
+        return raw_symbol, {
+            'market': 'crypto',
+            'av_symbol': None,
+            'yf_symbol': raw_symbol.replace('/', '-'),
+            'currency': '$',
+        }
+
+    # London Stock Exchange
+    if exchange == 'LON' or raw_symbol.endswith('.L'):
+        ticker = raw_symbol if raw_symbol.endswith('.L') else raw_symbol + '.L'
+        return ticker, {
+            'market': 'UK',
+            'av_symbol': ticker[:-2] + '.LON',
+            'yf_symbol': ticker,
+            'currency': '\u00a3',
+        }
+
+    # US / OTC -- strip exchange suffix (.O, .K, .PK)
+    base = raw_symbol
+    for suffix in _STRIP_SUFFIXES:
+        if raw_symbol.endswith(suffix):
+            base = raw_symbol[:-len(suffix)]
+            break
+
+    return base, {
+        'market': 'OTC' if exchange == 'OTC' else 'US',
+        'av_symbol': base,
+        'yf_symbol': base,
+        'currency': '$',
+    }
+
 
 class StocksModule:
-    def __init__(self, tickers, market_timezone='America/New_York'):
-        self.tickers = tickers
+    def __init__(self, tickers, alpha_vantage_key='', market_timezone='America/New_York'):
+        self.default_tickers = list(tickers)
+        self.alpha_vantage_key = alpha_vantage_key
         self.stock_data = {}
+        self._ticker_meta = {}
+
+        # CSV tracking
+        self._csv_date_str = None
+        self._last_csv_check = 0
+
+        # Load tickers from CSV, fall back to config list
+        self.tickers = []
+        self._load_tickers_from_csv()
+        if not self.tickers:
+            self.tickers = list(tickers)
+            for t in self.tickers:
+                self._ticker_meta[t] = {
+                    'market': 'UK' if t.endswith('.L') else 'US',
+                    'av_symbol': t[:-2] + '.LON' if t.endswith('.L') else t,
+                    'yf_symbol': t,
+                    'currency': '\u00a3' if t.endswith('.L') else '$',
+                }
+
+        # Non-blocking fetch queue
+        self._fetch_queue = []          # [(ticker, 'av'|'yf'), ...]
+        self._last_fetch_call = 0
+        self._queue_complete_pending = False
+
+        # Daily budget / round tracking
+        self._fetch_day = None
+        self._av_calls_today = 0
+        self._rotation_offset = 0      # rotate AV priority each round
+        self._rounds_today = 0
+        self._last_round_hour = -1
+        self._initial_fetch_done = False
+
+        # Timezone helpers for fetch windows
+        self._uk_tz = pytz_tz('Europe/London')
+        self._us_tz = pytz_tz('America/New_York')
+
+        # Fonts
         try:
             self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
         except Exception:
-            logging.warning(f"Font '{FONT_NAME}' not found. Using default font.")
             self.font = pygame.font.Font(None, FONT_SIZE)
-        self.market_timezones = {
-            'US': timezone('America/New_York'),
-            'UK': timezone('Europe/London')
-        }
-        self.update_interval = timedelta(minutes=10)  # Change this to your desired interval
-        
-        # Set last_update to a timezone-aware datetime
-        self.last_update = datetime.now(timezone('UTC')) - self.update_interval
-        self.market_hours = {
-            'US': {
-                'open': self.market_timezones['US'].localize(datetime.now().replace(hour=9, minute=30, second=0, microsecond=0)),
-                'close': self.market_timezones['US'].localize(datetime.now().replace(hour=16, minute=0, second=0, microsecond=0))
-            },
-            'UK': {
-                'open': self.market_timezones['UK'].localize(datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)),
-                'close': self.market_timezones['UK'].localize(datetime.now().replace(hour=16, minute=30, second=0, microsecond=0))
-            }
-        }
-
         self.ticker_font = pygame.font.SysFont(FONT_NAME, 24)
         self.alert_font = pygame.font.SysFont(FONT_NAME, 32)
-        self.scroll_position = 0
-        self.scroll_speed = 0.8  # Reduced from 2 to 0.8 for slower scrolling
-        self.alerts = []
-
         self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
         self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 6)
 
-        # Add new visual properties
+        # Scroll state
+        self.scroll_position = 0
+        self.scroll_speed = 0.8
+        self.alerts = []
+
+        # Visual effects
         self.effects = VisualEffects()
         self.animation_start_time = time.time()
-        self.item_fade_offsets = {ticker: i * 0.2 for i, ticker in enumerate(tickers)}
+        self.item_fade_offsets = {t: i * 0.2 for i, t in enumerate(self.tickers)}
         self.header_pulse_speed = 0.3
         self.alert_pulse_speed = 0.8
-        
         self.alert_bg_color = (60, 20, 20)
         self._notify = None
-        self._prev_changes = {}  # Track previous changes for notification dedup
+        self._prev_changes = {}
+
+        logger.info(
+            f"StocksModule: {len(self.tickers)} tickers, "
+            f"AV key={'yes' if alpha_vantage_key else 'no'}"
+        )
 
     def set_notification_callback(self, callback):
-        """Register a callback for center-screen notifications."""
         self._notify = callback
 
-    def update(self):
-        """Update stock data with minimal API calls to avoid rate limiting.
+    # ------------------------------------------------------------------
+    # CSV loading
+    # ------------------------------------------------------------------
 
-        Fetches even on weekends so last closing prices are always shown.
-        """
-        current_time = datetime.now(timezone('UTC'))
+    def _load_tickers_from_csv(self):
+        """Find Portfolio_Watchlist_*.csv in documentation/, parse tickers."""
+        try:
+            pattern = os.path.join(_CSV_DIR, 'Portfolio_Watchlist_*.csv')
+            files = glob.glob(pattern)
+        except Exception:
+            files = []
 
-        # Check if it's time to update (use longer intervals to reduce API calls)
-        # On weekends, only fetch once per session (data won't change)
-        is_weekend = current_time.weekday() >= 5
-        interval = timedelta(hours=12) if is_weekend else timedelta(minutes=30)
-        if current_time - self.last_update < interval:
+        if not files:
+            logger.info("No watchlist CSV found in documentation/")
             return
 
+        latest = sorted(files)[-1]
+        filename = os.path.basename(latest)
+
+        # Extract date portion: Portfolio_Watchlist_DDMMYYYY.csv
+        date_part = filename.replace('Portfolio_Watchlist_', '').replace('.csv', '')
+
+        if self._csv_date_str == date_part:
+            return  # unchanged
+
+        tickers = []
+        meta = {}
         try:
-            if not hasattr(self, 'logger'):
-                self.logger = logging.getLogger('stocks_module')
-            
-            # Check if we've been rate-limited recently (wait longer)
-            if hasattr(self, 'rate_limited') and self.rate_limited:
-                time_since_rate_limit = time.time() - self.rate_limited_time
-                if time_since_rate_limit < 3600 * 6:  # Wait 6 hours after being rate limited
-                    self.logger.warning(f"Skipping Yahoo Finance due to rate limits (retry in {(3600*6-time_since_rate_limit)/60:.0f}m)")
-                    return
-            
-            # Only test connection once, not for each ticker
-            try:
-                import socket
-                socket.create_connection(("query1.finance.yahoo.com", 443), timeout=5)
-                self.logger.info("Network connectivity confirmed")
-            except Exception as e:
-                self.logger.warning(f"Network issue: {e}")
-                return
+            with open(latest, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    raw_sym = row.get('Symbol', '')
+                    exchange = row.get('Exchange', '')
+                    if not raw_sym.strip():
+                        continue
+                    ticker, info = _normalize_csv_symbol(raw_sym, exchange)
+                    if ticker and ticker not in meta:
+                        tickers.append(ticker)
+                        meta[ticker] = info
+        except Exception as e:
+            logger.error(f"Error reading watchlist CSV {filename}: {e}")
+            return
 
-            if not api_tracker.allow("stocks", "yahoo-finance"):
-                self.logger.warning("Yahoo Finance rate limited by API tracker")
-                return
+        self.tickers = tickers
+        self._ticker_meta = meta
+        self._csv_date_str = date_part
+        self._initial_fetch_done = False
+        self.item_fade_offsets = {t: i * 0.2 for i, t in enumerate(tickers)}
+        logger.info(f"Loaded {len(tickers)} tickers from {filename}")
 
-            # Try batch first, fall back to individual history queries
-            try:
-                self.update_tickers_batch()
-            except Exception as e:
-                self.logger.warning(f"Batch update failed, trying history fallback: {e}")
+    def _check_csv_update(self):
+        """Re-scan CSV directory for filename date changes."""
+        old_date = self._csv_date_str
+        self._load_tickers_from_csv()
+        if self._csv_date_str != old_date and old_date is not None:
+            logger.info(f"Watchlist CSV updated: {old_date} -> {self._csv_date_str}")
+            current_set = set(self.tickers)
+            for t in list(self.stock_data.keys()):
+                if t not in current_set:
+                    del self.stock_data[t]
 
-            # If batch got no data (all N/A or empty), try history-based fallback
-            has_valid = any(
-                isinstance(d.get('price'), (int, float))
-                for d in self.stock_data.values()
+    # ------------------------------------------------------------------
+    # Fetch scheduling
+    # ------------------------------------------------------------------
+
+    def _populate_fetch_queue(self):
+        """Build the non-blocking fetch queue for a new round.
+
+        Assigns AV or yfinance source per ticker based on remaining daily
+        budget.  Rotates which tickers get AV priority so every ticker
+        gets high-quality data over successive rounds.
+        """
+        av_remaining = AV_DAILY_BUDGET - self._av_calls_today
+        n = len(self.tickers)
+        if n == 0:
+            return
+
+        offset = self._rotation_offset % n
+        rotated = self.tickers[offset:] + self.tickers[:offset]
+
+        queue = []
+        av_count = 0
+        for ticker in rotated:
+            meta = self._ticker_meta.get(ticker, {})
+            can_av = (
+                meta.get('av_symbol')
+                and meta.get('market') != 'crypto'
+                and av_count < av_remaining
             )
-            if not has_valid:
-                self.logger.info("No valid data from batch, trying history fallback")
-                self.update_data()
+            if can_av:
+                queue.append((ticker, 'av'))
+                av_count += 1
+            else:
+                queue.append((ticker, 'yf'))
 
-            api_tracker.record("stocks", "yahoo-finance")
-            self.last_update = current_time
-            self.logger.info(f"Stock data update complete: {len(self.stock_data)} tickers")
+        self._fetch_queue = queue
+        self._rotation_offset += av_count
+        self._rounds_today += 1
+        logger.info(
+            f"Fetch round {self._rounds_today}: "
+            f"{av_count} AV + {len(queue) - av_count} yfinance "
+            f"({av_remaining - av_count} AV budget left)"
+        )
 
-            # Push center notification for big movers (>5%)
-            if self._notify:
-                for ticker, data in self.stock_data.items():
-                    pct = data.get('percent_change', 0)
-                    if isinstance(pct, (int, float)) and abs(pct) >= 5:
-                        prev = self._prev_changes.get(ticker)
-                        if prev is None or abs(prev) < 5:
-                            arrow = "UP" if pct > 0 else "DOWN"
-                            color = COLOR_PASTEL_GREEN if pct > 0 else COLOR_PASTEL_RED
-                            self._notify(
-                                f"{ticker} {arrow} {abs(pct):.1f}%",
-                                color=color,
-                                duration_ms=6000,
-                            )
-                self._prev_changes = {
-                    t: d.get('percent_change', 0) for t, d in self.stock_data.items()
-                }
-            
-        except Exception as e:
-            self.logger.error(f"Error updating stock data: {e}")
+    def _is_fetch_window(self):
+        """Return a window identifier if current time is inside a fetch window.
 
-    def update_tickers_batch(self):
-        """Update all tickers with minimal API calls"""
+        Windows (30-minute duration each):
+          8  -> UK open  + 30 min  (08:30-09:00 London)
+          10 -> US open  + 30 min  (10:00-10:30 New York)
+          15 -> US close - 30 min  (15:30-16:00 New York)
+
+        Returns int window id or None.
+        """
+        now_utc = datetime.now(pytz_tz('UTC'))
+
+        uk_now = now_utc.astimezone(self._uk_tz)
+        if uk_now.hour == 8 and uk_now.minute >= 30:
+            return 8
+
+        us_now = now_utc.astimezone(self._us_tz)
+        if us_now.hour == 10 and us_now.minute < 30:
+            return 10
+        if us_now.hour == 15 and us_now.minute >= 30:
+            return 15
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Single-ticker fetch (non-blocking)
+    # ------------------------------------------------------------------
+
+    def _process_queue_item(self):
+        """Pop one item from the queue and fetch it."""
+        if not self._fetch_queue:
+            return
+
+        ticker, source = self._fetch_queue.pop(0)
+        if source == 'av':
+            self._fetch_single_av(ticker)
+        else:
+            self._fetch_single_yf(ticker)
+        self._last_fetch_call = time.time()
+
+        if not self._fetch_queue:
+            self._queue_complete_pending = True
+
+    def _fetch_single_av(self, ticker):
+        """Fetch one ticker from Alpha Vantage GLOBAL_QUOTE."""
+        meta = self._ticker_meta.get(ticker, {})
+        av_symbol = meta.get('av_symbol', ticker)
+
+        if not self.alpha_vantage_key:
+            return
+        if not api_tracker.allow("stocks", "alpha-vantage"):
+            logger.debug(f"AV tracker limit, skipping {ticker}")
+            return
+
+        url = (
+            f"https://www.alphavantage.co/query"
+            f"?function=GLOBAL_QUOTE"
+            f"&symbol={av_symbol}"
+            f"&apikey={self.alpha_vantage_key}"
+        )
         try:
-            # Attempt to use a single API call with multiple tickers
-            tickers_str = " ".join(self.tickers)
-            batch = yf.Tickers(tickers_str)
-            
-            # Check if we're already being rate limited
-            for ticker in self.tickers[:1]:  # Just check one ticker to minimize requests
-                try:
-                    single = batch.tickers[ticker]
-                    info = single.fast_info
-                    if info is None or (hasattr(info, 'regular_market_price') and info.regular_market_price is None):
-                        raise Exception("No data available")
-                except Exception as e:
-                    if "429" in str(e) or "Too Many Requests" in str(e):
-                        self.logger.warning("Yahoo Finance API rate limited")
-                        self.rate_limited = True
-                        self.rate_limited_time = time.time()
-                        return
-            
-            # Process each ticker but limit the API calls
-            for ticker in self.tickers:
-                try:
-                    # Use the ticker from the batch to minimize requests
-                    stock = batch.tickers[ticker]
-                    
-                    # Try getting price from fast_info first (less likely to be rate limited)
-                    try:
-                        info = stock.fast_info
-                        if hasattr(info, 'regular_market_price') and info.regular_market_price is not None:
-                            price = info.regular_market_price
-                            prev_close = info.previous_close if hasattr(info, 'previous_close') else price
-                            percent_change = ((price - prev_close) / prev_close) * 100 if prev_close != 0 else 0.0
-                            
-                            self.stock_data[ticker] = {
-                                'price': price,
-                                'percent_change': percent_change,
-                                'volume': getattr(info, 'regular_market_volume', 0),
-                                'day_range': f"{getattr(info, 'day_low', price):.2f} - {getattr(info, 'day_high', price):.2f}"
-                            }
-                            continue  # Skip to next ticker if successful
-                    except Exception as e:
-                        self.logger.debug(f"Fast info failed for {ticker}: {e}")
-                    
-                    # If we get here, we couldn't get data for this ticker
-                    self.logger.warning(f"Could not get data for {ticker}")
-                    self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
-                    
-                except Exception as e:
-                    self.logger.error(f"Error fetching {ticker}: {str(e)}")
-                    self.stock_data[ticker] = {'price': 'N/A', 'percent_change': 'N/A', 'volume': 'N/A', 'day_range': 'N/A'}
-                
-                # Add delay between processing each ticker
-                time.sleep(1.0)  # Longer delay to avoid rate limits
-            
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            api_tracker.record("stocks", "alpha-vantage")
+            self._av_calls_today += 1
+            data = resp.json()
+
+            # Rate-limit / info message from AV
+            if 'Note' in data or 'Information' in data:
+                msg = data.get('Note', data.get('Information', ''))
+                logger.warning(f"Alpha Vantage limit: {msg}")
+                # Downgrade remaining AV items to yfinance
+                self._fetch_queue = [
+                    (t, 'yf') for t, _s in self._fetch_queue
+                ]
+                return
+
+            quote = data.get('Global Quote', {})
+            if not quote or '05. price' not in quote:
+                logger.warning(f"No AV quote for {ticker} ({av_symbol})")
+                return
+
+            price = float(quote['05. price'])
+            change_pct = float(quote.get('10. change percent', '0%').rstrip('%'))
+
+            self.stock_data[ticker] = {
+                'price': price,
+                'percent_change': change_pct,
+                'volume': int(quote.get('06. volume', 0)),
+                'day_range': (
+                    f"{quote.get('04. low', 'N/A')} - "
+                    f"{quote.get('03. high', 'N/A')}"
+                ),
+                'source': 'alpha-vantage',
+                'currency': meta.get('currency', '$'),
+            }
+            logger.info(f"AV: {ticker} = {price:.2f} ({change_pct:+.2f}%)")
+
+        except requests.RequestException as e:
+            logger.warning(f"AV request failed for {ticker}: {e}")
+        except (ValueError, KeyError) as e:
+            logger.warning(f"AV parse error for {ticker}: {e}")
         except Exception as e:
-            self.logger.error(f"Batch update failed: {e}")
+            logger.error(f"AV error for {ticker}: {e}")
+
+    def _fetch_single_yf(self, ticker):
+        """Fetch one ticker from yfinance (fallback)."""
+        try:
+            import yfinance as yf
+        except ImportError:
+            return
+
+        meta = self._ticker_meta.get(ticker, {})
+        yf_symbol = meta.get('yf_symbol', ticker)
+
+        try:
+            stock = yf.Ticker(yf_symbol)
+            info = stock.fast_info
+            if hasattr(info, 'regular_market_price') and info.regular_market_price:
+                price = info.regular_market_price
+                prev = getattr(info, 'previous_close', price) or price
+                pct = ((price - prev) / prev) * 100 if prev else 0.0
+                self.stock_data[ticker] = {
+                    'price': price,
+                    'percent_change': pct,
+                    'volume': getattr(info, 'regular_market_volume', 0),
+                    'day_range': (
+                        f"{getattr(info, 'day_low', price):.2f} - "
+                        f"{getattr(info, 'day_high', price):.2f}"
+                    ),
+                    'source': 'yfinance',
+                    'currency': meta.get('currency', '$'),
+                }
+                logger.info(f"yfinance: {ticker} = {price:.2f} ({pct:+.2f}%)")
+                api_tracker.record("stocks", "yahoo-finance")
+        except Exception as e:
+            logger.debug(f"yfinance failed for {ticker} ({yf_symbol}): {e}")
+
+    # ------------------------------------------------------------------
+    # Main update (non-blocking)
+    # ------------------------------------------------------------------
+
+    def update(self):
+        """Non-blocking update.  Processes at most 1 ticker per call."""
+        now = time.time()
+
+        # Hourly CSV check
+        if now - self._last_csv_check > 3600:
+            self._check_csv_update()
+            self._last_csv_check = now
+
+        # Daily reset at midnight UTC
+        today = datetime.now(pytz_tz('UTC')).date()
+        if self._fetch_day != today:
+            self._fetch_day = today
+            self._av_calls_today = 0
+            self._rounds_today = 0
+            self._last_round_hour = -1
+            self._initial_fetch_done = False
+            logger.info("Daily stock tracker reset")
+
+        # Process queue: respect per-source rate intervals
+        if self._fetch_queue:
+            next_source = self._fetch_queue[0][1]
+            delay = AV_CALL_INTERVAL if next_source == 'av' else YF_CALL_INTERVAL
+            if now - self._last_fetch_call >= delay:
+                self._process_queue_item()
+            return  # don't start new rounds while queue is active
+
+        # Post-round notifications
+        if self._queue_complete_pending:
+            self._queue_complete_pending = False
+            self._post_round_notifications()
+
+        # Initial fetch (startup or after CSV reload)
+        if not self._initial_fetch_done:
+            self._initial_fetch_done = True
+            self._populate_fetch_queue()
+            return
+
+        # Weekends: no further rounds after initial
+        if today.weekday() >= 5:
+            return
+
+        # Check fetch windows
+        window = self._is_fetch_window()
+        if window is not None and window != self._last_round_hour:
+            self._last_round_hour = window
+            self._populate_fetch_queue()
+
+    def _post_round_notifications(self):
+        """Log round summary and push center notifications for big movers."""
+        valid = sum(
+            1 for d in self.stock_data.values()
+            if isinstance(d.get('price'), (int, float))
+        )
+        logger.info(
+            f"Fetch round complete: {valid}/{len(self.tickers)} with data"
+        )
+
+        if self._notify:
+            for ticker, data in self.stock_data.items():
+                pct = data.get('percent_change', 0)
+                if isinstance(pct, (int, float)) and abs(pct) >= 5:
+                    prev = self._prev_changes.get(ticker)
+                    if prev is None or abs(prev) < 5:
+                        arrow = "UP" if pct > 0 else "DOWN"
+                        color = (
+                            COLOR_PASTEL_GREEN if pct > 0 else COLOR_PASTEL_RED
+                        )
+                        self._notify(
+                            f"{ticker} {arrow} {abs(pct):.1f}%",
+                            color=color, duration_ms=6000,
+                        )
+            self._prev_changes = {
+                t: d.get('percent_change', 0)
+                for t, d in self.stock_data.items()
+            }
+
+    # ------------------------------------------------------------------
+    # Drawing
+    # ------------------------------------------------------------------
 
     def draw(self, screen, position):
-        """Draw stock data -- floating text on black, no background.
-
-        This is the fallback grid view. The primary rendering path is
-        draw_scrolling_ticker() called from AI-Mirror's draw_modules().
-        """
+        """Fallback grid view (primary path is draw_scrolling_ticker)."""
         try:
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
@@ -216,9 +493,6 @@ class StocksModule:
             else:
                 x, y = position
                 width, height = 300, 200
-
-            styling = CONFIG.get('module_styling', {})
-            line_height = styling.get('spacing', {}).get('line_height', 28)
 
             if not hasattr(self, '_grid_fonts_ready') or not self._grid_fonts_ready:
                 from module_base import ModuleDrawHelper
@@ -234,15 +508,17 @@ class StocksModule:
             )
 
             if not self.stock_data:
-                no_data = self.body_font.render("No stock data", True, (160, 160, 160))
+                no_data = self.body_font.render(
+                    "Loading stocks...", True, (140, 140, 140)
+                )
                 no_data.set_alpha(TRANSPARENCY)
                 screen.blit(no_data, (x, current_y))
                 return
 
             col_width = width // 2
-            stocks_to_display = list(self.stock_data.items())[:8]
+            items = list(self.stock_data.items())[:8]
 
-            for i, (ticker, data) in enumerate(stocks_to_display):
+            for i, (ticker, data) in enumerate(items):
                 col = i % 2
                 row = i // 2
                 item_x = x + col * col_width
@@ -252,70 +528,74 @@ class StocksModule:
                     break
 
                 price = data.get('price', 'N/A')
-                percent_change = data.get('percent_change', 0)
+                pct = data.get('percent_change', 0)
 
-                if isinstance(percent_change, (int, float)):
-                    color = self.determine_color(percent_change)
-                    change_str = f"{'+' if percent_change >= 0 else ''}{percent_change:.2f}%"
+                if isinstance(pct, (int, float)):
+                    color = self.determine_color(pct)
+                    change_str = f"{'+' if pct >= 0 else ''}{pct:.2f}%"
                 else:
                     color = (160, 160, 160)
                     change_str = "0.00%"
 
-                currency_symbol = '\u00a3' if ticker.endswith('.L') else '$'
+                currency = data.get('currency', '$')
 
-                ticker_surf = self.body_font.render(ticker, True, (200, 200, 200))
-                ticker_surf.set_alpha(TRANSPARENCY)
-                screen.blit(ticker_surf, (item_x, item_y))
+                t_surf = self.body_font.render(ticker, True, (200, 200, 200))
+                t_surf.set_alpha(TRANSPARENCY)
+                screen.blit(t_surf, (item_x, item_y))
 
                 if isinstance(price, (int, float)):
-                    price_surf = self.small_font.render(
-                        f"{currency_symbol}{price:.2f} {change_str}", True, color
+                    p_surf = self.small_font.render(
+                        f"{currency}{price:.2f} {change_str}", True, color
                     )
-                    price_surf.set_alpha(TRANSPARENCY)
-                    screen.blit(price_surf, (item_x, item_y + 16))
+                    p_surf.set_alpha(TRANSPARENCY)
+                    screen.blit(p_surf, (item_x, item_y + 16))
 
         except Exception as e:
-            logging.error(f"Error drawing stocks: {e}")
-            logging.error(traceback.format_exc())
+            logger.error(f"Error drawing stocks: {e}")
+            logger.error(traceback.format_exc())
 
     def draw_scrolling_ticker(self, screen):
-        """Draw a seamless scrolling ticker at the bottom of the screen.
-
-        Renders a thin separator line above the ticker, then loops ticker
-        items to fill the visible width with no gaps.
-        """
+        """Seamless scrolling ticker at the bottom of the screen."""
         try:
             ticker_height = 40
             screen_width = screen.get_width()
             y = screen.get_height() - ticker_height
 
             if not self.stock_data:
-                message = "Loading stock data..."
-                text_surface = self.ticker_font.render(message, True, (140, 140, 140))
-                text_surface.set_alpha(TRANSPARENCY)
-                x_pos = (screen_width - text_surface.get_width()) // 2
-                screen.blit(text_surface, (x_pos, y + 8))
+                msg = "Loading stock data..."
+                surf = self.ticker_font.render(msg, True, (140, 140, 140))
+                surf.set_alpha(TRANSPARENCY)
+                screen.blit(surf, ((screen_width - surf.get_width()) // 2, y + 8))
                 return
 
-            # Build rendered surfaces for each ticker
+            # Build per-ticker surfaces
             ticker_items = []
             total_width = 0
-            for ticker, data in self.stock_data.items():
+            for ticker in self.tickers:
+                data = self.stock_data.get(ticker)
+                if not data:
+                    continue
                 price = data.get('price', 'N/A')
-                percent_change = data.get('percent_change', 0)
-                if price == 'N/A' or not isinstance(price, (int, float)):
+                pct = data.get('percent_change', 0)
+                if not isinstance(price, (int, float)):
                     continue
 
-                if isinstance(percent_change, (int, float)):
-                    change_str = f"{'+' if percent_change >= 0 else ''}{percent_change:.2f}%"
-                    arrow = " \u25b2" if percent_change > 0 else " \u25bc" if percent_change < 0 else ""
-                    color = self.determine_color(percent_change)
+                if isinstance(pct, (int, float)):
+                    change_str = (
+                        f"{'+' if pct >= 0 else ''}{pct:.2f}%"
+                    )
+                    arrow = (
+                        " \u25b2" if pct > 0
+                        else " \u25bc" if pct < 0
+                        else ""
+                    )
+                    color = self.determine_color(pct)
                 else:
                     change_str = "0.00%"
                     arrow = ""
                     color = (160, 160, 160)
 
-                currency = '\u00a3' if ticker.endswith('.L') else '$'
+                currency = data.get('currency', '$')
                 text = f"  {ticker}  {currency}{price:.2f}{arrow} {change_str}  "
 
                 surf = self.ticker_font.render(text, True, color)
@@ -326,7 +606,7 @@ class StocksModule:
             if not ticker_items:
                 return
 
-            # Seamless loop: draw enough copies to fill the screen
+            # Seamless loop
             draw_x = self.scroll_position % total_width
             if draw_x > 0:
                 draw_x -= total_width
@@ -337,161 +617,68 @@ class StocksModule:
                         screen.blit(surf, (draw_x, y + 8))
                     draw_x += surf.get_width()
 
-            # Advance scroll
             self.scroll_position -= self.scroll_speed
             if self.scroll_position < -total_width * 2:
                 self.scroll_position += total_width
 
         except Exception as e:
-            logging.error(f"Error drawing scrolling ticker: {e}")
+            logger.error(f"Error drawing scrolling ticker: {e}")
 
     def draw_alerts(self, screen, position):
         x, y = position
-        current_time = datetime.now(timezone('UTC'))
-        
         self.alerts = []
         for ticker, data in self.stock_data.items():
-            percent_change = data['percent_change']
-            if isinstance(percent_change, float) and abs(percent_change) >= 5:
-                self.alerts.append((ticker, percent_change))
-        
+            pct = data.get('percent_change', 0)
+            if isinstance(pct, (int, float)) and abs(pct) >= 5:
+                self.alerts.append((ticker, pct))
+
         if self.alerts:
-            # Draw alert background with pulsing effect
-            alert_width = 280  # Adjust based on your layout
+            alert_width = 280
             alert_height = len(self.alerts) * LINE_SPACING + 10
-            alert_rect = pygame.Rect(x-5, y-5, alert_width, alert_height)
-            
-            # Pulse the alert background for attention
-            alert_alpha = self.effects.pulse_effect(160, 220, self.alert_pulse_speed)
-            self.effects.draw_rounded_rect(screen, alert_rect, self.alert_bg_color, radius=10, alpha=alert_alpha)
-            
-            logging.info(f"Displaying {len(self.alerts)} stock alerts")
-            alert_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE, bold=True)
-            
-            for ticker, percent_change in self.alerts:
-                color = COLOR_PASTEL_GREEN if percent_change > 0 else COLOR_PASTEL_RED
-                
-                # Create alert text with arrow indicator
-                arrow = "▲" if percent_change > 0 else "▼"
-                text = f"{ticker} {arrow} {abs(percent_change):.2f}%"
-                
-                # Create text with glow effect for alerts
-                text_surface = self.effects.create_text_with_shadow(
-                    alert_font, text, color, offset=2)
-                
-                screen.blit(text_surface, (x, y))
+            alert_rect = pygame.Rect(x - 5, y - 5, alert_width, alert_height)
+            alert_alpha = self.effects.pulse_effect(
+                160, 220, self.alert_pulse_speed
+            )
+            self.effects.draw_rounded_rect(
+                screen, alert_rect, self.alert_bg_color,
+                radius=10, alpha=alert_alpha,
+            )
+            afont = pygame.font.SysFont(FONT_NAME, FONT_SIZE, bold=True)
+            for ticker, pct in self.alerts:
+                color = COLOR_PASTEL_GREEN if pct > 0 else COLOR_PASTEL_RED
+                arrow_c = "^" if pct > 0 else "v"
+                text = f"{ticker} {arrow_c} {abs(pct):.2f}%"
+                tsurf = self.effects.create_text_with_shadow(
+                    afont, text, color, offset=2
+                )
+                screen.blit(tsurf, (x, y))
                 y += LINE_SPACING
-            
-            y += 5  # Add a bit of extra space after alerts
-        
+            y += 5
         return y
 
-    def is_market_open(self, current_market_time, market):
-        market_hours = self.market_hours[market]
-        return market_hours['open'].time() <= current_market_time.time() < market_hours['close'].time()
-
-    def cleanup(self):
-        pass  # No cleanup needed for this module
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     def determine_color(self, percent_change):
-        """Determine the color based on the percent change"""
-        # Default color for invalid cases
-        default_color = (180, 180, 180)  # Light gray
-        
-        # Handle N/A or string values
+        default_color = (180, 180, 180)
         if not isinstance(percent_change, (int, float)):
             return default_color
-        
-        try:
-            if percent_change > 0:
-                return COLOR_PASTEL_GREEN
-            elif percent_change < 0:
-                return COLOR_PASTEL_RED
-            else:
-                return default_color
-        except Exception:
-            return default_color  # Safe fallback
+        if percent_change > 0:
+            return COLOR_PASTEL_GREEN
+        elif percent_change < 0:
+            return COLOR_PASTEL_RED
+        return default_color
 
-    def update_data(self):
-        """Update stock data with more robust error handling and fallback"""
-        try:
-            # Use a slower, more reliable approach
-            for ticker in self.tickers:
-                try:
-                    # Force longer timeframe to improve chances of getting data
-                    ticker_data = yf.Ticker(ticker)
-                    
-                    # Try multiple timeframes
-                    for period in ["1d", "5d", "1mo"]:
-                        try:
-                            history = ticker_data.history(period=period)
-                            if not history.empty:
-                                # We have data, use it and exit loop
-                                current_price = history['Close'].iloc[-1]
-                                if 'Open' in history and len(history['Open']) > 0:
-                                    open_price = history['Open'].iloc[0]
-                                    percent_change = ((current_price - open_price) / open_price) * 100
-                                else:
-                                    # Just use 0% change if we can't calculate it
-                                    percent_change = 0.0
-                                    
-                                volume = history['Volume'].iloc[-1] if 'Volume' in history else 0
-                                day_high = history['High'].iloc[-1] if 'High' in history else current_price
-                                day_low = history['Low'].iloc[-1] if 'Low' in history else current_price
-                                
-                                self.stock_data[ticker] = {
-                                    'price': current_price,
-                                    'percent_change': percent_change,
-                                    'volume': volume,
-                                    'day_range': f"{day_low:.2f} - {day_high:.2f}"
-                                }
-                                
-                                self.logger.info(f"Successfully got data for {ticker} using {period} timeframe")
-                                break
-                        except Exception as e:
-                            self.logger.warning(f"Failed with {period} for {ticker}: {e}")
-                            continue
-                    
-                    # If we get here and don't have data, use hardcoded fallback values
-                    if ticker not in self.stock_data or 'price' not in self.stock_data[ticker]:
-                        self.logger.warning(f"Using fallback data for {ticker}")
-                        fallback_data = {
-                            'AAPL': {'price': 205.76, 'percent_change': 0.22, 'volume': 54321000},
-                            'GOOGL': {'price': 175.43, 'percent_change': -0.31, 'volume': 10293000},
-                            'MSFT': {'price': 428.74, 'percent_change': 1.15, 'volume': 25678000},
-                            'LLOY.L': {'price': 54.30, 'percent_change': 0.05, 'volume': 13456000}
-                        }
-                        
-                        if ticker in fallback_data:
-                            data = fallback_data[ticker]
-                            self.stock_data[ticker] = {
-                                'price': data['price'],
-                                'percent_change': data['percent_change'],
-                                'volume': data['volume'],
-                                'day_range': f"{data['price']*0.99:.2f} - {data['price']*1.01:.2f}"
-                            }
-                        else:
-                            # Still need a placeholder
-                            self.stock_data[ticker] = {
-                                'price': 100.00,  # Placeholder value
-                                'percent_change': 0.0,
-                                'volume': 0,
-                                'day_range': 'N/A'
-                            }
-                except Exception as e:
-                    self.logger.error(f"Complete failure fetching {ticker}: {e}")
-                    # Add fallback data
-                    self.stock_data[ticker] = {
-                        'price': 100.00,  # Placeholder
-                        'percent_change': 0.0,
-                        'volume': 0,
-                        'day_range': 'N/A'
-                    }
-                    
-            self.logger.info("Stock data update complete")
-            self.last_update = time.time()
-        except Exception as e:
-            self.logger.error(f"Fatal error updating stock data: {e}")
+    def is_market_open(self, current_market_time, market):
+        hours = {
+            'US': (9, 30, 16, 0),
+            'UK': (8, 0, 16, 30),
+        }
+        o_h, o_m, c_h, c_m = hours.get(market, (9, 30, 16, 0))
+        t = current_market_time.time()
+        from datetime import time as dt_time
+        return dt_time(o_h, o_m) <= t < dt_time(c_h, c_m)
 
-
-
+    def cleanup(self):
+        pass
