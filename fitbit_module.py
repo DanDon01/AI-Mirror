@@ -4,6 +4,7 @@ import time as time_module
 import pygame
 import logging
 from config import CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, TRANSPARENCY, COLOR_FONT_SUBTITLE, COLOR_FONT_BODY, COLOR_TEXT_SECONDARY
+from api_tracker import api_tracker
 import os
 from pathlib import Path
 import requests
@@ -66,8 +67,10 @@ class FitbitModule:
             return
 
         try:
+            if not api_tracker.allow("fitbit", "fitbit"):
+                return
             self.rate_limit_api_call()
-            
+
             today = datetime.now().strftime("%Y-%m-%d")
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -100,6 +103,7 @@ class FitbitModule:
                 logging.error(f"Error fetching sleep data: {e}")
                 self.data['sleep'] = 'N/A'
 
+            api_tracker.record("fitbit", "fitbit")
             self.last_update = datetime.now()
             logging.info("Fitbit data updated successfully")
             logging.debug(f"Updated Fitbit data: {self.data}")

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pytz import timezone
 from config import FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, CONFIG
 from visual_effects import VisualEffects
+from api_tracker import api_tracker
 import time
 import math
 import traceback
@@ -98,6 +99,10 @@ class StocksModule:
                 self.logger.warning(f"Network issue: {e}")
                 return
 
+            if not api_tracker.allow("stocks", "yahoo-finance"):
+                self.logger.warning("Yahoo Finance rate limited by API tracker")
+                return
+
             # Try batch first, fall back to individual history queries
             try:
                 self.update_tickers_batch()
@@ -113,6 +118,7 @@ class StocksModule:
                 self.logger.info("No valid data from batch, trying history fallback")
                 self.update_data()
 
+            api_tracker.record("stocks", "yahoo-finance")
             self.last_update = current_time
             self.logger.info(f"Stock data update complete: {len(self.stock_data)} tickers")
 

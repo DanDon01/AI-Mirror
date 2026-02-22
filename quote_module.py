@@ -66,9 +66,13 @@ class QuoteModule:
     def _fetch_from_api(self):
         """Fetch quote of the day from ZenQuotes API."""
         try:
+            from api_tracker import api_tracker
+            if not api_tracker.allow("quote", "zenquotes"):
+                return None, None
             import requests
             resp = requests.get("https://zenquotes.io/api/today", timeout=10)
             if resp.status_code == 200:
+                api_tracker.record("quote", "zenquotes")
                 data = resp.json()
                 if data and isinstance(data, list) and len(data) > 0:
                     return data[0].get("q", ""), data[0].get("a", "Unknown")

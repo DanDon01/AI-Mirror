@@ -7,6 +7,7 @@ import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 from visual_effects import VisualEffects
 from config import draw_module_background_fallback
+from api_tracker import api_tracker
 
 logger = logging.getLogger("WeatherModule")
 
@@ -110,6 +111,8 @@ class WeatherModule:
 
     def _fetch_open_meteo(self):
         """Fetch current weather from Open-Meteo (no API key needed)."""
+        if not api_tracker.allow("weather", "open-meteo"):
+            return None
         geo = self._geocode_city()
         if not geo:
             return None
@@ -127,6 +130,7 @@ class WeatherModule:
 
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
+        api_tracker.record("weather", "open-meteo")
         data = resp.json()
         current = data.get("current", {})
 
@@ -151,9 +155,12 @@ class WeatherModule:
 
     def _fetch_openweathermap(self):
         """Fetch current weather from OpenWeatherMap (requires API key)."""
+        if not api_tracker.allow("weather", "openweathermap"):
+            return None
         url = f"http://api.openweathermap.org/data/2.5/weather?q={self.city}&appid={self.api_key}&units=metric"
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
+        api_tracker.record("weather", "openweathermap")
         return resp.json()
 
     def update(self):

@@ -14,6 +14,7 @@ from config import (
     COLOR_ACCENT_AMBER, COLOR_ACCENT_BLUE, TRANSPARENCY,
 )
 from module_base import ModuleDrawHelper, SurfaceCache
+from api_tracker import api_tracker
 
 logger = logging.getLogger("SmartHome")
 
@@ -104,11 +105,15 @@ class SmartHomeModule:
 
         old_states = {eid: self.data.get(eid, {}).get('state') for eid in self.entities}
 
+        if not api_tracker.allow("smarthome", "home-assistant"):
+            return
+
         for entity_id in self.entities:
             try:
                 url = f"{self.ha_url}/api/states/{entity_id}"
                 resp = requests.get(url, headers=self.headers, timeout=self.timeout)
                 resp.raise_for_status()
+                api_tracker.record("smarthome", "home-assistant")
                 state = resp.json()
                 self.data[entity_id] = {
                     'state': state.get('state', 'unknown'),

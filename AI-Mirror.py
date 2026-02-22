@@ -92,6 +92,7 @@ from news_module import NewsModule
 from openclaw_module import OpenClawModule
 from sysinfo_module import SysInfoModule
 from greeting_module import GreetingModule
+from api_tracker import api_tracker
 
 
 def ensure_valid_color(color):
@@ -250,7 +251,12 @@ class MagicMirror:
             logging.debug(message)
 
     def initialize_modules(self):
-        """Initialize modules with explicit priority for ai_voice."""
+        """Initialize modules, skipping any disabled in module_visibility.
+
+        Voice modules (ai_voice, ai_interaction, eleven_voice) open network
+        connections on init and cost API credits, so they are only created
+        when explicitly enabled in config.
+        """
         modules = {}
         module_classes = {
             'clock': ClockModule,
@@ -271,10 +277,18 @@ class MagicMirror:
         }
 
         config_copy = CONFIG.copy()
+        visibility = CONFIG.get('module_visibility', {})
 
         for module_name, module_config in config_copy.items():
             if not isinstance(module_config, dict) or 'class' not in module_config:
                 continue
+
+            # Skip modules explicitly disabled in config (prevents network
+            # connections like the OpenAI Realtime WebSocket from opening)
+            if not visibility.get(module_name, True):
+                logging.info(f"Skipping {module_name}: disabled in module_visibility")
+                continue
+
             try:
                 if module_name == 'ai_voice':
                     logging.info(f"Attempting to initialize primary voice module: {module_name}")
@@ -294,7 +308,7 @@ class MagicMirror:
                     logging.warning("Primary voice module failed, attempting fallback")
 
         # Initialize Fitbit last (depends on network, can be slow)
-        if 'fitbit' in config_copy:
+        if 'fitbit' in config_copy and visibility.get('fitbit', True):
             try:
                 logging.info("Initializing FitbitModule (delayed)")
                 modules['fitbit'] = module_classes['fitbit'](**config_copy['fitbit'].get('params', {}))
@@ -587,6 +601,7 @@ class MagicMirror:
     def cleanup(self):
         """Safely clean up all resources."""
         logging.info("Shutting down Magic Mirror")
+        api_tracker.force_summary()
 
         module_names = list(self.modules.keys())
         module_names.reverse()

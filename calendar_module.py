@@ -8,6 +8,7 @@ import pygame
 import os
 from dotenv import load_dotenv
 import traceback
+from api_tracker import api_tracker
 from google_auth_oauthlib.flow import Flow
 from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY
 import time
@@ -116,6 +117,8 @@ class CalendarModule:
             return  # Skip update if not enough time has passed
 
         try:
+            if not api_tracker.allow("calendar", "google-calendar"):
+                return
             self.build_service()
             if not self.service:
                 logging.error("Calendar service is not available. Skipping update.")
@@ -123,7 +126,7 @@ class CalendarModule:
                 return
 
             now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
-            
+
             # Fetch calendar color information
             colors = self.service.colors().get().execute()
             self.color_map = colors['event']
@@ -131,6 +134,7 @@ class CalendarModule:
             events_result = self.service.events().list(calendarId='primary', timeMin=now,
                                                        maxResults=10, singleEvents=True,
                                                        orderBy='startTime').execute()
+            api_tracker.record("calendar", "google-calendar")
             self.events = events_result.get('items', [])
             logging.info(f"Successfully updated calendar events. Number of events fetched: {len(self.events)}")
             self.last_update = current_time
