@@ -3,6 +3,10 @@
 Tracks all external API calls across modules, enforces hourly/daily limits,
 estimates costs, and writes a periodic summary to api_usage.log.
 
+Call records are persisted to api_tracker_state.json so that daily limits
+survive application restarts (important for tight free-tier budgets like
+Alpha Vantage's 25 calls/day).
+
 Usage in any module:
     from api_tracker import api_tracker
     api_tracker.record("weather", "open-meteo")         # free call
@@ -12,7 +16,9 @@ Usage in any module:
         return  # limit reached, skip this call
 """
 
+import json
 import logging
+import os
 import time
 import threading
 from datetime import datetime, timedelta
@@ -20,6 +26,9 @@ from collections import defaultdict
 from logging.handlers import RotatingFileHandler
 
 logger = logging.getLogger("APITracker")
+
+_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+_STATE_FILE = os.path.join(_PROJECT_DIR, 'api_tracker_state.json')
 
 # Default limits per service (calls per hour)
 DEFAULT_LIMITS = {
@@ -39,7 +48,10 @@ DEFAULT_LIMITS = {
 
 
 class APITracker:
-    """Singleton API call tracker with rate limiting and cost tracking."""
+    """Singleton API call tracker with rate limiting and cost tracking.
+
+    Persists call records to disk so limits are enforced across restarts.
+    """
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -50,6 +62,8 @@ class APITracker:
         self._session_start = datetime.now()
         self._last_summary = time.time()
         self._summary_interval = 300  # log summary every 5 minutes
+        self._last_persist = 0
+        self._persist_interval = 30  # save to disk at most every 30 seconds
 
         # Dedicated log file for API usage
         self._usage_logger = logging.getLogger("APIUsage")
@@ -62,7 +76,76 @@ class APITracker:
             handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
             self._usage_logger.addHandler(handler)
 
+        # Load persisted state from previous sessions
+        self._load_state()
+
         self._usage_logger.info("=== API Tracker session started ===")
+        if self._calls:
+            self._usage_logger.info(
+                f"Loaded {len(self._calls)} call records from previous sessions"
+            )
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _load_state(self):
+        """Load call records from disk, pruning anything older than 24h."""
+        try:
+            if not os.path.exists(_STATE_FILE):
+                return
+            with open(_STATE_FILE, 'r') as f:
+                data = json.load(f)
+
+            now = time.time()
+            cutoff = now - 86400
+            loaded = []
+            cost = 0.0
+            for rec in data.get('calls', []):
+                ts = rec[0]
+                if ts > cutoff:
+                    loaded.append(tuple(rec))
+                    cost += rec[3] if len(rec) > 3 else 0.0
+
+            self._calls = loaded
+            self._daily_cost = cost
+            logger.info(
+                f"Loaded {len(loaded)} API call records from disk "
+                f"(cost so far: ${cost:.4f})"
+            )
+        except Exception as e:
+            logger.warning(f"Could not load API tracker state: {e}")
+
+    def _save_state(self):
+        """Persist current call records to disk."""
+        try:
+            now = time.time()
+            cutoff = now - 86400
+            with self._lock:
+                # Only save records from last 24h
+                records = [
+                    list(rec) for rec in self._calls
+                    if rec[0] > cutoff
+                ]
+            data = {'calls': records, 'saved_at': now}
+            # Write atomically: write to temp file then rename
+            tmp = _STATE_FILE + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(data, f)
+            os.replace(tmp, _STATE_FILE)
+        except Exception as e:
+            logger.warning(f"Could not save API tracker state: {e}")
+
+    def _maybe_persist(self):
+        """Save to disk if enough time has passed since last save."""
+        now = time.time()
+        if now - self._last_persist >= self._persist_interval:
+            self._save_state()
+            self._last_persist = now
+
+    # ------------------------------------------------------------------
+    # Rate limiting
+    # ------------------------------------------------------------------
 
     def set_limit(self, service, hourly=None, daily=None, daily_cost=None):
         """Override default limits for a service."""
@@ -151,6 +234,9 @@ class APITracker:
             f"CALL {module} -> {service}"
             + (f" (${estimated_cost:.4f})" if estimated_cost > 0 else "")
         )
+
+        # Periodic persist to disk
+        self._maybe_persist()
 
         # Periodic summary
         if now - self._last_summary > self._summary_interval:
@@ -242,8 +328,9 @@ class APITracker:
         }
 
     def force_summary(self):
-        """Force a summary log write now."""
+        """Force a summary log write and persist to disk."""
         self._log_summary()
+        self._save_state()
 
 
 # Module-level singleton

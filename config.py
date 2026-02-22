@@ -239,7 +239,7 @@ CONFIG = {
         'class': 'StocksModule',
         'params': {
             'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L'],
-            'alpha_vantage_key': os.getenv('ALPHA_VANTAGE_KEY', 'E1V5DRS0YIR1XAUA'),
+            'alpha_vantage_key': os.getenv('ALPHA_VANTAGE_KEY', ''),
         }
     },
     'calendar': {

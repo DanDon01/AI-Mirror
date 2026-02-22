@@ -18,6 +18,9 @@ Variables.env
 # Data directory (debug output, recordings, temp files)
 data/
 
+# API tracker state (persisted across sessions, machine-specific)
+api_tracker_state.json
+
 # Voice interaction logs
 mirror_voice_log.txt
 
