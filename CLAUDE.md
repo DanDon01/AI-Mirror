@@ -40,6 +40,9 @@ AI-Mirror.py (main loop, event handling, screen init)
        news_module.py        - RSS news headlines (feedparser)
        openclaw_module.py    - OpenClaw Gateway multi-channel inbox (remote WebSocket)
        retrocharacters_module.py - Screensaver animation
+       smarthome_module.py   - Home Assistant entity states (REST API)
+       sysinfo_module.py     - System stats (CPU temp, memory, disk, uptime)
+       greeting_module.py    - Time-based greetings + affirmations
   -> Voice/AI Modules (priority order):
        elevenvoice_module.py - ElevenLabs TTS (eleven_multilingual_v2) + GPT-4o (newest)
        ai_voice_module.py    - OpenAI Realtime API WebSocket (gpt-4o-realtime-preview)
@@ -71,7 +74,11 @@ AI-Mirror.py (main loop, event handling, screen init)
 | `news_module.py` | RSS news headlines via feedparser | ~194 |
 | `openclaw_module.py` | OpenClaw Gateway client (remote WebSocket) | ~392 |
 | `retrocharacters_module.py` | Falling retro icons screensaver | ~77 |
-| `smarthome_module.py` | Smart home stub (not yet functional) | ~91 |
+| `smarthome_module.py` | Home Assistant integration (REST API, auto-discover) | ~200 |
+| `sysinfo_module.py` | System stats (CPU temp, memory, disk, uptime) | ~200 |
+| `greeting_module.py` | Time-based greetings + rotating affirmations | ~170 |
+| `module_base.py` | Shared draw helpers, font init, surface cache | ~95 |
+| `animation_manager.py` | Fade transitions, state transitions, center notifications | ~100 |
 | `visual_effects.py` | Shared visual effect utilities | ~94 |
 | `voice_commands.py` | Show/hide command parser | ~57 |
 | `weather_animations.py` | Weather condition animations | ~150 |
@@ -92,6 +99,8 @@ ELEVENLABS_API_KEY=
 ELEVENLABS_VOICE_ID=
 OPENCLAW_GATEWAY_URL=
 OPENCLAW_GATEWAY_TOKEN=
+HA_URL=
+HA_TOKEN=
 ```
 
 ## Application States

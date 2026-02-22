@@ -161,14 +161,14 @@ LAYOUT = {
 
 LAYOUT_V2 = {
     'zones': {
-        'top_bar': {'y': 0, 'height': 80},
+        'top_bar': {'y': 0, 'height': 95},
         'bottom_bar': {'height': 40},
         'left_column': {'x': 0, 'width_pct': 0.22},
         'right_column': {'width_pct': 0.22},
         'center': {'width_pct': 0.56},
     },
     'left_modules': ['weather', 'calendar', 'countdown', 'smarthome'],
-    'right_modules': ['quote', 'news', 'fitbit', 'openclaw'],
+    'right_modules': ['greeting', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
     'top_bar_modules': ['clock'],
     'bottom_bar_modules': ['stocks'],
     'center_overlay_modules': ['ai_interaction', 'ai_voice', 'eleven_voice'],
@@ -358,6 +358,18 @@ CONFIG = {
             'update_interval_minutes': 2,
         }
     },
+    'sysinfo': {
+        'class': 'SysInfoModule',
+        'params': {
+            'update_interval_seconds': 10,
+        }
+    },
+    'greeting': {
+        'class': 'GreetingModule',
+        'params': {
+            'rotation_interval': 60,
+        }
+    },
 
     # Audio and sound effects
     'sound_effects_path': sound_effects_path,
@@ -381,7 +393,9 @@ CONFIG = {
         'quote': True,
         'news': True,
         'openclaw': True,
-        'smarthome': True
+        'smarthome': True,
+        'sysinfo': True,
+        'greeting': True
     },
     
     # State-specific module settings

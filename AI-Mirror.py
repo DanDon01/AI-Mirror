@@ -90,6 +90,8 @@ from countdown_module import CountdownModule
 from quote_module import QuoteModule
 from news_module import NewsModule
 from openclaw_module import OpenClawModule
+from sysinfo_module import SysInfoModule
+from greeting_module import GreetingModule
 
 
 def ensure_valid_color(color):
@@ -263,7 +265,9 @@ class MagicMirror:
             'quote': QuoteModule,
             'news': NewsModule,
             'openclaw': OpenClawModule,
-            'smarthome': SmartHomeModule
+            'smarthome': SmartHomeModule,
+            'sysinfo': SysInfoModule,
+            'greeting': GreetingModule
         }
 
         config_copy = CONFIG.copy()
@@ -666,6 +670,8 @@ class MagicMirror:
                     'fitbit': {'x': right_x, 'y': 525, 'width': col_w, 'height': 200},
                     'openclaw': {'x': right_x, 'y': 740, 'width': col_w, 'height': 200},
                     'smarthome': {'x': 15, 'y': 890, 'width': col_w, 'height': 200},
+                    'sysinfo': {'x': right_x, 'y': 955, 'width': col_w, 'height': 150},
+                    'greeting': {'x': right_x, 'y': 95, 'width': col_w, 'height': 150},
                     'retro_characters': {'x': 0, 'y': 0, 'width': width, 'height': height},
                     'ai_interaction': {'x': col_w + 30, 'y': height // 3, 'width': width - col_w * 2 - 60, 'height': 200},
                 }
