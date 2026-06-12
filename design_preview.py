@@ -47,6 +47,7 @@ from countdown_module import CountdownModule
 from fitbit_module import FitbitModule
 from stocks_module import StocksModule
 from sysinfo_module import SysInfoModule
+from phone_module import PhoneModule
 
 
 def fake_weather(module):
@@ -173,10 +174,16 @@ def main():
     except Exception:
         pass
 
+    phone = PhoneModule()
+    phone.set_calendar_source(cal)
+    phone.battery_level = 67
+    phone.battery_state = "Not Charging"
+    phone._leave = phone._compute_leave()
+
     modules = {
         "weather": weather, "calendar": cal, "countdown": countdown,
         "smarthome": smarthome, "greeting": greeting, "quote": quote,
-        "news": news, "fitbit": fitbit, "sysinfo": sysinfo,
+        "news": news, "fitbit": fitbit, "sysinfo": sysinfo, "phone": phone,
     }
 
     # Let the banner ambience settle (cloud spread, drop distribution)

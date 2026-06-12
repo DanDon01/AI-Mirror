@@ -58,6 +58,8 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
                                plus on-demand center dashboard overlay (voice "show the
                                dashboard" or 'h' key; auto-closes after 60s)
        avatar_module.py      - Procedural talking-head avatar with audio-driven lipsync
+       phone_module.py       - iPhone battery (HA Companion app) + leave-by countdown
+                               computed from the calendar module's events
        sysinfo_module.py     - Pi system stats (CPU temp, memory, disk, uptime via psutil + /proc fallback)
        greeting_module.py    - Time-based greetings + rotating affirmations
        retrocharacters_module.py - Falling retro icons screensaver

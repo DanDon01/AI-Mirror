@@ -94,6 +94,7 @@ from sysinfo_module import SysInfoModule
 from greeting_module import GreetingModule
 from octopus_energy_module import OctopusEnergyModule
 from avatar_module import AvatarModule
+from phone_module import PhoneModule
 from api_tracker import api_tracker
 
 
@@ -258,6 +259,16 @@ class MagicMirror:
                 self.module_manager.module_visibility['smarthome'] = False
                 logging.info("SmartHome hidden: no HA URL configured")
 
+        # Phone module: needs the calendar for the leave countdown; hide
+        # entirely when neither HA nor calendar can feed it
+        if 'phone' in self.modules:
+            phone = self.modules['phone']
+            if 'calendar' in self.modules:
+                phone.set_calendar_source(self.modules['calendar'])
+            if not getattr(phone, 'ha_url', '') and 'calendar' not in self.modules:
+                self.module_manager.module_visibility['phone'] = False
+                logging.info("Phone hidden: no HA URL and no calendar")
+
         logging.info(f"Initialized modules: {list(self.modules.keys())}")
 
     def setup_logging(self):
@@ -316,7 +327,8 @@ class MagicMirror:
             'sysinfo': SysInfoModule,
             'greeting': GreetingModule,
             'octopus_energy': OctopusEnergyModule,
-            'avatar': AvatarModule
+            'avatar': AvatarModule,
+            'phone': PhoneModule
         }
 
         config_copy = CONFIG.copy()

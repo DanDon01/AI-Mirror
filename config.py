@@ -207,7 +207,7 @@ LAYOUT_V2 = {
         'center': {'width_pct': 0.56},
     },
     'left_modules': ['weather', 'calendar', 'countdown', 'smarthome', 'octopus_energy'],
-    'right_modules': ['greeting', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
+    'right_modules': ['greeting', 'phone', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
     'top_bar_modules': ['clock'],
     'bottom_bar_modules': ['stocks'],
     'center_overlay_modules': ['avatar', 'ai_interaction', 'ai_voice', 'eleven_voice'],
@@ -429,6 +429,17 @@ CONFIG = {
             'update_interval_seconds': 10,
         }
     },
+    'phone': {
+        'class': 'PhoneModule',
+        'params': {
+            'ha_url': os.getenv('HA_URL') or os.getenv('HOME_ASSISTANT_URL', ''),
+            'ha_token': os.getenv('HA_TOKEN') or os.getenv('HOME_ASSISTANT_ACCESS_TOKEN', ''),
+            'battery_entity': '',     # auto-discovers the iPhone battery sensor
+            'travel_minutes': 25,     # commute buffer for the Leave countdown
+            'lead_window_minutes': 180,
+            'update_interval_minutes': 5,
+        }
+    },
     'greeting': {
         'class': 'GreetingModule',
         'params': {
@@ -475,7 +486,8 @@ CONFIG = {
         'smarthome': True,
         'sysinfo': True,
         'greeting': True,
-        'octopus_energy': True
+        'octopus_energy': True,
+        'phone': True
     },
     
     # Keyboard toggles: keys 1-9, 0 map to these modules (in order)

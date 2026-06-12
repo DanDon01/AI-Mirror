@@ -42,6 +42,7 @@ PROJECT_MODULES = [
     "retrocharacters_module",
     "octopus_energy_module",
     "avatar_module",
+    "phone_module",
     "web_panel",
     "ai_voice_module",
     "AI_Module",

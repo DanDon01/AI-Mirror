@@ -95,6 +95,11 @@ Enable voice first: in config.py set `module_visibility` -> `'ai_voice': True`.
       modules, switch state, check API usage table
 - [ ] Stocks ticker scrolls with real prices (yfinance 1.x check)
 - [ ] Smart home mini view shows real entities with state dots + summary
+- [ ] Phone module: install the HA Companion app on the iPhone (App
+      Store -> Home Assistant), sign in to your HA - the battery sensor
+      appears automatically and the mirror auto-discovers it. Leave
+      countdown appears when a timed calendar event is within 3 hours
+      (travel buffer: `travel_minutes` in config.py, default 25)
 - [ ] Press `h`: dashboard overlay fades in, auto-closes after 60s
 - [ ] Press SPACE: conversation opens, just talk - the server detects
       when you stop speaking (no second press needed per turn)
