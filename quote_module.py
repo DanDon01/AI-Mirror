@@ -50,7 +50,9 @@ class QuoteModule:
         self.author_font = None
         self._wrapped_lines = []
         from module_base import SurfaceCache
+        from background_fetcher import BackgroundFetcher
         self._surface_cache = SurfaceCache()
+        self._fetcher = BackgroundFetcher("quote")
 
     def _init_fonts(self):
         if self.title_font is None:
@@ -118,23 +120,30 @@ class QuoteModule:
             lines.append(current_line)
         return lines
 
-    def update(self):
-        today = date.today()
-        if self.last_fetch_date == today:
-            return
-
-        # Try API first, then local file, then builtin
+    def _fetch_daily_quote(self):
+        """API -> local file -> builtin fallback. Runs off the main loop."""
         quote, author = self._fetch_from_api()
         if not quote:
             quote, author = self._fetch_from_file()
         if not quote:
             quote, author = self._fetch_builtin()
+        return quote, author
 
-        self.current_quote = quote
-        self.current_author = author
-        self.last_fetch_date = today
-        self._wrapped_lines = []  # Reset wrap cache
-        logger.info(f"Quote of the day: '{quote[:50]}...' - {author}")
+    def update(self):
+        result = self._fetcher.take_result()
+        if result is not None:
+            ok, value = result
+            if ok:
+                self.current_quote, self.current_author = value
+                self._wrapped_lines = []  # Reset wrap cache
+                logger.info(
+                    f"Quote of the day: '{self.current_quote[:50]}...' - {self.current_author}"
+                )
+            self.last_fetch_date = date.today()
+
+        if self.last_fetch_date == date.today():
+            return
+        self._fetcher.submit(self._fetch_daily_quote)
 
     def draw(self, screen, position):
         try:

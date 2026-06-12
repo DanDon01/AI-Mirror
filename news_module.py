@@ -6,14 +6,18 @@ Uses feedparser (no API key needed). Falls back to built-in headlines.
 
 import pygame
 import logging
+import requests
 import time as time_module
 from datetime import datetime, timedelta
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
     COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_TEXT_DIM,
 )
+from background_fetcher import BackgroundFetcher
 
 logger = logging.getLogger("News")
+
+FEED_TIMEOUT = 10  # seconds; feedparser alone has no timeout at all
 
 # Default RSS feeds (no API key needed)
 DEFAULT_FEEDS = [
@@ -48,6 +52,16 @@ class NewsModule:
         self.title_font = None
         self.headline_font = None
         self.source_font = None
+        self._fetcher = BackgroundFetcher("news")
+
+        # Show last-good headlines immediately after a restart
+        from data_cache import data_cache
+        cached, age = data_cache.load("news", max_age_sec=86400)
+        if cached:
+            self.headlines = cached[:self.max_headlines]
+            self._known_titles = {h.get("title") for h in self.headlines}
+            logger.info(f"Restored {len(self.headlines)} cached headlines "
+                        f"({int(age / 60)} min old)")
 
     def _init_fonts(self):
         if self.title_font is None:
@@ -60,21 +74,24 @@ class NewsModule:
             self.headline_font = pygame.font.SysFont(FONT_NAME, body_size)
             self.source_font = pygame.font.SysFont(FONT_NAME, small_size)
 
-    def _fetch_headlines(self):
-        """Fetch headlines from all configured RSS feeds."""
-        try:
-            import feedparser
-        except ImportError:
-            logger.warning("feedparser not installed, using fallback headlines")
-            self.headlines = [
-                {"title": "feedparser not installed -- run: pip install feedparser", "source": "System"},
-            ]
-            return
+    def _fetch_headlines_blocking(self):
+        """Download and parse all RSS feeds. Runs on a background thread.
+
+        Feeds are downloaded with requests (which enforces a timeout) and
+        the bytes handed to feedparser, because feedparser's own URL
+        fetching can hang forever on a stalled host.
+        """
+        import feedparser
 
         new_headlines = []
         for feed_config in self.feeds:
             try:
-                feed = feedparser.parse(feed_config["url"])
+                resp = requests.get(
+                    feed_config["url"], timeout=FEED_TIMEOUT,
+                    headers={"User-Agent": "AI-Mirror/1.0"},
+                )
+                resp.raise_for_status()
+                feed = feedparser.parse(resp.content)
                 for entry in feed.entries[:5]:
                     new_headlines.append({
                         "title": entry.get("title", "No title"),
@@ -84,7 +101,9 @@ class NewsModule:
                     })
             except Exception as e:
                 logger.warning(f"Failed to fetch feed {feed_config['name']}: {e}")
+        return new_headlines
 
+    def _apply_headlines(self, new_headlines):
         if new_headlines:
             # Push notification for truly new headlines
             if self._notify and self._known_titles:
@@ -95,6 +114,8 @@ class NewsModule:
 
             self._known_titles = {h['title'] for h in new_headlines}
             self.headlines = new_headlines[:self.max_headlines]
+            from data_cache import data_cache
+            data_cache.save("news", self.headlines)
             logger.info(f"Fetched {len(self.headlines)} headlines from {len(self.feeds)} feeds")
         else:
             logger.warning("No headlines fetched from any feed")
@@ -121,10 +142,24 @@ class NewsModule:
         return lines
 
     def update(self):
+        result = self._fetcher.take_result()
+        if result is not None:
+            ok, value = result
+            if ok:
+                self._apply_headlines(value)
+            elif isinstance(value, ImportError):
+                logger.warning("feedparser not installed, using fallback headline")
+                self.headlines = [{
+                    "title": "feedparser not installed -- run: pip install feedparser",
+                    "source": "System",
+                }]
+            else:
+                logger.warning(f"Headline fetch failed: {value}")
+            self.last_fetch = datetime.now()
+
         now = datetime.now()
         if now - self.last_fetch >= self.fetch_interval:
-            self._fetch_headlines()
-            self.last_fetch = now
+            self._fetcher.submit(self._fetch_headlines_blocking)
 
         # Rotate headlines
         if self.headlines and (time_module.time() - self.last_rotation) >= self.rotation_interval:

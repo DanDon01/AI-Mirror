@@ -23,6 +23,7 @@ from config import (
 )
 from module_base import ModuleDrawHelper, SurfaceCache
 from api_tracker import api_tracker
+from background_fetcher import BackgroundFetcher
 
 logger = logging.getLogger("OctopusEnergy")
 
@@ -78,6 +79,7 @@ class OctopusEnergyModule:
         self.small_font = None
         self._surface_cache = SurfaceCache()
         self._notification_callback = None
+        self._fetcher = BackgroundFetcher("octopus_energy")
 
         logger.info(
             f"OctopusEnergy: key={'yes' if api_key else 'no'}, "
@@ -430,28 +432,37 @@ class OctopusEnergyModule:
         if not self.api_key:
             return
 
-        # Account discovery: once at startup, then daily
+        # Surface errors from the previous background fetch (the fetch
+        # functions mutate module state directly, so the value is unused)
+        result = self._fetcher.take_result()
+        if result is not None and not result[0]:
+            logger.error(f"Background fetch failed: {result[1]}")
+
+        if not self._fetcher.idle:
+            return  # previous fetch still running
+
+        # Staggered: at most one background fetch in flight per cycle
         if not self._account_fetched or now - self._last_account_fetch > 86400:
-            self._fetch_account()
             self._last_account_fetch = now
-            return  # stagger: one fetch per update cycle
+            self._fetcher.submit(self._fetch_account)
+            return
 
         # Tariff rates: every 2 hours (rates rarely change mid-day)
         if now - self._last_rates_fetch > 7200:
-            self._fetch_rates()
             self._last_rates_fetch = now
+            self._fetcher.submit(self._fetch_rates)
             return
 
         # Consumption: every 30 minutes
         if now - self._last_consumption_fetch > 1800:
-            self._fetch_consumption()
             self._last_consumption_fetch = now
+            self._fetcher.submit(self._fetch_consumption)
             return
 
         # EV dispatches: every 30 minutes (only if Intelligent tariff)
         if self._is_intelligent and now - self._last_ev_fetch > 1800:
-            self._fetch_ev_dispatches()
             self._last_ev_fetch = now
+            self._fetcher.submit(self._fetch_ev_dispatches)
 
     # ------------------------------------------------------------------
     # Drawing

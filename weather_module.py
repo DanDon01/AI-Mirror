@@ -8,6 +8,7 @@ from weather_animations import CloudAnimation, RainAnimation, SunAnimation, Stor
 from visual_effects import VisualEffects
 from config import draw_module_background_fallback
 from api_tracker import api_tracker
+from background_fetcher import BackgroundFetcher
 
 logger = logging.getLogger("WeatherModule")
 
@@ -44,6 +45,18 @@ class WeatherModule:
         from module_base import SurfaceCache
         self._surface_cache = SurfaceCache()
         self._last_data_hash = None
+        self._fetcher = BackgroundFetcher("weather")
+        self._retry_after = datetime.min  # backoff after a failed fetch
+
+        # Show last-good data immediately after a restart (refresh still
+        # runs on the first update since last_update stays at datetime.min)
+        from data_cache import data_cache
+        cached, age = data_cache.load("weather", max_age_sec=86400)
+        if cached:
+            self.weather_data = cached.get("data")
+            self.weather_source = cached.get("source")
+            if self.weather_data:
+                logger.info(f"Restored cached weather ({int(age / 60)} min old)")
 
     def _geocode_city(self):
         """Convert city name to lat/lon using Open-Meteo geocoding API."""
@@ -163,44 +176,56 @@ class WeatherModule:
         api_tracker.record("weather", "openweathermap")
         return resp.json()
 
-    def update(self):
-        current_time = datetime.now()
-        if current_time - self.last_update < self.update_interval:
-            if not hasattr(self, 'last_skip_log') or current_time.timestamp() - self.last_skip_log > 60:
-                logging.debug("Skipping weather update: Not enough time has passed since last update")
-                self.last_skip_log = current_time.timestamp()
-            return
+    def _fetch_weather_blocking(self):
+        """Try OpenWeatherMap then Open-Meteo. Runs on a background thread.
 
-        # Try OpenWeatherMap first (if key exists), then Open-Meteo as fallback
-        fetched = False
-
+        Returns (data, source_name) or raises if both sources fail.
+        """
         if self.api_key:
             try:
-                self.weather_data = self._fetch_openweathermap()
-                self.weather_source = "OpenWeatherMap"
-                fetched = True
-                logger.info(f"Weather via OpenWeatherMap for {self.weather_data['name']}")
+                data = self._fetch_openweathermap()
+                if data:
+                    return data, "OpenWeatherMap"
             except Exception as e:
+                api_tracker.failure("weather", "openweathermap")
                 logger.warning(f"OpenWeatherMap failed, trying Open-Meteo: {e}")
 
-        if not fetched:
-            try:
-                self.weather_data = self._fetch_open_meteo()
-                if self.weather_data:
-                    self.weather_source = "Open-Meteo"
-                    fetched = True
-                    logger.info(f"Weather via Open-Meteo for {self.weather_data['name']}")
-                else:
-                    logger.error("Open-Meteo returned no data")
-            except Exception as e:
-                logger.error(f"Open-Meteo also failed: {e}")
+        try:
+            data = self._fetch_open_meteo()
+            if data:
+                return data, "Open-Meteo"
+            raise RuntimeError("Open-Meteo returned no data")
+        except Exception:
+            api_tracker.failure("weather", "open-meteo")
+            raise
 
-        if fetched:
-            self.update_animation()
-            self.last_update = current_time
-        else:
-            self.weather_data = None
-            self.animation = None
+    def update(self):
+        # Collect a finished background fetch, if any
+        result = self._fetcher.take_result()
+        if result is not None:
+            ok, value = result
+            if ok:
+                self.weather_data, self.weather_source = value
+                self.update_animation()
+                self.last_update = datetime.now()
+                from data_cache import data_cache
+                data_cache.save("weather", {
+                    "data": self.weather_data, "source": self.weather_source,
+                })
+                logger.info(
+                    f"Weather via {self.weather_source} for {self.weather_data['name']}"
+                )
+            else:
+                logger.error(f"Weather fetch failed: {value}")
+                self._retry_after = datetime.now() + timedelta(minutes=2)
+
+        current_time = datetime.now()
+        if current_time - self.last_update < self.update_interval:
+            return
+        if current_time < self._retry_after:
+            return
+        # Kick off a fetch without blocking the render loop
+        self._fetcher.submit(self._fetch_weather_blocking)
 
     def update_animation(self):
         try:

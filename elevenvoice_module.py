@@ -11,10 +11,10 @@ from datetime import datetime
 logger = logging.getLogger("ElevenVoice")
 
 # --------------- CONFIG ----------------
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "your-eleven-api-key")
-ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "your-voice-id")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your-openai-api-key")
-USE_GPT_4O = True
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+CHAT_MODEL = "gpt-5.4-mini"
 # ---------------------------------------
 
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -57,10 +57,9 @@ class ElevenVoice:
     def generate_response(self, prompt):
         """Generate AI response using OpenAI's GPT models."""
         logger.info("Generating response...")
-        model = "gpt-4o" if USE_GPT_4O else "gpt-3.5-turbo"
         try:
             response = self.client.chat.completions.create(
-                model=model,
+                model=CHAT_MODEL,
                 messages=[
                     {"role": "system", "content": "You are MirrorVoice, a friendly but occasionally sarcastic hallway mirror."},
                     {"role": "user", "content": prompt}

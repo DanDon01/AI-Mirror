@@ -1,47 +1,92 @@
+"""Realtime voice module for AI-Mirror (OpenAI Realtime API, GA interface).
+
+Speech-to-speech conversation over a single WebSocket using the GA
+protocol (no beta header; session.type = "realtime"; GA event names).
+
+Conversation flow (live microphone):
+  - SPACE starts a conversation: the USB mic streams continuously to the
+    API and server-side semantic VAD detects when you finish speaking,
+    commits the audio and generates a reply - no push-to-talk per turn.
+  - While the mirror is speaking the mic is gated (chunks dropped) so it
+    does not hear its own speaker. No barge-in for now.
+  - SPACE again ends the conversation; it also ends itself after
+    conversation_timeout seconds without voice activity.
+
+Microphone capture shells out to arecord with a plughw: device so ALSA
+resamples the USB mic to the API's native 24 kHz mono S16_LE (raw hw:
+devices usually cannot do 24 kHz). On hosts without arecord (Windows
+dev box) or with no working mic, the module falls back to streaming the
+pre-recorded test WAV with manual commit, so development still works.
+
+Default model is gpt-realtime-mini (best cost/latency for casual mirror
+conversation); set 'model' in config to gpt-realtime-2 for the smartest
+voice with reasoning.
+
+Avatar integration:
+  set_audio_sink(fn)      - fn(pcm_bytes) called as audio chunks reach playback
+  set_state_listener(fn)  - fn(status) called on every status change
+"""
+
 import json
 import os
 import pygame
 import logging
+import shutil
 import threading
 import base64
 import time
 import subprocess
-import shutil
 from queue import Queue, Empty
 import websocket
-import wave
+
+from api_tracker import api_tracker
 
 # Resolve project root directory for relative paths
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.join(_PROJECT_DIR, "data")
 _DEBUG_DIR = os.path.join(_DATA_DIR, "debug")
-_RECORDINGS_DIR = os.path.join(_DATA_DIR, "recordings")
-_TMP_DIR = os.path.join(_DATA_DIR, "tmp")
+
+DEFAULT_MODEL = "gpt-realtime-mini"
+DEFAULT_VOICE = "marin"
+DEFAULT_CAPTURE_DEVICE = "plughw:3,0"  # plughw = ALSA converts rate/format
+SESSION_INSTRUCTIONS = (
+    "You are a helpful assistant living inside a smart mirror in a hallway. "
+    "Keep replies short, natural and conversational - one or two sentences "
+    "unless asked for detail."
+)
+# Cost estimate for the api_tracker daily budget: gpt-realtime-mini audio
+# runs ~10 tokens/sec, so a response second costs roughly $0.0002 out plus
+# input context - call it $0.0005/sec all-in, with a small floor per turn.
+EST_COST_PER_RESPONSE_SECOND = 0.0005
+MIN_RESPONSE_COST = 0.003
+
+MIC_CHUNK_SEC = 0.1       # mic read size (100 ms per append event)
+UNMUTE_TAIL_SEC = 0.35    # keep mic gated briefly after playback ends
+LIMIT_CHECK_EVERY_SEC = 5  # re-check rate limits mid-conversation
 
 
 class AIVoiceModule:
     def __init__(self, config):
         self.logger = logging.getLogger("AI_Voice")
-        self.logger.info("Initializing AI Voice Module (Realtime API)")
+        self.logger.info("Initializing AI Voice Module (Realtime API, GA)")
 
         self.config = config or {}
+        openai_cfg = self.config.get("openai", {})
+        audio_cfg = self.config.get("audio", {})
         self.status = "Initializing"
         self.status_message = "Starting voice systems..."
         self.recording = False
-        self.processing = False
         self.session_ready = False
         self.running = True
-        self.response_queue = Queue()
         self.audio_enabled = True
-        self.audio_device = "hw:3,0"
+        self.capture_device = audio_cfg.get("alsa_device", DEFAULT_CAPTURE_DEVICE)
+        self.conversation_timeout = audio_cfg.get("conversation_timeout", 25)
+        self.max_conversation_sec = audio_cfg.get("max_conversation_seconds", 180)
 
-        self.sample_rate = 24000
-        self.record_rate = 44100
+        self.sample_rate = 24000  # Realtime API native PCM rate
         self.channels = 1
-        self.format = "S16_LE"
-        self.chunk_size = 1024
 
-        self.api_key = self.config.get("openai", {}).get("api_key")
+        self.api_key = openai_cfg.get("api_key")
         if not self.api_key:
             self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_VOICE_KEY")
             if not self.api_key:
@@ -49,271 +94,279 @@ class AIVoiceModule:
                 self.set_status("Error", "No API key")
                 return
 
-        self.ws_url = "wss://api.openai.com/v1/realtime"
+        self.model = openai_cfg.get("model") or DEFAULT_MODEL
+        self.voice = openai_cfg.get("voice") or DEFAULT_VOICE
+        self.ws_url = f"wss://api.openai.com/v1/realtime?model={self.model}"
+
         self.send_queue = Queue()
-        self.speech_detected = False
-        self.buffer_committed = False
-        self.transcript_received = False
         self.retry_count = 0
         self.reconnecting = False
-        self.audio_chunks = []
 
-        # Enable/disable debug file writing (disable in production to save disk)
-        self.debug_write_enabled = self.config.get("debug_write", True)
+        # Live conversation state
+        self.live_mic = False           # determined during init
+        self.conversation_active = False
+        self._mic_proc = None
+        self._mic_thread = None
+        self._last_voice_activity = 0.0
+        self._conversation_started = 0.0
+        self._playback_active = False   # echo gate: mute mic while speaking
+        self._mute_until = 0.0
+        self._response_audio_bytes = 0  # for per-response cost estimation
+
+        # Playback pipeline: audio deltas land here, a dedicated thread
+        # feeds them to a pygame channel back-to-back for gapless speech
+        self._playback_queue = Queue()
+        self._playback_thread = None
+
+        # Avatar hooks
+        self._audio_sink = None
+        self._state_listener = None
+
+        # Debug file writing is expensive on the Pi SD card; opt-in only
+        self.debug_write_enabled = self.config.get("debug_write", False)
 
         self.initialize()
+
+    # ------------------------------------------------------------------
+    # Avatar integration
+    # ------------------------------------------------------------------
+
+    def set_audio_sink(self, callback):
+        """Register fn(pcm_bytes) called as audio chunks reach playback."""
+        self._audio_sink = callback
+
+    def set_state_listener(self, callback):
+        """Register fn(status_string) called on every status change."""
+        self._state_listener = callback
+
+    # ------------------------------------------------------------------
+    # Initialization
+    # ------------------------------------------------------------------
 
     def initialize(self):
         self.logger.info("Starting AIVoiceModule initialization")
         try:
-            self.test_api_connection()
-            time.sleep(2)
             self.check_alsa_sanity()
-            if self.audio_enabled:
-                self.test_audio_setup()
+            self.live_mic = bool(
+                self.audio_enabled and shutil.which("arecord")
+            )
+            if self.live_mic:
+                self.logger.info(
+                    f"Live microphone mode: device={self.capture_device}, "
+                    f"server VAD handles turn-taking"
+                )
+            else:
+                self.logger.warning(
+                    "No usable microphone/arecord - falling back to test "
+                    "WAV input (manual commit mode)"
+                )
             self.connect_websocket_thread()
-            time.sleep(2)
-            self.set_status("Ready", "Press SPACE to speak")
+            self._playback_thread = threading.Thread(
+                target=self._playback_loop, daemon=True, name="voice-playback"
+            )
+            self._playback_thread.start()
+            self.set_status("Ready", "Press SPACE to talk")
             self.logger.info("AIVoiceModule initialization complete")
         except Exception as e:
             self.logger.error(f"AIVoiceModule initialization failed: {e}")
             self.set_status("Error", f"Init failed: {str(e)}")
             raise
 
-    def test_api_connection(self):
-        import requests
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "OpenAI-Beta": "realtime=v1"
-        }
-        response = requests.get("https://api.openai.com/v1/models", headers=headers)
-        if response.status_code == 200:
-            models = [m["id"] for m in response.json()["data"]]
-            self.logger.info(f"Available models: {models}")
-            self.model = "gpt-4o-realtime-preview"
-            self.logger.info(f"Using model: {self.model}")
-        else:
-            self.logger.error(f"API test failed: {response.status_code} - {response.text}")
-            self.model = "gpt-4o-realtime-preview"
-
     def check_alsa_sanity(self):
+        """Verify ALSA recording devices exist (Pi only; skipped on Windows)."""
+        if os.name == "nt":
+            self.logger.info("Windows host: no ALSA, live mic disabled")
+            self.audio_enabled = False
+            return
         try:
-            self.logger.info(f"ALSA environment: {os.environ.get('ALSA_CONFIG_PATH', 'Not set')}")
-            playback_result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5)
-            if playback_result.returncode == 0:
-                self.logger.info("ALSA playback devices:\n" + playback_result.stdout)
-            else:
-                self.logger.error(f"ALSA playback check failed: {playback_result.stderr}")
-
-            record_result = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5)
+            record_result = subprocess.run(
+                ["arecord", "-l"], capture_output=True, text=True, timeout=5
+            )
             if record_result.returncode == 0:
                 self.logger.info("ALSA recording devices:\n" + record_result.stdout)
-                if "card 3" in record_result.stdout.lower():
-                    self.logger.info("Confirmed USB mic (card 3)")
-                    return
-                else:
-                    self.logger.warning("USB mic (card 3) not found")
             else:
-                self.logger.error(f"ALSA recording check failed: {record_result.stderr}")
-
-            os.makedirs(_TMP_DIR, exist_ok=True)
-            test_file = os.path.join(_TMP_DIR, "test_alsa_check.wav")
-            env = os.environ.copy()
-            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
-            cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", "1", "-d", "1", test_file, "-D", self.audio_device]
-            self.logger.info(f"Testing arecord: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
-            if result.returncode == 0 and os.path.exists(test_file):
-                self.logger.info(f"ALSA test succeeded with {self.audio_device}")
-                os.remove(test_file)
-                return
-            else:
-                self.logger.error(f"ALSA test failed: {result.stderr}")
+                self.logger.warning(f"ALSA recording check failed: {record_result.stderr}")
                 self.audio_enabled = False
         except Exception as e:
-            self.logger.error(f"ALSA sanity check failed: {e}")
+            self.logger.warning(f"ALSA sanity check failed: {e}")
             self.audio_enabled = False
 
-    def test_audio_setup(self):
-        try:
-            os.makedirs(_TMP_DIR, exist_ok=True)
-            test_file = os.path.join(_TMP_DIR, "test_rec.wav")
-            time.sleep(2)
-            env = os.environ.copy()
-            env["ALSA_CONFIG_PATH"] = "/usr/share/alsa/alsa.conf"
-            for attempt in range(3):
-                self.logger.info(f"Audio test attempt {attempt + 1}/3")
-                cmd = ["arecord", "-f", "S16_LE", "-r", "44100", "-c", str(self.channels), "-d", "1", test_file, "-D", self.audio_device]
-                self.logger.info(f"Testing device: {self.audio_device} with cmd: {' '.join(cmd)}")
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
-                if result.returncode == 0 and os.path.exists(test_file):
-                    self.logger.info(f"Audio test successful with {self.audio_device}")
-                    temp_file_resampled = os.path.join(_TMP_DIR, "test_rec_resampled.wav")
-                    subprocess.run(["sox", test_file, "-r", "24000", temp_file_resampled], check=True, env=env)
-                    os.remove(test_file)
-                    os.rename(temp_file_resampled, test_file)
-                    self.logger.info("Resampled test audio to 24000 Hz")
-                    os.remove(test_file)
-                    return
-                else:
-                    self.logger.warning(f"Audio test failed: {result.stderr}")
-                time.sleep(1)
-            self.logger.error("All audio tests failed")
-            self.audio_enabled = False
-        except Exception as e:
-            self.logger.error(f"Audio test setup failed: {e}")
-            self.audio_enabled = False
+    # ------------------------------------------------------------------
+    # WebSocket lifecycle (GA protocol)
+    # ------------------------------------------------------------------
+
+    def connect_websocket_thread(self):
+        headers = [f"Authorization: Bearer {self.api_key}"]
+        self.logger.info(f"Connecting to Realtime API: model={self.model}")
+
+        self.ws = websocket.WebSocketApp(
+            self.ws_url,
+            header=headers,
+            on_open=self.on_ws_open,
+            on_message=self.on_ws_message,
+            on_error=self.on_ws_error,
+            on_close=self.on_ws_close,
+        )
+
+        self.ws_thread = threading.Thread(
+            target=self.ws.run_forever, daemon=True, name="voice-ws"
+        )
+        self.ws_thread.start()
+        self.ws_thread_send = threading.Thread(
+            target=self._send_loop, daemon=True, name="voice-ws-send"
+        )
+        self.ws_thread_send.start()
+
+        start_time = time.time()
+        while not self.session_ready and time.time() - start_time < 10:
+            time.sleep(0.25)
+        if not self.session_ready:
+            self.logger.warning("Realtime session not ready after timeout")
 
     def on_ws_open(self, ws):
         self.logger.info("WebSocket connected")
         self.ws = ws
 
+    def _session_config(self):
+        """GA session.update payload (note required type: 'realtime').
+
+        Live mic mode lets the server's semantic VAD detect end of
+        speech, commit the buffer and create the response by itself.
+        Test-WAV fallback keeps manual commit (turn_detection None).
+        """
+        if self.live_mic:
+            turn_detection = {"type": "semantic_vad", "create_response": True}
+        else:
+            turn_detection = None
+        return {
+            "type": "session.update",
+            "session": {
+                "type": "realtime",
+                "output_modalities": ["audio"],
+                "instructions": SESSION_INSTRUCTIONS,
+                "audio": {
+                    "input": {
+                        "format": {"type": "audio/pcm", "rate": self.sample_rate},
+                        "transcription": {"model": "gpt-4o-transcribe"},
+                        "turn_detection": turn_detection,
+                    },
+                    "output": {
+                        "format": {"type": "audio/pcm", "rate": self.sample_rate},
+                        "voice": self.voice,
+                    },
+                },
+            },
+        }
+
     def on_ws_message(self, ws, message):
         try:
             data = json.loads(message)
             event_type = data.get("type")
-            self.logger.info(f"WebSocket event received: {event_type}")
 
             if self.debug_write_enabled:
-                os.makedirs(_DEBUG_DIR, exist_ok=True)
-                timestamp = time.strftime("%Y%m%d_%H%M%S_%f")[:19]
-                debug_file = os.path.join(_DEBUG_DIR, f"ws_message_{timestamp}_{event_type}.json")
-                with open(debug_file, "w") as f:
-                    json.dump(data, f, indent=2)
+                self._write_debug_event(event_type, data)
 
             if event_type == "session.created":
-                self.logger.info("Session created")
+                self.logger.info("Realtime session created")
                 self.session_ready = True
-                self.send_ws_message({
-                    "type": "session.update",
-                    "session": {
-                        "model": self.model,
-                        "modalities": ["text", "audio"],
-                        "instructions": "You are a helpful assistant for a smart mirror. Always respond with both text and audio.",
-                        "voice": "echo",
-                        "input_audio_format": "pcm16",
-                        "output_audio_format": "pcm16",
-                        "input_audio_transcription": {"model": "whisper-1"},
-                        "turn_detection": None
-                    }
-                })
-                self.logger.info("Session configured with Whisper transcription")
+                self.send_ws_message(self._session_config())
             elif event_type == "session.updated":
-                self.logger.info("Session updated successfully")
+                self.logger.info("Session configured")
             elif event_type == "input_audio_buffer.speech_started":
-                self.logger.info("Speech detected")
-                self.speech_detected = True
+                self._last_voice_activity = time.time()
+                if self.conversation_active:
+                    self.set_status("Listening", "Hearing you...")
             elif event_type == "input_audio_buffer.speech_stopped":
-                self.logger.info("Speech stopped")
-                self.speech_detected = False
+                self._last_voice_activity = time.time()
             elif event_type == "input_audio_buffer.committed":
                 self.logger.info("Audio buffer committed")
-                self.buffer_committed = True
-            elif event_type == "conversation.item.created":
-                transcript = data["item"]["content"][0].get("transcript", "")
-                self.logger.info(f"Transcript received: {transcript}")
-                self.transcript_received = True
-            elif event_type == "response.audio.delta":
-                self.logger.info("Received audio delta")
+                if self.conversation_active:
+                    self.set_status("Processing", "Thinking...")
+            elif event_type == "conversation.item.input_audio_transcription.completed":
+                transcript = data.get("transcript", "")
+                self.logger.info(f"User said: {transcript}")
+            elif event_type == "response.output_audio.delta":
                 audio_data = base64.b64decode(data.get("delta", ""))
-                self.logger.info(f"Decoded audio chunk: {len(audio_data)} bytes")
-
-                if self.debug_write_enabled:
-                    audio_dir = os.path.join(_RECORDINGS_DIR, "response_audio")
-                    os.makedirs(audio_dir, exist_ok=True)
-                    if not hasattr(self, "current_response_timestamp"):
-                        self.current_response_timestamp = time.strftime("%Y%m%d_%H%M%S")
-                        self.chunk_counter = 0
-                    self.chunk_counter += 1
-                    chunk_file = os.path.join(audio_dir, f"response_{self.current_response_timestamp}_chunk_{self.chunk_counter:03d}.raw")
-                    with open(chunk_file, "wb") as f:
-                        f.write(audio_data)
-                    self.logger.info(f"Saved audio chunk to {chunk_file}")
-
-                self.play_audio(audio_data)
-            elif event_type == "response.text.delta":
-                text = data.get("delta", "")
-                self.logger.info(f"Received text delta: {text}")
+                if audio_data:
+                    self._response_audio_bytes += len(audio_data)
+                    self._playback_queue.put(audio_data)
+            elif event_type == "response.output_audio_transcript.delta":
+                pass  # spoken text mirror; not displayed currently
+            elif event_type == "response.output_text.delta":
+                pass
             elif event_type == "response.done":
-                self.logger.info("Response completed")
-                self.logger.info(f"Full response data: {json.dumps(data, indent=2)}")
-                if data.get("response", {}).get("status") == "failed" and "server_error" in json.dumps(data):
-                    self.retry_count += 1
-                    if self.retry_count <= 3:
-                        self.logger.warning(f"Server error, retrying (attempt {self.retry_count}/3)")
-                        self.retry_response_create()
-                    else:
-                        self.logger.error("Max retries reached, will reconnect on next failure")
-                        self.retry_count = 0
-                        self.set_status("Error", "Failed after retries")
-                        threading.Thread(target=self.reconnect_websocket, daemon=True).start()
-                else:
-                    self.retry_count = 0
-                if hasattr(self, "current_response_timestamp"):
-                    del self.current_response_timestamp
-                    del self.chunk_counter
-                self.set_status("Ready", "Press SPACE to speak")
+                self._on_response_done(data)
             elif event_type == "error":
-                self.logger.error(f"API Error: {data.get('error')}")
+                err = data.get("error", {})
+                self.logger.error(f"Realtime API error: {err}")
+                api_tracker.failure("ai_voice", "openai-realtime")
         except Exception as e:
             self.logger.error(f"Error processing WebSocket message: {e}", exc_info=True)
 
-    def retry_response_create(self):
-        delay = 2 * self.retry_count
-        self.logger.info(f"Retrying response.create in {delay}s (attempt {self.retry_count}/3)")
-        time.sleep(delay)
-        self.send_ws_message({"type": "input_audio_buffer.clear"})
-        time.sleep(0.5)
+    def _on_response_done(self, data):
+        status = data.get("response", {}).get("status")
+        self.logger.info(f"Response completed: status={status}")
+        self._last_voice_activity = time.time()
+        if status == "failed":
+            api_tracker.failure("ai_voice", "openai-realtime")
+            self.retry_count += 1
+            if self.retry_count <= 3 and not self.live_mic:
+                self.logger.warning(
+                    f"Response failed, retrying (attempt {self.retry_count}/3)"
+                )
+                threading.Thread(
+                    target=self._retry_response_create, daemon=True
+                ).start()
+            else:
+                self.retry_count = 0
+                self.set_status("Error", "Response failed")
+        else:
+            self.retry_count = 0
+            # Estimate cost from the actual response audio length so the
+            # api_tracker daily cost ceiling tracks real usage
+            out_seconds = self._response_audio_bytes / 2 / self.sample_rate
+            cost = max(MIN_RESPONSE_COST, out_seconds * EST_COST_PER_RESPONSE_SECOND)
+            api_tracker.record("ai_voice", "openai-realtime", estimated_cost=cost)
+            # If this response used up the budget, end the conversation
+            # now instead of letting the next turn fail mid-sentence
+            if self.conversation_active and not api_tracker.allow("ai_voice", "openai-realtime"):
+                self.stop_conversation(reason="rate/cost limit reached")
+                self.set_status("Ready", "Voice limit reached for now")
+            # Playback thread flips status back when its queue drains
+        self._response_audio_bytes = 0
+
+    def _retry_response_create(self):
+        time.sleep(2 * self.retry_count)
         self.send_ws_message({
             "type": "response.create",
-            "response": {
-                "modalities": ["audio", "text"],
-                "instructions": "Respond with audio and text to the user's query."
-            }
+            "response": {"output_modalities": ["audio"]},
         })
-        self.set_status("Processing", f"Retrying AI response (attempt {self.retry_count}/3)...")
+        self.set_status("Processing", f"Retrying (attempt {self.retry_count}/3)...")
+
+    def _write_debug_event(self, event_type, data):
+        try:
+            os.makedirs(_DEBUG_DIR, exist_ok=True)
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            debug_file = os.path.join(
+                _DEBUG_DIR, f"ws_{timestamp}_{event_type.replace('.', '_')}.json"
+            )
+            with open(debug_file, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            pass
 
     def on_ws_error(self, ws, error):
         self.logger.error(f"WebSocket error: {error}")
         self.session_ready = False
+        api_tracker.failure("ai_voice", "openai-realtime")
         if not self.reconnecting:
             threading.Thread(target=self.reconnect_websocket, daemon=True).start()
 
     def on_ws_close(self, ws, close_status_code, close_msg):
         self.logger.info(f"WebSocket closed: {close_status_code} - {close_msg}")
         self.session_ready = False
-        if not self.reconnecting:
+        if self.running and not self.reconnecting:
             threading.Thread(target=self.reconnect_websocket, daemon=True).start()
-
-    def connect_websocket_thread(self):
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "OpenAI-Beta": "realtime=v1",
-            "Sec-WebSocket-Protocol": "realtime"
-        }
-        ws_url = f"{self.ws_url}?model={self.model}"
-        self.logger.info(f"Connecting to WebSocket URL: {ws_url}")
-
-        self.ws = websocket.WebSocketApp(
-            ws_url,
-            header=headers,
-            on_open=self.on_ws_open,
-            on_message=self.on_ws_message,
-            on_error=self.on_ws_error,
-            on_close=self.on_ws_close
-        )
-
-        self.ws_thread = threading.Thread(target=self.ws.run_forever, daemon=True)
-        self.ws_thread.start()
-        self.ws_thread_send = threading.Thread(target=self._send_loop, daemon=True)
-        self.ws_thread_send.start()
-        self.logger.info("WebSocket threads started")
-
-        start_time = time.time()
-        while not self.session_ready and time.time() - start_time < 10:
-            time.sleep(0.5)
-        if not self.session_ready:
-            self.logger.warning("WebSocket not ready after timeout")
 
     def _send_loop(self):
         while self.running:
@@ -323,7 +376,6 @@ class AIVoiceModule:
                     continue
                 message = self.send_queue.get(timeout=1.0)
                 self.ws.send(json.dumps(message))
-                self.logger.info(f"Sent message: {message.get('type')}")
                 self.send_queue.task_done()
             except Empty:
                 continue
@@ -338,8 +390,14 @@ class AIVoiceModule:
     def reconnect_websocket(self):
         if not self.running or self.reconnecting:
             return
+        if not api_tracker.allow("ai_voice", "openai-realtime"):
+            self.set_status("Error", "Rate limited")
+            return
         self.reconnecting = True
         self.logger.info("Reconnecting WebSocket...")
+        # A live conversation cannot survive a new session
+        if self.conversation_active:
+            self.stop_conversation(reason="connection lost")
         if hasattr(self, "ws"):
             try:
                 self.ws.close()
@@ -347,198 +405,289 @@ class AIVoiceModule:
                 pass
         time.sleep(2)
         self.connect_websocket_thread()
-        wait_time = 0
-        while not self.session_ready and wait_time < 5:
-            time.sleep(0.5)
-            wait_time += 0.5
         if self.session_ready:
             self.logger.info("WebSocket reconnected successfully")
-            self.set_status("Ready", "Press SPACE to speak")
+            self.set_status("Ready", "Press SPACE to talk")
         else:
             self.logger.error("Failed to reconnect WebSocket")
             self.set_status("Error", "Connection failed")
         self.reconnecting = False
 
+    # ------------------------------------------------------------------
+    # Conversation flow
+    # ------------------------------------------------------------------
+
     def on_button_press(self):
-        self.logger.info("Spacebar pressed")
+        self.logger.info("Voice interaction triggered")
         if not self.session_ready:
-            self.logger.warning("WebSocket not ready")
+            self.logger.warning("Realtime session not ready")
             self.set_status("Error", "Not connected")
             return
-        if not self.audio_enabled:
-            self.logger.warning("Audio disabled")
-            return
-        if self.recording:
-            self.stop_recording()
+        if self.live_mic:
+            if self.conversation_active:
+                self.stop_conversation(reason="user ended")
+            else:
+                self.start_conversation()
         else:
-            self.start_recording()
+            # Fallback: single test-WAV exchange per press
+            if not self.recording:
+                self.start_test_wav_exchange()
 
-    def start_recording(self):
-        if not hasattr(self, "ws"):
-            self.logger.error("No WebSocket connection")
-            self.set_status("Error", "No connection")
+    def start_conversation(self):
+        """Begin a hands-free conversation: stream mic, server VAD turns."""
+        if not api_tracker.allow("ai_voice", "openai-realtime"):
+            self.set_status("Error", "Rate limited")
             return
+        self.conversation_active = True
         self.recording = True
-        self.speech_detected = False
-        self.buffer_committed = False
-        self.transcript_received = False
+        self._last_voice_activity = time.time()
+        self._conversation_started = time.time()
+        self._mute_until = 0.0
+        self.send_ws_message({"type": "input_audio_buffer.clear"})
+        self._mic_thread = threading.Thread(
+            target=self._mic_loop, daemon=True, name="voice-mic"
+        )
+        self._mic_thread.start()
+        self.set_status("Listening", "Just talk - SPACE to end")
+
+    def stop_conversation(self, reason=""):
+        self.logger.info(f"Ending conversation ({reason})")
+        self.conversation_active = False
+        self.recording = False
+        self._stop_mic_proc()
+        self.send_ws_message({"type": "input_audio_buffer.clear"})
+        self.set_status("Ready", "Press SPACE to talk")
+
+    def _stop_mic_proc(self):
+        proc = self._mic_proc
+        self._mic_proc = None
+        if proc is not None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+    def _mic_loop(self):
+        """Stream the USB mic to the API until the conversation ends.
+
+        arecord writes raw S16_LE 24 kHz mono PCM to stdout; plughw lets
+        ALSA do the resampling from whatever the mic natively supports.
+        Chunks are dropped while the mirror is speaking (echo gate).
+        """
+        cmd = [
+            "arecord", "-q", "-t", "raw",
+            "-f", "S16_LE", "-r", str(self.sample_rate),
+            "-c", str(self.channels), "-D", self.capture_device,
+        ]
+        self.logger.info(f"Starting mic capture: {' '.join(cmd)}")
+        try:
+            self._mic_proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to start arecord: {e}")
+            self.conversation_active = False
+            self.recording = False
+            self.set_status("Error", "Mic capture failed")
+            return
+
+        chunk_bytes = int(self.sample_rate * MIC_CHUNK_SEC) * 2  # 16-bit mono
+        end_message = "Press SPACE to talk"
+        next_limit_check = time.time() + LIMIT_CHECK_EVERY_SEC
+        try:
+            while self.running and self.conversation_active:
+                proc = self._mic_proc
+                if proc is None:
+                    break
+                data = proc.stdout.read(chunk_bytes)
+                if not data:
+                    self.logger.error("arecord stream ended unexpectedly")
+                    break
+
+                now = time.time()
+
+                # Idle timeout: nobody has spoken for a while
+                if now - self._last_voice_activity > self.conversation_timeout:
+                    self.logger.info("Conversation idle timeout")
+                    break
+
+                # Hard cap: no conversation runs forever, active or not
+                if now - self._conversation_started > self.max_conversation_sec:
+                    self.logger.info(
+                        f"Conversation hard cap reached "
+                        f"({self.max_conversation_sec}s)"
+                    )
+                    end_message = "Time limit - SPACE to talk again"
+                    break
+
+                # Periodic budget check while the conversation runs
+                if now >= next_limit_check:
+                    next_limit_check = now + LIMIT_CHECK_EVERY_SEC
+                    if not api_tracker.allow("ai_voice", "openai-realtime"):
+                        self.logger.warning(
+                            "Voice rate/cost limit hit mid-conversation"
+                        )
+                        end_message = "Voice limit reached for now"
+                        break
+
+                # Echo gate: do not send the mirror's own voice back
+                if self._playback_active or now < self._mute_until:
+                    continue
+
+                self.send_ws_message({
+                    "type": "input_audio_buffer.append",
+                    "audio": base64.b64encode(data).decode("utf-8"),
+                })
+        except Exception as e:
+            self.logger.error(f"Mic loop error: {e}", exc_info=True)
+        finally:
+            ended_by_loop = self.conversation_active
+            self._stop_mic_proc()
+            if ended_by_loop:
+                # Timeout, cap, limit, or capture failure: close out cleanly
+                self.conversation_active = False
+                self.recording = False
+                self.set_status("Ready", end_message)
+
+    # ------------------------------------------------------------------
+    # Test-WAV fallback (no microphone available)
+    # ------------------------------------------------------------------
+
+    def start_test_wav_exchange(self):
+        self.recording = True
         self.retry_count = 0
-        self.audio_chunks = []
-        self.set_status("Listening", "Recording...")
-        self.logger.info("Starting recording")
-        self.audio_thread = threading.Thread(target=self.stream_audio, daemon=True)
+        self.set_status("Listening", "Streaming test audio...")
+        self.audio_thread = threading.Thread(
+            target=self._stream_test_wav, daemon=True, name="voice-stream"
+        )
         self.audio_thread.start()
 
-    def save_sent_audio(self, chunks, timestamp):
-        """Save the exact audio sent to the API as a WAV file."""
-        os.makedirs(_RECORDINGS_DIR, exist_ok=True)
-        sent_audio_file = os.path.join(_RECORDINGS_DIR, f"sent_audio_{timestamp}.wav")
-
-        pcm_data = b""
-        for chunk in chunks:
-            pcm_data += base64.b64decode(chunk["audio"])
-
-        with wave.open(sent_audio_file, "wb") as wav_file:
-            wav_file.setnchannels(self.channels)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(self.sample_rate)
-            wav_file.writeframes(pcm_data)
-
-        self.logger.info(f"Saved sent audio to {sent_audio_file} ({len(pcm_data)} bytes)")
-        return sent_audio_file
-
-    def stream_audio(self):
-        """Stream audio to the Realtime API.
-
-        NOTE: Currently uses a pre-recorded test WAV file for development.
-        This will be replaced with live microphone recording when audio
-        hardware setup on the Pi is finalized.
-        """
+    def _stream_test_wav(self):
+        """Stream the pre-recorded test WAV with manual commit."""
         try:
-            if not hasattr(self, "ws") or not self.session_ready:
-                self.logger.error("No active WebSocket session")
-                self.set_status("Error", "No connection")
-                return
-
-            # TODO: Replace with live microphone recording when Pi audio is ready.
-            # For now, use a pre-recorded test file for development.
             test_audio_path = os.path.join(_DATA_DIR, "test_spedup.wav")
             if not os.path.exists(test_audio_path):
                 self.logger.error(f"Test audio file not found: {test_audio_path}")
                 self.set_status("Error", "No test audio file")
                 return
 
-            self.logger.info(f"Using pre-recorded audio: {test_audio_path}")
             with open(test_audio_path, "rb") as f:
                 pcm_data = f.read()
 
-            if len(pcm_data) > 4800:
-                self.logger.info(f"PCM data size: {len(pcm_data)} bytes")
-                chunk_size = 16000
-                total_chunks = (len(pcm_data) + chunk_size - 1) // chunk_size
-                for i in range(0, len(pcm_data), chunk_size):
-                    chunk = pcm_data[i:i + chunk_size]
-                    self.audio_chunks.append({
-                        "audio": base64.b64encode(chunk).decode("utf-8"),
-                        "size": len(chunk)
-                    })
-                    self.logger.info(f"Accumulated chunk {(i // chunk_size) + 1}/{total_chunks} ({len(chunk)} bytes)")
-
-                if self.debug_write_enabled:
-                    timestamp = time.strftime("%Y%m%d_%H%M%S")
-                    self.save_sent_audio(self.audio_chunks, timestamp)
-
-                self.send_ws_message({"type": "input_audio_buffer.clear"})
-                time.sleep(0.5)
-                for chunk in self.audio_chunks:
-                    self.send_ws_message({
-                        "type": "input_audio_buffer.append",
-                        "audio": chunk["audio"]
-                    })
-                    self.logger.info(f"Sent chunk ({chunk['size']} bytes)")
-                    time.sleep(0.25)
-
-                self.send_ws_message({"type": "input_audio_buffer.commit"})
-                self.logger.info("Audio buffer committed")
-                time.sleep(1.0)
-                self.send_ws_message({
-                    "type": "response.create",
-                    "response": {
-                        "modalities": ["audio", "text"],
-                        "instructions": "Respond with audio and text to the user's query."
-                    }
-                })
-                self.logger.info("Response requested")
-                self.set_status("Processing", "Waiting for AI response...")
-
-        except Exception as e:
-            self.logger.error(f"Streaming error: {str(e)}", exc_info=True)
-            self.set_status("Error", f"Streaming failed: {str(e)}")
-        finally:
-            self.recording = False
-            self.speech_detected = False
-            self.buffer_committed = False
-            self.transcript_received = False
-            self.audio_chunks = []
-            if not self.session_ready and not self.reconnecting:
-                threading.Thread(target=self.reconnect_websocket, daemon=True).start()
-            else:
-                self.set_status("Processing", "Generating response...")
-
-    def stop_recording(self):
-        self.recording = False
-        self.set_status("Processing", "Generating response...")
-        self.logger.info("Recording stopped")
-
-    def play_audio(self, audio_data):
-        try:
-            self.logger.info(f"Attempting to play {len(audio_data)} bytes")
-            if len(audio_data) < 100:
-                self.logger.warning(f"Audio data too small: {len(audio_data)} bytes")
+            if len(pcm_data) <= 4800:
+                self.logger.warning("Test audio too short, skipping")
                 return
 
-            if not pygame.mixer.get_init():
-                try:
-                    pygame.mixer.init(frequency=self.sample_rate, size=-16, channels=1)
-                    self.logger.info("Initialized pygame mixer: 24000 Hz, 16-bit, mono")
-                except Exception as e:
-                    self.logger.error(f"Failed to initialize pygame mixer: {e}")
-                    return
+            self.send_ws_message({"type": "input_audio_buffer.clear"})
+            chunk_size = 16000
+            for i in range(0, len(pcm_data), chunk_size):
+                chunk = pcm_data[i:i + chunk_size]
+                self.send_ws_message({
+                    "type": "input_audio_buffer.append",
+                    "audio": base64.b64encode(chunk).decode("utf-8"),
+                })
 
-            sound = pygame.mixer.Sound(buffer=audio_data)
-            sound.play()
-            self.set_status("Speaking", "Playing response...")
-            self.logger.info("Audio playback started")
-
-            start_time = time.time()
-            while pygame.mixer.get_busy() and time.time() - start_time < 10:
-                time.sleep(0.1)
-
-            if pygame.mixer.get_busy():
-                pygame.mixer.stop()
-                self.logger.warning("Audio playback timed out")
-
-            self.logger.info("Audio playback completed")
+            self.send_ws_message({"type": "input_audio_buffer.commit"})
+            self.send_ws_message({
+                "type": "response.create",
+                "response": {"output_modalities": ["audio"]},
+            })
+            self.set_status("Processing", "Waiting for AI response...")
         except Exception as e:
-            self.logger.error(f"Playback error: {e}", exc_info=True)
+            self.logger.error(f"Streaming error: {e}", exc_info=True)
+            self.set_status("Error", f"Streaming failed: {str(e)[:40]}")
+        finally:
+            self.recording = False
+
+    # ------------------------------------------------------------------
+    # Playback (gapless, with avatar lipsync feed and mic echo gate)
+    # ------------------------------------------------------------------
+
+    def _playback_loop(self):
+        """Feed PCM chunks to a pygame channel back-to-back.
+
+        Runs in its own thread so the WebSocket reader is never blocked
+        by audio playback. Sets _playback_active so the mic loop gates
+        itself while the mirror speaks, and forwards each chunk to the
+        avatar audio sink for lipsync.
+        """
+        channel = None
+        while self.running:
+            try:
+                chunk = self._playback_queue.get(timeout=0.5)
+            except Empty:
+                if self._playback_active and (channel is None or not channel.get_busy()):
+                    self._playback_active = False
+                    self._mute_until = time.time() + UNMUTE_TAIL_SEC
+                    self._last_voice_activity = time.time()
+                    if self.conversation_active:
+                        self.set_status("Listening", "Just talk - SPACE to end")
+                    else:
+                        self.set_status("Ready", "Press SPACE to talk")
+                continue
+
+            try:
+                if len(chunk) < 4:
+                    continue
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init(
+                        frequency=self.sample_rate, size=-16, channels=1
+                    )
+
+                if not self._playback_active:
+                    self._playback_active = True
+                    self.set_status("Speaking", "Playing response...")
+
+                if self._audio_sink:
+                    try:
+                        self._audio_sink(chunk)
+                    except Exception as e:
+                        self.logger.debug(f"Avatar audio sink error: {e}")
+
+                sound = pygame.mixer.Sound(buffer=chunk)
+                if channel is None or not channel.get_busy():
+                    channel = sound.play()
+                else:
+                    # Wait for the queue slot, then chain for gapless output
+                    while channel.get_queued() and self.running:
+                        time.sleep(0.005)
+                    channel.queue(sound)
+            except Exception as e:
+                self.logger.error(f"Playback error: {e}")
+
+    # ------------------------------------------------------------------
+    # Status / drawing / cleanup
+    # ------------------------------------------------------------------
 
     def set_status(self, status, message):
         self.status = status
         self.status_message = message
         self.logger.info(f"Status: {status} - {message}")
+        if self._state_listener:
+            try:
+                self._state_listener(status)
+            except Exception as e:
+                self.logger.debug(f"State listener error: {e}")
+
+    def update(self):
+        pass
 
     def draw(self, screen, position):
         """Draw voice AI status -- only visible when active. No background."""
         try:
             if isinstance(position, dict):
                 x, y = position.get("x", 0), position.get("y", 0)
-                width, height = position.get("width", 300), position.get("height", 200)
+                width = position.get("width", 300)
             else:
                 x, y = position
-                width, height = 300, 200
+                width = 300
 
             # Only draw when actively doing something
-            if not self.recording and self.status in ("idle", "disconnected", ""):
+            if not self.recording and self.status in ("Ready", "idle", "disconnected", ""):
                 return
 
             if not hasattr(self, "_voice_font_ready") or not self._voice_font_ready:
@@ -559,26 +708,28 @@ class AIVoiceModule:
                 msg_surf.set_alpha(200)
                 screen.blit(msg_surf, (center_x - msg_surf.get_width() // 2, y + 28))
 
-            if self.recording:
+            if self.conversation_active:
                 pulse = int(128 + 127 * (pygame.time.get_ticks() % 1000) / 1000)
-                rec_color = (255, pulse, pulse)
-                pygame.draw.circle(screen, rec_color, (center_x - 30, y + 55), 6)
-                rec_text = self.font.render("Recording", True, rec_color)
-                screen.blit(rec_text, (center_x - 18, y + 47))
+                live_color = (pulse, 255, pulse) if not self._playback_active else (160, 160, 160)
+                pygame.draw.circle(screen, live_color, (center_x - 30, y + 55), 6)
+                live_text = self.font.render("Live", True, live_color)
+                screen.blit(live_text, (center_x - 18, y + 47))
         except Exception as e:
             self.logger.error(f"Draw error: {e}")
 
     def cleanup(self):
         self.running = False
+        self.conversation_active = False
+        self._stop_mic_proc()
         if hasattr(self, "ws"):
             try:
                 self.ws.close()
             except Exception:
                 pass
-        if hasattr(self, "audio_thread") and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=2)
-        if hasattr(self, "ws_thread_send") and self.ws_thread_send.is_alive():
-            self.ws_thread_send.join(timeout=2)
+        for attr in ("audio_thread", "_mic_thread", "ws_thread_send", "_playback_thread"):
+            t = getattr(self, attr, None)
+            if t is not None and t.is_alive():
+                t.join(timeout=2)
         if pygame.mixer.get_init():
             pygame.mixer.quit()
         self.logger.info("Cleanup complete")
@@ -586,13 +737,9 @@ class AIVoiceModule:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
-    CONFIG = {
-        "openai": {"api_key": "your-api-key-here"},
-        "audio": {"device_index": 3}
-    }
     pygame.init()
     screen = pygame.display.set_mode((800, 480))
-    module = AIVoiceModule(CONFIG)
+    module = AIVoiceModule({"openai": {}})
     running = True
     clock = pygame.time.Clock()
     while running:

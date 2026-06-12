@@ -33,7 +33,9 @@ _STATE_FILE = os.path.join(_PROJECT_DIR, 'api_tracker_state.json')
 # Default limits per service (calls per hour)
 DEFAULT_LIMITS = {
     'openai': {'hourly': 60, 'daily': 500, 'daily_cost': 5.00},
-    'openai-realtime': {'hourly': 20, 'daily': 100, 'daily_cost': 2.00},
+    # Realtime voice: ~20 replies/hour, hard $1/day ceiling. The voice
+    # module also enforces per-conversation time caps on top of this.
+    'openai-realtime': {'hourly': 20, 'daily': 100, 'daily_cost': 1.00},
     'elevenlabs': {'hourly': 30, 'daily': 200, 'daily_cost': 2.00},
     'openweathermap': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
     'open-meteo': {'hourly': 20, 'daily': 500, 'daily_cost': 0},
@@ -53,10 +55,18 @@ class APITracker:
     Persists call records to disk so limits are enforced across restarts.
     """
 
+    # Circuit breaker: after this many consecutive failures a service is
+    # blocked for BREAKER_COOLDOWN seconds (stops hammering a dead API
+    # and burning rate-limit quota while it is down).
+    BREAKER_THRESHOLD = 3
+    BREAKER_COOLDOWN = 1800  # 30 minutes
+
     def __init__(self):
         self._lock = threading.Lock()
         self._calls = []  # list of (timestamp, module, service, cost)
         self._blocked = defaultdict(int)  # service -> blocked count
+        self._failures = defaultdict(int)  # service -> consecutive failures
+        self._breaker_opened = {}  # service -> unix time circuit opened
         self._limits = dict(DEFAULT_LIMITS)
         self._daily_cost = 0.0
         self._session_start = datetime.now()
@@ -167,6 +177,22 @@ class APITracker:
         now = time.time()
 
         with self._lock:
+            # Circuit breaker: service recently failed repeatedly
+            opened = self._breaker_opened.get(service)
+            if opened is not None:
+                if now - opened < self.BREAKER_COOLDOWN:
+                    self._blocked[service] += 1
+                    if self._blocked[service] % 10 == 1:
+                        remaining = int(self.BREAKER_COOLDOWN - (now - opened))
+                        logger.warning(
+                            f"Circuit open: {service} blocked for {remaining}s more "
+                            f"after {self._failures[service]} consecutive failures"
+                        )
+                    return False
+                # Cooldown elapsed: half-open, allow one attempt through
+                del self._breaker_opened[service]
+                self._failures[service] = self.BREAKER_THRESHOLD - 1
+
             hour_ago = now - 3600
             day_ago = now - 86400
 
@@ -223,6 +249,10 @@ class APITracker:
             self._calls.append((now, module, service, estimated_cost))
             self._daily_cost += estimated_cost
 
+            # Successful call closes the circuit breaker for this service
+            self._failures[service] = 0
+            self._breaker_opened.pop(service, None)
+
             # Prune calls older than 24 hours
             cutoff = now - 86400
             self._calls = [
@@ -242,6 +272,26 @@ class APITracker:
         if now - self._last_summary > self._summary_interval:
             self._log_summary()
             self._last_summary = now
+
+    def failure(self, module, service):
+        """Record a failed API call. Call this in fetch exception handlers.
+
+        After BREAKER_THRESHOLD consecutive failures the circuit opens and
+        allow() returns False for BREAKER_COOLDOWN seconds.
+        """
+        with self._lock:
+            self._failures[service] += 1
+            count = self._failures[service]
+            if count >= self.BREAKER_THRESHOLD and service not in self._breaker_opened:
+                self._breaker_opened[service] = time.time()
+                logger.warning(
+                    f"Circuit opened for {service} after {count} consecutive "
+                    f"failures (reported by {module}); backing off "
+                    f"{self.BREAKER_COOLDOWN // 60} minutes"
+                )
+                self._usage_logger.info(
+                    f"BREAKER OPEN {service} ({count} failures, from {module})"
+                )
 
     def _log_summary(self):
         """Write a summary of API usage to the log."""

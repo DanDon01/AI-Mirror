@@ -51,16 +51,29 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
        quote_module.py       - Daily quote (ZenQuotes API + local JSON + builtin fallback)
        news_module.py        - RSS news headlines (feedparser) + breaking news notifications
        openclaw_module.py    - OpenClaw Gateway multi-channel inbox (WebSocket)
-       smarthome_module.py   - Home Assistant entity states (REST API, auto-discover)
+       smarthome_module.py   - Home Assistant entity states (single batched /api/states call)
+       avatar_module.py      - Procedural talking-head avatar with audio-driven lipsync
        sysinfo_module.py     - Pi system stats (CPU temp, memory, disk, uptime via psutil + /proc fallback)
        greeting_module.py    - Time-based greetings + rotating affirmations
        retrocharacters_module.py - Falling retro icons screensaver
   -> Voice/AI Modules (priority order):
-       elevenvoice_module.py - ElevenLabs TTS (eleven_multilingual_v2) + GPT-4o
-       ai_voice_module.py    - OpenAI Realtime API WebSocket (gpt-4o-realtime-preview)
-       AI_Module.py          - GPT-4o + OpenAI TTS (gpt-4o-mini-tts), gTTS fallback
+       ai_voice_module.py    - OpenAI Realtime API GA WebSocket (gpt-realtime-mini default,
+                               gpt-realtime-2 optional). Live mic conversations with server
+                               VAD; feeds avatar lipsync + state hooks.
+       AI_Module.py          - gpt-5.4-mini chat + OpenAI TTS (pinned gpt-4o-mini-tts
+                               snapshot), gTTS fallback
+       elevenvoice_module.py - ElevenLabs TTS (eleven_multilingual_v2) + gpt-5.4-mini
   -> Support:
        config.py             - All configuration, colors, fonts, layout zones, env vars
+       web_panel.py          - LAN phone control panel (http://<pi-ip>:8780): state,
+                               module toggles, API usage, log tail. Stdlib HTTP server;
+                               writes go through a command queue drained by the main loop.
+       data_cache.py         - Last-good payload cache (weather/news/calendar restore
+                               instantly after reboot, then refresh in background)
+       background_fetcher.py - Runs module network fetches on daemon threads (never
+                               block the 30 FPS render loop); results polled in update()
+       api_tracker.py        - API rate limits, cost tracking, and circuit breaker
+                               (3 consecutive failures -> 30 min backoff per service)
        module_base.py        - ModuleDrawHelper, SurfaceCache, shared draw utilities
        animation_manager.py  - Fade transitions, state transitions, center notifications
        layout_manager.py     - Zone-based position calculation with alignment
@@ -118,6 +131,15 @@ HA_URL=
 HA_TOKEN=
 ```
 
+## Deployment (Pi as an appliance)
+- `deploy/ai-mirror.service` - systemd unit (auto-restart, start on boot). Adjust
+  User/WorkingDirectory, then `sudo cp` to /etc/systemd/system and enable.
+- `deploy/deploy.sh` - run on the Pi: git pull, pip install, smoke test, restart service.
+- `smoke_test.py` - headless import + 30-frame draw test; CI runs it on every push
+  (`.github/workflows/ci.yml`). Run it before restarting the mirror after changes.
+- Web panel at `http://<pi-ip>:8780` replaces keyboard controls once wall-mounted
+  (no auth - home LAN only; disable via `web_panel.enabled` in config.py).
+
 ## Keyboard Controls
 | Key | Action |
 |-----|--------|
@@ -133,11 +155,40 @@ HA_TOKEN=
 - **Sleep:** Clock module only (minimal display)
 - State transitions use fade animations via AnimationManager
 
+## API Lifecycle Notes (June 2026)
+- OpenAI Realtime API: migrated to the GA interface (beta removed May 2026). No
+  OpenAI-Beta header; session.update requires `type: "realtime"` and nested audio
+  config; server events are `response.output_audio.delta` etc.
+- Voice model: `gpt-realtime-mini` (cost/latency sweet spot); switch to
+  `gpt-realtime-2` in config for reasoning-class conversation.
+- TTS uses the pinned `gpt-4o-mini-tts-2025-12-15` snapshot (unversioned alias
+  shuts down 2026-07-23).
+- Fitbit legacy Web API retires September 2026; Google Health API (Google Cloud +
+  Google OAuth + user re-consent) is the replacement. fitbit_module detects HTTP 410
+  and shows "Fitbit API retired" instead of hammering the dead endpoint.
+- yfinance was bumped 0.2.x -> 1.x in requirements.txt; verify the stock ticker on
+  the Pi after upgrading.
+
+## Avatar (talking head, "Holly" style)
+- `avatar_module.py` composites pre-rendered realistic face frames from
+  `assets/avatar/` (neutral/blink/smile + mouth visemes; see README.txt there)
+  semi-transparent on black with optional CRT scanlines. Centered in the
+  mirror's clear zone, visible only during voice interaction, smiles when the
+  conversation ends, fades out after 5 s idle.
+- Lipsync: the voice playback thread calls `avatar.feed_audio(pcm)`; RMS picks
+  mouth openness, zero-crossing rate separates fricatives from vowels, and the
+  nearest available viseme frame is shown. Blinks are random (2-6 s).
+- Frames are produced OFFLINE (photos of a real face, or LivePortrait on the
+  dev PC from a single photo). Neural talking heads are not real-time on a
+  Pi 5; frame compositing at 30 FPS is the intended approach.
+- Falls back to a simple procedural face when assets/avatar/ has no frames.
+
 ## Known Gotchas
 - `Variables.env` path is `os.path.join(current_dir, '..', 'Variables.env')` - file must be in parent directory
 - Screen resolution is auto-detected at startup (`pygame.display.Info()`) - config values are overridden with actual display size
 - Audio device indices are hardware-specific (USB mic typically card 2 or 3 on Pi)
-- `ai_voice_module.py` currently uses a test WAV file for audio input (intentional during testing phase)
+- `ai_voice_module.py` streams the live USB mic via arecord + plughw (ALSA resamples to 24 kHz); SPACE toggles a hands-free conversation with server-side semantic VAD. Falls back to the test WAV (manual commit) when arecord/mic is unavailable, e.g. on the Windows dev box. Mic is gated while the mirror speaks (no barge-in).
+- All display modules fetch over the network via `BackgroundFetcher` - update() submits a fetch and polls the result on later frames; never call requests directly in update()
 - ALSA error suppression in `AI-Mirror.py` is aggressive - may hide real audio errors
 - `config.py` calls `pygame.font.init()` at import time (side effect)
 - Voice activation/wake words are experimental - gesture control or PIR detection may replace them

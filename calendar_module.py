@@ -11,6 +11,7 @@ import traceback
 from api_tracker import api_tracker
 from google_auth_oauthlib.flow import Flow
 from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY
+from background_fetcher import BackgroundFetcher
 import time
 
 # Google Calendar color mapping - these match the standard Google Calendar colors
@@ -48,9 +49,19 @@ class CalendarModule:
         self.service = None
         self.env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
         self.load_tokens()
-        
+
         self.last_update_time = time.time()
         self.today_highlight_color = (0, 40, 80, 120)
+        self.color_map = None
+        self._fetcher = BackgroundFetcher("calendar")
+
+        # Show last-good events immediately after a restart
+        from data_cache import data_cache
+        cached, age = data_cache.load("calendar", max_age_sec=86400)
+        if cached:
+            self.events = cached
+            logging.info(f"Restored {len(self.events)} cached calendar events "
+                         f"({int(age / 60)} min old)")
 
     def load_tokens(self):
         load_dotenv(self.env_file)
@@ -111,37 +122,57 @@ class CalendarModule:
             else:
                 logging.error("Failed to build Google Calendar service due to invalid credentials.")
 
-    def update(self):
-        current_time = datetime.datetime.now()
-        if current_time - self.last_update < self.update_interval:
-            return  # Skip update if not enough time has passed
+    def _fetch_events_blocking(self):
+        """Token refresh + Google API round-trips. Runs on a background
+        thread because each call is a 1-3 second network round-trip.
 
+        Returns (events, color_map_or_None).
+        """
         try:
-            if not api_tracker.allow("calendar", "google-calendar"):
-                return
             self.build_service()
             if not self.service:
-                logging.error("Calendar service is not available. Skipping update.")
-                self.events = None
-                return
+                raise RuntimeError("Calendar service unavailable (credentials?)")
 
-            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-            # Fetch calendar color information
-            colors = self.service.colors().get().execute()
-            self.color_map = colors['event']
+            # Calendar colors never change mid-session: fetch once
+            color_map = None
+            if self.color_map is None:
+                colors = self.service.colors().get().execute()
+                color_map = colors['event']
 
             events_result = self.service.events().list(calendarId='primary', timeMin=now,
                                                        maxResults=10, singleEvents=True,
                                                        orderBy='startTime').execute()
             api_tracker.record("calendar", "google-calendar")
-            self.events = events_result.get('items', [])
-            logging.info(f"Successfully updated calendar events. Number of events fetched: {len(self.events)}")
-            self.last_update = current_time
-        except Exception as e:
-            logging.error(f"Error updating Calendar data: {e}")
-            logging.error(traceback.format_exc())
-            self.events = None
+            return events_result.get('items', []), color_map
+        except Exception:
+            api_tracker.failure("calendar", "google-calendar")
+            raise
+
+    def update(self):
+        result = self._fetcher.take_result()
+        if result is not None:
+            ok, value = result
+            if ok:
+                events, color_map = value
+                self.events = events
+                if color_map:
+                    self.color_map = color_map
+                from data_cache import data_cache
+                data_cache.save("calendar", self.events)
+                logging.info(f"Calendar updated: {len(self.events)} events")
+            else:
+                logging.error(f"Error updating Calendar data: {value}")
+                # Keep showing the previous events rather than blanking
+            self.last_update = datetime.datetime.now()
+
+        current_time = datetime.datetime.now()
+        if current_time - self.last_update < self.update_interval:
+            return
+        if not api_tracker.allow("calendar", "google-calendar"):
+            return
+        self._fetcher.submit(self._fetch_events_blocking)
 
     def draw(self, screen, position):
         """Draw calendar with floating text on black -- no background."""
@@ -257,7 +288,7 @@ class CalendarModule:
                 return GOOGLE_CALENDAR_COLORS[color_id]
         
         # If we have color information from the API
-        if hasattr(self, 'color_map') and 'colorId' in event:
+        if self.color_map and 'colorId' in event:
             color_id = event['colorId']
             if color_id in self.color_map:
                 color_hex = self.color_map[color_id].get('background', '#4285F4')

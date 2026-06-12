@@ -1,0 +1,32 @@
+# systemd unit for AI-Mirror on the Raspberry Pi.
+#
+# Install (adjust User/paths for your Pi first):
+#   sudo cp deploy/ai-mirror.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ai-mirror
+#
+# Logs: journalctl -u ai-mirror -f   (plus the app's magic_mirror.log)
+
+[Unit]
+Description=AI-Mirror smart mirror
+After=network-online.target graphical.target
+Wants=network-online.target
+
+[Service]
+# Adjust to your Pi username and checkout location
+User=dan
+WorkingDirectory=/home/dan/AI-Mirror
+# Use the venv interpreter instead if the Pi runs one:
+#   ExecStart=/home/dan/AI-Mirror/venv/bin/python AI-Mirror.py
+ExecStart=/usr/bin/python3 AI-Mirror.py
+Restart=always
+RestartSec=5
+# Pygame needs the desktop session's display
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/dan/.Xauthority
+# Give slow Pi boots time before the first restart counts as a failure
+StartLimitIntervalSec=120
+StartLimitBurst=10
+
+[Install]
+WantedBy=graphical.target

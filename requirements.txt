@@ -1,42 +1,44 @@
-beautifulsoup4==4.12.3
-certifi==2024.7.4
-charset-normalizer==3.3.2
-DateTime==5.5
-python-dotenv==1.0.1
-feedparser
+# AI-Mirror dependencies (direct imports only; pip resolves the rest)
+# Updated June 2026. Test on the Pi after upgrading - especially yfinance,
+# which jumped from 0.2.x to 1.x (API mostly compatible but verify ticker
+# data parsing in stocks_module).
+
+# Core display
+pygame==2.6.1
+numpy==2.4.6
+
+# HTTP / parsing
+requests==2.34.2
+python-dotenv==1.2.2
+feedparser==6.0.12
+beautifulsoup4==4.15.0
+lxml==6.1.1
+
+# OpenAI (Realtime GA + chat + TTS; 2.x SDK required for GA realtime)
+openai==2.41.1
+websocket-client==1.9.0
+
+# Google Calendar
+google-api-python-client==2.197.0
+google-auth-oauthlib==1.4.0
+google-auth-httplib2==0.4.0
+
+# Fitbit (legacy Web API - retires September 2026, see fitbit_module.py)
 fitbit==0.3.1
-frozendict==2.4.4
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
-gtts
-gpiod
-html5lib==1.1
-idna==3.8
-lxml==5.3.0
-multitasking==0.0.11
-numpy==2.1.0
 oauthlib==3.2.2
-openai
-pandas==2.2.2
-peewee==3.17.6
-platformdirs==4.2.2
-pygame==2.6.0
-python-dateutil==2.9.0.post0
-pytz==2024.1
-psutil
-pyaudio
-soundfile
-sounddevice
-websocket-client
-requests==2.32.3
 requests-oauthlib==2.0.0
-setuptools==73.0.1
-six==1.16.0
-soupsieve==2.6
-speechrecognition
-tzdata==2024.1
-urllib3==2.2.2
-webencodings==0.5.1
-yfinance==0.2.42
-zope.interface==7.0.1
+
+# Stocks
+yfinance==1.4.1
+pandas>=2.2,<4
+
+# System stats
+psutil==7.2.2
+
+# Audio / speech (Pi hardware dependent - loose pins so platform
+# wheels resolve cleanly on ARM)
+pyaudio
+SpeechRecognition>=3.14
+sounddevice>=0.5
+soundfile>=0.12
+gtts==2.5.4

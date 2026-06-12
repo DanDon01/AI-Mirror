@@ -77,14 +77,17 @@ class LayoutManager:
             pos['align'] = 'right'
         self.module_positions.update(right_positions)
 
-        # Center overlay modules (AI/voice): centered on screen
+        # Center overlay modules (AI/voice/avatar): centered on screen
         center_x = left_w + edge_pad + gap
         center_w = w - left_w - right_w - (edge_pad + gap) * 2
         center_y = h // 3
         for name in self.layout.get('center_overlay_modules', []):
+            # The avatar face needs a taller square-ish zone than the
+            # one-line voice status overlays
+            height = min(center_w, h // 3) if name == 'avatar' else 200
             self.module_positions[name] = {
                 'x': center_x, 'y': center_y,
-                'width': center_w, 'height': 200,
+                'width': center_w, 'height': height,
             }
 
         # Fullscreen overlay (retro characters, screensaver)

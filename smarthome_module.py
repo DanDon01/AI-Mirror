@@ -15,6 +15,7 @@ from config import (
 )
 from module_base import ModuleDrawHelper, SurfaceCache
 from api_tracker import api_tracker
+from background_fetcher import BackgroundFetcher
 
 logger = logging.getLogger("SmartHome")
 
@@ -76,6 +77,7 @@ class SmartHomeModule:
         self._surface_cache = SurfaceCache()
         self._last_data_hash = None
         self._notification_callback = None
+        self._fetcher = BackgroundFetcher("smarthome")
 
         # Fonts are lazy-initialised on first draw
         self.title_font = None
@@ -86,54 +88,74 @@ class SmartHomeModule:
         """Allow main app to wire center notifications."""
         self._notification_callback = callback
 
-    def update(self):
+    def _fetch_states_blocking(self):
+        """Fetch ALL entity states in one /api/states call (background thread).
+
+        One batched request replaces the previous per-entity N+1 pattern,
+        and the same response drives auto-discovery on first run.
+        """
+        url = f"{self.ha_url}/api/states"
+        try:
+            resp = requests.get(url, headers=self.headers, timeout=self.timeout)
+            resp.raise_for_status()
+        except Exception:
+            api_tracker.failure("smarthome", "home-assistant")
+            raise
+        api_tracker.record("smarthome", "home-assistant")
+        return resp.json()
+
+    def _pick_entities(self, all_states):
+        """Auto-discover: pick the first few useful entities."""
+        preferred_domains = ['sensor', 'light', 'climate', 'binary_sensor', 'switch', 'lock']
+        picked = []
+        for domain in preferred_domains:
+            for s in all_states:
+                eid = s.get('entity_id', '')
+                if eid.startswith(domain + '.') and len(picked) < 8:
+                    # Skip internal/diagnostic entities
+                    attrs = s.get('attributes', {})
+                    if attrs.get('device_class') in ('update', 'connectivity', 'problem'):
+                        continue
+                    picked.append(eid)
+            if len(picked) >= 8:
+                break
+
+        if picked:
+            self.entities = picked
+            logger.info(f"Auto-discovered {len(picked)} HA entities: {picked}")
+        else:
+            logger.warning("Auto-discovery found no suitable entities")
+
+    def _apply_states(self, all_states):
         current_time = datetime.now()
-        if current_time - self.last_update < self.update_interval:
-            return
-
-        if not self.ha_url or not self.ha_token:
-            self._last_error = "No HA URL or token configured"
-            self._connected = False
-            return
-
         if not self.entities:
-            # Try auto-discovery: fetch all states and pick some useful ones
-            self._auto_discover()
+            self._pick_entities(all_states)
             if not self.entities:
-                self._last_error = "No entities configured"
+                self._last_error = "No entities found"
                 return
 
         old_states = {eid: self.data.get(eid, {}).get('state') for eid in self.entities}
 
-        if not api_tracker.allow("smarthome", "home-assistant"):
-            return
-
+        by_id = {s.get('entity_id'): s for s in all_states}
         for entity_id in self.entities:
-            try:
-                url = f"{self.ha_url}/api/states/{entity_id}"
-                resp = requests.get(url, headers=self.headers, timeout=self.timeout)
-                resp.raise_for_status()
-                api_tracker.record("smarthome", "home-assistant")
-                state = resp.json()
+            state = by_id.get(entity_id)
+            if state is not None:
                 self.data[entity_id] = {
                     'state': state.get('state', 'unknown'),
                     'attributes': state.get('attributes', {}),
                     'last_updated': current_time,
                     'status': 'ok',
                 }
-                self._connected = True
-                self._last_error = None
-            except requests.RequestException as e:
-                logger.warning(f"HA fetch failed for {entity_id}: {e}")
+            else:
                 self.data[entity_id] = {
                     'state': 'unavailable',
                     'attributes': self.data.get(entity_id, {}).get('attributes', {}),
                     'last_updated': current_time,
                     'status': 'error',
                 }
-                self._last_error = str(e)
 
-        self.last_update = current_time
+        self._connected = True
+        self._last_error = None
 
         # Push notification if a notable state changed
         if self._notification_callback:
@@ -149,39 +171,29 @@ class SmartHomeModule:
                             COLOR_ACCENT_AMBER, 5000
                         )
 
-    def _auto_discover(self):
-        """Fetch all HA states and pick the first few useful entities."""
-        try:
-            url = f"{self.ha_url}/api/states"
-            resp = requests.get(url, headers=self.headers, timeout=self.timeout)
-            resp.raise_for_status()
-            all_states = resp.json()
+    def update(self):
+        if not self.ha_url or not self.ha_token:
+            self._last_error = "No HA URL or token configured"
+            self._connected = False
+            return
 
-            # Pick sensors, lights, climate -- up to 8 entities
-            preferred_domains = ['sensor', 'light', 'climate', 'binary_sensor', 'switch', 'lock']
-            picked = []
-            for domain in preferred_domains:
-                for s in all_states:
-                    eid = s.get('entity_id', '')
-                    if eid.startswith(domain + '.') and len(picked) < 8:
-                        # Skip internal/diagnostic entities
-                        attrs = s.get('attributes', {})
-                        if attrs.get('device_class') in ('update', 'connectivity', 'problem'):
-                            continue
-                        picked.append(eid)
-                if len(picked) >= 8:
-                    break
-
-            if picked:
-                self.entities = picked
-                self._connected = True
-                logger.info(f"Auto-discovered {len(picked)} HA entities: {picked}")
+        result = self._fetcher.take_result()
+        if result is not None:
+            ok, value = result
+            if ok:
+                self._apply_states(value)
             else:
-                logger.warning("Auto-discovery found no suitable entities")
+                logger.warning(f"HA fetch failed: {value}")
+                self._connected = False
+                self._last_error = str(value)
+            self.last_update = datetime.now()
 
-        except Exception as e:
-            logger.error(f"HA auto-discovery failed: {e}")
-            self._last_error = str(e)
+        current_time = datetime.now()
+        if current_time - self.last_update < self.update_interval:
+            return
+        if not api_tracker.allow("smarthome", "home-assistant"):
+            return
+        self._fetcher.submit(self._fetch_states_blocking)
 
     def draw(self, screen, position):
         """Draw smart home entity states -- floating text, no background."""

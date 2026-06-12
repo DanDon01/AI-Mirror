@@ -171,7 +171,7 @@ LAYOUT_V2 = {
     'right_modules': ['greeting', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
     'top_bar_modules': ['clock'],
     'bottom_bar_modules': ['stocks'],
-    'center_overlay_modules': ['ai_interaction', 'ai_voice', 'eleven_voice'],
+    'center_overlay_modules': ['avatar', 'ai_interaction', 'ai_voice', 'eleven_voice'],
     'fullscreen_overlay_modules': ['retro_characters'],
     'module_gap': 15,
     'edge_padding': 15,
@@ -281,20 +281,40 @@ CONFIG = {
         'class': 'AIVoiceModule',
         'params': {
             'openai': {
-                'api_key': None,  # Fetched in module
-                'model': None, # Fetched in module
+                'api_key': None,  # Fetched from env in module
+                # gpt-realtime-mini: best cost/latency for casual chat.
+                # Switch to 'gpt-realtime-2' for reasoning-class replies.
+                'model': 'gpt-realtime-mini',
+                'voice': 'marin',
             },
             'audio': {
-                'device_index': 2
-            }
+                'device_index': 2,
+                # plughw (not hw) so ALSA resamples the USB mic to the
+                # Realtime API's 24 kHz. Card number is hardware-specific.
+                'alsa_device': 'plughw:3,0',
+                # End a live conversation after this many idle seconds
+                'conversation_timeout': 25,
+                # Hard cap on any single conversation, idle or not
+                'max_conversation_seconds': 180,
+            },
+            'debug_write': False,
+        }
+    },
+    'avatar': {
+        'class': 'AvatarModule',
+        'params': {
+            'size': 420,
+            'transparency': 205,  # semi-transparent ghost-on-glass look
+            'scanlines': True,    # faint CRT lines, Red Dwarf style
+            # Face frames live in assets/avatar/ (see README.txt there)
         }
     },
     'ai_interaction': {
         'class': 'AIInteractionModule',
         'params': {
             'openai': {
-                'api_key': None,  # Fetched in module
-                'model': 'gpt-4o'
+                'api_key': None,  # Fetched from env in module
+                'model': 'gpt-5.4-mini'
             },
             'audio': {
                 'device_index': 2,
@@ -379,6 +399,12 @@ CONFIG = {
         }
     },
 
+    # Phone control panel served on the LAN (http://<pi-ip>:8780)
+    'web_panel': {
+        'enabled': True,
+        'port': 8780,
+    },
+
     # Audio and sound effects
     'sound_effects_path': sound_effects_path,
     'audio': {
@@ -397,6 +423,7 @@ CONFIG = {
         'retro_characters': True,
         'ai_voice': False,
         'ai_interaction': False,
+        'avatar': True,  # Only draws while a voice conversation is active
         'countdown': True,
         'quote': True,
         'news': True,

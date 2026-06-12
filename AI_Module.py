@@ -16,8 +16,10 @@ import json
 import pyaudio
 import math
 
-DEFAULT_MODEL = "gpt-4o"
+DEFAULT_MODEL = "gpt-5.4-mini"
 DEFAULT_MAX_TOKENS = 250
+# Pinned snapshot: the unversioned gpt-4o-mini-tts alias shuts down 2026-07-23
+TTS_MODEL = "gpt-4o-mini-tts-2025-12-15"
 
 class AIInteractionModule:
     def __init__(self, config_path=None, **kwargs):
@@ -56,8 +58,7 @@ class AIInteractionModule:
         openai_config = self.config.get('openai', {})
         self.api_key = openai_config.get('api_key')
         
-        # Use a model that's definitely available based on the logs
-        self.model = openai_config.get('model', 'gpt-4o-realtime-preview-2024-12-17')  # Changed from DEFAULT_MODEL
+        self.model = openai_config.get('model', DEFAULT_MODEL)
         self.max_tokens = openai_config.get('max_tokens', DEFAULT_MAX_TOKENS)
         
         # Get audio settings with defaults
@@ -320,7 +321,7 @@ class AIInteractionModule:
             if self.client and self.has_openai_access:
                 try:
                     response = self.client.audio.speech.create(
-                        model="gpt-4o-mini-tts",
+                        model=TTS_MODEL,
                         voice="alloy",
                         input=text_chunk,
                     )
@@ -823,12 +824,12 @@ class AIInteractionModule:
             if self.client and self.has_openai_access:
                 try:
                     response = self.client.audio.speech.create(
-                        model="gpt-4o-mini-tts",
+                        model=TTS_MODEL,
                         voice="alloy",
                         input=text,
                     )
                     response.stream_to_file(temp_file)
-                    self.logger.info("Used OpenAI TTS (gpt-4o-mini-tts)")
+                    self.logger.info(f"Used OpenAI TTS ({TTS_MODEL})")
                 except Exception as e:
                     self.logger.warning(f"OpenAI TTS failed, falling back to gTTS: {e}")
                     tts = gTTS(text=text, lang='en', slow=False)

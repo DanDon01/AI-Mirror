@@ -93,6 +93,7 @@ from openclaw_module import OpenClawModule
 from sysinfo_module import SysInfoModule
 from greeting_module import GreetingModule
 from octopus_energy_module import OctopusEnergyModule
+from avatar_module import AvatarModule
 from api_tracker import api_tracker
 
 
@@ -198,6 +199,27 @@ class MagicMirror:
             if hasattr(module, 'set_notification_callback'):
                 module.set_notification_callback(self.animation_manager.push_notification)
 
+        # Wire the avatar to the voice module: lipsync audio + state changes
+        if 'avatar' in self.modules and 'ai_voice' in self.modules:
+            voice = self.modules['ai_voice']
+            avatar = self.modules['avatar']
+            if hasattr(voice, 'set_audio_sink'):
+                voice.set_audio_sink(avatar.feed_audio)
+            if hasattr(voice, 'set_state_listener'):
+                voice.set_state_listener(avatar.set_voice_state)
+            logging.info("Avatar wired to AI voice module (lipsync + state)")
+
+        # Phone control panel (LAN only, no auth - see web_panel.py)
+        self.web_panel = None
+        wp_cfg = CONFIG.get('web_panel', {})
+        if wp_cfg.get('enabled', True):
+            try:
+                from web_panel import WebPanel
+                self.web_panel = WebPanel(self, port=wp_cfg.get('port', 8780))
+                self.web_panel.start()
+            except Exception as e:
+                logging.error(f"Web panel failed to start: {e}")
+
         # Ensure all modules have a visibility entry (don't override
         # decisions already made by ModuleManager.verify_voice_module)
         for module_name in self.modules.keys():
@@ -275,7 +297,8 @@ class MagicMirror:
             'smarthome': SmartHomeModule,
             'sysinfo': SysInfoModule,
             'greeting': GreetingModule,
-            'octopus_energy': OctopusEnergyModule
+            'octopus_energy': OctopusEnergyModule,
+            'avatar': AvatarModule
         }
 
         config_copy = CONFIG.copy()
@@ -527,6 +550,10 @@ class MagicMirror:
         )
 
     def update_modules(self):
+        # Apply commands queued by the web control panel
+        if self.web_panel:
+            self.web_panel.process_commands()
+
         # Check for AI commands
         if 'ai_module' in self.modules:
             while not self.modules['ai_module'].response_queue.empty():
@@ -603,6 +630,8 @@ class MagicMirror:
     def cleanup(self):
         """Safely clean up all resources."""
         logging.info("Shutting down Magic Mirror")
+        if self.web_panel:
+            self.web_panel.stop()
         api_tracker.force_summary()
 
         module_names = list(self.modules.keys())
