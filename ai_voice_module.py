@@ -121,6 +121,8 @@ class AIVoiceModule:
         # Avatar hooks
         self._audio_sink = None
         self._state_listener = None
+        # Mirror command hook: receives each user speech transcript
+        self._command_listener = None
 
         # Debug file writing is expensive on the Pi SD card; opt-in only
         self.debug_write_enabled = self.config.get("debug_write", False)
@@ -138,6 +140,11 @@ class AIVoiceModule:
     def set_state_listener(self, callback):
         """Register fn(status_string) called on every status change."""
         self._state_listener = callback
+
+    def set_command_listener(self, callback):
+        """Register fn(transcript) called with each user utterance, so the
+        mirror can act on spoken commands (show/hide modules, dashboard)."""
+        self._command_listener = callback
 
     # ------------------------------------------------------------------
     # Initialization
@@ -285,6 +292,11 @@ class AIVoiceModule:
             elif event_type == "conversation.item.input_audio_transcription.completed":
                 transcript = data.get("transcript", "")
                 self.logger.info(f"User said: {transcript}")
+                if transcript and self._command_listener:
+                    try:
+                        self._command_listener(transcript)
+                    except Exception as e:
+                        self.logger.debug(f"Command listener error: {e}")
             elif event_type == "response.output_audio.delta":
                 audio_data = base64.b64decode(data.get("delta", ""))
                 if audio_data:

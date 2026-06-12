@@ -209,6 +209,16 @@ class MagicMirror:
                 voice.set_state_listener(avatar.set_voice_state)
             logging.info("Avatar wired to AI voice module (lipsync + state)")
 
+        # Spoken commands: transcripts arrive on the WebSocket thread, so
+        # they queue here and are parsed on the main loop
+        from queue import Queue as _Queue
+        self.voice_command_queue = _Queue()
+        from voice_commands import ModuleCommand
+        self.voice_command_parser = ModuleCommand()
+        if 'ai_voice' in self.modules and hasattr(self.modules['ai_voice'], 'set_command_listener'):
+            self.modules['ai_voice'].set_command_listener(self.voice_command_queue.put)
+            logging.info("Voice command listener wired to AI voice module")
+
         # Phone control panel (LAN only, no auth - see web_panel.py)
         self.web_panel = None
         wp_cfg = CONFIG.get('web_panel', {})
@@ -352,6 +362,9 @@ class MagicMirror:
                     self.running = False
                 elif event.key == pygame.K_d:
                     self.toggle_debug()
+                elif event.key == pygame.K_h:
+                    if 'smarthome' in self.modules:
+                        self.modules['smarthome'].toggle_dashboard()
                 elif event.key == pygame.K_s:
                     if self.state == "active":
                         self.change_state("screensaver")
@@ -438,6 +451,11 @@ class MagicMirror:
                 # 4) Center overlays (AI/voice - only when active)
                 for name in center_names:
                     self._draw_module(name)
+
+                # 4b) Smart home dashboard overlay (voice/'h' key, on demand)
+                sh = self.modules.get('smarthome')
+                if sh is not None and hasattr(sh, 'draw_dashboard'):
+                    sh.draw_dashboard(self.screen)
 
                 # 5) Draw any remaining modules not in layout zones
                 drawn = set(['clock', 'stocks'] + left_names + right_names
@@ -549,18 +567,52 @@ class MagicMirror:
             duration_ms=2000,
         )
 
+    def _handle_voice_transcript(self, text):
+        """Act on a spoken command parsed from the user's transcript."""
+        lowered = text.lower()
+        self.speech_logger.log_user_speech(text)
+
+        # Dashboard control ("show the dashboard", "close dashboard")
+        if 'dashboard' in lowered and 'smarthome' in self.modules:
+            sh = self.modules['smarthome']
+            if any(w in lowered for w in ('hide', 'close', 'dismiss')):
+                sh.hide_dashboard()
+            elif any(w in lowered for w in ('show', 'open', 'display', 'see')):
+                sh.show_dashboard()
+            else:
+                sh.toggle_dashboard()
+            return
+
+        # Module show/hide ("hide the news", "show weather")
+        command = self.voice_command_parser.parse_command(text)
+        if command:
+            logging.info(f"Voice command: {command}")
+            if self.module_manager.handle_command(command):
+                self.speech_logger.log_user_speech(text, was_command=True)
+                self.animation_manager.push_notification(
+                    f"{command['module']}: {'ON' if command['action'] == 'show' else 'OFF'}",
+                    duration_ms=2000,
+                )
+
     def update_modules(self):
         # Apply commands queued by the web control panel
         if self.web_panel:
             self.web_panel.process_commands()
 
-        # Check for AI commands
-        if 'ai_module' in self.modules:
-            while not self.modules['ai_module'].response_queue.empty():
-                msg_type, content = self.modules['ai_module'].response_queue.get()
+        # Spoken commands from the realtime voice module
+        while not self.voice_command_queue.empty():
+            try:
+                self._handle_voice_transcript(self.voice_command_queue.get_nowait())
+            except Exception as e:
+                logging.error(f"Voice transcript handling failed: {e}")
+
+        # Check for commands from the fallback AI module
+        if 'ai_interaction' in self.modules:
+            while not self.modules['ai_interaction'].response_queue.empty():
+                msg_type, content = self.modules['ai_interaction'].response_queue.get()
                 if msg_type == 'command':
                     logging.info(f"Processing command: {content}")
-                    self.module_manager.handle_command(content)
+                    self.module_manager.handle_command(content['command'])
                     self.speech_logger.log_user_speech(content['text'], was_command=True)
                 elif msg_type == 'speech':
                     self.speech_logger.log_user_speech(content['user_text'])

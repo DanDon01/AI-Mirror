@@ -51,7 +51,9 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
        quote_module.py       - Daily quote (ZenQuotes API + local JSON + builtin fallback)
        news_module.py        - RSS news headlines (feedparser) + breaking news notifications
        openclaw_module.py    - OpenClaw Gateway multi-channel inbox (WebSocket)
-       smarthome_module.py   - Home Assistant entity states (single batched /api/states call)
+       smarthome_module.py   - Home Assistant mini view (left column: summary + state dots)
+                               plus on-demand center dashboard overlay (voice "show the
+                               dashboard" or 'h' key; auto-closes after 60s)
        avatar_module.py      - Procedural talking-head avatar with audio-driven lipsync
        sysinfo_module.py     - Pi system stats (CPU temp, memory, disk, uptime via psutil + /proc fallback)
        greeting_module.py    - Time-based greetings + rotating affirmations
@@ -146,6 +148,7 @@ HA_TOKEN=
 | `s` | Cycle state: active -> screensaver -> sleep -> active |
 | `Space` | Trigger voice interaction (AI module) |
 | `d` | Toggle debug overlay (red grid + module bounds) |
+| `h` | Toggle Home Assistant dashboard overlay |
 | `q` / `Esc` | Quit application |
 | `1`-`9`, `0` | Toggle module visibility (1=weather, 2=calendar, 3=countdown, 4=smarthome, 5=greeting, 6=quote, 7=news, 8=fitbit, 9=openclaw, 0=sysinfo) |
 
@@ -189,6 +192,7 @@ HA_TOKEN=
 - Audio device indices are hardware-specific (USB mic typically card 2 or 3 on Pi)
 - `ai_voice_module.py` streams the live USB mic via arecord + plughw (ALSA resamples to 24 kHz); SPACE toggles a hands-free conversation with server-side semantic VAD. Falls back to the test WAV (manual commit) when arecord/mic is unavailable, e.g. on the Windows dev box. Mic is gated while the mirror speaks (no barge-in).
 - All display modules fetch over the network via `BackgroundFetcher` - update() submits a fetch and polls the result on later frames; never call requests directly in update()
+- Spoken commands ride the Realtime API's user transcript: ai_voice's command listener queues each utterance, the main loop parses it (dashboard phrases + voice_commands.py show/hide). The AI also replies conversationally to these - it does not know a command fired.
 - ALSA error suppression in `AI-Mirror.py` is aggressive - may hide real audio errors
 - `config.py` calls `pygame.font.init()` at import time (side effect)
 - Voice activation/wake words are experimental - gesture control or PIR detection may replace them

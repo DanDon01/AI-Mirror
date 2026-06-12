@@ -377,6 +377,9 @@ CONFIG = {
             'ha_token': os.getenv('HA_TOKEN', ''),
             'entities': [],  # Empty = auto-discover from HA
             'update_interval_minutes': 2,
+            'max_entities': 20,      # discovered total (dashboard shows all)
+            'mini_entities': 8,      # shown in the left-column mini view
+            'dashboard_timeout': 60,  # seconds before dashboard auto-closes
         }
     },
     'sysinfo': {

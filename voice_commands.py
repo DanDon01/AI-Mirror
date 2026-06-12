@@ -17,11 +17,18 @@ class ModuleCommand:
             'stocks': ['stocks', 'market', 'shares'],
             'calendar': ['calendar', 'events', 'schedule'],
             'fitbit': ['fitbit', 'health', 'steps'],
-            'retro': ['retro', 'characters', 'icons'],
+            'retro_characters': ['retro', 'characters', 'icons'],
             'countdown': ['countdown', 'timer', 'countdowns'],
             'quote': ['quote', 'quotes', 'inspiration'],
             'news': ['news', 'headlines', 'articles'],
-            'openclaw': ['openclaw', 'messages', 'inbox']
+            'openclaw': ['openclaw', 'messages', 'inbox'],
+            # Deliberately no 'lights'/'devices' keywords: "turn off the
+            # lights" must never hide the module when the user means the
+            # actual lights (real HA control is a future feature)
+            'smarthome': ['smart home', 'home assistant'],
+            'sysinfo': ['system', 'stats', 'system info'],
+            'octopus_energy': ['energy', 'electricity', 'octopus'],
+            'greeting': ['greeting', 'greetings'],
         }
         
         # Action keywords
