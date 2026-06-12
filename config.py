@@ -373,8 +373,10 @@ CONFIG = {
     'smarthome': {
         'class': 'SmartHomeModule',
         'params': {
-            'ha_url': os.getenv('HA_URL', ''),
-            'ha_token': os.getenv('HA_TOKEN', ''),
+            # Accept both env spellings; some Variables.env copies used the
+            # long HOME_ASSISTANT_* names
+            'ha_url': os.getenv('HA_URL') or os.getenv('HOME_ASSISTANT_URL', ''),
+            'ha_token': os.getenv('HA_TOKEN') or os.getenv('HOME_ASSISTANT_ACCESS_TOKEN', ''),
             'entities': [],  # Empty = auto-discover from HA
             'update_interval_minutes': 2,
             'max_entities': 20,      # discovered total (dashboard shows all)
