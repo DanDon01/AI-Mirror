@@ -27,7 +27,9 @@ Entry point: `AI-Mirror.py` -> `MagicMirror` class -> `run()` main loop at 30 FP
 
 ## UI Design
 - **Mirror-optimized:** Pure black background (transparent through two-way mirror glass), no module backgrounds or boxes
-- **Color palette:** Soft text on black -- primary (185,185,190), secondary (140,140,145), dim (90,90,95). Blue module titles (70,140,220). Cyan clock face (90,195,255).
+- **Minimal luxury:** platinum text on black -- primary (226,228,232), secondary (148,150,156), dim (96,98,104). Single champagne accent (196,174,128) for module labels and hairline rules only. Muted functional green/red/amber. Module labels are tracked uppercase with a short hairline rule. Full-width hairlines under the top banner and above the ticker frame the mirror space.
+- **Typography:** Bundled Lato (assets/fonts, OFL) -- light weight for body/hero values, regular for small labels. load_font(weight, size) in config.py; SysFont stack is the fallback. Hero values (temperature, greeting, clock) are large and light.
+- **Design preview:** `python design_preview.py` renders the full UI with fake data to data/preview.png headlessly -- judge design changes on the dev box before deploying.
 - **Layout:** Zone-based with edge padding. Left column (22% width): weather, calendar, countdown, smarthome. Right column (22% width, right-aligned text): greeting, quote, news, fitbit, openclaw, sysinfo. Top bar: scrolling monospace clock + date + weather status. Bottom bar: scrolling stock ticker.
 - **Center clear zone:** Reserved for mirror reflection. AI/voice overlays only appear when active. Center notification queue for alerts (stock moves, timer completion, new messages).
 - **Fonts:** Segoe UI / DejaVu Sans (body), Consolas / DejaVu Sans Mono (clock). Sizes scaled for arm's length readability.

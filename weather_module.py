@@ -2,7 +2,12 @@ import requests
 import pygame
 import logging
 from datetime import datetime, timedelta
-from config import CONFIG, FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT, COLOR_FONT_BODY, COLOR_PASTEL_RED, LINE_SPACING, TRANSPARENCY, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA
+from config import (
+    CONFIG, FONT_NAME, FONT_SIZE, FONT_SIZE_HERO, COLOR_FONT_DEFAULT,
+    COLOR_FONT_BODY, COLOR_PASTEL_RED, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
+    LINE_SPACING, TRANSPARENCY, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA,
+    load_font,
+)
 import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 from visual_effects import VisualEffects
@@ -309,7 +314,6 @@ class WeatherModule:
 
             if self.weather_data:
                 city_name = self.weather_data['name']
-                country_code = self.weather_data['sys']['country']
                 temp = self.weather_data['main']['temp']
                 condition = self.weather_data['weather'][0]['description'].capitalize()
                 humidity = self.weather_data['main']['humidity']
@@ -319,29 +323,56 @@ class WeatherModule:
 
                 data_hash = f"{city_name}{temp}{condition}{humidity}{wind_speed}{feels_like}{cloud_cover}"
 
-                lines = [
-                    (f"{city_name}, {country_code}", COLOR_FONT_DEFAULT),
-                    (f"{temp:.1f}C  {condition}", self.get_temperature_color(temp)),
-                    (f"Feels {feels_like:.1f}C", self.get_temperature_color(feels_like)),
-                    (f"Humidity {humidity}%", COLOR_FONT_BODY),
-                    (f"Wind {wind_speed} m/s", COLOR_FONT_BODY),
-                    (f"Clouds {cloud_cover}%", COLOR_FONT_BODY),
-                ]
+                # Hero temperature: large, light, platinum
+                def _render_hero():
+                    font = load_font('light', FONT_SIZE_HERO)
+                    s = font.render(f"{temp:.0f}°", True, COLOR_FONT_DEFAULT)
+                    s.set_alpha(TRANSPARENCY)
+                    return s
 
-                for i, (text, color) in enumerate(lines):
-                    if draw_y > y + height - line_height:
+                hero = self._surface_cache.get_or_render(
+                    "weather_hero", _render_hero, data_hash
+                )
+                screen.blit(hero, (x, draw_y))
+
+                # Condition sits beside the hero, baseline-ish aligned
+                def _render_cond():
+                    s = self.body_font.render(condition, True, COLOR_TEXT_SECONDARY)
+                    s.set_alpha(TRANSPARENCY)
+                    return s
+
+                cond = self._surface_cache.get_or_render(
+                    "weather_cond", _render_cond, data_hash
+                )
+                screen.blit(
+                    cond,
+                    (x + hero.get_width() + 14,
+                     draw_y + hero.get_height() - cond.get_height() - 10),
+                )
+                draw_y += hero.get_height() + 6
+
+                # Quiet detail rows
+                details = [
+                    f"Feels {feels_like:.0f}°   Humidity {humidity}%",
+                    f"Wind {wind_speed:.1f} m/s   Cloud {cloud_cover}%",
+                    city_name,
+                ]
+                for i, text in enumerate(details):
+                    if draw_y > y + height - 22:
                         break
 
-                    def _render(t=text, c=color):
-                        s = self.body_font.render(t, True, c)
+                    def _render(t=text, last=(i == len(details) - 1)):
+                        s = self.small_font.render(
+                            t, True, COLOR_TEXT_DIM if last else COLOR_TEXT_SECONDARY
+                        )
                         s.set_alpha(TRANSPARENCY)
                         return s
 
                     surf = self._surface_cache.get_or_render(
-                        f"weather_line_{i}", _render, data_hash
+                        f"weather_detail_{i}", _render, data_hash
                     )
                     screen.blit(surf, (x, draw_y))
-                    draw_y += line_height
+                    draw_y += 24
 
                 # Weather animation across full screen (clouds, sun, rain, etc.)
                 if self.animation:

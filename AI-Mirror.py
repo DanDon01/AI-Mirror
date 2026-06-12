@@ -199,6 +199,14 @@ class MagicMirror:
             if hasattr(module, 'set_notification_callback'):
                 module.set_notification_callback(self.animation_manager.push_notification)
 
+        # Premium boot: modules fade in one after another (bars first,
+        # then columns top to bottom)
+        layout_v2 = CONFIG.get('layout_v2', {})
+        boot_order = ['clock', 'stocks']
+        boot_order += [n for n in layout_v2.get('left_modules', []) if n in self.modules]
+        boot_order += [n for n in layout_v2.get('right_modules', []) if n in self.modules]
+        self.animation_manager.stagger_in([n for n in boot_order if n in self.modules])
+
         # Wire the avatar to the voice module: lipsync audio + state changes
         if 'avatar' in self.modules and 'ai_voice' in self.modules:
             voice = self.modules['ai_voice']

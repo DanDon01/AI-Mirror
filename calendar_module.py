@@ -228,14 +228,11 @@ class CalendarModule:
                         except Exception:
                             pass
 
-                    # Subtle highlight for today's events
-                    if is_today:
-                        today_surf = pygame.Surface((width, 36), pygame.SRCALPHA)
-                        today_surf.fill(self.today_highlight_color)
-                        screen.blit(today_surf, (x, current_y))
-
-                    # Thin color indicator bar
-                    pygame.draw.rect(screen, event_color, (x, current_y + 2, 3, 22))
+                    # Today's events get a slightly wider indicator bar
+                    # instead of a background box (boxes break the
+                    # floating-on-glass look)
+                    bar_w = 3 if is_today else 2
+                    pygame.draw.rect(screen, event_color, (x, current_y + 2, bar_w, 34))
 
                     # Format start time/date
                     start = event.get('start', {})

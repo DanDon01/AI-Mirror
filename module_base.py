@@ -1,14 +1,16 @@
 """Shared drawing utilities for AI-Mirror modules.
 
-Provides consistent font initialization, text rendering, separators,
-and surface caching for the mirror UI. All modules use these helpers
-for a unified visual style.
+Provides consistent typography (bundled Lato light/regular weights),
+tracked uppercase module labels with hairline accent rules, text
+rendering helpers, and surface caching. All modules use these helpers
+for a unified minimal-luxury visual style.
 """
 
 import pygame
 from config import (
     CONFIG, FONT_NAME, FONT_SIZE_TITLE, FONT_SIZE_BODY, FONT_SIZE_SMALL,
-    COLOR_TEXT_DIM, COLOR_TITLE_BLUE, COLOR_SEPARATOR, TRANSPARENCY,
+    FONT_SIZE_LABEL, FONT_SIZE_HERO, LABEL_TRACKING, load_font,
+    COLOR_TEXT_DIM, COLOR_ACCENT_PRIMARY, COLOR_SEPARATOR, TRANSPARENCY,
 )
 
 
@@ -45,10 +47,11 @@ class ModuleDrawHelper:
     _title_font = None
     _body_font = None
     _small_font = None
+    _label_font = None
 
     @classmethod
     def _ensure_fonts(cls):
-        """Lazy-init shared fonts from config."""
+        """Lazy-init shared fonts: light body, regular small, tracked label."""
         if cls._fonts_initialized:
             return
         styling = CONFIG.get('module_styling', {})
@@ -56,30 +59,73 @@ class ModuleDrawHelper:
         title_size = fonts.get('title', {}).get('size', FONT_SIZE_TITLE)
         body_size = fonts.get('body', {}).get('size', FONT_SIZE_BODY)
         small_size = fonts.get('small', {}).get('size', FONT_SIZE_SMALL)
-        cls._title_font = pygame.font.SysFont(FONT_NAME, title_size)
-        cls._body_font = pygame.font.SysFont(FONT_NAME, body_size)
-        cls._small_font = pygame.font.SysFont(FONT_NAME, small_size)
+        cls._title_font = load_font('light', title_size)
+        cls._body_font = load_font('light', body_size)
+        cls._small_font = load_font('regular', small_size)
+        cls._label_font = load_font('regular', FONT_SIZE_LABEL)
         cls._fonts_initialized = True
 
     @staticmethod
+    def get_font(weight, size):
+        """Bundled Lato in 'light' | 'regular' | 'bold' at any size."""
+        return load_font(weight, size)
+
+    @staticmethod
+    def render_tracked(font, text, color, tracking=LABEL_TRACKING):
+        """Render text with letterspacing (pygame has none natively).
+
+        Used for the uppercase module labels; cache the result, do not
+        call per frame for long strings.
+        """
+        glyphs = [font.render(ch, True, color) for ch in text]
+        if not glyphs:
+            return pygame.Surface((1, 1), pygame.SRCALPHA)
+        width = sum(g.get_width() for g in glyphs) + tracking * (len(glyphs) - 1)
+        height = max(g.get_height() for g in glyphs)
+        surf = pygame.Surface((max(width, 1), height), pygame.SRCALPHA)
+        x = 0
+        for g in glyphs:
+            surf.blit(g, (x, 0))
+            x += g.get_width() + tracking
+        return surf
+
+    # Per-class cache of rendered title labels (they rarely change)
+    _title_cache = {}
+
+    @staticmethod
     def draw_module_title(screen, text, x, y, width, align='left'):
-        """Draw a subtle module title label -- dim text, no background.
+        """Draw a module label: tracked uppercase with a short hairline
+        rule in the champagne accent underneath.
 
-        Args:
-            align: 'left' or 'right' text alignment within the module width.
-
-        Returns the y-offset below the title for content to start.
+        Returns the y-offset below the label for content to start.
         """
         ModuleDrawHelper._ensure_fonts()
-        title_surf = ModuleDrawHelper._small_font.render(
-            text.upper(), True, COLOR_TITLE_BLUE
-        )
-        title_surf.set_alpha(TRANSPARENCY)
+
+        key = (text, align)
+        label = ModuleDrawHelper._title_cache.get(key)
+        if label is None:
+            label = ModuleDrawHelper.render_tracked(
+                ModuleDrawHelper._label_font, text.upper(), COLOR_ACCENT_PRIMARY
+            )
+            label.set_alpha(190)
+            ModuleDrawHelper._title_cache[key] = label
+
+        rule_w = 26
         if align == 'right':
-            screen.blit(title_surf, (x + width - title_surf.get_width(), y))
+            lx = x + width - label.get_width()
         else:
-            screen.blit(title_surf, (x, y))
-        return y + title_surf.get_height() + 6
+            lx = x
+        screen.blit(label, (lx, y))
+
+        rule_y = y + label.get_height() + 5
+        rule = pygame.Surface((rule_w, 1), pygame.SRCALPHA)
+        rule.fill((*COLOR_ACCENT_PRIMARY, 110))
+        if align == 'right':
+            screen.blit(rule, (x + width - rule_w, rule_y))
+        else:
+            screen.blit(rule, (x, rule_y))
+
+        return rule_y + 10
 
     @staticmethod
     def blit_aligned(screen, surf, x, y, width, align='left'):

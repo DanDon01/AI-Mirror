@@ -44,9 +44,9 @@ class AnimationManager:
 
     def _ensure_fonts(self):
         if self._notification_font is None:
-            from config import FONT_NAME, FONT_SIZE_BODY, FONT_SIZE_SMALL
-            self._notification_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_BODY + 4)
-            self._notification_small_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE_SMALL)
+            from config import load_font, FONT_SIZE_BODY, FONT_SIZE_SMALL
+            self._notification_font = load_font('light', FONT_SIZE_BODY + 6)
+            self._notification_small_font = load_font('regular', FONT_SIZE_SMALL)
 
     # ----- Module fades -----
 
@@ -55,6 +55,7 @@ class AnimationManager:
             self._module_fades[name] = {
                 'alpha': TRANSPARENCY,
                 'target': TRANSPARENCY,
+                'delay': 0.0,
             }
         return self._module_fades[name]
 
@@ -68,10 +69,26 @@ class AnimationManager:
         fade = self._get_fade(name)
         fade['target'] = 0
 
+    def stagger_in(self, names, interval_ms=110):
+        """Fade modules in one after another (premium boot sequence)."""
+        for i, name in enumerate(names):
+            fade = self._get_fade(name)
+            fade['alpha'] = 0
+            fade['target'] = TRANSPARENCY
+            fade['delay'] = (i * interval_ms) / 1000.0
+
+    @staticmethod
+    def _ease(t):
+        """Smoothstep: gentle in/out instead of a linear fade."""
+        t = max(0.0, min(1.0, t))
+        return t * t * (3.0 - 2.0 * t)
+
     def get_module_alpha(self, name):
-        """Return the current alpha for a module (0-255)."""
+        """Return the current eased alpha for a module (0-255)."""
         fade = self._get_fade(name)
-        return int(fade['alpha'])
+        span = max(fade['target'], fade['alpha'], 1)
+        t = fade['alpha'] / TRANSPARENCY if TRANSPARENCY else 1.0
+        return int(self._ease(t) * min(span, TRANSPARENCY))
 
     def is_module_fading(self, name):
         fade = self._get_fade(name)
@@ -122,9 +139,12 @@ class AnimationManager:
         self._last_tick = now
         dt_s = dt_ms / 1000.0
 
-        # Module fades
+        # Module fades (honoring per-module stagger delays)
         step = self._fade_speed * dt_ms
         for name, fade in self._module_fades.items():
+            if fade.get('delay', 0) > 0:
+                fade['delay'] = max(0.0, fade['delay'] - dt_s)
+                continue
             if fade['alpha'] < fade['target']:
                 fade['alpha'] = min(fade['alpha'] + step, fade['target'])
             elif fade['alpha'] > fade['target']:

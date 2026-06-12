@@ -24,23 +24,29 @@ load_dotenv(env_path)
 COLOR_WHITE = (255, 255, 255)
 COLOR_BLACK = (0, 0, 0)
 
-# Text hierarchy: soft on black for mirror readability (not harsh white)
-COLOR_TEXT_PRIMARY = (185, 185, 190)
-COLOR_TEXT_SECONDARY = (140, 140, 145)
-COLOR_TEXT_DIM = (90, 90, 95)
+# Text hierarchy: platinum on black for the minimal-luxury mirror look.
+# Primary is bright enough to read through glass; secondary and dim
+# recede so key values carry the layout.
+COLOR_TEXT_PRIMARY = (226, 228, 232)
+COLOR_TEXT_SECONDARY = (148, 150, 156)
+COLOR_TEXT_DIM = (96, 98, 104)
 COLOR_TEXT_ACCENT = (100, 180, 255)
 
-# Module title color (soft blue glow)
-COLOR_TITLE_BLUE = (70, 140, 220)
+# Single luxury accent: soft champagne. Used for module labels, hairline
+# rules, and small emphasis only - never large areas.
+COLOR_ACCENT_PRIMARY = (196, 174, 128)
 
-# Clock face color (cool cyan for digital look)
-COLOR_CLOCK_FACE = (90, 195, 255)
+# Module title color (legacy name; now the champagne accent)
+COLOR_TITLE_BLUE = COLOR_ACCENT_PRIMARY
 
-# Accent colors (used sparingly for status/indicators)
-COLOR_ACCENT_BLUE = (70, 130, 220)
-COLOR_ACCENT_GREEN = (80, 200, 120)
-COLOR_ACCENT_RED = (220, 80, 80)
-COLOR_ACCENT_AMBER = (240, 180, 40)
+# Clock face: bright platinum, not cyan - reads as engraved, not digital
+COLOR_CLOCK_FACE = (232, 234, 238)
+
+# Functional accent colors, muted to sit quietly on glass
+COLOR_ACCENT_BLUE = (110, 150, 210)
+COLOR_ACCENT_GREEN = (124, 188, 150)
+COLOR_ACCENT_RED = (206, 118, 118)
+COLOR_ACCENT_AMBER = (212, 178, 122)
 
 # Separator lines (subtle dividers between sections)
 COLOR_SEPARATOR = (40, 40, 40)
@@ -65,17 +71,50 @@ COLOR_BG_HEADER_ALPHA = (0, 0, 0, 0)
 # Text transparency (high = more visible, critical for mirror readability)
 TRANSPARENCY = 240
 
-# Font Settings -- larger sizes for mirror readability at arm's length
-# SysFont tries each name in order, picks first available
+# Typography -- Lato (bundled in assets/fonts, OFL licensed) gives the
+# same premium light weights on Windows and the Pi. SysFont names remain
+# as a fallback if the TTFs are missing.
 FONT_NAME = "segoeui,dejavusans,freesans,arial"
 FONT_NAME_CLOCK = "consolas,dejavusansmono,liberationmono,couriernew,monospace"
-FONT_SIZE_CLOCK = 72
+
+_FONTS_DIR = os.path.join(current_dir, 'assets', 'fonts')
+_FONT_FILES = {
+    'light': 'Lato-Light.ttf',
+    'regular': 'Lato-Regular.ttf',
+    'bold': 'Lato-Bold.ttf',
+}
+_font_cache = {}
+
+
+def load_font(weight, size):
+    """Return a Font for ('light'|'regular'|'bold', px). Cached.
+
+    Falls back to the system font stack when the bundled TTF is missing.
+    """
+    key = (weight, size)
+    font = _font_cache.get(key)
+    if font is None:
+        path = os.path.join(_FONTS_DIR, _FONT_FILES.get(weight, 'Lato-Regular.ttf'))
+        try:
+            font = pygame.font.Font(path, size)
+        except Exception:
+            font = pygame.font.SysFont(FONT_NAME, size)
+        _font_cache[key] = font
+    return font
+
+
+FONT_SIZE_CLOCK = 84
+FONT_SIZE_HERO = 56       # large feature values (temperature, etc.)
 FONT_SIZE_TITLE = 28
 FONT_SIZE_SUBTITLE = 22
-FONT_SIZE_BODY = 18
+FONT_SIZE_BODY = 19
 FONT_SIZE_SMALL = 14
+FONT_SIZE_LABEL = 13      # tracked uppercase module labels
 FONT_SIZE_TICKER = 20
 FONT_SIZE = FONT_SIZE_BODY
+
+# Letterspacing (px) for tracked uppercase labels
+LABEL_TRACKING = 4
 
 # Spacing and Dimensions
 LINE_SPACING = 30

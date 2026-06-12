@@ -12,7 +12,7 @@ import pygame
 
 from config import (
     COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_BLUE,
-    TRANSPARENCY,
+    TRANSPARENCY, load_font,
 )
 from module_base import ModuleDrawHelper, SurfaceCache
 
@@ -133,15 +133,16 @@ class GreetingModule:
 
             align = position.get('align', 'left') if isinstance(position, dict) else 'left'
 
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Mirror", x, y, width, align=align
-            )
+            # No label: the greeting is its own hero, a label adds clutter
+            draw_y = y + 6
 
             data_hash = f"{self.current_greeting}|{self.current_affirmation}"
 
             if self.current_greeting:
                 def _render_greeting(text=self.current_greeting):
-                    surf = self.body_font.render(text, True, COLOR_TEXT_PRIMARY)
+                    # The greeting is this module's hero: large and light
+                    font = load_font('light', 30)
+                    surf = font.render(text, True, COLOR_TEXT_PRIMARY)
                     surf.set_alpha(TRANSPARENCY)
                     return surf
 

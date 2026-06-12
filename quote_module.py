@@ -176,17 +176,6 @@ class QuoteModule:
 
             quote_hash = self.current_quote[:30] + (self.current_author or "")
 
-            # Opening quote mark
-            mark = self._surface_cache.get_or_render(
-                "quote_mark",
-                lambda: self.quote_font.render('"', True, COLOR_FONT_SMALL),
-                quote_hash,
-            )
-            if align == 'right':
-                screen.blit(mark, (x + width - mark.get_width(), draw_y - 2))
-            else:
-                screen.blit(mark, (x, draw_y - 2))
-
             for i, line in enumerate(self._wrapped_lines):
                 def _render_line(l=line):
                     s = self.quote_font.render(l, True, COLOR_FONT_BODY)
@@ -200,7 +189,7 @@ class QuoteModule:
                 draw_y += 22
 
             draw_y += 5
-            author_text = f"-- {self.current_author}"
+            author_text = self.current_author or ""
 
             def _render_author():
                 s = self.author_font.render(author_text, True, COLOR_FONT_SMALL)

@@ -24,7 +24,8 @@ from pytz import timezone as pytz_tz
 from config import (
     FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT,
     COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING,
-    TRANSPARENCY, CONFIG,
+    TRANSPARENCY, CONFIG, COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY,
+    COLOR_ACCENT_PRIMARY, load_font,
 )
 from visual_effects import VisualEffects
 from api_tracker import api_tracker
@@ -128,10 +129,12 @@ class StocksModule:
             self.font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
         except Exception:
             self.font = pygame.font.Font(None, FONT_SIZE)
-        self.ticker_font = pygame.font.SysFont(FONT_NAME, 24)
-        self.alert_font = pygame.font.SysFont(FONT_NAME, 32)
-        self.markets_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE + 4)
-        self.status_font = pygame.font.SysFont(FONT_NAME, FONT_SIZE - 6)
+        self.ticker_font = load_font('regular', 19)
+        self.ticker_price_font = load_font('light', 19)
+        self.alert_font = load_font('light', 32)
+        self.markets_font = load_font('regular', FONT_SIZE + 4)
+        self.status_font = load_font('regular', FONT_SIZE - 6)
+        self._ticker_hairline = None
 
         # Scroll state
         self.scroll_position = 0
@@ -561,6 +564,12 @@ class StocksModule:
             screen_width = screen.get_width()
             y = screen.get_height() - ticker_height
 
+            # Hairline rule separating the ticker from the mirror space
+            if self._ticker_hairline is None or self._ticker_hairline.get_width() != screen_width:
+                self._ticker_hairline = pygame.Surface((screen_width, 1), pygame.SRCALPHA)
+                self._ticker_hairline.fill((*COLOR_ACCENT_PRIMARY, 70))
+            screen.blit(self._ticker_hairline, (0, y))
+
             if not self.stock_data:
                 msg = "Loading stock data..."
                 surf = self.ticker_font.render(msg, True, (140, 140, 140))
@@ -580,25 +589,34 @@ class StocksModule:
                 if not isinstance(price, (int, float)):
                     continue
 
+                # The +/- sign carries direction; arrow glyphs are not in
+                # the bundled Lato and rendered as boxes
                 if isinstance(pct, (int, float)):
-                    change_str = (
-                        f"{'+' if pct >= 0 else ''}{pct:.2f}%"
-                    )
-                    arrow = (
-                        " \u25b2" if pct > 0
-                        else " \u25bc" if pct < 0
-                        else ""
-                    )
+                    change_str = f"{'+' if pct >= 0 else ''}{pct:.2f}%"
                     color = self.determine_color(pct)
                 else:
                     change_str = "0.00%"
-                    arrow = ""
                     color = (160, 160, 160)
 
                 currency = data.get('currency', '$')
-                text = f"  {ticker}  {currency}{price:.2f}{arrow} {change_str}  "
 
-                surf = self.ticker_font.render(text, True, color)
+                # Two-tone item: symbol quiet, price platinum, change colored
+                sym_surf = self.ticker_font.render(f"{ticker}  ", True, COLOR_TEXT_SECONDARY)
+                price_surf = self.ticker_price_font.render(
+                    f"{currency}{price:.2f}  ", True, COLOR_TEXT_PRIMARY
+                )
+                chg_surf = self.ticker_font.render(change_str, True, color)
+
+                gap = 44  # breathing room between ticker items
+                item_w = (sym_surf.get_width() + price_surf.get_width()
+                          + chg_surf.get_width() + gap)
+                item_h = max(sym_surf.get_height(), price_surf.get_height(),
+                             chg_surf.get_height())
+                surf = pygame.Surface((item_w, item_h), pygame.SRCALPHA)
+                ix = 0
+                for part in (sym_surf, price_surf, chg_surf):
+                    surf.blit(part, (ix, 0))
+                    ix += part.get_width()
                 surf.set_alpha(TRANSPARENCY)
                 ticker_items.append(surf)
                 total_width += surf.get_width()
