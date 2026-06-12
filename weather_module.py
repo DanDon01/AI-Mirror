@@ -236,19 +236,37 @@ class WeatherModule:
         try:
             weather_main = self.weather_data['weather'][0]['main'].lower()
             weather_description = self.weather_data['weather'][0]['description'].lower()
+            wind = self.weather_data.get('wind', {}).get('speed', 0) or 0
+            is_night = not (6 <= datetime.now().hour < 20)
 
             if 'clear' in weather_main:
-                self.animation = SunAnimation(self.screen_width, self.screen_height)
+                if is_night:
+                    self.animation = MoonAnimation(
+                        self.screen_width, self.screen_height, wind_speed=wind)
+                else:
+                    self.animation = SunAnimation(
+                        self.screen_width, self.screen_height, wind_speed=wind)
             elif 'cloud' in weather_main or 'broken' in weather_description:
                 partly = 'partly' in weather_description or 'broken' in weather_description
-                self.animation = CloudAnimation(self.screen_width, self.screen_height, partly=partly)
-            elif 'rain' in weather_main:
+                if is_night and partly:
+                    self.animation = MoonAnimation(
+                        self.screen_width, self.screen_height, cloudy=True,
+                        wind_speed=wind)
+                else:
+                    self.animation = CloudAnimation(
+                        self.screen_width, self.screen_height, partly=partly,
+                        wind_speed=wind)
+            elif 'rain' in weather_main or 'drizzle' in weather_main:
                 heavy = 'heavy' in weather_description
-                self.animation = RainAnimation(self.screen_width, self.screen_height, heavy=heavy)
+                self.animation = RainAnimation(
+                    self.screen_width, self.screen_height, heavy=heavy,
+                    wind_speed=wind)
             elif 'thunderstorm' in weather_main:
-                self.animation = StormAnimation(self.screen_width, self.screen_height)
+                self.animation = StormAnimation(
+                    self.screen_width, self.screen_height, wind_speed=wind)
             elif 'snow' in weather_main:
-                self.animation = SnowAnimation(self.screen_width, self.screen_height)
+                self.animation = SnowAnimation(
+                    self.screen_width, self.screen_height, wind_speed=wind)
             else:
                 self.animation = None
         except Exception as e:

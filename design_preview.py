@@ -5,7 +5,10 @@ data and drawn once at portrait resolution, then saved to
 data/preview.png. Use this on the dev box to judge layout/typography
 changes without deploying to the Pi.
 
-    python design_preview.py [width height]
+    python design_preview.py [condition]
+
+condition: clear | partly | clouds | rain | storm | snow (default partly).
+Also saves a banner close-up to data/preview_banner.png.
 """
 
 import os
@@ -19,8 +22,17 @@ import pygame
 
 pygame.init()
 
-WIDTH = int(sys.argv[1]) if len(sys.argv) > 2 else 1440
-HEIGHT = int(sys.argv[2]) if len(sys.argv) > 2 else 2560
+WIDTH, HEIGHT = 1440, 2560
+CONDITION = (sys.argv[1] if len(sys.argv) > 1 else "partly").lower()
+
+CONDITION_DATA = {
+    "clear": ("clear", "clear sky", 3.0),
+    "partly": ("clouds", "partly cloudy", 3.4),
+    "clouds": ("clouds", "overcast", 5.0),
+    "rain": ("rain", "moderate rain", 9.5),
+    "storm": ("thunderstorm", "thunderstorm", 11.0),
+    "snow": ("snow", "moderate snowfall", 2.5),
+}
 
 from config import CONFIG
 from layout_manager import LayoutManager
@@ -38,15 +50,17 @@ from sysinfo_module import SysInfoModule
 
 
 def fake_weather(module):
+    main, desc, wind = CONDITION_DATA.get(CONDITION, CONDITION_DATA["partly"])
     module.weather_data = {
         "name": "Birmingham",
         "sys": {"country": "GB"},
         "main": {"temp": 14.2, "feels_like": 12.1, "humidity": 64, "pressure": 1018},
-        "weather": [{"main": "clouds", "description": "partly cloudy"}],
-        "wind": {"speed": 3.4},
+        "weather": [{"main": main, "description": desc}],
+        "wind": {"speed": wind},
         "clouds": {"all": 40},
     }
     module.weather_source = "Open-Meteo"
+    module.update_animation()
 
 
 def fake_calendar(module):
@@ -165,6 +179,12 @@ def main():
         "news": news, "fitbit": fitbit, "sysinfo": sysinfo,
     }
 
+    # Let the banner ambience settle (cloud spread, drop distribution)
+    # before the single draw pass; weather.draw renders the animation
+    if weather.animation:
+        for _ in range(90):
+            weather.animation.update()
+
     for name, module in modules.items():
         pos = layout.get_module_position(name)
         if not pos:
@@ -178,10 +198,15 @@ def main():
                or {"x": 0, "y": 0, "width": WIDTH, "height": 95})
     stocks.draw_scrolling_ticker(screen)
 
-    out = os.path.join("data", "preview.png")
     os.makedirs("data", exist_ok=True)
+    out = os.path.join("data", "preview.png")
     pygame.image.save(screen, out)
-    print(f"saved {out} ({WIDTH}x{HEIGHT})")
+
+    # Banner close-up for judging the weather ambience
+    banner = screen.subsurface(pygame.Rect(0, 0, WIDTH, 150)).copy()
+    banner_out = os.path.join("data", "preview_banner.png")
+    pygame.image.save(banner, banner_out)
+    print(f"saved {out} and {banner_out} (condition: {CONDITION})")
 
 
 if __name__ == "__main__":
