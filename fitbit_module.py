@@ -266,26 +266,17 @@ class FitbitModule:
         progress grows, closing into a full square at the goal.
 
         Starts at the top-left and runs clockwise (top -> right -> bottom
-        -> left). A faint full-square track sits underneath so the unfilled
-        part still reads as an outline.
+        -> left). Only the filled coloured portion is drawn - no track.
         """
         fraction = max(0.0, min(fraction, 1.0))
+        if fraction <= 0:
+            return
         t = thickness
         # Draw onto a SRCALPHA layer so colours blend softly on the glass
         surf = pygame.Surface((w + t, h + t), pygame.SRCALPHA)
         inset = t / 2.0
         x0, y0 = inset, inset
         x1, y1 = w - inset, h - inset
-
-        # Faint track (whole square)
-        pygame.draw.lines(
-            surf, (60, 60, 64, 90), True,
-            [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], 1,
-        )
-
-        if fraction <= 0:
-            screen.blit(surf, (x, y))
-            return
 
         color = (*self._progress_color(fraction), 230)
         perim = 2 * ((x1 - x0) + (y1 - y0))
@@ -369,10 +360,24 @@ class FitbitModule:
             except Exception:
                 steps_int = 0
 
-            # Step progress traces the module outline, closing into a full
-            # square at the goal. Drawn around the whole module box.
+            # Step progress frame: a square anchored to the module's outer
+            # edge and sitting BELOW the title so it never covers text.
+            # Closes into a full square at the goal.
             fraction = steps_int / step_goal if step_goal else 0.0
-            self.draw_step_frame(screen, x, y, width, height, fraction)
+            frame_top = current_y - 2
+            frame_side = max(60, (y + height - 10) - frame_top)
+            if align == 'right':
+                frame_x = x + width - frame_side
+                if frame_x < x:
+                    frame_x, frame_side = x, width
+            else:
+                frame_side = min(frame_side, width)
+                frame_x = x
+            self.draw_step_frame(screen, frame_x, frame_top, frame_side, frame_side, fraction)
+
+            # Keep text off the frame line with a little inner padding
+            inner = 14
+            cw = width - inner
 
             steps_label = self.body_font.render("Steps:", True, label_color)
             steps_value = self.body_font.render(str(steps), True, value_color)
@@ -380,7 +385,7 @@ class FitbitModule:
             steps_value.set_alpha(TRANSPARENCY)
             combined_w = steps_label.get_width() + 5 + steps_value.get_width()
             if align == 'right':
-                sx = x + width - combined_w
+                sx = x + cw - combined_w
             else:
                 sx = x
             screen.blit(steps_label, (sx, current_y))
@@ -391,28 +396,28 @@ class FitbitModule:
                 hr_text = f"HR: {self.data['resting_heart_rate']} bpm"
                 hr_surf = self.body_font.render(hr_text, True, value_color)
                 hr_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, hr_surf, x, current_y, width, align)
+                ModuleDrawHelper.blit_aligned(screen, hr_surf, x, current_y, cw, align)
                 current_y += line_height
 
             if 'sleep' in self.data and self.data['sleep'] != 'N/A':
                 sleep_text = f"Sleep: {self.data['sleep']}"
                 sleep_surf = self.body_font.render(sleep_text, True, value_color)
                 sleep_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, sleep_surf, x, current_y, width, align)
+                ModuleDrawHelper.blit_aligned(screen, sleep_surf, x, current_y, cw, align)
                 current_y += line_height
 
             if 'active_minutes' in self.data:
                 active_text = f"Active: {self.data['active_minutes']} min"
                 active_surf = self.body_font.render(active_text, True, value_color)
                 active_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, active_surf, x, current_y, width, align)
+                ModuleDrawHelper.blit_aligned(screen, active_surf, x, current_y, cw, align)
                 current_y += line_height
 
             if 'calories' in self.data and self.data['calories'] != 'N/A':
                 cal_text = f"Cal: {self.data['calories']}"
                 cal_surf = self.body_font.render(cal_text, True, value_color)
                 cal_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, cal_surf, x, current_y, width, align)
+                ModuleDrawHelper.blit_aligned(screen, cal_surf, x, current_y, cw, align)
             
         except Exception as e:
             logging.error(f"Error drawing Fitbit data: {e}")
