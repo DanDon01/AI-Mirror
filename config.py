@@ -261,7 +261,8 @@ CONFIG = {
             'color': COLOR_TEXT_PRIMARY,
             'time_format': '%H:%M:%S',
             'date_format': '%A, %B %d, %Y',
-            'timezone': 'local'
+            'timezone': 'local',
+            'scrolling': True
         }
     },
     'weather': {

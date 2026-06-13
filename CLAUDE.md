@@ -34,7 +34,7 @@ Entry point: `AI-Mirror.py` -> `MagicMirror` class -> `run()` main loop at 30 FP
 - **Center clear zone:** Reserved for mirror reflection. AI/voice overlays only appear when active. Center notification queue for alerts (stock moves, timer completion, new messages).
 - **Fonts:** Segoe UI / DejaVu Sans (body), Consolas / DejaVu Sans Mono (clock). Sizes scaled for arm's length readability.
 - **Animations:** Per-module eased fade transitions via AnimationManager with staggered boot. Headline rotation with crossfade.
-- **Banner weather ambience:** The top banner reflects the sky (weather_animations.py): procedural soft-glow sun/moon, parallax cloud haze, wind-slanted rain, drifting snow, soft lightning pulses. No icon PNGs; everything pre-rendered glow sprites + thin lines, confined to the banner with an alpha gradient dissolve at the bottom. Clouds keep clear of the time digits. Day/night picks sun vs crescent moon. Preview any condition: `python design_preview.py rain` (also writes data/preview_banner.png close-up).
+- **Weather feature band:** The top of the screen reflects the sky (weather_animations.py) in an expanded band (~16% of screen height, EFFECT_H, fading out at the bottom into the mirror's clear centre): radiant rayed sun, big crescent moon + drifting stars, layered cloud banks, wind-slanted rain with splashes, drifting snow with depth, and dramatic storm lightning (full-band flash + bolt). Procedural soft-glow sprites + lines, no PNGs. Clouds keep clear of the time digits. Day/night picks sun vs moon; wind speed slants rain and adds gusts. Preview any condition: `python design_preview.py rain` (clear|partly|clouds|rain|storm|snow). The clock banner scrolls the time (config clock params `scrolling: True`).
 
 ## Architecture
 ```
