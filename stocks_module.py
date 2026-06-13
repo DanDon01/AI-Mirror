@@ -239,12 +239,17 @@ class StocksModule:
         offset = self._rotation_offset % n
         rotated = self.tickers[offset:] + self.tickers[:offset]
 
+        # Only route to Alpha Vantage if we actually have a key; otherwise
+        # everything goes to Yahoo (yfinance) instead of dead no-op slots
+        have_av_key = bool(self.alpha_vantage_key)
+
         queue = []
         av_count = 0
         for ticker in rotated:
             meta = self._ticker_meta.get(ticker, {})
             can_av = (
-                meta.get('av_symbol')
+                have_av_key
+                and meta.get('av_symbol')
                 and meta.get('market') != 'crypto'
                 and av_count < av_remaining
             )
@@ -312,9 +317,12 @@ class StocksModule:
         av_symbol = meta.get('av_symbol', ticker)
 
         if not self.alpha_vantage_key:
+            # No key: fall through to Yahoo rather than storing nothing
+            self._fetch_single_yf(ticker)
             return
         if not api_tracker.allow("stocks", "alpha-vantage"):
-            logger.debug(f"AV tracker limit, skipping {ticker}")
+            # AV budget hit: use Yahoo for this ticker instead of skipping
+            self._fetch_single_yf(ticker)
             return
 
         url = (
