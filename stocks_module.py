@@ -368,8 +368,34 @@ class StocksModule:
         except Exception as e:
             logger.error(f"AV error for {ticker}: {e}")
 
+    @staticmethod
+    def _fi_get(fast_info, *keys):
+        """Read a value from yfinance fast_info across key-name variants.
+
+        fast_info supports both dict and attribute access and the key
+        spelling has changed between versions (last_price vs lastPrice).
+        """
+        for k in keys:
+            try:
+                v = fast_info[k]
+                if v:
+                    return v
+            except (KeyError, TypeError, AttributeError, Exception):
+                pass
+            v = getattr(fast_info, k, None)
+            if v:
+                return v
+        return None
+
     def _fetch_single_yf(self, ticker):
-        """Fetch one ticker from yfinance (fallback)."""
+        """Fetch one ticker from Yahoo via yfinance.
+
+        Uses history() (the chart endpoint) as the primary source: it is
+        far less rate-limited than the quote endpoint fast_info uses, and
+        works consistently across yfinance versions. fast_info is a
+        secondary. NOTE: the old code checked fast_info.regular_market_price
+        which never exists -> it silently fetched nothing.
+        """
         try:
             import yfinance as yf
         except ImportError:
@@ -380,24 +406,52 @@ class StocksModule:
 
         try:
             stock = yf.Ticker(yf_symbol)
-            info = stock.fast_info
-            if hasattr(info, 'regular_market_price') and info.regular_market_price:
-                price = info.regular_market_price
-                prev = getattr(info, 'previous_close', price) or price
-                pct = ((price - prev) / prev) * 100 if prev else 0.0
-                self.stock_data[ticker] = {
-                    'price': price,
-                    'percent_change': pct,
-                    'volume': getattr(info, 'regular_market_volume', 0),
-                    'day_range': (
-                        f"{getattr(info, 'day_low', price):.2f} - "
-                        f"{getattr(info, 'day_high', price):.2f}"
-                    ),
-                    'source': 'yfinance',
-                    'currency': meta.get('currency', '$'),
-                }
-                logger.info(f"yfinance: {ticker} = {price:.2f} ({pct:+.2f}%)")
-                api_tracker.record("stocks", "yahoo-finance")
+            price = prev = None
+            volume = 0
+            day_low = day_high = None
+
+            # Primary: recent daily candles (chart endpoint, robust)
+            try:
+                hist = stock.history(period='5d')
+                if hist is not None and not hist.empty:
+                    closes = hist['Close'].dropna()
+                    if len(closes):
+                        price = float(closes.iloc[-1])
+                        prev = float(closes.iloc[-2]) if len(closes) >= 2 else price
+                        vol = hist['Volume'].iloc[-1]
+                        volume = int(vol) if vol == vol else 0  # NaN guard
+                        low = hist['Low'].iloc[-1]
+                        high = hist['High'].iloc[-1]
+                        day_low = float(low) if low == low else price
+                        day_high = float(high) if high == high else price
+            except Exception as e:
+                logger.debug(f"yfinance history failed for {ticker}: {e}")
+
+            # Secondary: fast_info quote
+            if not price:
+                try:
+                    fi = stock.fast_info
+                    price = self._fi_get(fi, 'last_price', 'lastPrice')
+                    prev = self._fi_get(fi, 'previous_close', 'previousClose') or price
+                except Exception:
+                    pass
+
+            if not price:
+                logger.debug(f"yfinance: no price for {ticker} ({yf_symbol})")
+                return
+
+            prev = prev or price
+            pct = ((price - prev) / prev) * 100 if prev else 0.0
+            self.stock_data[ticker] = {
+                'price': float(price),
+                'percent_change': pct,
+                'volume': int(volume or 0),
+                'day_range': f"{(day_low or price):.2f} - {(day_high or price):.2f}",
+                'source': 'yfinance',
+                'currency': meta.get('currency', '$'),
+            }
+            logger.info(f"yfinance: {ticker} = {price:.2f} ({pct:+.2f}%)")
+            api_tracker.record("stocks", "yahoo-finance")
         except Exception as e:
             logger.debug(f"yfinance failed for {ticker} ({yf_symbol}): {e}")
 
