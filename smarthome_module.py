@@ -88,7 +88,12 @@ class SmartHomeModule:
                  update_interval_minutes=2, timeout=10,
                  max_entities=20, mini_entities=8,
                  dashboard_timeout=60, **kwargs):
-        self.ha_url = ha_url.rstrip('/') if ha_url else ''
+        # Prepend scheme if missing - requests needs http:// or it raises
+        # "No connection adapters were found"
+        ha_url = (ha_url or '').strip().rstrip('/')
+        if ha_url and not ha_url.startswith(('http://', 'https://')):
+            ha_url = 'http://' + ha_url
+        self.ha_url = ha_url
         self.ha_token = ha_token or ''
         self.headers = {
             "Authorization": f"Bearer {self.ha_token}",
@@ -262,6 +267,9 @@ class SmartHomeModule:
         if datetime.now() - self.last_update < interval:
             return
         if not api_tracker.allow("smarthome", "home-assistant"):
+            # Blocked (rate limit or open circuit): wait a full interval
+            # before retrying instead of hammering allow() every frame
+            self.last_update = datetime.now()
             return
         self._fetcher.submit(self._fetch_states_blocking)
 

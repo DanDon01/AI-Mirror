@@ -35,7 +35,12 @@ class PhoneModule:
     def __init__(self, ha_url='', ha_token='', battery_entity='',
                  travel_minutes=25, lead_window_minutes=180,
                  update_interval_minutes=5, **kwargs):
-        self.ha_url = ha_url.rstrip('/') if ha_url else ''
+        # Prepend scheme if missing - requests needs http:// or it raises
+        # "No connection adapters were found"
+        ha_url = (ha_url or '').strip().rstrip('/')
+        if ha_url and not ha_url.startswith(('http://', 'https://')):
+            ha_url = 'http://' + ha_url
+        self.ha_url = ha_url
         self.ha_token = ha_token or ''
         self.headers = {
             "Authorization": f"Bearer {self.ha_token}",
@@ -184,6 +189,8 @@ class PhoneModule:
         if datetime.now() - self.last_update < self.update_interval:
             return
         if not api_tracker.allow("phone", "home-assistant"):
+            # Blocked: wait a full interval before retrying allow()
+            self.last_update = datetime.now()
             return
         self._fetcher.submit(self._fetch_states_blocking)
 

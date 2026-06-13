@@ -125,6 +125,39 @@ Enable voice first: in config.py set `module_visibility` -> `'ai_voice': True`.
 - [ ] Check `api_usage.log` after a few conversations - realtime costs
       should be fractions of a penny per exchange, $1/day hard ceiling
 
+## Service control (it auto-restarts by design)
+
+The mirror runs as a systemd service with Restart=always, so pressing
+q/Esc just makes systemd relaunch it. To actually stop or develop:
+
+```bash
+sudo systemctl stop ai-mirror        # stop it (stays stopped)
+sudo systemctl start ai-mirror       # start again
+sudo systemctl restart ai-mirror     # after a git pull / config change
+./venv/bin/python AI-Mirror.py       # run in foreground (stop service first)
+```
+
+## Google Calendar re-auth (invalid_grant)
+
+If the log shows `invalid_grant: Bad Request`, the Google refresh token
+expired (Google kills them after 7 days while the OAuth app is in
+"Testing"). Regenerate on the Pi desktop (needs a browser):
+
+```bash
+sudo systemctl stop ai-mirror
+./venv/bin/python google_reauth.py   # approve in the browser
+sudo systemctl start ai-mirror
+```
+
+To stop it expiring weekly: in Google Cloud Console -> APIs & Services
+-> OAuth consent screen, click "Publish app" (Production).
+
+## Home Assistant URL
+
+HA_URL in ../Variables.env must include the scheme, e.g.
+`HA_URL=http://192.168.1.110:8123`. The code now prepends http:// if you
+forget, but set it properly to be safe.
+
 ## Things to report back for tuning
 
 - Voice cuts you off mid-sentence -> VAD eagerness needs adjusting
