@@ -82,16 +82,20 @@ def main():
     }
 
     flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-    print(f"If you hit Error 400 (redirect_uri_mismatch), your OAuth client")
-    print(f"is a 'Web application' type. Either create a 'Desktop app' client")
-    print(f"(no redirect setup needed), or add this exact URL to the Web")
-    print(f"client's Authorized redirect URIs:")
-    print(f"    http://localhost:{REDIRECT_PORT}/")
     print()
+    print("=" * 64)
+    print("Copy the URL below into a browser on your laptop/phone, approve")
+    print(f"access, and the page will redirect to localhost:{REDIRECT_PORT} (this Pi).")
+    print("If running over SSH, first reconnect with port forwarding so the")
+    print("redirect reaches the Pi:")
+    print(f"    ssh -L {REDIRECT_PORT}:localhost:{REDIRECT_PORT} <user>@<pi-ip>")
+    print("=" * 64)
+    print()
+    # open_browser=False prints the URL instead of launching a (text) browser;
     # access_type=offline + prompt=consent guarantees a refresh token
     creds = flow.run_local_server(
         port=REDIRECT_PORT, access_type="offline", prompt="consent",
-        open_browser=True,
+        open_browser=False,
     )
 
     if not creds.refresh_token:
