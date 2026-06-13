@@ -152,6 +152,21 @@ sudo systemctl start ai-mirror
 To stop it expiring weekly: in Google Cloud Console -> APIs & Services
 -> OAuth consent screen, click "Publish app" (Production).
 
+## Home Assistant entities
+
+Auto-discovery now scores entities and skips system noise (backups, sun
+timers, snapshot paths, updates, diagnostics), preferring doors/motion,
+temperatures, locks, climate and lights. To pick the EXACT entities
+instead, add a comma-separated list to ../Variables.env (survives git
+pulls, stays out of the repo):
+
+```
+HA_ENTITIES=climate.living_room,lock.front_door,sensor.live_house_cost_per_hour,light.hall
+```
+
+Then restart. The dashboard ('h' key) shows all of them; the mini view
+shows the first 8.
+
 ## Home Assistant URL
 
 HA_URL in ../Variables.env must include the scheme, e.g.

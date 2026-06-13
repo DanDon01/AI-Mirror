@@ -168,21 +168,62 @@ class SmartHomeModule:
         api_tracker.record("smarthome", "home-assistant")
         return resp.json()
 
+    # Domains worth showing on a mirror, with a base usefulness score
+    _DOMAIN_SCORE = {
+        'lock': 10, 'alarm_control_panel': 10, 'climate': 9,
+        'light': 7, 'binary_sensor': 6, 'switch': 5, 'sensor': 4,
+        'cover': 6, 'fan': 5, 'media_player': 5,
+    }
+    # device_class bonus (real home state people glance at)
+    _DC_SCORE = {
+        'temperature': 9, 'humidity': 7, 'door': 9, 'window': 9, 'garage_door': 9,
+        'motion': 8, 'occupancy': 8, 'presence': 8, 'moisture': 7,
+        'power': 6, 'energy': 6, 'gas': 6, 'co2': 6, 'pm25': 5, 'battery': 3,
+    }
+    # device_class values that are noise on a mirror
+    _SKIP_DC = ('timestamp', 'date', 'enum', 'update', 'connectivity', 'problem')
+    # name fragments that mark system/diagnostic sensors
+    _NOISE = ('snapshot', '_path', 'backup', 'sun_next', 'uptime', 'version',
+              'scheduled', 'last_attempted', 'last_successful')
+
     def _pick_entities(self, all_states):
-        """Auto-discover: pick the most useful entities up to max_entities."""
-        preferred_domains = ['sensor', 'light', 'climate', 'binary_sensor', 'switch', 'lock']
-        picked = []
-        for domain in preferred_domains:
-            for s in all_states:
-                eid = s.get('entity_id', '')
-                if eid.startswith(domain + '.') and len(picked) < self.max_entities:
-                    # Skip internal/diagnostic entities
-                    attrs = s.get('attributes', {})
-                    if attrs.get('device_class') in ('update', 'connectivity', 'problem'):
-                        continue
-                    picked.append(eid)
-            if len(picked) >= self.max_entities:
-                break
+        """Auto-discover useful entities, scored so real home state wins.
+
+        Skips diagnostic/config entities, system sensors (backup, sun,
+        snapshots, updates) and string sensors with no unit. Picks the
+        highest-scoring entities up to max_entities, best first (so the
+        mini view shows the most useful ones).
+        """
+        scored = []
+        for s in all_states:
+            eid = s.get('entity_id', '')
+            domain = eid.split('.')[0] if '.' in eid else ''
+            base = self._DOMAIN_SCORE.get(domain)
+            if base is None:
+                continue
+
+            attrs = s.get('attributes', {})
+            if attrs.get('entity_category') in ('diagnostic', 'config'):
+                continue
+
+            name = (attrs.get('friendly_name') or eid).lower()
+            if any(frag in eid.lower() or frag in name for frag in self._NOISE):
+                continue
+
+            dc = attrs.get('device_class')
+            if domain == 'sensor':
+                # Keep only real measurements: a unit, or a useful class.
+                # Drops snapshot-path / status-string / counter sensors.
+                if dc in self._SKIP_DC:
+                    continue
+                if not attrs.get('unit_of_measurement') and dc not in self._DC_SCORE:
+                    continue
+
+            score = base + self._DC_SCORE.get(dc, 0)
+            scored.append((score, eid))
+
+        scored.sort(key=lambda x: (-x[0], x[1]))
+        picked = [eid for _, eid in scored[:self.max_entities]]
 
         if picked:
             self.entities = picked

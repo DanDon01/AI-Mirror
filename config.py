@@ -416,7 +416,9 @@ CONFIG = {
             # long HOME_ASSISTANT_* names
             'ha_url': os.getenv('HA_URL') or os.getenv('HOME_ASSISTANT_URL', ''),
             'ha_token': os.getenv('HA_TOKEN') or os.getenv('HOME_ASSISTANT_ACCESS_TOKEN', ''),
-            'entities': [],  # Empty = auto-discover from HA
+            # Curate exactly which entities show by setting HA_ENTITIES in
+            # Variables.env (comma-separated entity ids). Empty = auto-discover.
+            'entities': [e.strip() for e in os.getenv('HA_ENTITIES', '').split(',') if e.strip()],
             'update_interval_minutes': 2,
             'max_entities': 20,      # discovered total (dashboard shows all)
             'mini_entities': 8,      # shown in the left-column mini view
