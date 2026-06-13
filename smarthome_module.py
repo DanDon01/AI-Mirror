@@ -14,6 +14,7 @@ Two display modes:
 """
 
 import math
+import os
 import requests
 import pygame
 import logging
@@ -30,6 +31,11 @@ from api_tracker import api_tracker
 from background_fetcher import BackgroundFetcher
 
 logger = logging.getLogger("SmartHome")
+
+_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Web-panel entity selection: one entity_id per line. Takes precedence
+# over HA_ENTITIES and auto-discovery when present.
+_ENTITY_OVERRIDE = os.path.join(_PROJECT_DIR, 'data', 'smarthome_entities.txt')
 
 # Domain-based state colors
 DOMAIN_COLORS = {
@@ -87,7 +93,7 @@ class SmartHomeModule:
     def __init__(self, ha_url, ha_token, entities=None,
                  update_interval_minutes=2, timeout=10,
                  max_entities=20, mini_entities=8,
-                 dashboard_timeout=60, **kwargs):
+                 dashboard_timeout=60, max_candidates=45, **kwargs):
         # Prepend scheme if missing - requests needs http:// or it raises
         # "No connection adapters were found"
         ha_url = (ha_url or '').strip().rstrip('/')
@@ -100,8 +106,14 @@ class SmartHomeModule:
             "content-type": "application/json",
         }
         self.entities = entities or []
+        # Web-panel selection file wins over HA_ENTITIES / auto-discovery
+        file_ents = self._load_entity_override()
+        if file_ents:
+            self.entities = file_ents
         self.max_entities = max_entities
         self.mini_entities = mini_entities
+        self.max_candidates = max_candidates
+        self._candidates = []   # scored pool for the web panel checklist
         self.data = {}
         self.last_update = datetime.min
         self.update_interval = timedelta(minutes=update_interval_minutes)
@@ -153,6 +165,89 @@ class SmartHomeModule:
             self.show_dashboard()
 
     # ------------------------------------------------------------------
+    # Web-panel entity selection
+    # ------------------------------------------------------------------
+
+    def _load_entity_override(self):
+        try:
+            if not os.path.exists(_ENTITY_OVERRIDE):
+                return []
+            with open(_ENTITY_OVERRIDE, 'r', encoding='utf-8') as f:
+                ents = [ln.strip() for ln in f if ln.strip()]
+            if ents:
+                logger.info(f"Loaded {len(ents)} HA entities from override file")
+            return ents
+        except Exception as e:
+            logger.warning(f"Could not read entity override: {e}")
+            return []
+
+    def _save_entity_override(self, entities):
+        try:
+            os.makedirs(os.path.dirname(_ENTITY_OVERRIDE), exist_ok=True)
+            if not entities:
+                if os.path.exists(_ENTITY_OVERRIDE):
+                    os.remove(_ENTITY_OVERRIDE)
+                return
+            tmp = _ENTITY_OVERRIDE + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                f.write("\n".join(entities) + "\n")
+            os.replace(tmp, _ENTITY_OVERRIDE)
+        except Exception as e:
+            logger.warning(f"Could not save entity override: {e}")
+
+    def get_entity_options(self):
+        """For the web panel: candidate entities with which are shown.
+
+        Returns [{id, name, state, shown}], currently-shown first (so they
+        are easy to untick) then the rest of the scored candidate pool.
+        """
+        shown = list(self.entities)
+        shown_set = set(shown)
+        options, seen = [], set()
+        for eid in shown:
+            cand = next((c for c in self._candidates if c['id'] == eid), {})
+            options.append({
+                'id': eid,
+                'name': cand.get('name', eid),
+                'state': self.data.get(eid, {}).get('state', cand.get('state', '?')),
+                'shown': True,
+            })
+            seen.add(eid)
+        for c in self._candidates:
+            if c['id'] in seen:
+                continue
+            options.append({
+                'id': c['id'], 'name': c['name'],
+                'state': c['state'], 'shown': c['id'] in shown_set,
+            })
+        return options
+
+    def set_entities(self, ids):
+        """Replace shown entities from the web panel and persist.
+
+        Runs on the main loop (command queue). Empty list clears the
+        override file and restores auto-discovery.
+        """
+        seen = set()
+        valid = []
+        for e in ids:
+            e = (e or '').strip()
+            if e and e not in seen:
+                seen.add(e)
+                valid.append(e)
+
+        self.data = {k: v for k, v in self.data.items() if k in seen}
+        self._save_entity_override(valid)
+        if valid:
+            self.entities = valid
+            logger.info(f"HA entities set via web panel: {valid}")
+        else:
+            self.entities = []   # auto-discovery resumes on next fetch
+            logger.info("HA entity selection cleared; auto-discovery restored")
+        self.last_update = datetime.min  # force an immediate refresh
+        return True
+
+    # ------------------------------------------------------------------
     # Data fetch (background thread)
     # ------------------------------------------------------------------
 
@@ -186,13 +281,11 @@ class SmartHomeModule:
     _NOISE = ('snapshot', '_path', 'backup', 'sun_next', 'uptime', 'version',
               'scheduled', 'last_attempted', 'last_successful')
 
-    def _pick_entities(self, all_states):
-        """Auto-discover useful entities, scored so real home state wins.
+    def _score_states(self, all_states):
+        """Return useful entities as sorted [(score, eid, attrs)], best first.
 
         Skips diagnostic/config entities, system sensors (backup, sun,
-        snapshots, updates) and string sensors with no unit. Picks the
-        highest-scoring entities up to max_entities, best first (so the
-        mini view shows the most useful ones).
+        snapshots, updates) and string sensors with no unit.
         """
         scored = []
         for s in all_states:
@@ -220,11 +313,14 @@ class SmartHomeModule:
                     continue
 
             score = base + self._DC_SCORE.get(dc, 0)
-            scored.append((score, eid))
+            scored.append((score, eid, attrs))
 
         scored.sort(key=lambda x: (-x[0], x[1]))
-        picked = [eid for _, eid in scored[:self.max_entities]]
+        return scored
 
+    def _pick_entities(self, scored):
+        """Auto-discover: take the top-scoring entities up to max_entities."""
+        picked = [eid for _, eid, _ in scored[:self.max_entities]]
         if picked:
             self.entities = picked
             logger.info(f"Auto-discovered {len(picked)} HA entities: {picked}")
@@ -233,15 +329,28 @@ class SmartHomeModule:
 
     def _apply_states(self, all_states):
         current_time = datetime.now()
+        by_id = {s.get('entity_id'): s for s in all_states}
+
+        # Refresh the candidate pool the web panel offers to toggle
+        scored = self._score_states(all_states)
+        self._candidates = [
+            {
+                'id': eid,
+                'name': attrs.get('friendly_name', eid),
+                'state': by_id.get(eid, {}).get('state', '?'),
+                'unit': attrs.get('unit_of_measurement', ''),
+            }
+            for _, eid, attrs in scored[:self.max_candidates]
+        ]
+
         if not self.entities:
-            self._pick_entities(all_states)
+            self._pick_entities(scored)
             if not self.entities:
                 self._last_error = "No entities found"
                 return
 
         old_states = {eid: self.data.get(eid, {}).get('state') for eid in self.entities}
 
-        by_id = {s.get('entity_id'): s for s in all_states}
         for entity_id in self.entities:
             state = by_id.get(entity_id)
             if state is not None:

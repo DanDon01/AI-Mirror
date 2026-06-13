@@ -58,6 +58,12 @@ PAGE = """<!DOCTYPE html>
         padding:10px; font-family:monospace; font-size:0.95em; }
   .meta { color:#5a5a5f; font-size:0.8em; margin-top:4px; }
   .saved { color:#7fd9a4; }
+  .halist { max-height:340px; overflow-y:auto; border:1px solid #1c1c22;
+        border-radius:8px; padding:6px 10px; }
+  .halist label { display:flex; align-items:center; gap:10px; padding:6px 2px;
+        font-size:0.92em; border-bottom:1px solid #141418; }
+  .halist input { width:18px; height:18px; }
+  .halist .st { color:#6a6a70; margin-left:auto; font-size:0.85em; }
 </style>
 </head>
 <body>
@@ -76,6 +82,14 @@ PAGE = """<!DOCTYPE html>
   <button onclick="loadTickers()">Reload</button>
 </div>
 <div class="meta" id="tickersMeta">One symbol per line. e.g. AAPL, MSFT, RR.L (London), BTC/USD (crypto)</div>
+
+<h2>Smart home entities</h2>
+<div class="halist" id="haList">loading...</div>
+<div class="row" style="margin-top:8px">
+  <button onclick="saveEntities()">Save entities</button>
+  <button onclick="loadEntities()">Reload</button>
+</div>
+<div class="meta" id="haMeta">Tick which entities to show. Untick everything to auto-pick.</div>
 
 <h2>API usage (24h)</h2>
 <table id="api"><thead>
@@ -163,9 +177,43 @@ async function saveTickers() {
   setTimeout(loadTickers, 1500);
 }
 
+async function loadEntities() {
+  try {
+    const r = await fetch("/api/ha_entities");
+    const j = await r.json();
+    const list = document.getElementById("haList");
+    list.innerHTML = "";
+    const ents = j.entities || [];
+    if (!ents.length) {
+      list.textContent = "No entities yet (Home Assistant not connected?)";
+      return;
+    }
+    for (const e of ents) {
+      const lab = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = e.id; cb.checked = e.shown;
+      const nm = document.createElement("span"); nm.textContent = e.name;
+      const st = document.createElement("span"); st.className = "st"; st.textContent = e.state;
+      lab.appendChild(cb); lab.appendChild(nm); lab.appendChild(st);
+      list.appendChild(lab);
+    }
+    document.getElementById("haMeta").textContent =
+      ents.filter(e => e.shown).length + " shown of " + ents.length + " offered";
+  } catch (e) {}
+}
+
+async function saveEntities() {
+  const ids = [...document.querySelectorAll("#haList input:checked")].map(c => c.value);
+  document.getElementById("haMeta").innerHTML =
+    "<span class='saved'>Saved - refreshing...</span>";
+  await fetch("/api/ha_entities", { method: "POST", body: JSON.stringify(ids) });
+  setTimeout(loadEntities, 1500);
+}
+
 refresh();
 refreshLog();
 loadTickers();
+loadEntities();
 setInterval(refresh, 5000);
 setInterval(refreshLog, 10000);
 </script>
@@ -213,6 +261,10 @@ class WebPanel:
                     stocks = self.mirror.modules.get("stocks")
                     if stocks and hasattr(stocks, "set_tickers"):
                         stocks.set_tickers(value)
+                elif cmd == "set_entities":
+                    sh = self.mirror.modules.get("smarthome")
+                    if sh and hasattr(sh, "set_entities"):
+                        sh.set_entities(value)
             except Exception as e:
                 logger.error(f"Panel command {cmd}={value} failed: {e}")
 
@@ -248,6 +300,11 @@ class WebPanel:
                     tickers = (stocks.get_tickers()
                                if stocks and hasattr(stocks, "get_tickers") else [])
                     self._send(200, json.dumps({"tickers": tickers}))
+                elif url.path == "/api/ha_entities":
+                    sh = panel.mirror.modules.get("smarthome")
+                    opts = (sh.get_entity_options()
+                            if sh and hasattr(sh, "get_entity_options") else [])
+                    self._send(200, json.dumps({"entities": opts}))
                 else:
                     self._send(404, json.dumps({"error": "not found"}))
 
@@ -276,6 +333,17 @@ class WebPanel:
                             if s.strip()]
                     panel.commands.put(("set_tickers", syms))
                     self._send(200, json.dumps({"ok": True, "count": len(syms)}))
+                elif url.path == "/api/ha_entities":
+                    length = int(self.headers.get("Content-Length", 0) or 0)
+                    body = self.rfile.read(length).decode("utf-8") if length else ""
+                    try:
+                        ids = json.loads(body) if body else []
+                        if not isinstance(ids, list):
+                            ids = []
+                    except Exception:
+                        ids = [s.strip() for s in body.splitlines() if s.strip()]
+                    panel.commands.put(("set_entities", ids))
+                    self._send(200, json.dumps({"ok": True, "count": len(ids)}))
                 else:
                     self._send(404, json.dumps({"error": "not found"}))
 

@@ -73,9 +73,9 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
   -> Support:
        config.py             - All configuration, colors, fonts, layout zones, env vars
        web_panel.py          - LAN phone control panel (http://<pi-ip>:8780): state,
-                               module toggles, editable stocks watchlist, API usage,
-                               log tail. Stdlib HTTP server; writes go through a command
-                               queue drained by the main loop.
+                               module toggles, editable stocks watchlist, smart-home
+                               entity checklist, API usage, log tail. Stdlib HTTP server;
+                               writes go through a command queue drained by the main loop.
        data_cache.py         - Last-good payload cache (weather/news/calendar restore
                                instantly after reboot, then refresh in background)
        background_fetcher.py - Runs module network fetches on daemon threads (never
