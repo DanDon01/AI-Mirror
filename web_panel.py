@@ -53,7 +53,11 @@ PAGE = """<!DOCTYPE html>
   pre { background:#101014; border:1px solid #1c1c22; border-radius:8px;
         padding:10px; font-size:0.72em; overflow-x:auto; white-space:pre-wrap;
         max-height:300px; overflow-y:auto; }
+  textarea { width:100%; box-sizing:border-box; background:#101014;
+        color:#cfcfd4; border:1px solid #2a2a30; border-radius:8px;
+        padding:10px; font-family:monospace; font-size:0.95em; }
   .meta { color:#5a5a5f; font-size:0.8em; margin-top:4px; }
+  .saved { color:#7fd9a4; }
 </style>
 </head>
 <body>
@@ -64,6 +68,14 @@ PAGE = """<!DOCTYPE html>
 
 <h2>Modules</h2>
 <div class="row" id="modules"></div>
+
+<h2>Stocks watchlist</h2>
+<textarea id="tickers" rows="8" placeholder="loading..."></textarea>
+<div class="row" style="margin-top:8px">
+  <button onclick="saveTickers()">Save watchlist</button>
+  <button onclick="loadTickers()">Reload</button>
+</div>
+<div class="meta" id="tickersMeta">One symbol per line. e.g. AAPL, MSFT, RR.L (London), BTC/USD (crypto)</div>
 
 <h2>API usage (24h)</h2>
 <table id="api"><thead>
@@ -133,8 +145,27 @@ async function refresh() {
   try { render(await getStatus()); } catch (e) {}
 }
 
+async function loadTickers() {
+  try {
+    const r = await fetch("/api/tickers");
+    const j = await r.json();
+    document.getElementById("tickers").value = (j.tickers || []).join("\\n");
+    document.getElementById("tickersMeta").textContent =
+      (j.tickers || []).length + " symbols. One per line. e.g. AAPL, RR.L, BTC/USD";
+  } catch (e) {}
+}
+
+async function saveTickers() {
+  const v = document.getElementById("tickers").value;
+  const meta = document.getElementById("tickersMeta");
+  await fetch("/api/tickers", { method: "POST", body: v });
+  meta.innerHTML = "<span class='saved'>Saved - refetching prices...</span>";
+  setTimeout(loadTickers, 1500);
+}
+
 refresh();
 refreshLog();
+loadTickers();
 setInterval(refresh, 5000);
 setInterval(refreshLog, 10000);
 </script>
@@ -178,6 +209,10 @@ class WebPanel:
                 elif cmd == "state":
                     self.mirror.change_state(value)
                     logger.info(f"Panel set state: {value}")
+                elif cmd == "set_tickers":
+                    stocks = self.mirror.modules.get("stocks")
+                    if stocks and hasattr(stocks, "set_tickers"):
+                        stocks.set_tickers(value)
             except Exception as e:
                 logger.error(f"Panel command {cmd}={value} failed: {e}")
 
@@ -208,6 +243,11 @@ class WebPanel:
                     qs = parse_qs(url.query)
                     lines = int(qs.get("lines", ["60"])[0])
                     self._send(200, panel.tail_log(min(lines, 500)), "text/plain")
+                elif url.path == "/api/tickers":
+                    stocks = panel.mirror.modules.get("stocks")
+                    tickers = (stocks.get_tickers()
+                               if stocks and hasattr(stocks, "get_tickers") else [])
+                    self._send(200, json.dumps({"tickers": tickers}))
                 else:
                     self._send(404, json.dumps({"error": "not found"}))
 
@@ -228,6 +268,14 @@ class WebPanel:
                         self._send(200, json.dumps({"ok": True}))
                     else:
                         self._send(400, json.dumps({"error": "bad state"}))
+                elif url.path == "/api/tickers":
+                    length = int(self.headers.get("Content-Length", 0) or 0)
+                    body = self.rfile.read(length).decode("utf-8") if length else ""
+                    # Accept newline- or comma-separated symbols
+                    syms = [s.strip() for s in body.replace(",", "\n").splitlines()
+                            if s.strip()]
+                    panel.commands.put(("set_tickers", syms))
+                    self._send(200, json.dumps({"ok": True, "count": len(syms)}))
                 else:
                     self._send(404, json.dumps({"error": "not found"}))
 

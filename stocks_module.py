@@ -34,6 +34,9 @@ logger = logging.getLogger("stocks")
 
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 _CSV_DIR = os.path.join(_PROJECT_DIR, 'documentation')
+# Web-panel watchlist override: one symbol per line. Takes precedence over
+# the CSV and config defaults when present.
+_TICKER_OVERRIDE = os.path.join(_PROJECT_DIR, 'data', 'tickers.txt')
 
 # Alpha Vantage free tier: 25/day.  Keep 1 spare.
 AV_DAILY_BUDGET = 24
@@ -94,9 +97,10 @@ class StocksModule:
         self._csv_date_str = None
         self._last_csv_check = 0
 
-        # Load tickers from CSV, fall back to config list
+        # Source priority: web-panel override file > CSV > config default
         self.tickers = []
-        self._load_tickers_from_csv()
+        if not self._load_ticker_override():
+            self._load_tickers_from_csv()
         if not self.tickers:
             self.tickers = list(tickers)
             for t in self.tickers:
@@ -209,8 +213,90 @@ class StocksModule:
         self.item_fade_offsets = {t: i * 0.2 for i, t in enumerate(tickers)}
         logger.info(f"Loaded {len(tickers)} tickers from {filename}")
 
+    # ------------------------------------------------------------------
+    # Web-panel watchlist override
+    # ------------------------------------------------------------------
+
+    def _load_ticker_override(self):
+        """Load tickers from the web-panel override file, if present.
+
+        Returns True if it set a non-empty ticker list. Each line is a
+        symbol (e.g. AAPL, RR.L, BTC/USD); metadata is derived the same
+        way as CSV symbols so AV/yfinance routing still works.
+        """
+        try:
+            if not os.path.exists(_TICKER_OVERRIDE):
+                return False
+            with open(_TICKER_OVERRIDE, 'r', encoding='utf-8') as f:
+                raw_lines = [ln.strip() for ln in f if ln.strip()]
+        except Exception as e:
+            logger.warning(f"Could not read ticker override: {e}")
+            return False
+
+        tickers, meta = [], {}
+        for raw in raw_lines:
+            ticker, info = _normalize_csv_symbol(raw, '')
+            if ticker and ticker not in meta:
+                tickers.append(ticker)
+                meta[ticker] = info
+        if not tickers:
+            return False
+
+        self.tickers = tickers
+        self._ticker_meta = meta
+        logger.info(f"Loaded {len(tickers)} tickers from override file")
+        return True
+
+    def _save_ticker_override(self, tickers):
+        try:
+            os.makedirs(os.path.dirname(_TICKER_OVERRIDE), exist_ok=True)
+            tmp = _TICKER_OVERRIDE + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                f.write("\n".join(tickers) + "\n")
+            os.replace(tmp, _TICKER_OVERRIDE)
+        except Exception as e:
+            logger.warning(f"Could not save ticker override: {e}")
+
+    def get_tickers(self):
+        """Current watchlist (for the web panel)."""
+        return list(self.tickers)
+
+    def set_tickers(self, symbols):
+        """Replace the watchlist from a list of raw symbols and persist it.
+
+        Called on the main loop (via the web-panel command queue), so it
+        is safe to mutate state here. Triggers an immediate refetch.
+        """
+        tickers, meta = [], {}
+        for raw in symbols:
+            raw = (raw or '').strip()
+            if not raw:
+                continue
+            ticker, info = _normalize_csv_symbol(raw, '')
+            if ticker and ticker not in meta:
+                tickers.append(ticker)
+                meta[ticker] = info
+        if not tickers:
+            logger.warning("set_tickers called with no valid symbols")
+            return False
+
+        self.tickers = tickers
+        self._ticker_meta = meta
+        # Drop data/state for removed tickers, keep the rest
+        keep = set(tickers)
+        self.stock_data = {k: v for k, v in self.stock_data.items() if k in keep}
+        self.item_fade_offsets = {t: i * 0.2 for i, t in enumerate(tickers)}
+        self._fetch_queue = []
+        self._initial_fetch_done = False  # refetch on next update
+        self._save_ticker_override(tickers)
+        logger.info(f"Watchlist updated via web panel: {tickers}")
+        return True
+
     def _check_csv_update(self):
         """Re-scan CSV directory for filename date changes."""
+        # The web-panel override wins; don't let a CSV re-scan clobber it
+        if os.path.exists(_TICKER_OVERRIDE):
+            return
         old_date = self._csv_date_str
         self._load_tickers_from_csv()
         if self._csv_date_str != old_date and old_date is not None:
