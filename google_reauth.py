@@ -24,6 +24,12 @@ _ENV = os.path.join(_PROJECT_DIR, "..", "Variables.env")
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
+# Fixed port so the redirect URL is predictable. If your OAuth client is
+# a "Web application" type, add exactly this URL (with trailing slash) to
+# its Authorized redirect URIs in Google Cloud Console. A "Desktop app"
+# client needs no redirect URI registration at all (recommended).
+REDIRECT_PORT = 8765
+
 
 def _write_env(token, refresh_token):
     """Update the two GOOGLE_*_TOKEN lines in place, preserve the rest."""
@@ -76,9 +82,15 @@ def main():
     }
 
     flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
+    print(f"If you hit Error 400 (redirect_uri_mismatch), your OAuth client")
+    print(f"is a 'Web application' type. Either create a 'Desktop app' client")
+    print(f"(no redirect setup needed), or add this exact URL to the Web")
+    print(f"client's Authorized redirect URIs:")
+    print(f"    http://localhost:{REDIRECT_PORT}/")
+    print()
     # access_type=offline + prompt=consent guarantees a refresh token
     creds = flow.run_local_server(
-        port=0, access_type="offline", prompt="consent",
+        port=REDIRECT_PORT, access_type="offline", prompt="consent",
         open_browser=True,
     )
 
