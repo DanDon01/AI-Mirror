@@ -1,4 +1,5 @@
 import fitbit
+import math
 from datetime import datetime, timedelta
 import time as time_module
 import pygame
@@ -251,28 +252,67 @@ class FitbitModule:
         
         logging.info("Fitbit tokens have been saved to environment file")
 
-    def draw_progress_bar(self, screen, x, y, width, progress, goal):
-        """Thin progress bar -- colored fill on black, no border."""
-        bar_height = 4
-        bar_width = min(width, 250)
+    @staticmethod
+    def _progress_color(fraction):
+        """Red below 50%, amber below 80%, green at/above goal."""
+        if fraction < 0.5:
+            return (220, 80, 80)
+        if fraction < 0.8:
+            return (240, 180, 40)
+        return (80, 200, 120)
 
-        progress_width = min(int((progress / goal) * bar_width), bar_width)
+    def draw_step_frame(self, screen, x, y, w, h, fraction, thickness=3):
+        """Trace a coloured line around the module's outline as step
+        progress grows, closing into a full square at the goal.
 
-        if progress < goal * 0.5:
-            color = (220, 80, 80)
-        elif progress < goal * 0.8:
-            color = (240, 180, 40)
-        else:
-            color = (80, 200, 120)
+        Starts at the top-left and runs clockwise (top -> right -> bottom
+        -> left). A faint full-square track sits underneath so the unfilled
+        part still reads as an outline.
+        """
+        fraction = max(0.0, min(fraction, 1.0))
+        t = thickness
+        # Draw onto a SRCALPHA layer so colours blend softly on the glass
+        surf = pygame.Surface((w + t, h + t), pygame.SRCALPHA)
+        inset = t / 2.0
+        x0, y0 = inset, inset
+        x1, y1 = w - inset, h - inset
 
-        # Dim track
-        track = pygame.Surface((bar_width, bar_height), pygame.SRCALPHA)
-        track.fill((40, 40, 40, 120))
-        screen.blit(track, (x, y))
+        # Faint track (whole square)
+        pygame.draw.lines(
+            surf, (60, 60, 64, 90), True,
+            [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], 1,
+        )
 
-        # Colored fill
-        if progress_width > 0:
-            pygame.draw.rect(screen, color, (x, y, progress_width, bar_height))
+        if fraction <= 0:
+            screen.blit(surf, (x, y))
+            return
+
+        color = (*self._progress_color(fraction), 230)
+        perim = 2 * ((x1 - x0) + (y1 - y0))
+        remaining = fraction * perim
+        edges = [
+            ((x0, y0), (x1, y0)),   # top
+            ((x1, y0), (x1, y1)),   # right
+            ((x1, y1), (x0, y1)),   # bottom
+            ((x0, y1), (x0, y0)),   # left
+        ]
+        for (ax, ay), (bx, by) in edges:
+            if remaining <= 0:
+                break
+            seg = math.hypot(bx - ax, by - ay)
+            if seg <= 0:
+                continue
+            if remaining >= seg:
+                pygame.draw.line(surf, color, (ax, ay), (bx, by), t)
+                remaining -= seg
+            else:
+                f = remaining / seg
+                pygame.draw.line(
+                    surf, color, (ax, ay),
+                    (ax + (bx - ax) * f, ay + (by - ay) * f), t,
+                )
+                remaining = 0
+        screen.blit(surf, (x, y))
 
     def draw(self, screen, position):
         """Draw Fitbit data -- floating text on black, no background."""
@@ -329,11 +369,10 @@ class FitbitModule:
             except Exception:
                 steps_int = 0
 
-            # Thin progress bar for steps
-            bar_w = min(width, 250)
-            bar_x = x + width - bar_w if align == 'right' else x
-            self.draw_progress_bar(screen, bar_x, current_y, width, steps_int, step_goal)
-            current_y += 10
+            # Step progress traces the module outline, closing into a full
+            # square at the goal. Drawn around the whole module box.
+            fraction = steps_int / step_goal if step_goal else 0.0
+            self.draw_step_frame(screen, x, y, width, height, fraction)
 
             steps_label = self.body_font.render("Steps:", True, label_color)
             steps_value = self.body_font.render(str(steps), True, value_color)
