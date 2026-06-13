@@ -59,15 +59,29 @@ voice capture will work.
 
 ## 4. One-time: systemd service (run as an appliance)
 
+No manual editing - the install script fills in your username, project
+path, and venv automatically (so nothing personal lands in git):
+
 ```bash
-nano deploy/ai-mirror.service    # set User= and the two /home/dan paths
-sudo cp deploy/ai-mirror.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ai-mirror
-journalctl -u ai-mirror -f       # watch it start
+chmod +x deploy/install-service.sh   # first time only
+./deploy/install-service.sh
+journalctl -u ai-mirror -f           # watch it start
 ```
 
 After this the mirror starts on boot and restarts itself if it crashes.
+
+Troubleshooting:
+- `status=217/USER` -> username mismatch (the script avoids this).
+- `status=209/214` or display errors -> the Pi is on Wayland (Bookworm
+  default), not X11. Find your session with `echo $WAYLAND_DISPLAY`
+  (e.g. wayland-0), then edit /etc/systemd/system/ai-mirror.service:
+  replace the DISPLAY/XAUTHORITY lines with
+  `Environment=WAYLAND_DISPLAY=wayland-0` and
+  `Environment=SDL_VIDEODRIVER=wayland`, then
+  `sudo systemctl daemon-reload && sudo systemctl restart ai-mirror`.
+  If pygame still won't open a window, run it once in the foreground
+  (`./venv/bin/python AI-Mirror.py` from the desktop) to see the real
+  SDL error.
 
 ## 5. One-time: avatar face frames (Holly)
 

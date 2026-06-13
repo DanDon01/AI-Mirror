@@ -1,32 +1,33 @@
-# systemd unit for AI-Mirror on the Raspberry Pi.
+# systemd unit TEMPLATE for AI-Mirror on the Raspberry Pi.
 #
-# Install (adjust User/paths for your Pi first):
-#   sudo cp deploy/ai-mirror.service /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable --now ai-mirror
+# Do not install this file directly - the __PLACEHOLDERS__ below are
+# filled in for your user and paths by:
 #
-# Logs: journalctl -u ai-mirror -f   (plus the app's magic_mirror.log)
+#   ./deploy/install-service.sh
+#
+# That script detects your username, project directory, and venv, writes
+# the real unit to /etc/systemd/system/, and starts it. Logs:
+#   journalctl -u ai-mirror -f   (plus the app's magic_mirror.log)
 
 [Unit]
 Description=AI-Mirror smart mirror
 After=network-online.target graphical.target
 Wants=network-online.target
-
-[Service]
-# Adjust to your Pi username and checkout location
-User=dan
-WorkingDirectory=/home/dan/AI-Mirror
-# Use the venv interpreter instead if the Pi runs one:
-#   ExecStart=/home/dan/AI-Mirror/venv/bin/python AI-Mirror.py
-ExecStart=/usr/bin/python3 AI-Mirror.py
-Restart=always
-RestartSec=5
-# Pygame needs the desktop session's display
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/dan/.Xauthority
-# Give slow Pi boots time before the first restart counts as a failure
+# Boot grace: don't count restarts as failure during slow Pi startup
 StartLimitIntervalSec=120
 StartLimitBurst=10
+
+[Service]
+User=__USER__
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PYTHON__ AI-Mirror.py
+Restart=always
+RestartSec=5
+# Display: X11 path. If the Pi runs Wayland (labwc, the Bookworm default)
+# and this still fails on the display, see PI_TESTING.md.
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=__HOME__/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
 
 [Install]
 WantedBy=graphical.target
