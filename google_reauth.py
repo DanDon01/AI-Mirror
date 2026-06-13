@@ -15,6 +15,7 @@ the mirror afterwards.
 """
 
 import os
+import shutil
 import sys
 
 from dotenv import load_dotenv
@@ -29,6 +30,23 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 # its Authorized redirect URIs in Google Cloud Console. A "Desktop app"
 # client needs no redirect URI registration at all (recommended).
 REDIRECT_PORT = 8765
+
+
+def _prepare_pi_browser():
+    """Make the auth page open in a real browser on the Pi's screen.
+
+    Over SSH, Python's webbrowser has no DISPLAY and falls back to a
+    text browser (no JavaScript -> Google rejects it). Point it at the
+    Pi's display and a graphical browser instead.
+    """
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
+    for name in ("chromium-browser", "chromium", "firefox", "epiphany-browser"):
+        path = shutil.which(name)
+        if path:
+            os.environ["BROWSER"] = path
+            return name
+    return None
 
 
 def _write_env(token, refresh_token):
@@ -81,21 +99,23 @@ def main():
         }
     }
 
+    browser = _prepare_pi_browser()
+    if browser:
+        print(f"Opening {browser} on the Pi's screen "
+              f"(DISPLAY={os.environ.get('DISPLAY', '?')})...")
+        print("Approve there. If nothing appears, the URL is also printed")
+        print("below - open it in any browser that can reach this Pi.")
+    else:
+        print("No graphical browser found on the Pi. Open the URL below in")
+        print("a browser that can reach this machine on localhost.")
+    print()
+
     flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-    print()
-    print("=" * 64)
-    print("Copy the URL below into a browser on your laptop/phone, approve")
-    print(f"access, and the page will redirect to localhost:{REDIRECT_PORT} (this Pi).")
-    print("If running over SSH, first reconnect with port forwarding so the")
-    print("redirect reaches the Pi:")
-    print(f"    ssh -L {REDIRECT_PORT}:localhost:{REDIRECT_PORT} <user>@<pi-ip>")
-    print("=" * 64)
-    print()
-    # open_browser=False prints the URL instead of launching a (text) browser;
-    # access_type=offline + prompt=consent guarantees a refresh token
+    # open_browser=True launches the Pi browser we just selected and ALSO
+    # prints the URL as a fallback; offline+consent guarantees a refresh token
     creds = flow.run_local_server(
         port=REDIRECT_PORT, access_type="offline", prompt="consent",
-        open_browser=False,
+        open_browser=True,
     )
 
     if not creds.refresh_token:
