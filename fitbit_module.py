@@ -149,10 +149,15 @@ class FitbitModule:
         """Runs on the background fetch thread only."""
         try:
             return func(**kwargs)
-        except fitbit.exceptions.HTTPUnauthorized:
-            logging.info("Received HTTPUnauthorized, attempting to refresh token")
-            self.refresh_access_token()
-            return func(**kwargs)
+        except (fitbit.exceptions.HTTPUnauthorized, TokenExpiredError):
+            logging.info("Fitbit token expired; refreshing and retrying")
+            if not self.refresh_access_token():
+                raise
+            # refresh_access_token() rebuilt self.client, so re-resolve the
+            # method on the NEW client - the old bound func still carries
+            # the expired token and would 401 again.
+            fresh = getattr(self.client, func.__name__)
+            return fresh(**kwargs)
         except fitbit.exceptions.HTTPTooManyRequests as e:
             # Do NOT sleep through the Retry-After window (it can be an
             # hour): remember when we may try again and give up for now.
