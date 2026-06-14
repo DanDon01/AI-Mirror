@@ -45,7 +45,9 @@ DEFAULT_LIMITS = {
     'google-calendar': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
     'zenquotes': {'hourly': 5, 'daily': 10, 'daily_cost': 0},
     'home-assistant': {'hourly': 60, 'daily': 1000, 'daily_cost': 0},
-    'octopus-energy': {'hourly': 20, 'daily': 80, 'daily_cost': 0},
+    # Octopus REST API is free and generous; the module polls account +
+    # rates + hourly consumption, ~50-70/day, so keep healthy headroom
+    'octopus-energy': {'hourly': 60, 'daily': 400, 'daily_cost': 0},
 }
 
 

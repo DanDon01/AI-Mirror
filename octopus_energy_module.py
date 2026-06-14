@@ -71,6 +71,7 @@ class OctopusEnergyModule:
         self._last_rates_fetch = 0
         self._last_consumption_fetch = 0
         self._last_ev_fetch = 0
+        self._blocked_until = 0   # rate-limit backoff (unix time)
         self._last_error = None
 
         # Fonts (lazy init)
@@ -441,6 +442,16 @@ class OctopusEnergyModule:
         if not self._fetcher.idle:
             return  # previous fetch still running
 
+        # Rate-limited: back off instead of re-checking (and re-logging)
+        # every frame. Without this, a blocked account fetch never sets
+        # _account_fetched, so update() resubmits it every cycle.
+        if now < self._blocked_until:
+            return
+        if not api_tracker.allow("octopus_energy", "octopus-energy"):
+            self._blocked_until = now + 1800  # 30 min
+            logger.info("Octopus rate-limited; backing off 30 min")
+            return
+
         # Staggered: at most one background fetch in flight per cycle
         if not self._account_fetched or now - self._last_account_fetch > 86400:
             self._last_account_fetch = now
@@ -453,8 +464,8 @@ class OctopusEnergyModule:
             self._fetcher.submit(self._fetch_rates)
             return
 
-        # Consumption: every 30 minutes
-        if now - self._last_consumption_fetch > 1800:
+        # Consumption: hourly (half-hourly data lands with a delay anyway)
+        if now - self._last_consumption_fetch > 3600:
             self._last_consumption_fetch = now
             self._fetcher.submit(self._fetch_consumption)
             return
