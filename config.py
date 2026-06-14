@@ -311,11 +311,13 @@ CONFIG = {
             'screen_size': CURRENT_MONITOR['resolution'],
             'icon_size': 64,
             'icon_directory': retro_icons_path,
-            # 0.002 was effectively invisible (~0 icons in 20s). ~0.04 gives
-            # a steady gentle fall without overcrowding (capped below).
-            'spawn_probability': 0.04,
-            'fall_speed': 2,
-            'max_active_icons': 18,
+            # Drip feed: slow spawn rate, gentle fall, and a high cap so it
+            # never blocks (a low cap caused fill-then-refill batches). More
+            # on screen comes from the slower fall (longer dwell), not a
+            # faster spawn, so appearances stay spread out (~1.2s apart).
+            'spawn_probability': 0.028,
+            'fall_speed': 2.0,
+            'max_active_icons': 60,
             'rotation_speed': 1
         }
     },
