@@ -592,6 +592,17 @@ class MagicMirror:
         lowered = text.lower()
         self.speech_logger.log_user_speech(text)
 
+        # Display state ("screensaver", "wake up", "go to sleep")
+        if 'screensaver' in lowered or 'screen saver' in lowered:
+            self.change_state('screensaver')
+            return
+        if 'wake' in lowered or 'wake up' in lowered:
+            self.change_state('active')
+            return
+        if 'go to sleep' in lowered or 'sleep mode' in lowered:
+            self.change_state('sleep')
+            return
+
         # Dashboard control ("show the dashboard", "close dashboard")
         if 'dashboard' in lowered and 'smarthome' in self.modules:
             sh = self.modules['smarthome']

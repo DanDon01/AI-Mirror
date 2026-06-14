@@ -311,9 +311,11 @@ CONFIG = {
             'screen_size': CURRENT_MONITOR['resolution'],
             'icon_size': 64,
             'icon_directory': retro_icons_path,
-            'spawn_probability': 0.002,
-            'fall_speed': 1,
-            'max_active_icons': 20,
+            # 0.002 was effectively invisible (~0 icons in 20s). ~0.04 gives
+            # a steady gentle fall without overcrowding (capped below).
+            'spawn_probability': 0.04,
+            'fall_speed': 2,
+            'max_active_icons': 18,
             'rotation_speed': 1
         }
     },
