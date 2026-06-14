@@ -360,64 +360,63 @@ class FitbitModule:
             except Exception:
                 steps_int = 0
 
-            # Step progress frame: a square anchored to the module's outer
-            # edge and sitting BELOW the title so it never covers text.
-            # Closes into a full square at the goal.
             fraction = steps_int / step_goal if step_goal else 0.0
-            frame_top = current_y - 2
-            frame_side = max(60, (y + height - 10) - frame_top)
-            if align == 'right':
-                frame_x = x + width - frame_side
-                if frame_x < x:
-                    frame_x, frame_side = x, width
-            else:
-                frame_side = min(frame_side, width)
-                frame_x = x
-            self.draw_step_frame(screen, frame_x, frame_top, frame_side, frame_side, fraction)
 
-            # Keep text off the frame line with a little inner padding
-            inner = 14
-            cw = width - inner
+            # Build the stat rows as surfaces first, so the frame can be
+            # sized to hug the actual text rather than the module box.
+            rows = []
 
-            steps_label = self.body_font.render("Steps:", True, label_color)
-            steps_value = self.body_font.render(str(steps), True, value_color)
-            steps_label.set_alpha(TRANSPARENCY)
-            steps_value.set_alpha(TRANSPARENCY)
-            combined_w = steps_label.get_width() + 5 + steps_value.get_width()
-            if align == 'right':
-                sx = x + cw - combined_w
-            else:
-                sx = x
-            screen.blit(steps_label, (sx, current_y))
-            screen.blit(steps_value, (sx + steps_label.get_width() + 5, current_y))
-            current_y += line_height
+            sl = self.body_font.render("Steps:", True, label_color)
+            sv = self.body_font.render(str(steps), True, value_color)
+            gap = 5
+            srow = pygame.Surface(
+                (sl.get_width() + gap + sv.get_width(),
+                 max(sl.get_height(), sv.get_height())), pygame.SRCALPHA)
+            srow.blit(sl, (0, 0))
+            srow.blit(sv, (sl.get_width() + gap, 0))
+            rows.append(srow)
 
-            if 'resting_heart_rate' in self.data and self.data['resting_heart_rate'] != 'N/A':
-                hr_text = f"HR: {self.data['resting_heart_rate']} bpm"
-                hr_surf = self.body_font.render(hr_text, True, value_color)
-                hr_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, hr_surf, x, current_y, cw, align)
-                current_y += line_height
-
-            if 'sleep' in self.data and self.data['sleep'] != 'N/A':
-                sleep_text = f"Sleep: {self.data['sleep']}"
-                sleep_surf = self.body_font.render(sleep_text, True, value_color)
-                sleep_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, sleep_surf, x, current_y, cw, align)
-                current_y += line_height
-
+            hr = self.data.get('resting_heart_rate')
+            if hr not in (None, 'N/A'):
+                rows.append(self.body_font.render(f"HR: {hr} bpm", True, value_color))
+            if self.data.get('sleep') not in (None, 'N/A'):
+                rows.append(self.body_font.render(
+                    f"Sleep: {self.data['sleep']}", True, value_color))
             if 'active_minutes' in self.data:
-                active_text = f"Active: {self.data['active_minutes']} min"
-                active_surf = self.body_font.render(active_text, True, value_color)
-                active_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, active_surf, x, current_y, cw, align)
-                current_y += line_height
+                rows.append(self.body_font.render(
+                    f"Active: {self.data['active_minutes']} min", True, value_color))
+            cal = self.data.get('calories')
+            if cal not in (None, 'N/A'):
+                rows.append(self.body_font.render(f"Cal: {cal}", True, value_color))
 
-            if 'calories' in self.data and self.data['calories'] != 'N/A':
-                cal_text = f"Cal: {self.data['calories']}"
-                cal_surf = self.body_font.render(cal_text, True, value_color)
-                cal_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, cal_surf, x, current_y, cw, align)
+            for r in rows:
+                r.set_alpha(TRANSPARENCY)
+
+            # Square sized to hug the text block (+ inner padding), anchored
+            # to the module's outer edge below the title.
+            pad = 12
+            content_w = max(r.get_width() for r in rows)
+            content_h = len(rows) * line_height
+            side = max(content_w, content_h) + 2 * pad
+            # Never exceed the module box
+            side = min(side, width, (y + height) - (current_y - pad) - 4)
+
+            frame_top = current_y - pad
+            if align == 'right':
+                frame_x = x + width - side
+            else:
+                frame_x = x
+            self.draw_step_frame(screen, frame_x, frame_top, side, side, fraction)
+
+            # Blit rows inside the frame with pad from the inner edge
+            row_y = current_y
+            for r in rows:
+                if align == 'right':
+                    rx = frame_x + side - pad - r.get_width()
+                else:
+                    rx = frame_x + pad
+                screen.blit(r, (rx, row_y))
+                row_y += line_height
             
         except Exception as e:
             logging.error(f"Error drawing Fitbit data: {e}")
