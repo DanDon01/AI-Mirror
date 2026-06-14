@@ -44,3 +44,4 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+google_login.html

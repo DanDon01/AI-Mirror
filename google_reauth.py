@@ -122,22 +122,41 @@ def main():
         access_type="offline", prompt="consent", include_granted_scopes="true"
     )
 
-    browser = _try_open_browser(auth_url)
+    # Write a clickable HTML file so the FULL url reaches the browser - the
+    # terminal wraps/truncates long URLs and copying half of one causes
+    # "invalid code_challenge_method" errors.
+    html_path = os.path.join(_PROJECT_DIR, "google_login.html")
+    try:
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(
+                "<!doctype html><meta charset=utf-8>"
+                "<title>AI-Mirror Google sign-in</title>"
+                "<body style='font-family:sans-serif;padding:2em;font-size:1.2em'>"
+                "<h2>AI-Mirror &mdash; Google Calendar sign-in</h2>"
+                f"<p><a href=\"{auth_url}\">Click here to authorise</a></p>"
+                "<p>Approve access (Advanced &rarr; Go to ... if warned). Your "
+                "browser then goes to a <b>localhost:8765</b> page that will not "
+                "load &mdash; that is normal. Copy the whole address from the "
+                "address bar and paste it back into the terminal.</p>"
+                "</body>"
+            )
+        _try_open_browser("file://" + html_path)
+    except Exception:
+        html_path = None
+
     print()
     print("=" * 68)
-    if browser:
-        print(f"Opened {browser} on the Pi screen. If it did not appear, open")
-        print("this URL in any browser (phone/laptop is fine):")
-    else:
-        print("Open this URL in any browser (phone/laptop is fine):")
+    print("1. Open this file and click the link (double-click it in the Pi")
+    print("   file manager, or open it in a browser):")
+    if html_path:
+        print(f"      {html_path}")
+    print("   ...or open the URL below in your PHONE/LAPTOP browser instead.")
+    print("2. Approve access (Advanced -> Go to AI-Mirror (unsafe) if warned).")
+    print("3. The browser lands on a 'localhost:8765' page that will NOT load")
+    print("   - that is normal. Copy the whole address bar and paste below.")
+    print("=" * 68)
     print()
     print(auth_url)
-    print()
-    print("Approve access (click Advanced -> Go to ... (unsafe) if warned).")
-    print("Your browser will then go to a 'localhost:8765' page that shows an")
-    print("error or will not load - THAT IS NORMAL. Copy the full address")
-    print("from the browser's address bar and paste it below.")
-    print("=" * 68)
     print()
 
     try:
