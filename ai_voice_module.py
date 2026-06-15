@@ -80,6 +80,9 @@ class AIVoiceModule:
         self.running = True
         self.audio_enabled = True
         self.capture_device = audio_cfg.get("alsa_device", DEFAULT_CAPTURE_DEVICE)
+        # Speaker output: None = ALSA default, or a plughw: device.
+        self.speaker_device = audio_cfg.get("speaker_device") or None
+        self._aplay = None
         self.conversation_timeout = audio_cfg.get("conversation_timeout", 25)
         self.max_conversation_sec = audio_cfg.get("max_conversation_seconds", 180)
 
@@ -643,20 +646,42 @@ class AIVoiceModule:
     # Playback (gapless, with avatar lipsync feed and mic echo gate)
     # ------------------------------------------------------------------
 
-    def _playback_loop(self):
-        """Feed PCM chunks to a pygame channel back-to-back.
+    def _aplay_cmd(self):
+        cmd = [
+            "aplay", "-q", "-t", "raw", "-f", "S16_LE",
+            "-r", str(self.sample_rate), "-c", str(self.channels),
+        ]
+        if self.speaker_device:
+            cmd += ["-D", self.speaker_device]
+        return cmd
 
-        Runs in its own thread so the WebSocket reader is never blocked
-        by audio playback. Sets _playback_active so the mic loop gates
-        itself while the mirror speaks, and forwards each chunk to the
-        avatar audio sink for lipsync.
+    def _playback_loop(self):
+        """Pipe PCM reply chunks to ALSA via aplay.
+
+        pygame's mixer can't be used: the app runs with SDL_AUDIODRIVER=
+        dummy (set so pygame doesn't grab the audio device at display
+        init), so mixer output is silent. aplay talks to ALSA directly,
+        like the mic's arecord. Audio is also forwarded to the avatar sink
+        for lipsync. The echo gate stays closed until aplay has finished
+        draining its buffer, so the mic never hears the tail of the reply.
         """
-        channel = None
         while self.running:
             try:
                 chunk = self._playback_queue.get(timeout=0.5)
             except Empty:
-                if self._playback_active and (channel is None or not channel.get_busy()):
+                if self._playback_active:
+                    proc = self._aplay
+                    # Signal end-of-stream once; keep the gate closed until
+                    # aplay has played out everything it buffered
+                    if proc is not None:
+                        if proc.stdin and not proc.stdin.closed:
+                            try:
+                                proc.stdin.close()
+                            except Exception:
+                                pass
+                        if proc.poll() is None:
+                            continue  # still playing buffered audio
+                        self._aplay = None
                     self._playback_active = False
                     self._mute_until = time.time() + UNMUTE_TAIL_SEC
                     self._last_voice_activity = time.time()
@@ -669,10 +694,6 @@ class AIVoiceModule:
             try:
                 if len(chunk) < 4:
                     continue
-                if not pygame.mixer.get_init():
-                    pygame.mixer.init(
-                        frequency=self.sample_rate, size=-16, channels=1
-                    )
 
                 if not self._playback_active:
                     self._playback_active = True
@@ -684,16 +705,14 @@ class AIVoiceModule:
                     except Exception as e:
                         self.logger.debug(f"Avatar audio sink error: {e}")
 
-                sound = pygame.mixer.Sound(buffer=chunk)
-                if channel is None or not channel.get_busy():
-                    channel = sound.play()
-                else:
-                    # Wait for the single queue slot to free, then chain for
-                    # gapless output. Channel.get_queue() returns the queued
-                    # Sound or None (there is no get_queued()).
-                    while channel.get_queue() is not None and self.running:
-                        time.sleep(0.005)
-                    channel.queue(sound)
+                # (Re)start aplay if needed and stream this chunk to it
+                if self._aplay is None or self._aplay.poll() is not None:
+                    self._aplay = subprocess.Popen(
+                        self._aplay_cmd(), stdin=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+                self._aplay.stdin.write(chunk)
+                self._aplay.stdin.flush()
             except Exception as e:
                 self.logger.error(f"Playback error: {e}")
 
@@ -759,6 +778,11 @@ class AIVoiceModule:
         self.running = False
         self.conversation_active = False
         self._stop_mic_proc()
+        if self._aplay is not None:
+            try:
+                self._aplay.terminate()
+            except Exception:
+                pass
         if hasattr(self, "ws"):
             try:
                 self.ws.close()
