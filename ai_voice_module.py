@@ -46,6 +46,10 @@ _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.join(_PROJECT_DIR, "data")
 _DEBUG_DIR = os.path.join(_DATA_DIR, "debug")
 
+# Marker pushed onto the playback queue when a response finishes, so the
+# loop closes aplay's stdin only after all that reply's audio is queued.
+_RESPONSE_END = object()
+
 DEFAULT_MODEL = "gpt-realtime-mini"
 DEFAULT_VOICE = "marin"
 DEFAULT_CAPTURE_DEVICE = "plughw:3,0"  # plughw = ALSA converts rate/format
@@ -354,6 +358,9 @@ class AIVoiceModule:
             elif event_type == "response.output_text.delta":
                 self._response_text += data.get("delta", "")
             elif event_type == "response.done":
+                # All audio deltas for this response are already queued;
+                # the marker tells playback to close aplay's input now
+                self._playback_queue.put(_RESPONSE_END)
                 self._on_response_done(data)
             elif event_type == "error":
                 err = data.get("error", {})
@@ -568,7 +575,10 @@ class AIVoiceModule:
                     break
                 data = proc.stdout.read(chunk_bytes)
                 if not data:
-                    self.logger.error("arecord stream ended unexpectedly")
+                    # Empty read after we asked to stop is normal (arecord
+                    # was killed); only an error if still mid-conversation
+                    if self.conversation_active:
+                        self.logger.error("arecord stream ended unexpectedly")
                     break
 
                 now = time.time()
@@ -679,42 +689,57 @@ class AIVoiceModule:
             cmd += ["-D", self.speaker_device]
         return cmd
 
+    def _maybe_finish_playback(self):
+        """Release the echo gate once a finished response has fully drained.
+
+        Called when the response-end marker arrives and on idle ticks. The
+        gate stays closed (mic muted) until aplay has read EOF and played
+        out its buffer, so the mic never catches the tail of the reply.
+        """
+        if not self._playback_active:
+            return
+        proc = self._aplay
+        if proc is not None and proc.poll() is None:
+            return  # still playing buffered audio
+        self._aplay = None
+        self._playback_active = False
+        self._mute_until = time.time() + UNMUTE_TAIL_SEC
+        self._last_voice_activity = time.time()
+        if self.conversation_active:
+            self.set_status("Listening", "Just talk - SPACE to end")
+        else:
+            self.set_status("Ready", "Press SPACE to talk")
+
     def _playback_loop(self):
         """Pipe PCM reply chunks to ALSA via aplay.
 
         pygame's mixer can't be used: the app runs with SDL_AUDIODRIVER=
         dummy (set so pygame doesn't grab the audio device at display
         init), so mixer output is silent. aplay talks to ALSA directly,
-        like the mic's arecord. Audio is also forwarded to the avatar sink
-        for lipsync. The echo gate stays closed until aplay has finished
-        draining its buffer, so the mic never hears the tail of the reply.
+        like the mic's arecord. Audio is forwarded to the avatar sink for
+        lipsync. aplay's stdin is only closed when the response actually
+        ends (the _RESPONSE_END marker), not on brief mid-reply gaps -
+        closing it early would drop the rest of the reply.
         """
         while self.running:
             try:
-                chunk = self._playback_queue.get(timeout=0.5)
+                item = self._playback_queue.get(timeout=0.5)
             except Empty:
-                if self._playback_active:
-                    proc = self._aplay
-                    # Signal end-of-stream once; keep the gate closed until
-                    # aplay has played out everything it buffered
-                    if proc is not None:
-                        if proc.stdin and not proc.stdin.closed:
-                            try:
-                                proc.stdin.close()
-                            except Exception:
-                                pass
-                        if proc.poll() is None:
-                            continue  # still playing buffered audio
-                        self._aplay = None
-                    self._playback_active = False
-                    self._mute_until = time.time() + UNMUTE_TAIL_SEC
-                    self._last_voice_activity = time.time()
-                    if self.conversation_active:
-                        self.set_status("Listening", "Just talk - SPACE to end")
-                    else:
-                        self.set_status("Ready", "Press SPACE to talk")
+                self._maybe_finish_playback()
                 continue
 
+            # End-of-response marker: stop the input stream so aplay drains
+            if item is _RESPONSE_END:
+                proc = self._aplay
+                if proc is not None and proc.stdin and not proc.stdin.closed:
+                    try:
+                        proc.stdin.close()
+                    except Exception:
+                        pass
+                self._maybe_finish_playback()
+                continue
+
+            chunk = item
             try:
                 if len(chunk) < 4:
                     continue
@@ -730,7 +755,8 @@ class AIVoiceModule:
                         self.logger.debug(f"Avatar audio sink error: {e}")
 
                 # (Re)start aplay if needed and stream this chunk to it
-                if self._aplay is None or self._aplay.poll() is not None:
+                if (self._aplay is None or self._aplay.poll() is not None
+                        or self._aplay.stdin is None or self._aplay.stdin.closed):
                     self._aplay = subprocess.Popen(
                         self._aplay_cmd(), stdin=subprocess.PIPE,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
