@@ -112,6 +112,23 @@ class AIVoiceModule:
         self._playback_active = False   # echo gate: mute mic while speaking
         self._mute_until = 0.0
         self._response_audio_bytes = 0  # for per-response cost estimation
+        self._response_text = ""        # accumulated spoken transcript
+
+        # Conversation transcript log (gitignored): what was heard / spoken
+        self._voice_log = logging.getLogger("VoiceHistory")
+        self._voice_log.setLevel(logging.INFO)
+        self._voice_log.propagate = False
+        if not self._voice_log.handlers:
+            try:
+                from logging.handlers import RotatingFileHandler
+                handler = RotatingFileHandler(
+                    os.path.join(_PROJECT_DIR, "voice_history.log"),
+                    maxBytes=500000, backupCount=3,
+                )
+                handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s"))
+                self._voice_log.addHandler(handler)
+            except Exception as e:
+                self.logger.warning(f"Could not set up voice history log: {e}")
 
         # Playback pipeline: audio deltas land here, a dedicated thread
         # feeds them to a pygame channel back-to-back for gapless speech
@@ -292,6 +309,8 @@ class AIVoiceModule:
             elif event_type == "conversation.item.input_audio_transcription.completed":
                 transcript = data.get("transcript", "")
                 self.logger.info(f"User said: {transcript}")
+                if transcript:
+                    self._voice_log.info(f"HEARD: {transcript.strip()}")
                 if transcript and self._command_listener:
                     try:
                         self._command_listener(transcript)
@@ -303,9 +322,10 @@ class AIVoiceModule:
                     self._response_audio_bytes += len(audio_data)
                     self._playback_queue.put(audio_data)
             elif event_type == "response.output_audio_transcript.delta":
-                pass  # spoken text mirror; not displayed currently
+                # Transcript of the spoken reply, streamed in pieces
+                self._response_text += data.get("delta", "")
             elif event_type == "response.output_text.delta":
-                pass
+                self._response_text += data.get("delta", "")
             elif event_type == "response.done":
                 self._on_response_done(data)
             elif event_type == "error":
@@ -319,6 +339,10 @@ class AIVoiceModule:
         status = data.get("response", {}).get("status")
         self.logger.info(f"Response completed: status={status}")
         self._last_voice_activity = time.time()
+        spoken = self._response_text.strip()
+        if spoken:
+            self._voice_log.info(f"SPOKE: {spoken}")
+        self._response_text = ""
         if status == "failed":
             api_tracker.failure("ai_voice", "openai-realtime")
             self.retry_count += 1
