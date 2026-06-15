@@ -326,16 +326,17 @@ CONFIG = {
         'params': {
             'openai': {
                 'api_key': None,  # Fetched from env in module
-                # gpt-realtime-mini: best cost/latency for casual chat.
-                # Switch to 'gpt-realtime-2' for reasoning-class replies.
-                'model': 'gpt-realtime-mini',
-                'voice': 'marin',
+                # Set VOICE_MODEL in Variables.env to switch (no code edit).
+                # gpt-realtime-mini = best cost/latency; gpt-realtime = smarter.
+                'model': os.getenv('VOICE_MODEL', 'gpt-realtime-mini'),
+                'voice': os.getenv('VOICE_VOICE', 'marin'),
             },
             'audio': {
                 'device_index': 2,
                 # plughw (not hw) so ALSA resamples the USB mic to the
-                # Realtime API's 24 kHz. Card number is hardware-specific.
-                'alsa_device': 'plughw:3,0',
+                # Realtime API's 24 kHz. Set VOICE_MIC in Variables.env if
+                # your USB mic is not card 3.
+                'alsa_device': os.getenv('VOICE_MIC', 'plughw:3,0'),
                 # End a live conversation after this many idle seconds
                 'conversation_timeout': 25,
                 # Hard cap on any single conversation, idle or not
@@ -483,8 +484,11 @@ CONFIG = {
         'calendar': True,
         'fitbit': True,
         'retro_characters': True,
-        'ai_voice': False,
-        'ai_interaction': False,
+        # Voice is opt-in via Variables.env (no code edit, survives git pull):
+        #   ENABLE_VOICE=1           -> Realtime voice (gpt-realtime-mini)
+        #   ENABLE_VOICE_FALLBACK=1  -> older chat+TTS voice (no Realtime access needed)
+        'ai_voice': os.getenv('ENABLE_VOICE', '').lower() in ('1', 'true', 'yes', 'on'),
+        'ai_interaction': os.getenv('ENABLE_VOICE_FALLBACK', '').lower() in ('1', 'true', 'yes', 'on'),
         'avatar': True,  # Only draws while a voice conversation is active
         'countdown': True,
         'quote': True,
