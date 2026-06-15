@@ -337,6 +337,9 @@ CONFIG = {
                 # Realtime API's 24 kHz. Set VOICE_MIC in Variables.env if
                 # your USB mic is not card 3.
                 'alsa_device': os.getenv('VOICE_MIC', 'plughw:3,0'),
+                # Speaker for replies (aplay). Empty = ALSA default output;
+                # set VOICE_SPEAKER (e.g. plughw:0,0 for HDMI) if needed.
+                'speaker_device': os.getenv('VOICE_SPEAKER') or None,
                 # End a live conversation after this many idle seconds
                 'conversation_timeout': 25,
                 # Hard cap on any single conversation, idle or not
