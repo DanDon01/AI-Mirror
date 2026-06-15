@@ -664,8 +664,10 @@ class AIVoiceModule:
                 if channel is None or not channel.get_busy():
                     channel = sound.play()
                 else:
-                    # Wait for the queue slot, then chain for gapless output
-                    while channel.get_queued() and self.running:
+                    # Wait for the single queue slot to free, then chain for
+                    # gapless output. Channel.get_queue() returns the queued
+                    # Sound or None (there is no get_queued()).
+                    while channel.get_queue() is not None and self.running:
                         time.sleep(0.005)
                     channel.queue(sound)
             except Exception as e:
