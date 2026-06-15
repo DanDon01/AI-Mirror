@@ -49,11 +49,32 @@ _DEBUG_DIR = os.path.join(_DATA_DIR, "debug")
 DEFAULT_MODEL = "gpt-realtime-mini"
 DEFAULT_VOICE = "marin"
 DEFAULT_CAPTURE_DEVICE = "plughw:3,0"  # plughw = ALSA converts rate/format
-SESSION_INSTRUCTIONS = (
-    "You are a helpful assistant living inside a smart mirror in a hallway. "
-    "Keep replies short, natural and conversational - one or two sentences "
-    "unless asked for detail."
+# Personality. Override by creating voice_prompt.txt (gitignored) or
+# setting VOICE_PROMPT in Variables.env; otherwise this default is used.
+DEFAULT_INSTRUCTIONS = (
+    "You are the Magic Mirror - a witty, theatrical, slightly sassy wizard "
+    "who lives in the glass. When someone appears you greet them with flair, "
+    "give one genuine compliment on their appearance and one cheeky, "
+    "good-natured roast - playful, never cruel. You also answer questions "
+    "helpfully and a little dramatically. Because you are spoken aloud, keep "
+    "replies short - one or two sentences - unless asked for more. You have "
+    "seen a thousand faces and you are never lost for a clever word."
 )
+_PROMPT_FILE = os.path.join(_PROJECT_DIR, "voice_prompt.txt")
+
+
+def _load_instructions(logger=None):
+    """Persona text: voice_prompt.txt -> VOICE_PROMPT env -> default."""
+    try:
+        if os.path.exists(_PROMPT_FILE):
+            with open(_PROMPT_FILE, encoding="utf-8") as f:
+                text = f.read().strip()
+            if text:
+                return text
+    except Exception as e:
+        if logger:
+            logger.warning(f"Could not read voice_prompt.txt: {e}")
+    return (os.getenv("VOICE_PROMPT") or "").strip() or DEFAULT_INSTRUCTIONS
 # Cost estimate for the api_tracker daily budget: gpt-realtime-mini audio
 # runs ~10 tokens/sec, so a response second costs roughly $0.0002 out plus
 # input context - call it $0.0005/sec all-in, with a small floor per turn.
@@ -99,6 +120,7 @@ class AIVoiceModule:
 
         self.model = openai_cfg.get("model") or DEFAULT_MODEL
         self.voice = openai_cfg.get("voice") or DEFAULT_VOICE
+        self.instructions = _load_instructions(self.logger)
         self.ws_url = f"wss://api.openai.com/v1/realtime?model={self.model}"
 
         self.send_queue = Queue()
@@ -270,7 +292,7 @@ class AIVoiceModule:
             "session": {
                 "type": "realtime",
                 "output_modalities": ["audio"],
-                "instructions": SESSION_INSTRUCTIONS,
+                "instructions": self.instructions,
                 "audio": {
                     "input": {
                         "format": {"type": "audio/pcm", "rate": self.sample_rate},
@@ -298,7 +320,9 @@ class AIVoiceModule:
                 self.session_ready = True
                 self.send_ws_message(self._session_config())
             elif event_type == "session.updated":
-                self.logger.info("Session configured")
+                src = "voice_prompt.txt" if os.path.exists(_PROMPT_FILE) else (
+                    "VOICE_PROMPT env" if os.getenv("VOICE_PROMPT") else "default persona")
+                self.logger.info(f"Session configured (persona: {src}, voice: {self.voice})")
             elif event_type == "input_audio_buffer.speech_started":
                 self._last_voice_activity = time.time()
                 if self.conversation_active:

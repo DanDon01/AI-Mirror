@@ -45,3 +45,4 @@ dist/
 build/
 *.egg-info/
 google_login.html
+voice_prompt.txt
