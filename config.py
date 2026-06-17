@@ -41,27 +41,29 @@ def _bright(color):
     return tuple(min(255, int(c * _UI_BRIGHTNESS)) for c in color)
 
 
-# Text hierarchy: bright platinum on black. Brightened for glass - even
-# the "dim" tier stays legible through a two-way mirror.
-COLOR_TEXT_PRIMARY = _bright((240, 242, 245))
-COLOR_TEXT_SECONDARY = _bright((188, 190, 196))
-COLOR_TEXT_DIM = _bright((140, 142, 148))
-COLOR_TEXT_ACCENT = _bright((120, 195, 255))
+# Text hierarchy: pushed near-maximum for two-way glass. Primary is pure
+# white; even the "dim" tier is a light grey so it survives the glass.
+# The hierarchy is compressed (less contrast between tiers) on purpose -
+# legibility through the mirror wins over subtlety.
+COLOR_TEXT_PRIMARY = _bright((255, 255, 255))
+COLOR_TEXT_SECONDARY = _bright((232, 234, 238))
+COLOR_TEXT_DIM = _bright((198, 200, 206))
+COLOR_TEXT_ACCENT = _bright((150, 210, 255))
 
 # Single luxury accent: champagne. Module labels, hairline rules, emphasis.
-COLOR_ACCENT_PRIMARY = _bright((220, 198, 154))
+COLOR_ACCENT_PRIMARY = _bright((242, 222, 172))
 
 # Module title color (legacy name; now the champagne accent)
 COLOR_TITLE_BLUE = COLOR_ACCENT_PRIMARY
 
-# Clock face: bright platinum, reads as engraved
-COLOR_CLOCK_FACE = _bright((242, 244, 248))
+# Clock face: pure white, reads as engraved
+COLOR_CLOCK_FACE = _bright((255, 255, 255))
 
-# Functional accent colors (brighter so they read through glass)
-COLOR_ACCENT_BLUE = _bright((120, 165, 225))
-COLOR_ACCENT_GREEN = _bright((130, 205, 160))
-COLOR_ACCENT_RED = _bright((222, 130, 130))
-COLOR_ACCENT_AMBER = _bright((226, 192, 136))
+# Functional accent colors (bright so they read through glass)
+COLOR_ACCENT_BLUE = _bright((150, 190, 245))
+COLOR_ACCENT_GREEN = _bright((150, 228, 178))
+COLOR_ACCENT_RED = _bright((242, 150, 150))
+COLOR_ACCENT_AMBER = _bright((246, 212, 150))
 
 # Separator lines (subtle dividers between sections)
 COLOR_SEPARATOR = (40, 40, 40)

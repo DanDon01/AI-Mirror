@@ -107,7 +107,7 @@ class ModuleDrawHelper:
             label = ModuleDrawHelper.render_tracked(
                 ModuleDrawHelper._label_font, text.upper(), COLOR_ACCENT_PRIMARY
             )
-            label.set_alpha(190)
+            label.set_alpha(235)
             ModuleDrawHelper._title_cache[key] = label
 
         rule_w = 26
@@ -119,7 +119,7 @@ class ModuleDrawHelper:
 
         rule_y = y + label.get_height() + 5
         rule = pygame.Surface((rule_w, 1), pygame.SRCALPHA)
-        rule.fill((*COLOR_ACCENT_PRIMARY, 110))
+        rule.fill((*COLOR_ACCENT_PRIMARY, 170))
         if align == 'right':
             screen.blit(rule, (x + width - rule_w, rule_y))
         else:
