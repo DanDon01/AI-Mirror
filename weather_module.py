@@ -343,7 +343,7 @@ class WeatherModule:
 
                 # Hero temperature: large, light, platinum
                 def _render_hero():
-                    font = load_font('light', FONT_SIZE_HERO)
+                    font = load_font('regular', FONT_SIZE_HERO)
                     s = font.render(f"{temp:.0f}°", True, COLOR_FONT_DEFAULT)
                     s.set_alpha(TRANSPARENCY)
                     return s

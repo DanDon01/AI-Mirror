@@ -141,7 +141,7 @@ class GreetingModule:
             if self.current_greeting:
                 def _render_greeting(text=self.current_greeting):
                     # The greeting is this module's hero: large and light
-                    font = load_font('light', 30)
+                    font = load_font('regular', 30)
                     surf = font.render(text, True, COLOR_TEXT_PRIMARY)
                     surf.set_alpha(TRANSPARENCY)
                     return surf

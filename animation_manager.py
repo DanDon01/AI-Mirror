@@ -45,7 +45,7 @@ class AnimationManager:
     def _ensure_fonts(self):
         if self._notification_font is None:
             from config import load_font, FONT_SIZE_BODY, FONT_SIZE_SMALL
-            self._notification_font = load_font('light', FONT_SIZE_BODY + 6)
+            self._notification_font = load_font('regular', FONT_SIZE_BODY + 6)
             self._notification_small_font = load_font('regular', FONT_SIZE_SMALL)
 
     # ----- Module fades -----

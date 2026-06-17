@@ -59,10 +59,10 @@ class ModuleDrawHelper:
         title_size = fonts.get('title', {}).get('size', FONT_SIZE_TITLE)
         body_size = fonts.get('body', {}).get('size', FONT_SIZE_BODY)
         small_size = fonts.get('small', {}).get('size', FONT_SIZE_SMALL)
-        cls._title_font = load_font('light', title_size)
-        cls._body_font = load_font('light', body_size)
+        cls._title_font = load_font('regular', title_size)
+        cls._body_font = load_font('regular', body_size)
         cls._small_font = load_font('regular', small_size)
-        cls._label_font = load_font('regular', FONT_SIZE_LABEL)
+        cls._label_font = load_font('bold', FONT_SIZE_LABEL)
         cls._fonts_initialized = True
 
     @staticmethod

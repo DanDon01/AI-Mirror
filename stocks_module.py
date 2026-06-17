@@ -134,8 +134,8 @@ class StocksModule:
         except Exception:
             self.font = pygame.font.Font(None, FONT_SIZE)
         self.ticker_font = load_font('regular', 19)
-        self.ticker_price_font = load_font('light', 19)
-        self.alert_font = load_font('light', 32)
+        self.ticker_price_font = load_font('regular', 19)
+        self.alert_font = load_font('regular', 32)
         self.markets_font = load_font('regular', FONT_SIZE + 4)
         self.status_font = load_font('regular', FONT_SIZE - 6)
         self._ticker_hairline = None

@@ -243,7 +243,7 @@ class PhoneModule:
                     hero_color = COLOR_ACCENT_AMBER
 
                 def _render_hero(t=hero_text, c=hero_color):
-                    s = load_font('light', 26).render(t, True, c)
+                    s = load_font('regular', 26).render(t, True, c)
                     s.set_alpha(TRANSPARENCY)
                     return s
 

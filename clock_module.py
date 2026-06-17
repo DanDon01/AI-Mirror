@@ -27,8 +27,8 @@ class ClockModule:
                  color=None, time_format='%H:%M:%S', date_format='%a, %b %d, %Y',
                  timezone='local', scrolling=False, **kwargs):
         size = time_font_size or FONT_SIZE_CLOCK
-        self.time_font = load_font('light', size)
-        self.seconds_font = load_font('light', int(size * 0.45))
+        self.time_font = load_font('regular', size)
+        self.seconds_font = load_font('regular', int(size * 0.45))
         self.date_font = load_font('regular', FONT_SIZE_SMALL)
         self.status_font = load_font('regular', FONT_SIZE_LABEL)
         self.color = COLOR_CLOCK_FACE
