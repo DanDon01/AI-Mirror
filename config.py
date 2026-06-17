@@ -24,29 +24,44 @@ load_dotenv(env_path)
 COLOR_WHITE = (255, 255, 255)
 COLOR_BLACK = (0, 0, 0)
 
-# Text hierarchy: platinum on black for the minimal-luxury mirror look.
-# Primary is bright enough to read through glass; secondary and dim
-# recede so key values carry the layout.
-COLOR_TEXT_PRIMARY = (226, 228, 232)
-COLOR_TEXT_SECONDARY = (148, 150, 156)
-COLOR_TEXT_DIM = (96, 98, 104)
-COLOR_TEXT_ACCENT = (100, 180, 255)
+# Content brightness multiplier for two-way mirror glass. The glass only
+# transmits part of the light, so the rendered content must be brighter
+# than on a bare screen. This scales the CONTENT colours only - the black
+# background stays black, so the mirror illusion is preserved (unlike a
+# monitor/gamma brightness boost, which would grey out the whole sheet).
+# Tune in Variables.env: UI_BRIGHTNESS=1.3 (brighter), 1.0 = base.
+try:
+    _UI_BRIGHTNESS = max(0.5, min(float(os.getenv('UI_BRIGHTNESS', '1.0')), 2.0))
+except (TypeError, ValueError):
+    _UI_BRIGHTNESS = 1.0
 
-# Single luxury accent: soft champagne. Used for module labels, hairline
-# rules, and small emphasis only - never large areas.
-COLOR_ACCENT_PRIMARY = (196, 174, 128)
+
+def _bright(color):
+    """Scale an RGB colour by the UI brightness, clamped to 255."""
+    return tuple(min(255, int(c * _UI_BRIGHTNESS)) for c in color)
+
+
+# Text hierarchy: bright platinum on black. Brightened for glass - even
+# the "dim" tier stays legible through a two-way mirror.
+COLOR_TEXT_PRIMARY = _bright((240, 242, 245))
+COLOR_TEXT_SECONDARY = _bright((188, 190, 196))
+COLOR_TEXT_DIM = _bright((140, 142, 148))
+COLOR_TEXT_ACCENT = _bright((120, 195, 255))
+
+# Single luxury accent: champagne. Module labels, hairline rules, emphasis.
+COLOR_ACCENT_PRIMARY = _bright((220, 198, 154))
 
 # Module title color (legacy name; now the champagne accent)
 COLOR_TITLE_BLUE = COLOR_ACCENT_PRIMARY
 
-# Clock face: bright platinum, not cyan - reads as engraved, not digital
-COLOR_CLOCK_FACE = (232, 234, 238)
+# Clock face: bright platinum, reads as engraved
+COLOR_CLOCK_FACE = _bright((242, 244, 248))
 
-# Functional accent colors, muted to sit quietly on glass
-COLOR_ACCENT_BLUE = (110, 150, 210)
-COLOR_ACCENT_GREEN = (124, 188, 150)
-COLOR_ACCENT_RED = (206, 118, 118)
-COLOR_ACCENT_AMBER = (212, 178, 122)
+# Functional accent colors (brighter so they read through glass)
+COLOR_ACCENT_BLUE = _bright((120, 165, 225))
+COLOR_ACCENT_GREEN = _bright((130, 205, 160))
+COLOR_ACCENT_RED = _bright((222, 130, 130))
+COLOR_ACCENT_AMBER = _bright((226, 192, 136))
 
 # Separator lines (subtle dividers between sections)
 COLOR_SEPARATOR = (40, 40, 40)
@@ -68,8 +83,8 @@ COLOR_BG_HIGHLIGHT = (0, 0, 0)
 COLOR_BG_MODULE_ALPHA = (0, 0, 0, 0)
 COLOR_BG_HEADER_ALPHA = (0, 0, 0, 0)
 
-# Text transparency (high = more visible, critical for mirror readability)
-TRANSPARENCY = 240
+# Text opacity (255 = fully opaque; max visibility through the glass)
+TRANSPARENCY = 255
 
 # Typography -- Lato (bundled in assets/fonts, OFL licensed) gives the
 # same premium light weights on Windows and the Pi. SysFont names remain
