@@ -16,7 +16,7 @@ REFERENCE_HASH = "4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7d
 
 def _intent_for(text: str) -> str:
     words = text.casefold()
-    if any(term in words for term in ("good morning", "hello", "hi princess", "hey princess")): return "greeting"
+    if any(term in words for term in ("good morning", "good afternoon", "good evening", "hello", "hi princess", "hey princess", "hiya")): return "greeting"
     if "how are you" in words or "i'm fine" in words or "im fine" in words: return "wellbeing"
     if "thank" in words: return "thanks"
     if "good night" in words or "sleep well" in words: return "night"
@@ -120,6 +120,8 @@ class PrincessModule:
             cache_model = f"{model}::portrait-v2"
             intent = _intent_for(transcript)
             if intent != "general":
+                promoted = self.cache.promote_matching_transcript(transcript, intent)
+                if promoted: self.logger.info("Princess promoted %s existing cached clip(s) to %s", promoted, intent)
                 cached = self.cache.select(transcript, REFERENCE_HASH, cache_model, intent=intent)
                 if cached:
                     self.status = "Cache hit — playing Princess"

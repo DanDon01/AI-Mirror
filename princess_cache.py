@@ -126,6 +126,24 @@ class PrincessCache:
         with self._db() as db:
             db.execute("UPDATE clips SET use_count=use_count+1,last_used_at=? WHERE id=?", (_now(), clip_id))
 
+    def promote_matching_transcript(self, transcript: str, intent: str) -> int:
+        """Upgrade old generic clips once their conversational intent is recognised."""
+        wanted = normalize_text(transcript)
+        if not wanted or intent == "general":
+            return 0
+        promoted = 0
+        with self._db() as db:
+            rows = db.execute("SELECT id, metadata_json FROM clips WHERE intent='general' AND status='approved'").fetchall()
+            for row in rows:
+                try:
+                    original = json.loads(row["metadata_json"]).get("transcript", "")
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if normalize_text(original) == wanted:
+                    db.execute("UPDATE clips SET intent=? WHERE id=?", (intent, row["id"]))
+                    promoted += 1
+        return promoted
+
     def quarantine(self, clip_id: int) -> None:
         with self._db() as db:
             row = db.execute("SELECT media_path FROM clips WHERE id=?", (clip_id,)).fetchone()
