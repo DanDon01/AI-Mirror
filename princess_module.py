@@ -73,15 +73,21 @@ class PrincessModule:
             if not text: raise RuntimeError("OpenAI returned no response text")
             self.status = "Creating Princess video..."; self.logger.info("Princess text reply ready; submitting fal video")
             model = os.getenv("PRINCESS_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
-            cached = self.cache.lookup(text, REFERENCE_HASH, model)
+            cache_model = f"{model}::portrait-v2"
+            cached = self.cache.lookup(text, REFERENCE_HASH, cache_model)
             if cached:
                 self.logger.info("Princess cache hit")
                 self.ready.put(self.cache.root / cached["media_path"]); return
             staging = self.cache.root / "staging" / "latest.mp4"
-            result = FlashTalkService().generate_from_text(REFERENCE, text, staging, model=model, prompt=f"{system} Say exactly: {text}", duration_seconds=5)
+            video_prompt = (
+                "A poised royal woman speaks naturally and directly to camera, with subtle confident facial expressions. "
+                "Use a seamless pure black background. No mirror, no reflective glass, no frame, no border, no text, and no hands. "
+                f'Say exactly: "{text}"'
+            )
+            result = FlashTalkService().generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5)
             intent = "general"
             if not any(word in transcript.casefold() for word in TIME_SENSITIVE_INTENTS):
-                record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript})
+                record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
                 self.ready.put(self.cache.root / record["media_path"])
             else:
                 self.ready.put(staging)

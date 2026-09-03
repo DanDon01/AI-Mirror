@@ -84,7 +84,10 @@ class LayoutManager:
         for name in self.layout.get('center_overlay_modules', []):
             # The avatar face needs a taller square-ish zone than the
             # one-line voice status overlays
-            height = min(center_w, h // 3) if name == 'avatar' else 200
+            height = (
+                min(int(center_w * 1.5), int(h * 0.65))
+                if name in ('avatar', 'princess') else 200
+            )
             self.module_positions[name] = {
                 'x': center_x, 'y': center_y,
                 'width': center_w, 'height': height,
