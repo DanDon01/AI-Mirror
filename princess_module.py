@@ -13,6 +13,16 @@ ROOT = Path(__file__).resolve().parent
 REFERENCE = ROOT / "assets" / "princess" / "reference_v001.png"
 REFERENCE_HASH = "4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7def"
 
+def _intent_for(text: str) -> str:
+    words = text.casefold()
+    if any(term in words for term in ("good morning", "hello", "hi princess", "hey princess")): return "greeting"
+    if "how are you" in words or "i'm fine" in words or "im fine" in words: return "wellbeing"
+    if "thank" in words: return "thanks"
+    if "good night" in words or "sleep well" in words: return "night"
+    if "goodbye" in words or "have a good day" in words: return "farewell"
+    if "plans" in words or "what are you doing" in words: return "plans"
+    return "general"
+
 class PrincessModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
@@ -61,7 +71,7 @@ class PrincessModule:
         self.recording = False
         if self.proc:
             self.proc.terminate(); self.proc.wait(timeout=3); self.proc = None
-        self.status = "Thinking..."
+        self.status = "Cold start — transcribing locally..."
         self.logger.info("Princess recording stopped; processing local transcription")
         threading.Thread(target=self._make_video, daemon=True, name="princess-turn").start()
 
@@ -80,20 +90,29 @@ class PrincessModule:
             return json.loads(recognizer.FinalResult()).get("text", "").strip()
 
     def _make_video(self):
+        started = time.monotonic()
         try:
             transcript = self._transcribe_local(self.cache.root / "capture.wav")
             if not transcript: raise RuntimeError("No speech recognised")
-            self.logger.info("Princess local STT complete: %s", transcript)
-            system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a poised, warm princess in a magic mirror. Reply concisely, naturally, and without markdown.")
+            self.logger.info("Princess local STT complete in %.2fs: %s", time.monotonic() - started, transcript)
+            model = os.getenv("PRINCESS_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
+            cache_model = f"{model}::portrait-v2"
+            intent = _intent_for(transcript)
+            if intent != "general":
+                cached = self.cache.select(transcript, REFERENCE_HASH, cache_model, intent=intent)
+                if cached:
+                    self.status = "Cache hit — playing Princess"
+                    self.logger.info("Princess intent cache hit (%s) in %.2fs", intent, time.monotonic() - started)
+                    self.ready.put(self.cache.root / cached["media_path"]); return
+            self.status = "Cold start — asking Princess..."
+            system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a poised, confident princess. Be warmly playful, witty, and a little sassy with tasteful attitude; never cruel. Reply concisely and naturally, without markdown.")
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
             response = self.openai_client.responses.create(model=os.getenv("PRINCESS_LLM_MODEL", "gpt-5.4-mini"), max_output_tokens=80, input=[{"role":"system","content":system}, {"role":"user","content":transcript}])
             text = response.output_text.strip()
             if not text: raise RuntimeError("OpenAI returned no response text")
-            self.status = "Creating Princess video..."; self.logger.info("Princess text reply ready; submitting fal video")
-            model = os.getenv("PRINCESS_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
-            cache_model = f"{model}::portrait-v2"
+            self.status = "Cold start — creating Princess video..."; self.logger.info("Princess text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
             cached = self.cache.lookup(text, REFERENCE_HASH, cache_model)
             if cached:
                 self.logger.info("Princess cache hit")
@@ -105,7 +124,7 @@ class PrincessModule:
                 f'Say exactly: "{text}"'
             )
             result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5)
-            intent = "general"
+            self.logger.info("Princess fal video ready in %.2fs (upload %.2fs, queue %.2fs, generation %.2fs, download %.2fs)", time.monotonic() - started, result.timings.get("image_upload", 0), result.timings.get("queue", 0), result.timings.get("generation", 0), result.timings.get("download", 0))
             if not any(word in transcript.casefold() for word in TIME_SENSITIVE_INTENTS):
                 record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
                 self.ready.put(self.cache.root / record["media_path"])
@@ -136,5 +155,5 @@ class PrincessModule:
             x = position.get("x", 0) + (width - image.get_width()) // 2; y = position.get("y", 0) + (height - image.get_height()) // 2
             screen.blit(image, (x, y))
         font = pygame.font.Font(None, 26); label = font.render(self.status, True, (242, 222, 172)); label.set_alpha(235)
-        screen.blit(label, (position.get("x", 0) + 12, position.get("y", 0) + position.get("height", self.size) - 36))
+        screen.blit(label, (position.get("x", 0) + 12, position.get("y", 0) + 12))
     def cleanup(self): self.player.cleanup()
