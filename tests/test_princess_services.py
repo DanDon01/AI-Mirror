@@ -182,18 +182,21 @@ class PrincessServiceTests(unittest.TestCase):
             image = root / "reference.png"
             output = root / "provider_output.mp4"
             image.write_bytes(b"png")
+            ready_urls = []
             result = FlashTalkService(tracker, fal, FakeSession()).generate_from_text(
                 image,
                 "Well hello there.",
                 output,
                 model="minimax/h3-max-turbo/image-to-video",
                 duration_seconds=3,
+                on_video_ready=ready_urls.append,
             )
             self.assertEqual(fal.arguments["duration"], 5)
             self.assertIn('says exactly: "Well hello there."', fal.arguments["prompt"])
             self.assertNotIn("audio_url", fal.arguments)
             self.assertEqual(result.duration_seconds, 5.0)
             self.assertEqual(len(fal.uploaded), 1)
+            self.assertEqual(ready_urls, ["https://example.invalid/result.mp4"])
 
 
 if __name__ == "__main__":

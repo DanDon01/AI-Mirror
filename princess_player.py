@@ -15,7 +15,9 @@ class PrincessPlayer:
     def has_frame(self): return self.surface is not None
 
     def play(self, path: str | Path, size: tuple[int, int]):
-        self.stop(); self.width, self.height = map(int, size); source = str(Path(path).resolve())
+        self.stop(); self.width, self.height = map(int, size)
+        raw_source = str(path)
+        source = raw_source if raw_source.startswith(("https://", "http://")) else str(Path(path).resolve())
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg: raise RuntimeError("ffmpeg is required for Princess playback")
         self.process = subprocess.Popen([ffmpeg, "-re", "-loglevel", "error", "-i", source,

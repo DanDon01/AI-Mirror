@@ -111,7 +111,7 @@ class PrincessModule:
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
-            response = self.openai_client.responses.create(model=os.getenv("PRINCESS_LLM_MODEL", "gpt-5.4-mini"), max_output_tokens=80, input=[{"role":"system","content":system}, {"role":"user","content":transcript}])
+            response = self.openai_client.responses.create(model=os.getenv("PRINCESS_LLM_MODEL", "gpt-5-nano"), max_output_tokens=80, input=[{"role":"system","content":system}, {"role":"user","content":transcript}])
             text = response.output_text.strip()
             if not text: raise RuntimeError("OpenAI returned no response text")
             self.status = "Cold start — creating Princess video..."; self.logger.info("Princess text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
@@ -125,13 +125,19 @@ class PrincessModule:
                 "Use a seamless pure black background. No mirror, no reflective glass, no frame, no border, no text, and no hands. "
                 f'Say exactly: "{text}"'
             )
-            result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5, resolution=os.getenv("PRINCESS_FAL_RESOLUTION", "480P"))
+            stream_first = os.getenv("PRINCESS_STREAM_FIRST", "1").lower() in ("1", "true", "yes", "on")
+            streamed = threading.Event()
+            def stream_when_ready(url):
+                if stream_first:
+                    self.ready.put({"stream_url": url})
+                    streamed.set()
+            result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5, resolution=os.getenv("PRINCESS_FAL_RESOLUTION", "480P"), on_video_ready=stream_when_ready)
             self.logger.info("Princess fal video ready in %.2fs (upload %.2fs, queue %.2fs, generation %.2fs, download %.2fs)", time.monotonic() - started, result.timings.get("image_upload", 0), result.timings.get("queue", 0), result.timings.get("generation", 0), result.timings.get("download", 0))
             if not any(word in transcript.casefold() for word in TIME_SENSITIVE_INTENTS):
                 record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
-                self.ready.put(self.cache.root / record["media_path"])
+                if not streamed.is_set(): self.ready.put(self.cache.root / record["media_path"])
             else:
-                self.ready.put(staging)
+                if not streamed.is_set(): self.ready.put(staging)
         except Exception as exc:
             self.logger.exception("Princess turn failed")
             self.ready.put(exc)
@@ -143,7 +149,11 @@ class PrincessModule:
             if isinstance(item, Exception):
                 background_network.set_paused(False)
                 self.status = f"Error: {item}"; continue
-            self.player.play(item, self._bounds); self.status = "Playing"
+            if isinstance(item, dict) and "stream_url" in item:
+                self.player.play(item["stream_url"], self._bounds)
+                self.status = "Streaming Princess video..."
+            else:
+                self.player.play(item, self._bounds); self.status = "Playing"
             background_network.set_paused(False)
         self.player.update(__import__("pygame"))
 

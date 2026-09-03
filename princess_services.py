@@ -357,6 +357,7 @@ class FlashTalkService:
         acceleration: str = "high",
         seed: int | None = 42,
         duration_seconds: int = 3,
+        on_video_ready: Callable[[str], None] | None = None,
         timeout_seconds: float = 900.0,
     ) -> FalResult:
         """Generate a talking avatar directly from text via fal's internal TTS."""
@@ -435,6 +436,8 @@ class FlashTalkService:
             video_url = video.get("url") if isinstance(video, dict) else None
             if not video_url:
                 raise PrincessServiceError("fal response did not include video.url")
+            if on_video_ready is not None:
+                on_video_ready(video_url)
             download_started = time.monotonic()
             with self.session.get(video_url, stream=True, timeout=(15.0, timeout_seconds)) as response:
                 response.raise_for_status()
