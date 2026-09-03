@@ -24,6 +24,24 @@ def _intent_for(text: str) -> str:
     if "plans" in words or "what are you doing" in words: return "plans"
     return "general"
 
+
+def _response_text(response) -> str:
+    """Read a visible reply from both current and older Responses SDK shapes."""
+    text = getattr(response, "output_text", "") or ""
+    if text.strip():
+        return text.strip()
+    for message in getattr(response, "output", []) or []:
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content", [])
+        for part in content or []:
+            value = getattr(part, "text", None)
+            if value is None and isinstance(part, dict):
+                value = part.get("text", "")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
 class PrincessModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
@@ -111,9 +129,16 @@ class PrincessModule:
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
-            response = self.openai_client.responses.create(model=os.getenv("PRINCESS_LLM_MODEL", "gpt-5-nano"), max_output_tokens=80, input=[{"role":"system","content":system}, {"role":"user","content":transcript}])
-            text = response.output_text.strip()
-            if not text: raise RuntimeError("OpenAI returned no response text")
+            llm_model = os.getenv("PRINCESS_LLM_MODEL", "gpt-5-nano")
+            request = {"model": llm_model, "max_output_tokens": int(os.getenv("PRINCESS_LLM_MAX_OUTPUT_TOKENS", "160")), "input": [{"role":"system","content":system}, {"role":"user","content":transcript}]}
+            if llm_model.startswith("gpt-5"):
+                request["reasoning"] = {"effort": os.getenv("PRINCESS_LLM_REASONING_EFFORT", "minimal")}
+            response = self.openai_client.responses.create(**request)
+            text = _response_text(response)
+            if not text:
+                status = getattr(response, "status", "unknown")
+                detail = getattr(response, "incomplete_details", None)
+                raise RuntimeError(f"OpenAI returned no visible response text (status={status}, detail={detail})")
             self.status = "Cold start — creating Princess video..."; self.logger.info("Princess text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
             cached = self.cache.lookup(text, REFERENCE_HASH, cache_model)
             if cached:
