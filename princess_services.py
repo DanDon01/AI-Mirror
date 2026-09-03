@@ -185,6 +185,31 @@ class FlashTalkService:
         self.tracker = tracker
         self.fal_module = fal_module
         self.session = session or requests.Session()
+        self._uploaded_images: dict[str, str] = {}
+
+    def _upload_image(self, fal: Any, image: Path) -> str:
+        """Reuse the immutable approved-reference upload within one runtime."""
+        key = str(image.resolve())
+        cached = self._uploaded_images.get(key)
+        if cached:
+            return cached
+        uploaded = fal.upload_file(key)
+        self._uploaded_images[key] = uploaded
+        return uploaded
+
+    def warm_reference(self, image_path: str | Path) -> None:
+        """Upload the approved still during startup, before the first paid turn."""
+        image = _existing_file(image_path, "Reference image")
+        if not os.getenv("FAL_KEY", "").strip() and os.getenv("FAL", "").strip():
+            os.environ["FAL_KEY"] = os.getenv("FAL", "").strip()
+        if not os.getenv("FAL_KEY", "").strip():
+            return
+        if self.fal_module is None:
+            import fal_client
+            fal = fal_client
+        else:
+            fal = self.fal_module
+        self._upload_image(fal, image)
 
     def generate(
         self,
@@ -225,7 +250,7 @@ class FlashTalkService:
         request_id = ""
         try:
             upload_started = time.monotonic()
-            image_url = fal.upload_file(str(image))
+            image_url = self._upload_image(fal, image)
             image_upload_done = time.monotonic()
             audio_url = fal.upload_file(str(audio))
             uploads_done = time.monotonic()
@@ -367,7 +392,7 @@ class FlashTalkService:
         request_id = ""
         try:
             upload_started = time.monotonic()
-            image_url = fal.upload_file(str(image))
+            image_url = self._upload_image(fal, image)
             upload_done = time.monotonic()
             if "ai-avatar/single-text" in model:
                 arguments: dict[str, Any] = {

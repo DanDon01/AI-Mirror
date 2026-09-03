@@ -17,6 +17,7 @@ class PrincessModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
         self.cache = PrincessCache(); self.player = PrincessPlayer(); self.recording = False
+        self.fal = FlashTalkService(); self.openai_client = None; self._vosk_model = None
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
         self._bounds = (self.size, self.size)
         self.logger = logging.getLogger("Princess")
@@ -26,6 +27,21 @@ class PrincessModule:
             self.logger.info("Princess ready: local STT -> OpenAI text -> fal video")
         except Exception as exc:
             self.logger.error("Princess reference image unavailable: %s", exc)
+        threading.Thread(target=self._warm_dependencies, daemon=True, name="princess-warmup").start()
+
+    def _warm_dependencies(self):
+        """Hide one-off client/model startup work before the first turn."""
+        try:
+            from openai import OpenAI
+            self.openai_client = OpenAI()
+            from vosk import Model
+            model_path = os.getenv("VOSK_MODEL_PATH", "")
+            if model_path:
+                self._vosk_model = Model(model_path)
+            self.fal.warm_reference(REFERENCE)
+            self.logger.info("Princess local STT and text client warmed")
+        except Exception as exc:
+            self.logger.warning("Princess warm-up deferred: %s", exc)
 
     def on_button_press(self):
         self.logger.info("Princess Space pressed; recording=%s", self.recording)
@@ -57,7 +73,9 @@ class PrincessModule:
         model_path = os.getenv("VOSK_MODEL_PATH", "")
         if not model_path: raise RuntimeError("VOSK_MODEL_PATH is required for local transcription")
         with wave.open(str(path), "rb") as audio:
-            recognizer = KaldiRecognizer(Model(model_path), audio.getframerate())
+            if self._vosk_model is None:
+                self._vosk_model = Model(model_path)
+            recognizer = KaldiRecognizer(self._vosk_model, audio.getframerate())
             while chunk := audio.readframes(4000): recognizer.AcceptWaveform(chunk)
             return json.loads(recognizer.FinalResult()).get("text", "").strip()
 
@@ -66,9 +84,11 @@ class PrincessModule:
             transcript = self._transcribe_local(self.cache.root / "capture.wav")
             if not transcript: raise RuntimeError("No speech recognised")
             self.logger.info("Princess local STT complete: %s", transcript)
-            from openai import OpenAI
             system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a poised, warm princess in a magic mirror. Reply concisely, naturally, and without markdown.")
-            response = OpenAI().responses.create(model=os.getenv("PRINCESS_LLM_MODEL", "gpt-5.4-mini"), input=[{"role":"system","content":system}, {"role":"user","content":transcript}])
+            if self.openai_client is None:
+                from openai import OpenAI
+                self.openai_client = OpenAI()
+            response = self.openai_client.responses.create(model=os.getenv("PRINCESS_LLM_MODEL", "gpt-5.4-mini"), max_output_tokens=80, input=[{"role":"system","content":system}, {"role":"user","content":transcript}])
             text = response.output_text.strip()
             if not text: raise RuntimeError("OpenAI returned no response text")
             self.status = "Creating Princess video..."; self.logger.info("Princess text reply ready; submitting fal video")
@@ -84,7 +104,7 @@ class PrincessModule:
                 "Use a seamless pure black background. No mirror, no reflective glass, no frame, no border, no text, and no hands. "
                 f'Say exactly: "{text}"'
             )
-            result = FlashTalkService().generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5)
+            result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5)
             intent = "general"
             if not any(word in transcript.casefold() for word in TIME_SENSITIVE_INTENTS):
                 record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
