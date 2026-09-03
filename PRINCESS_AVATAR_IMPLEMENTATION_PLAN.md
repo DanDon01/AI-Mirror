@@ -2,7 +2,7 @@
 
 Status: Phases 0-2 complete; Phase 3 persistent library is next
 Plan date: 3 September 2026
-Repository baseline: `main` at `5fea67a`
+Repository baseline: `main` at `baff942`
 
 ## Checkpoint and scope
 
