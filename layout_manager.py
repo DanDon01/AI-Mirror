@@ -85,11 +85,12 @@ class LayoutManager:
             # The avatar face needs a taller square-ish zone than the
             # one-line voice status overlays
             height = (
-                min(int(center_w * 1.5), int(h * 0.65))
+                min(int(center_w * 2.25), int(h * 0.90))
                 if name in ('avatar', 'princess') else 200
             )
             self.module_positions[name] = {
-                'x': center_x, 'y': center_y,
+                'x': center_x,
+                'y': (h - height) // 2 if name in ('avatar', 'princess') else center_y,
                 'width': center_w, 'height': height,
             }
 

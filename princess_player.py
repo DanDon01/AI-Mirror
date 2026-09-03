@@ -11,6 +11,9 @@ class PrincessPlayer:
     @property
     def playing(self): return self.process is not None
 
+    @property
+    def has_frame(self): return self.surface is not None
+
     def play(self, path: str | Path, size: tuple[int, int]):
         self.stop(); self.width, self.height = map(int, size); source = str(Path(path).resolve())
         ffmpeg = shutil.which("ffmpeg")
@@ -34,7 +37,7 @@ class PrincessPlayer:
         if len(frame) == self.width * self.height * 3:
             self.surface = pygame_module.image.frombuffer(frame, (self.width, self.height), "RGB").copy()
         else:
-            self.stop()
+            self._finish()
 
     def draw(self, screen, position):
         if self.surface is not None:
@@ -44,5 +47,11 @@ class PrincessPlayer:
         for process in (self.process, self.audio, self.audio_decoder):
             if process and process.poll() is None: process.terminate()
         self.process = self.audio = self.audio_decoder = None; self.surface = None
+
+    def _finish(self):
+        """Release decoder/audio processes but keep the last video frame visible."""
+        for process in (self.process, self.audio, self.audio_decoder):
+            if process and process.poll() is None: process.terminate()
+        self.process = self.audio = self.audio_decoder = None
 
     def cleanup(self): self.stop()
