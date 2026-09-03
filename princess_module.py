@@ -48,7 +48,7 @@ class PrincessModule:
         self.cache = PrincessCache(); self.player = PrincessPlayer(); self.recording = False
         self.fal = FlashTalkService(); self.openai_client = None; self._vosk_model = None
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
-        self._deferred_cache = None; self._cache_downloading = False
+        self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
         self._bounds = (self.size, self.size)
         self.logger = logging.getLogger("Princess")
         self._portrait = None; self._alpha = 0.0; self._last_update = time.monotonic()
@@ -184,14 +184,19 @@ class PrincessModule:
             item = self.ready.get_nowait()
             if isinstance(item, Exception):
                 background_network.set_paused(False)
+                self._hold_background_for_playback = False
                 self.status = f"Error: {item}"; continue
             if isinstance(item, dict) and "stream_url" in item:
                 self.player.play(item["stream_url"], self._bounds)
-                self.status = "Streaming Princess video..."
+                self.status = "Streaming Princess video..."; self._hold_background_for_playback = True
             else:
                 self.player.play(item, self._bounds); self.status = "Playing"
-            background_network.set_paused(False)
+                background_network.set_paused(False)
         self.player.update(__import__("pygame"))
+        if self._hold_background_for_playback and not self.player.playing:
+            self._hold_background_for_playback = False
+            background_network.set_paused(False)
+            self.logger.info("Princess playback complete; background network requests resumed")
         if not self.player.playing and self._deferred_cache and not self._cache_downloading:
             pending = self._deferred_cache; self._deferred_cache = None; self._cache_downloading = True
             threading.Thread(target=self._save_after_playback, args=(pending,), daemon=True, name="princess-cache-save").start()
