@@ -1,6 +1,6 @@
 ﻿# Princess Conversational Avatar - Implementation Plan
 
-Status: Phases 0-2 complete; Phase 3 cache foundation and Phase 4 playback/overlay wiring complete; pool seeding and display validation next
+Status: Phases 0-2 complete; Phase 3 cache foundation and Phase 4 playback/overlay wiring complete; cache-driven invocation and display validation next
 Plan date: 3 September 2026
 Repository baseline: `main` at `baff942`
 
@@ -293,11 +293,13 @@ verified. Face-only short-reply gestures are supported in the proof prompt.
 ### Phase 3 - persistent library and common pools (cache foundation complete)
 
 - Implement SQLite schema, atomic media writes, checksums, lookup/use tracking, quarantine, and the cache CLI.
-- Seed a tiny approved greeting pool through an explicit paid command.
+- Naturally populate the pool from successful non-time-sensitive responses; never pre-seed or auto-spend.
 
 Progress: SQLite storage, atomic content-addressed media, normalized lookup,
 use tracking, corruption quarantine, and verified ZIP export/import are now in
-`princess_cache.py` and `princess_cache_tool.py`. Greeting-pool seeding remains.
+`princess_cache.py` and `princess_cache_tool.py`. Pool admission rejects
+time-sensitive intents and requires time-of-day tags; selection matches the
+current morning/afternoon/evening/night tag. Cache-driven invocation remains.
 
 Tests: schema creation/migration idempotence; normalization; cache hit causes zero provider calls; weighted pool selection; use count/last-used update; stale/overused exclusion; interrupted write recovery; corrupt-file quarantine; concurrent read/update; export/import checksum verification.
 

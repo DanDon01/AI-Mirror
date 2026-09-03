@@ -16,6 +16,16 @@ import zipfile
 def normalize_text(text: str) -> str:
     return " ".join(text.casefold().split()).strip(" .!?\t\r\n")
 
+TIME_TAGS = ("morning", "afternoon", "evening", "night")
+TIME_SENSITIVE_INTENTS = {"news", "weather", "stocks", "calendar", "events", "traffic"}
+
+def time_of_day_tags(when: datetime | None = None) -> set[str]:
+    hour = (when or datetime.now()).hour
+    if 5 <= hour < 12: return {"morning"}
+    if 12 <= hour < 17: return {"afternoon"}
+    if 17 <= hour < 22: return {"evening"}
+    return {"night"}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -74,6 +84,11 @@ class PrincessCache:
         source = Path(media_path).resolve()
         if not source.is_file() or source.stat().st_size == 0:
             raise ValueError("media file does not exist or is empty")
+        if intent.casefold() in TIME_SENSITIVE_INTENTS:
+            raise ValueError(f"time-sensitive intent is not reusable: {intent}")
+        tags = tags or []
+        if not set(tags).intersection(TIME_TAGS):
+            raise ValueError("pooled responses require at least one time-of-day tag")
         media_hash = _sha256(source)
         destination = self.media / f"{media_hash}.mp4"
         if not destination.exists():
@@ -83,7 +98,7 @@ class PrincessCache:
         normalized = normalize_text(spoken_text)
         cache_key = hashlib.sha256(f"{normalized}|{reference_sha256}|{model}|{media_hash}".encode()).hexdigest()
         record = {"cache_key": cache_key, "spoken_text": spoken_text, "normalized_text": normalized,
-                  "intent": intent, "tags": tags or [], "model": model, "reference_sha256": reference_sha256,
+                  "intent": intent, "tags": tags, "model": model, "reference_sha256": reference_sha256,
                   "media_path": str(destination.relative_to(self.root)).replace("\\", "/"),
                   "media_sha256": media_hash, "duration_seconds": duration_seconds,
                   "metadata": metadata or {}, "status": "approved", "created_at": _now()}
@@ -131,10 +146,11 @@ class PrincessCache:
                 "by_intent": {name: sum(r["intent"] == name and r["status"] == "approved" for r in rows)
                                for name in sorted({r["intent"] for r in rows})}}
 
-    def select(self, spoken_text: str, reference_sha256: str, model: str, *, intent: str = "greeting") -> dict | None:
+    def select(self, spoken_text: str, reference_sha256: str, model: str, *, intent: str = "general", when: datetime | None = None) -> dict | None:
         exact = self.lookup(spoken_text, reference_sha256, model)
         if exact: return exact
-        rows = [r for r in self.inspect() if r["intent"] == intent and r["status"] == "approved"]
+        rows = [r for r in self.inspect() if r["intent"] == intent and r["status"] == "approved"
+                and time_of_day_tags(when).intersection(json.loads(r["tags_json"]))]
         if not rows: return None
         rows.sort(key=lambda row: (row["use_count"], row["last_used_at"] or "", row["id"]))
         return rows[0]
