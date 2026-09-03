@@ -415,6 +415,8 @@ class FlashTalkService:
                     # Keep the caller's target in metadata, but satisfy the
                     # provider schema so a short reply does not fail.
                     "duration": max(5, min(int(duration_seconds), 5)),
+                    "resolution": resolution.upper(),
+                    "prompt_expansion_mode": "balanced",
                 }
             if seed is not None:
                 arguments["seed"] = seed

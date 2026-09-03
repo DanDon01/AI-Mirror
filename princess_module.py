@@ -123,7 +123,7 @@ class PrincessModule:
                 "Use a seamless pure black background. No mirror, no reflective glass, no frame, no border, no text, and no hands. "
                 f'Say exactly: "{text}"'
             )
-            result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5)
+            result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5, resolution=os.getenv("PRINCESS_FAL_RESOLUTION", "480P"))
             self.logger.info("Princess fal video ready in %.2fs (upload %.2fs, queue %.2fs, generation %.2fs, download %.2fs)", time.monotonic() - started, result.timings.get("image_upload", 0), result.timings.get("queue", 0), result.timings.get("generation", 0), result.timings.get("download", 0))
             if not any(word in transcript.casefold() for word in TIME_SENSITIVE_INTENTS):
                 record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
