@@ -1,6 +1,6 @@
 ﻿# Princess Conversational Avatar - Implementation Plan
 
-Status: Phase 1 reference approved; Phase 2 standalone proof scaffolded
+Status: Phases 0-2 complete; Phase 3 persistent library is next
 Plan date: 3 September 2026
 Repository baseline: `main` at `5fea67a`
 
@@ -262,13 +262,13 @@ Non-secret defaults belong in `config.py`. `ENABLE_PRINCESS` defaults off until 
 
 ## Phased implementation and tests
 
-### Phase 0 - discovery and plan (this document)
+### Phase 0 - discovery and plan (complete)
 
 Deliverable: this plan.
 Verification: repository/document/config/startup/data/audio/cache/deployment paths inspected; current OpenAI and fal docs checked.
 Stop condition: operator approval.
 
-### Phase 1 - reference design
+### Phase 1 - reference design (complete)
 
 - Generate one Princess reference with OpenAI `gpt-image-2` from a saved prompt tailored to the portrait mirror and talking-head crop.
 - Save the candidate and metadata outside production wiring.
@@ -277,7 +277,7 @@ Stop condition: operator approval.
 Tests: face unobstructed; eyes and mouth clear; direct gaze; head/shoulders/chest crop; black feathered surround; no text/logos; appearance acceptable at centre-zone scale.
 Mandatory stop: operator explicitly approves or asks for regeneration.
 
-### Phase 2 - paid video proof, outside the mirror
+### Phase 2 - paid video proof, outside the mirror (complete)
 
 - Add the minimal OpenAI TTS plus fal adapter and `princess_demo.py`.
 - Generate "Well hello there." using the approved image.
@@ -285,7 +285,10 @@ Mandatory stop: operator explicitly approves or asks for regeneration.
 - Test the configured text-image endpoint first. Run an audio-driven FlashTalk comparison only when explicitly requested; do not spend across many models without approval.
 
 Tests: valid non-empty MP4; audio present; lip-sync/identity/black-edge visual review; decode on Windows; H.264/yuv420p/AAC normalization if needed; repeatable error handling.
-Gate: choose and pin a configurable fal endpoint based on measured results.
+Gate: met for the Windows proof. The configurable default is Minimax
+`minimax/h3-max-turbo/image-to-video`; its schema enforces a five-second
+minimum. The approved reference identity and Pi-compatible output were
+verified. Face-only short-reply gestures are supported in the proof prompt.
 
 ### Phase 3 - persistent library and common pools
 
@@ -436,4 +439,6 @@ No failure in capture, OpenAI, fal, download, SQLite, ffmpeg, or playback may te
 
 ## Approval requested
 
-Approve this plan before any production implementation. On approval, proceed only to Phase 1 reference-image generation and return for the mandatory visual checkpoint.
+The Phase 0-2 checkpoint is complete. Proceed to Phase 3 only after the
+operator confirms the Windows proof quality and accepts the five-second
+provider minimum/cost behavior.
