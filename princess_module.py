@@ -126,7 +126,7 @@ class PrincessModule:
                     self.logger.info("Princess intent cache hit (%s) in %.2fs", intent, time.monotonic() - started)
                     self.ready.put(self.cache.root / cached["media_path"]); return
             self.status = "Cold start — asking Princess..."
-            system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a poised, confident princess. Be warmly playful, witty, and a little sassy with tasteful attitude; never cruel.")
+            system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a princess in an enchanted mirror addressing your Prince. Be witty and a little sassy with sarcastic charm.")
             system += " Reply with exactly one natural short sentence, at most 12 words. No markdown."
             if self.openai_client is None:
                 from openai import OpenAI
