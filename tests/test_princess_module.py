@@ -22,6 +22,9 @@ class PrincessModuleTests(unittest.TestCase):
     def test_time_specific_greetings_do_not_share_a_pool(self):
         self.assertEqual(_intent_for("good morning"), "greeting_morning")
         self.assertEqual(_intent_for("good evening"), "greeting_evening")
+        self.assertEqual(_intent_for("morning"), "greeting_morning")
+        self.assertEqual(_intent_for("afternoon"), "greeting_afternoon")
+        self.assertEqual(_intent_for("evening"), "greeting_evening")
 
 
 if __name__ == "__main__":
