@@ -215,7 +215,9 @@ class PrincessModule:
     def draw(self, screen, position):
         width, height = int(position.get("width", self.size)), int(position.get("height", self.size))
         self._bounds = (width, height)
-        if self.player.playing or self.player.has_frame:
+        # Keep the portrait visible while the background decoder buffers its
+        # first frame; otherwise streaming introduces a black transition.
+        if self.player.has_frame:
             self.player.draw(screen, position)
             return
         if self._portrait is not None and self._alpha > 0.01:
