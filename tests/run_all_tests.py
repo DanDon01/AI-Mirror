@@ -48,6 +48,7 @@ DISPLAY_TESTS = [
 LOGIC_TESTS = [
     "test_voice_commands.py",
     "test_princess_services.py",
+    "test_princess_cache.py",
 ]
 
 INTEGRATION_TESTS = [

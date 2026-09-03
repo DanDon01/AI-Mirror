@@ -49,6 +49,7 @@ PROJECT_MODULES = [
     "elevenvoice_module",
     "princess_services",
     "princess_demo",
+    "princess_cache",
 ]
 
 
