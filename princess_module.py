@@ -48,6 +48,7 @@ class PrincessModule:
         self.cache = PrincessCache(); self.player = PrincessPlayer(); self.recording = False
         self.fal = FlashTalkService(); self.openai_client = None; self._vosk_model = None
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
+        self._deferred_cache = None; self._cache_downloading = False
         self._bounds = (self.size, self.size)
         self.logger = logging.getLogger("Princess")
         self._portrait = None; self._alpha = 0.0; self._last_update = time.monotonic()
@@ -125,7 +126,8 @@ class PrincessModule:
                     self.logger.info("Princess intent cache hit (%s) in %.2fs", intent, time.monotonic() - started)
                     self.ready.put(self.cache.root / cached["media_path"]); return
             self.status = "Cold start — asking Princess..."
-            system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a poised, confident princess. Be warmly playful, witty, and a little sassy with tasteful attitude; never cruel. Reply concisely and naturally, without markdown.")
+            system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a poised, confident princess. Be warmly playful, witty, and a little sassy with tasteful attitude; never cruel.")
+            system += " Reply with exactly one natural short sentence, at most 12 words. No markdown."
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
@@ -140,27 +142,36 @@ class PrincessModule:
                 detail = getattr(response, "incomplete_details", None)
                 raise RuntimeError(f"OpenAI returned no visible response text (status={status}, detail={detail})")
             self.status = "Cold start — creating Princess video..."; self.logger.info("Princess text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
+            self.logger.info("Princess reply sent to Fal: %s", text)
             cached = self.cache.lookup(text, REFERENCE_HASH, cache_model)
             if cached:
                 self.logger.info("Princess cache hit")
                 self.ready.put(self.cache.root / cached["media_path"]); return
-            staging = self.cache.root / "staging" / "latest.mp4"
+            staging = self.cache.root / "staging" / f"turn-{time.time_ns()}.mp4"
             video_prompt = (
                 "A poised royal woman speaks naturally and directly to camera, with subtle confident facial expressions. "
                 "Use a seamless pure black background. No mirror, no reflective glass, no frame, no border, no text, and no hands. "
                 f'Say exactly: "{text}"'
             )
+            self.logger.info("Princess Fal prompt: %s", video_prompt)
             stream_first = os.getenv("PRINCESS_STREAM_FIRST", "1").lower() in ("1", "true", "yes", "on")
             streamed = threading.Event()
+            stream_url = None
             def stream_when_ready(url):
+                nonlocal stream_url
+                stream_url = url
                 if stream_first:
                     self.ready.put({"stream_url": url})
                     streamed.set()
-            result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5, resolution=os.getenv("PRINCESS_FAL_RESOLUTION", "480P"), on_video_ready=stream_when_ready)
+            result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5, resolution=os.getenv("PRINCESS_FAL_RESOLUTION", "480P"), on_video_ready=stream_when_ready, defer_download=stream_first)
             self.logger.info("Princess fal video ready in %.2fs (upload %.2fs, queue %.2fs, generation %.2fs, download %.2fs)", time.monotonic() - started, result.timings.get("image_upload", 0), result.timings.get("queue", 0), result.timings.get("generation", 0), result.timings.get("download", 0))
+            if streamed.is_set(): self.logger.info("Princess cache download deferred until playback has completed")
             if not any(word in transcript.casefold() for word in TIME_SENSITIVE_INTENTS):
-                record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
-                if not streamed.is_set(): self.ready.put(self.cache.root / record["media_path"])
+                if streamed.is_set():
+                    self._deferred_cache = {"url": stream_url, "staging": staging, "text": text, "intent": intent, "model": cache_model, "duration_seconds": result.duration_seconds, "transcript": transcript}
+                else:
+                    record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
+                    self.ready.put(self.cache.root / record["media_path"])
             else:
                 if not streamed.is_set(): self.ready.put(staging)
         except Exception as exc:
@@ -181,6 +192,20 @@ class PrincessModule:
                 self.player.play(item, self._bounds); self.status = "Playing"
             background_network.set_paused(False)
         self.player.update(__import__("pygame"))
+        if not self.player.playing and self._deferred_cache and not self._cache_downloading:
+            pending = self._deferred_cache; self._deferred_cache = None; self._cache_downloading = True
+            threading.Thread(target=self._save_after_playback, args=(pending,), daemon=True, name="princess-cache-save").start()
+
+    def _save_after_playback(self, pending):
+        try:
+            self.logger.info("Princess playback complete; downloading response for cache")
+            self.fal.download_video(pending["url"], pending["staging"])
+            record = self.cache.add_clip(pending["staging"], spoken_text=pending["text"], intent=pending["intent"], model=pending["model"], reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=pending["duration_seconds"], metadata={"transcript": pending["transcript"], "prompt_version": "portrait-v2"})
+            self.logger.info("Princess response saved to cache: %s", record["media_path"])
+        except Exception:
+            self.logger.exception("Princess background cache save failed")
+        finally:
+            self._cache_downloading = False
 
     def draw(self, screen, position):
         width, height = int(position.get("width", self.size)), int(position.get("height", self.size))

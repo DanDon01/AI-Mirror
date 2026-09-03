@@ -198,6 +198,22 @@ class PrincessServiceTests(unittest.TestCase):
             self.assertEqual(len(fal.uploaded), 1)
             self.assertEqual(ready_urls, ["https://example.invalid/result.mp4"])
 
+    def test_text_avatar_defers_cache_download_until_requested(self):
+        tracker = FakeTracker()
+        fal = FakeFal()
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {"FAL_KEY": "test"}):
+            root = Path(temp)
+            image = root / "reference.png"
+            output = root / "provider_output.mp4"
+            image.write_bytes(b"png")
+            urls = []
+            service = FlashTalkService(tracker, fal, FakeSession())
+            result = service.generate_from_text(image, "Hello.", output, on_video_ready=urls.append, defer_download=True)
+            self.assertEqual(result.bytes, 0)
+            self.assertFalse(output.exists())
+            service.download_video(urls[0], output)
+            self.assertEqual(output.read_bytes(), b"fake-mp4")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

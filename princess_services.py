@@ -358,6 +358,7 @@ class FlashTalkService:
         seed: int | None = 42,
         duration_seconds: int = 3,
         on_video_ready: Callable[[str], None] | None = None,
+        defer_download: bool = False,
         timeout_seconds: float = 900.0,
     ) -> FalResult:
         """Generate a talking avatar directly from text via fal's internal TTS."""
@@ -439,16 +440,11 @@ class FlashTalkService:
             if on_video_ready is not None:
                 on_video_ready(video_url)
             download_started = time.monotonic()
-            with self.session.get(video_url, stream=True, timeout=(15.0, timeout_seconds)) as response:
-                response.raise_for_status()
-                with partial.open("wb") as handle_out:
-                    for chunk in response.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            handle_out.write(chunk)
-            download_done = time.monotonic()
-            if not partial.is_file() or partial.stat().st_size == 0:
-                raise PrincessServiceError("fal returned an empty video file")
-            os.replace(partial, output)
+            if defer_download:
+                download_done = download_started
+            else:
+                self.download_video(video_url, output, timeout_seconds=timeout_seconds)
+                download_done = time.monotonic()
             returned_seed = result.get("seed") if isinstance(result, dict) else seed
             frame_count = int(arguments.get("num_frames", 0))
             estimated_duration = (
@@ -486,7 +482,7 @@ class FlashTalkService:
                 estimated_cost_usd=cost,
                 timings={key: round(value, 3) for key, value in timings.items()},
                 provider_timings=provider_timings,
-                bytes=output.stat().st_size,
+                bytes=output.stat().st_size if output.is_file() else 0,
                 model=model,
             )
         except Exception as exc:
@@ -497,6 +493,26 @@ class FlashTalkService:
                 raise
             suffix = f" (request {request_id})" if request_id else ""
             raise PrincessServiceError(f"fal text-avatar generation failed{suffix}: {exc}") from exc
+
+    def download_video(self, video_url: str, destination: str | Path, *, timeout_seconds: float = 900.0) -> Path:
+        """Persist a finished provider video when it will not affect foreground playback."""
+        output = Path(destination).resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        partial = output.with_suffix(output.suffix + ".partial")
+        try:
+            with self.session.get(video_url, stream=True, timeout=(15.0, timeout_seconds)) as response:
+                response.raise_for_status()
+                with partial.open("wb") as handle_out:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            handle_out.write(chunk)
+            if not partial.is_file() or partial.stat().st_size == 0:
+                raise PrincessServiceError("fal returned an empty video file")
+            os.replace(partial, output)
+            return output
+        except Exception:
+            partial.unlink(missing_ok=True)
+            raise
 
 
 def _optional_float(value: Any) -> float | None:
