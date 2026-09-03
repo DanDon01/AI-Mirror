@@ -133,7 +133,7 @@ class PrincessCache:
             return 0
         promoted = 0
         with self._db() as db:
-            rows = db.execute("SELECT id, metadata_json FROM clips WHERE intent='general' AND status='approved'").fetchall()
+            rows = db.execute("SELECT id, intent, metadata_json FROM clips WHERE intent<>? AND status='approved'", (intent,)).fetchall()
             for row in rows:
                 try:
                     original = json.loads(row["metadata_json"]).get("transcript", "")

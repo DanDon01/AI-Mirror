@@ -35,9 +35,9 @@ class PrincessCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); media = root / "clip.mp4"; media.write_bytes(b"mp4")
             cache = PrincessCache(root / "library"); ref = "c" * 64
-            cache.add_clip(media, spoken_text="Good evening, darling.", intent="general", model="model", reference_sha256=ref, tags=["night"], metadata={"transcript": "Good evening"})
-            self.assertEqual(cache.promote_matching_transcript("good evening", "greeting"), 1)
-            found = cache.select("good evening", ref, "model", intent="greeting", when=__import__('datetime').datetime(2026, 9, 3, 23))
+            cache.add_clip(media, spoken_text="Good evening, darling.", intent="greeting", model="model", reference_sha256=ref, tags=["night"], metadata={"transcript": "Good evening"})
+            self.assertEqual(cache.promote_matching_transcript("good evening", "greeting_evening"), 1)
+            found = cache.select("good evening", ref, "model", intent="greeting_evening", when=__import__('datetime').datetime(2026, 9, 3, 23))
             self.assertIsNotNone(found)
 
 if __name__ == "__main__": unittest.main()

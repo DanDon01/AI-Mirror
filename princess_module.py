@@ -16,7 +16,10 @@ REFERENCE_HASH = "4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7d
 
 def _intent_for(text: str) -> str:
     words = text.casefold()
-    if any(term in words for term in ("good morning", "good afternoon", "good evening", "hello", "hi princess", "hey princess", "hiya")): return "greeting"
+    if "good morning" in words: return "greeting_morning"
+    if "good afternoon" in words: return "greeting_afternoon"
+    if "good evening" in words: return "greeting_evening"
+    if any(term in words for term in ("hello", "hi princess", "hey princess", "hiya")): return "greeting"
     if "how are you" in words or "i'm fine" in words or "im fine" in words: return "wellbeing"
     if "thank" in words: return "thanks"
     if "good night" in words or "sleep well" in words: return "night"
