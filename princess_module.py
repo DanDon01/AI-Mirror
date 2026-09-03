@@ -18,6 +18,7 @@ class PrincessModule:
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
         self.cache = PrincessCache(); self.player = PrincessPlayer(); self.recording = False
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
+        self._bounds = (self.size, self.size)
         self.logger = logging.getLogger("Princess")
         self._portrait = None; self._alpha = 0.0; self._last_update = time.monotonic()
         try:
@@ -93,15 +94,16 @@ class PrincessModule:
         while not self.ready.empty():
             item = self.ready.get_nowait()
             if isinstance(item, Exception): self.status = f"Error: {item}"; continue
-            self.player.play(item, (self.size, self.size)); self.status = "Playing"
+            self.player.play(item, self._bounds); self.status = "Playing"
         self.player.update(__import__("pygame"))
 
     def draw(self, screen, position):
+        width, height = int(position.get("width", self.size)), int(position.get("height", self.size))
+        self._bounds = (width, height)
         if self.player.playing:
             self.player.draw(screen, position)
             return
         if self._portrait is not None and self._alpha > 0.01:
-            width, height = int(position.get("width", self.size)), int(position.get("height", self.size))
             scale = min(width / self._portrait.get_width(), height / self._portrait.get_height())
             image = pygame.transform.smoothscale(self._portrait, (max(1, int(self._portrait.get_width() * scale)), max(1, int(self._portrait.get_height() * scale))))
             image.set_alpha(int(255 * self._alpha))
