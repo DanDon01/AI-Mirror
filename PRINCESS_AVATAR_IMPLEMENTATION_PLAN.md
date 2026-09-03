@@ -1,6 +1,6 @@
 ﻿# Princess Conversational Avatar - Implementation Plan
 
-Status: Phases 0-2 complete; Phase 3 cache foundation complete; Phase 3 pool seeding and Phase 4 overlay next
+Status: Phases 0-2 complete; Phase 3 cache foundation and Phase 4 playback adapter complete; pool seeding and mirror wiring next
 Plan date: 3 September 2026
 Repository baseline: `main` at `baff942`
 
@@ -301,10 +301,14 @@ use tracking, corruption quarantine, and verified ZIP export/import are now in
 
 Tests: schema creation/migration idempotence; normalization; cache hit causes zero provider calls; weighted pool selection; use count/last-used update; stale/overused exclusion; interrupted write recovery; corrupt-file quarantine; concurrent read/update; export/import checksum verification.
 
-### Phase 4 - Princess centre overlay
+### Phase 4 - Princess centre overlay (playback adapter complete)
 
 - Implement ffmpeg-backed playback and add the opt-in centre module.
 - Keep edge modules running during playback.
+
+Progress: `princess_player.py` now decodes cached MP4 frames through ffmpeg and
+plays audio through ffplay when available. Full `AI-Mirror.py` wiring and
+physical-display validation remain.
 
 Tests: offline cached clip in `princess_demo.py`; headless draw state tests; repeated play/fade cycles; missing ffmpeg; missing/corrupt audio/video; main loop stays responsive; no controls/rectangle; measured frame drops and A/V drift. Run `smoke_test.py` and create a screenshot of the non-video still states.
 

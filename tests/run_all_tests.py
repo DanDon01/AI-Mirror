@@ -49,6 +49,7 @@ LOGIC_TESTS = [
     "test_voice_commands.py",
     "test_princess_services.py",
     "test_princess_cache.py",
+    "test_princess_player.py",
 ]
 
 INTEGRATION_TESTS = [

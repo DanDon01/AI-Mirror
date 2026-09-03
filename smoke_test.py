@@ -50,6 +50,7 @@ PROJECT_MODULES = [
     "princess_services",
     "princess_demo",
     "princess_cache",
+    "princess_player",
 ]
 
 
