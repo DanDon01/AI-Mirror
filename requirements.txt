@@ -17,6 +17,7 @@ lxml==6.1.1
 # OpenAI (Realtime GA + chat + TTS; 2.x SDK required for GA realtime)
 openai==2.41.1
 websocket-client==1.9.0
+fal-client==1.0.1
 
 # Google Calendar
 google-api-python-client==2.197.0

@@ -47,6 +47,8 @@ PROJECT_MODULES = [
     "ai_voice_module",
     "AI_Module",
     "elevenvoice_module",
+    "princess_services",
+    "princess_demo",
 ]
 
 

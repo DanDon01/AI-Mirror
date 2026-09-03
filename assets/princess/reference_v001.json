@@ -1,0 +1,12 @@
+{
+  "version": "v001",
+  "status": "approved",
+  "approved_at": "2026-09-03",
+  "file": "reference_v001.png",
+  "sha256": "4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7def",
+  "bytes": 2078275,
+  "generation_tool": "OpenAI built-in ImageGen",
+  "generation_model": "not exposed by built-in tool",
+  "source_output": "exec-e7f67dd1-7294-47c6-ae14-7c41c3323459.png",
+  "prompt": "Use case: photorealistic-natural\nAsset type: adult AI talking-avatar concept, selection preview\nInput images: Image 1 is a composition, quality, and black-background reference only. Create a clearly distinct adult Princess.\nPrimary request: A glamorous adult Princess in her late twenties, with long champagne-blonde waves, icy blue eyes, and a poised confident half-smile.\nScene/backdrop: pure seamless black fading cleanly into the UI.\nStyle/medium: premium photorealistic cinematic fashion portrait, realistic skin texture and hair, elegant fantasy royalty.\nComposition/framing: centered straight-on head-and-upper-torso portrait, direct eye contact, shoulders and upper bodice visible, face unobstructed and animation-friendly.\nLighting/mood: soft cinematic key light and delicate rim light; confident and warm.\nColor palette: sapphire blue, silver, champagne gold, black.\nWardrobe/details: sophisticated sapphire evening gown with an open formal neckline, silver embroidery, delicate silver-and-sapphire tiara, restrained jewelry.\nConstraints: clearly adult; anatomically natural; lips fully visible; hands out of frame; formal red-carpet styling; no text, logo, watermark, other people, or busy accessories."
+}

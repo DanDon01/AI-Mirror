@@ -158,6 +158,40 @@ Modules auto-hide when their credentials aren't configured, so you can start wit
 python AI-Mirror.py
 ```
 
+### Princess video proof (standalone)
+
+The approved Princess reference and two dormant visual candidates live under
+`assets/princess/`. Phase 2 is deliberately separate from the mirror UI.
+
+Add `FAL_KEY` to the parent `Variables.env`, install `requirements.txt`, then
+run the no-cost preflight before the explicit paid proof:
+
+```bash
+python princess_demo.py --check
+python princess_demo.py --run --play
+```
+
+If the OpenAI project does not have TTS entitlement, use a local Windows WAV
+to exercise fal without another OpenAI call:
+
+```bash
+python princess_demo.py --run --audio path\to\speech.wav --play
+```
+
+The default proof sends the approved image and text directly to
+`minimax/h3-max-turbo/image-to-video`; fal generates the talking video and
+its internal audio, so no WAV is uploaded. Short replies (up to eight words)
+request three seconds; longer replies request five seconds. Minimax currently
+enforces a five-second minimum, so short requests are safely clamped and the
+effective provider duration is recorded in `proof.json`. The downloaded MP4
+is validated with FFprobe and normalized to H.264/yuv420p/AAC when required.
+Durable video, request IDs, timings, and cost metadata are stored
+under ignored `data/princess/proofs/`. The command performs every dependency
+and key check before making a paid call.
+
+Use `--mode audio --audio <file> --fal-model fal-ai/flashtalk` only when an
+audio-driven FlashTalk comparison is explicitly wanted.
+
 ## Controls
 
 | Key | Action |

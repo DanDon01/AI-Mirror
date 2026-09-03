@@ -73,6 +73,7 @@ python tests/test_integration.py       # Full module init + screenshot
 | Script | Tests |
 |--------|-------|
 | `test_voice_commands.py` | 11 voice command phrases with expected parse results |
+| `test_princess_services.py` | Princess TTS/fal boundaries, atomic writes, cost metadata, and Pi codec policy |
 
 ### Integration Test
 | Script | Tests |

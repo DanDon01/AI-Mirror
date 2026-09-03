@@ -36,6 +36,9 @@ DEFAULT_LIMITS = {
     # Realtime voice: ~20 replies/hour, hard $1/day ceiling. The voice
     # module also enforces per-conversation time caps on top of this.
     'openai-realtime': {'hourly': 20, 'daily': 100, 'daily_cost': 1.00},
+    # Princess talking-avatar generation. The model is currently $0.02/s;
+    # keep the proof and future explicit prewarming inside a hard daily cap.
+    'fal-avatar': {'hourly': 10, 'daily': 50, 'daily_cost': 2.00},
     'elevenlabs': {'hourly': 30, 'daily': 200, 'daily_cost': 2.00},
     'openweathermap': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
     'open-meteo': {'hourly': 20, 'daily': 500, 'daily_cost': 0},
