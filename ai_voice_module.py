@@ -167,6 +167,7 @@ class AIVoiceModule:
         # Avatar hooks
         self._audio_sink = None
         self._state_listener = None
+        self._response_listener = None
         # Mirror command hook: receives each user speech transcript
         self._command_listener = None
 
@@ -191,6 +192,10 @@ class AIVoiceModule:
         """Register fn(transcript) called with each user utterance, so the
         mirror can act on spoken commands (show/hide modules, dashboard)."""
         self._command_listener = callback
+
+    def set_response_listener(self, callback):
+        """Register fn(text) after a completed successful response."""
+        self._response_listener = callback
 
     # ------------------------------------------------------------------
     # Initialization
@@ -376,6 +381,11 @@ class AIVoiceModule:
         spoken = self._response_text.strip()
         if spoken:
             self._voice_log.info(f"SPOKE: {spoken}")
+        if spoken and status != "failed" and self._response_listener:
+            try:
+                self._response_listener(spoken)
+            except Exception as exc:
+                self.logger.debug(f"Response listener error: {exc}")
         self._response_text = ""
         if status == "failed":
             api_tracker.failure("ai_voice", "openai-realtime")

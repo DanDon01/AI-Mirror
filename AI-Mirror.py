@@ -225,11 +225,15 @@ class MagicMirror:
         # they queue here and are parsed on the main loop
         from queue import Queue as _Queue
         self.voice_command_queue = _Queue()
+        self.voice_response_queue = _Queue()
         from voice_commands import ModuleCommand
         self.voice_command_parser = ModuleCommand()
         if 'ai_voice' in self.modules and hasattr(self.modules['ai_voice'], 'set_command_listener'):
             self.modules['ai_voice'].set_command_listener(self.voice_command_queue.put)
             logging.info("Voice command listener wired to AI voice module")
+        if 'ai_voice' in self.modules and hasattr(self.modules['ai_voice'], 'set_response_listener'):
+            self.modules['ai_voice'].set_response_listener(self.voice_response_queue.put)
+            logging.info("Voice response listener wired to Princess cache")
 
         # Phone control panel (LAN only, no auth - see web_panel.py)
         self.web_panel = None
@@ -661,6 +665,12 @@ class MagicMirror:
                 self._handle_voice_transcript(self.voice_command_queue.get_nowait())
             except Exception as e:
                 logging.error(f"Voice transcript handling failed: {e}")
+
+        while not self.voice_response_queue.empty():
+            try:
+                self._play_cached_princess(self.voice_response_queue.get_nowait())
+            except Exception as e:
+                logging.error(f"Princess cached response handling failed: {e}")
 
         # Check for commands from the fallback AI module
         if 'ai_interaction' in self.modules:
