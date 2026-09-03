@@ -97,6 +97,7 @@ from avatar_module import AvatarModule
 from phone_module import PhoneModule
 from princess_overlay_module import PrincessOverlayModule
 from princess_cache import PrincessCache
+from princess_autofill import PrincessAutoFiller
 from api_tracker import api_tracker
 
 
@@ -169,6 +170,9 @@ class MagicMirror:
         # Initialize modules first
         self.modules = self.initialize_modules()
         self.princess_cache = PrincessCache() if 'princess' in self.modules else None
+        self.princess_autofill = None
+        if self.princess_cache and (os.getenv('FAL_KEY', '').strip() or os.getenv('FAL', '').strip()):
+            self.princess_autofill = PrincessAutoFiller(self.princess_cache, 'assets/princess/reference_v001.png', os.getenv('PRINCESS_FAL_MODEL', 'minimax/h3-max-turbo/image-to-video'), 'A poised royal woman speaks naturally to camera with subtle facial expressions. Keep hands out of frame.')
 
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
@@ -645,6 +649,8 @@ class MagicMirror:
                 return False
             clip = self.princess_cache.select(response_text, reference_hash, model, intent='general')
             if not clip:
+                if self.princess_autofill:
+                    self.princess_autofill.enqueue(response_text)
                 return False
             position = self.module_positions.get('princess', {'width': 420, 'height': 420})
             self.modules['princess'].play_cached(self.princess_cache.root / clip['media_path'], position)
@@ -747,6 +753,8 @@ class MagicMirror:
             sys.exit(0)
 
     def cleanup(self):
+        if self.princess_autofill:
+            self.princess_autofill.stop()
         """Safely clean up all resources."""
         logging.info("Shutting down Magic Mirror")
         if self.web_panel:
