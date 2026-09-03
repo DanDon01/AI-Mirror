@@ -96,6 +96,7 @@ from octopus_energy_module import OctopusEnergyModule
 from avatar_module import AvatarModule
 from phone_module import PhoneModule
 from princess_overlay_module import PrincessOverlayModule
+from princess_cache import PrincessCache
 from api_tracker import api_tracker
 
 
@@ -167,6 +168,7 @@ class MagicMirror:
 
         # Initialize modules first
         self.modules = self.initialize_modules()
+        self.princess_cache = PrincessCache() if 'princess' in self.modules else None
 
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
@@ -627,6 +629,27 @@ class MagicMirror:
                     duration_ms=2000,
                 )
 
+    def _play_cached_princess(self, response_text):
+        """Play an already-approved reusable response; never generate here."""
+        if not self.princess_cache or 'princess' not in self.modules:
+            return False
+        try:
+            import os
+            reference_hash = os.getenv('PRINCESS_REFERENCE_SHA256', '4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7def')
+            model = os.getenv('PRINCESS_FAL_MODEL', 'minimax/h3-max-turbo/image-to-video')
+            if not reference_hash:
+                return False
+            clip = self.princess_cache.select(response_text, reference_hash, model, intent='general')
+            if not clip:
+                return False
+            position = self.module_positions.get('princess', {'width': 420, 'height': 420})
+            self.modules['princess'].play_cached(self.princess_cache.root / clip['media_path'], position)
+            self.princess_cache.mark_used(clip['id'])
+            return True
+        except Exception as exc:
+            logging.debug(f"Princess cache playback skipped: {exc}")
+            return False
+
     def update_modules(self):
         # Apply commands queued by the web control panel
         if self.web_panel:
@@ -651,6 +674,7 @@ class MagicMirror:
                     self.speech_logger.log_user_speech(content['user_text'])
                     if content['ai_response']:
                         self.speech_logger.log_ai_response(content['ai_response'])
+                        self._play_cached_princess(content['ai_response'])
 
         # Update visible modules (state-aware)
         screensaver_names = CONFIG.get('screensaver_modules', ['retro_characters'])
