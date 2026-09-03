@@ -406,7 +406,8 @@ class MagicMirror:
                 elif event.key == pygame.K_SPACE:
                     if self.state != "active":
                         self.change_state("active")
-                    elif 'princess' in self.modules:
+                    if 'princess' in self.modules:
+                        logging.info("Space bar pressed - triggering PrincessModule")
                         self.modules['princess'].on_button_press()
                     elif 'ai_voice' in self.modules:
                         try:
