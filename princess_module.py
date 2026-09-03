@@ -7,6 +7,7 @@ from queue import Queue
 from princess_cache import PrincessCache, TIME_SENSITIVE_INTENTS, time_of_day_tags
 from princess_player import PrincessPlayer
 from princess_services import FlashTalkService
+from background_fetcher import background_network
 import pygame
 
 ROOT = Path(__file__).resolve().parent
@@ -72,6 +73,7 @@ class PrincessModule:
         if self.proc:
             self.proc.terminate(); self.proc.wait(timeout=3); self.proc = None
         self.status = "Cold start — transcribing locally..."
+        background_network.set_paused(True, "Princess turn")
         self.logger.info("Princess recording stopped; processing local transcription")
         threading.Thread(target=self._make_video, daemon=True, name="princess-turn").start()
 
@@ -138,8 +140,11 @@ class PrincessModule:
         now = time.monotonic(); self._alpha = min(1.0, self._alpha + min(now - self._last_update, 0.1) * 3) if (self.recording or self.status not in ("Ready: SPACE to talk", "Playing")) else max(0.0, self._alpha - min(now - self._last_update, 0.1) * 2); self._last_update = now
         while not self.ready.empty():
             item = self.ready.get_nowait()
-            if isinstance(item, Exception): self.status = f"Error: {item}"; continue
+            if isinstance(item, Exception):
+                background_network.set_paused(False)
+                self.status = f"Error: {item}"; continue
             self.player.play(item, self._bounds); self.status = "Playing"
+            background_network.set_paused(False)
         self.player.update(__import__("pygame"))
 
     def draw(self, screen, position):
@@ -156,4 +161,6 @@ class PrincessModule:
             screen.blit(image, (x, y))
         font = pygame.font.Font(None, 26); label = font.render(self.status, True, (242, 222, 172)); label.set_alpha(235)
         screen.blit(label, (position.get("x", 0) + 12, position.get("y", 0) + 12))
-    def cleanup(self): self.player.cleanup()
+    def cleanup(self):
+        background_network.set_paused(False)
+        self.player.cleanup()

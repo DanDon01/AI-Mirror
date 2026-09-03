@@ -20,6 +20,27 @@ import threading
 logger = logging.getLogger("BackgroundFetcher")
 
 
+class BackgroundNetworkGate:
+    """Stops optional refreshes starting while latency-sensitive media loads."""
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._paused = False
+        self._reason = ""
+
+    def set_paused(self, paused, reason=""):
+        with self._lock:
+            self._paused = bool(paused)
+            self._reason = reason if paused else ""
+
+    @property
+    def paused(self):
+        with self._lock:
+            return self._paused
+
+
+background_network = BackgroundNetworkGate()
+
+
 class BackgroundFetcher:
     """Runs one fetch function at a time in a daemon thread.
 
@@ -42,6 +63,8 @@ class BackgroundFetcher:
 
     def submit(self, fn):
         """Start fn in a background thread. Returns False if already busy."""
+        if background_network.paused:
+            return False
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return False

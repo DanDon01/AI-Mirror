@@ -18,6 +18,7 @@ import requests
 import pygame
 import logging
 import time
+from background_fetcher import background_network
 import traceback
 from datetime import datetime, timedelta
 from pytz import timezone as pytz_tz
@@ -554,6 +555,8 @@ class StocksModule:
     # ------------------------------------------------------------------
 
     def update(self):
+        if background_network.paused:
+            return
         """Non-blocking update.  Processes at most 1 ticker per call."""
         now = time.time()
 
