@@ -51,6 +51,7 @@ PROJECT_MODULES = [
     "princess_demo",
     "princess_cache",
     "princess_player",
+    "princess_overlay_module",
 ]
 
 

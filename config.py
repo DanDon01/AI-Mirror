@@ -227,7 +227,7 @@ LAYOUT_V2 = {
     'right_modules': ['greeting', 'phone', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
     'top_bar_modules': ['clock'],
     'bottom_bar_modules': ['stocks'],
-    'center_overlay_modules': ['avatar', 'ai_interaction', 'ai_voice', 'eleven_voice'],
+    'center_overlay_modules': ['princess', 'avatar', 'ai_interaction', 'ai_voice', 'eleven_voice'],
     'fullscreen_overlay_modules': ['retro_characters'],
     'module_gap': 15,
     'edge_padding': 15,
@@ -518,7 +518,8 @@ CONFIG = {
         'sysinfo': True,
         'greeting': True,
         'octopus_energy': True,
-        'phone': True
+        'phone': True,
+        'princess': os.getenv('ENABLE_PRINCESS', '').lower() in ('1', 'true', 'yes', 'on')
     },
     
     # Keyboard toggles: keys 1-9, 0 map to these modules (in order)

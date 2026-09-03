@@ -95,6 +95,7 @@ from greeting_module import GreetingModule
 from octopus_energy_module import OctopusEnergyModule
 from avatar_module import AvatarModule
 from phone_module import PhoneModule
+from princess_overlay_module import PrincessOverlayModule
 from api_tracker import api_tracker
 
 
@@ -328,7 +329,8 @@ class MagicMirror:
             'greeting': GreetingModule,
             'octopus_energy': OctopusEnergyModule,
             'avatar': AvatarModule,
-            'phone': PhoneModule
+            'phone': PhoneModule,
+            'princess': PrincessOverlayModule
         }
 
         config_copy = CONFIG.copy()
