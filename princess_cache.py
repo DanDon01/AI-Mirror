@@ -123,6 +123,22 @@ class PrincessCache:
         with self._db() as db:
             return [dict(row) for row in db.execute("SELECT * FROM clips ORDER BY id")]
 
+    def health(self, intent: str | None = None) -> dict:
+        rows = self.inspect()
+        if intent: rows = [row for row in rows if row["intent"] == intent]
+        return {"total": len(rows), "approved": sum(r["status"] == "approved" for r in rows),
+                "quarantined": sum(r["status"] == "quarantined" for r in rows),
+                "by_intent": {name: sum(r["intent"] == name and r["status"] == "approved" for r in rows)
+                               for name in sorted({r["intent"] for r in rows})}}
+
+    def select(self, spoken_text: str, reference_sha256: str, model: str, *, intent: str = "greeting") -> dict | None:
+        exact = self.lookup(spoken_text, reference_sha256, model)
+        if exact: return exact
+        rows = [r for r in self.inspect() if r["intent"] == intent and r["status"] == "approved"]
+        if not rows: return None
+        rows.sort(key=lambda row: (row["use_count"], row["last_used_at"] or "", row["id"]))
+        return rows[0]
+
     def export_bundle(self, destination: str | Path) -> Path:
         destination = Path(destination).resolve(); destination.parent.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:

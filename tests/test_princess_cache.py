@@ -15,6 +15,8 @@ class PrincessCacheTests(unittest.TestCase):
             self.assertIsNotNone(found)
             cache.mark_used(found["id"])
             self.assertEqual(cache.inspect()[0]["use_count"], 1)
+            self.assertEqual(cache.health()["approved"], 1)
+            self.assertEqual(cache.select("unseen", ref, "model")["id"], found["id"])
             self.assertEqual(normalize_text("A  TEST?!"), "a test")
 
     def test_corrupt_media_is_quarantined_and_export_import_verifies(self):

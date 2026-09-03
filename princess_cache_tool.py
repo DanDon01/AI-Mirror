@@ -9,12 +9,15 @@ def main() -> int:
     parser.add_argument("--root", default="data/princess/library")
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument("--inspect", action="store_true")
+    actions.add_argument("--health", action="store_true")
     actions.add_argument("--export")
     actions.add_argument("--import-bundle", metavar="ZIP")
     args = parser.parse_args()
     cache = PrincessCache(args.root)
     if args.inspect:
         print(json.dumps(cache.inspect(), indent=2))
+    elif args.health:
+        print(json.dumps(cache.health(), indent=2))
     elif args.export:
         print(cache.export_bundle(args.export))
     else:
