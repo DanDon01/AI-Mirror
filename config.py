@@ -14,6 +14,7 @@ env_path = os.path.join(current_dir, '..', 'Variables.env')
 
 # Load the .env file
 load_dotenv(env_path)
+PRINCESS_ENABLED = os.getenv('ENABLE_PRINCESS', '').lower() in ('1', 'true', 'yes', 'on')
 
 #########################################
 # GLOBAL CONSTANTS
@@ -374,6 +375,10 @@ CONFIG = {
             # Face frames live in assets/avatar/ (see README.txt there)
         }
     },
+    'princess': {
+        'class': 'PrincessModule',
+        'params': {'size': 620, 'alsa_device': os.getenv('VOICE_MIC', 'plughw:3,0')}
+    },
     'ai_interaction': {
         'class': 'AIInteractionModule',
         'params': {
@@ -507,9 +512,9 @@ CONFIG = {
         # Voice is opt-in via Variables.env (no code edit, survives git pull):
         #   ENABLE_VOICE=1           -> Realtime voice (gpt-realtime-mini)
         #   ENABLE_VOICE_FALLBACK=1  -> older chat+TTS voice (no Realtime access needed)
-        'ai_voice': os.getenv('ENABLE_VOICE', '').lower() in ('1', 'true', 'yes', 'on'),
-        'ai_interaction': os.getenv('ENABLE_VOICE_FALLBACK', '').lower() in ('1', 'true', 'yes', 'on'),
-        'avatar': True,  # Only draws while a voice conversation is active
+        'ai_voice': (not PRINCESS_ENABLED) and os.getenv('ENABLE_VOICE', '').lower() in ('1', 'true', 'yes', 'on'),
+        'ai_interaction': (not PRINCESS_ENABLED) and os.getenv('ENABLE_VOICE_FALLBACK', '').lower() in ('1', 'true', 'yes', 'on'),
+        'avatar': not PRINCESS_ENABLED,
         'countdown': True,
         'quote': True,
         'news': True,
@@ -519,7 +524,7 @@ CONFIG = {
         'greeting': True,
         'octopus_energy': True,
         'phone': True,
-        'princess': os.getenv('ENABLE_PRINCESS', '').lower() in ('1', 'true', 'yes', 'on')
+        'princess': PRINCESS_ENABLED
     },
     
     # Keyboard toggles: keys 1-9, 0 map to these modules (in order)

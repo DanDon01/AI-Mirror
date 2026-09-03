@@ -42,4 +42,5 @@ pyaudio
 SpeechRecognition>=3.14
 sounddevice>=0.5
 soundfile>=0.12
+vosk>=0.3.45
 gtts==2.5.4

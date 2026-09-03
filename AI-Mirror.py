@@ -95,9 +95,7 @@ from greeting_module import GreetingModule
 from octopus_energy_module import OctopusEnergyModule
 from avatar_module import AvatarModule
 from phone_module import PhoneModule
-from princess_overlay_module import PrincessOverlayModule
-from princess_cache import PrincessCache
-from princess_autofill import PrincessAutoFiller
+from princess_module import PrincessModule
 from api_tracker import api_tracker
 
 
@@ -169,10 +167,6 @@ class MagicMirror:
 
         # Initialize modules first
         self.modules = self.initialize_modules()
-        self.princess_cache = PrincessCache() if 'princess' in self.modules else None
-        self.princess_autofill = None
-        if self.princess_cache and (os.getenv('FAL_KEY', '').strip() or os.getenv('FAL', '').strip()):
-            self.princess_autofill = PrincessAutoFiller(self.princess_cache, 'assets/princess/reference_v001.png', os.getenv('PRINCESS_FAL_MODEL', 'minimax/h3-max-turbo/image-to-video'), 'A poised royal woman speaks naturally to camera with subtle facial expressions. Keep hands out of frame.')
 
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
@@ -340,7 +334,7 @@ class MagicMirror:
             'octopus_energy': OctopusEnergyModule,
             'avatar': AvatarModule,
             'phone': PhoneModule,
-            'princess': PrincessOverlayModule
+            'princess': PrincessModule
         }
 
         config_copy = CONFIG.copy()
@@ -412,6 +406,8 @@ class MagicMirror:
                 elif event.key == pygame.K_SPACE:
                     if self.state != "active":
                         self.change_state("active")
+                    elif 'princess' in self.modules:
+                        self.modules['princess'].on_button_press()
                     elif 'ai_voice' in self.modules:
                         try:
                             logging.info("Space bar pressed - triggering AIVoiceModule")
@@ -753,8 +749,6 @@ class MagicMirror:
             sys.exit(0)
 
     def cleanup(self):
-        if self.princess_autofill:
-            self.princess_autofill.stop()
         """Safely clean up all resources."""
         logging.info("Shutting down Magic Mirror")
         if self.web_panel:

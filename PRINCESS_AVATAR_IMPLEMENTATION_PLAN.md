@@ -1,6 +1,6 @@
 ﻿# Princess Conversational Avatar - Implementation Plan
 
-Status: Phases 0-2 complete; Phase 3 cache foundation and Phase 4 playback/overlay wiring complete; cache-driven invocation and display validation next
+Status: Princess-only local-STT/text/fal runtime implemented; Pi dependency and display validation next
 Plan date: 3 September 2026
 Repository baseline: `main` at `baff942`
 
@@ -315,9 +315,9 @@ and cache-driven invocation remain.
 
 Tests: offline cached clip in `princess_demo.py`; headless draw state tests; repeated play/fade cycles; missing ffmpeg; missing/corrupt audio/video; main loop stays responsive; no controls/rectangle; measured frame drops and A/V drift. Run `smoke_test.py` and create a screenshot of the non-video still states.
 
-### Phase 5 - basic voice input
+### Phase 5 - basic voice input (implemented; Pi validation pending)
 
-- Add hold-Space-to-talk capture. Use `arecord` on Pi and `sounddevice` on Windows, then send the completed utterance to `gpt-transcribe`.
+- Princess mode uses hold-Space recording via `arecord`, local Vosk transcription, an OpenAI text-only response, then fal video/audio playback. It disables legacy Realtime voice and the drawn avatar.
 - Preserve existing command parsing: recognized mirror commands execute without also generating Princess chatter; other transcripts route to Princess.
 - Do not add a wake word.
 

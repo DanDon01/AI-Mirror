@@ -161,7 +161,9 @@ python AI-Mirror.py
 ### Princess video proof (standalone)
 
 The approved Princess reference and two dormant visual candidates live under
-`assets/princess/`. Phase 2 is deliberately separate from the mirror UI.
+`assets/princess/`. In Princess mode, install the local Vosk model separately,
+set `VOSK_MODEL_PATH`, and set `ENABLE_PRINCESS=1`; this replaces the legacy
+Realtime/drawn-avatar path with local STT -> OpenAI text -> fal video/audio.
 
 Add `FAL_KEY` to the parent `Variables.env`, install `requirements.txt`, then
 run the no-cost preflight before the explicit paid proof:
