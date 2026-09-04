@@ -12,7 +12,25 @@ import pygame
 
 ROOT = Path(__file__).resolve().parent
 REFERENCE = ROOT / "assets" / "princess" / "reference_v001.png"
+DEFAULT_PROMPT_FILE = ROOT / "assets" / "princess" / "princess_prompt.default.txt"
 REFERENCE_HASH = "4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7def"
+DEFAULT_SYSTEM_PROMPT = "You are a princess in an enchanted mirror addressing your Prince Dan. Be witty and a little sassy with sarcastic charm."
+
+
+def _load_system_prompt() -> str:
+    """Load the editable tracked prompt, ignoring its human guidance comments."""
+    override = os.getenv("PRINCESS_SYSTEM_PROMPT", "").strip()
+    if override:
+        return override
+    prompt_file = Path(os.getenv("PRINCESS_PROMPT_FILE", str(DEFAULT_PROMPT_FILE)))
+    try:
+        prompt = " ".join(
+            line.strip() for line in prompt_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        )
+        return prompt or DEFAULT_SYSTEM_PROMPT
+    except OSError:
+        return DEFAULT_SYSTEM_PROMPT
 
 def _intent_for(text: str) -> str:
     words = text.casefold()
@@ -131,7 +149,7 @@ class PrincessModule:
                     self.logger.info("Princess intent cache hit (%s) in %.2fs", intent, time.monotonic() - started)
                     self.ready.put(self.cache.root / cached["media_path"]); return
             self.status = "Cold start — asking Princess..."
-            system = os.getenv("PRINCESS_SYSTEM_PROMPT", "You are a princess in an enchanted mirror addressing your Prince. Be witty and a little sassy with sarcastic charm.")
+            system = _load_system_prompt()
             system += " Reply with exactly one natural short sentence, at most 12 words. No markdown."
             if self.openai_client is None:
                 from openai import OpenAI

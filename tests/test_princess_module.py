@@ -1,11 +1,15 @@
 """Small unit tests for the live Princess turn helpers."""
+import os
+from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.modules.setdefault("pygame", SimpleNamespace())
 
-from princess_module import _intent_for, _response_text
+from princess_module import _intent_for, _load_system_prompt, _response_text
 
 
 class PrincessModuleTests(unittest.TestCase):
@@ -25,6 +29,13 @@ class PrincessModuleTests(unittest.TestCase):
         self.assertEqual(_intent_for("morning"), "greeting_morning")
         self.assertEqual(_intent_for("afternoon"), "greeting_afternoon")
         self.assertEqual(_intent_for("evening"), "greeting_evening")
+
+    def test_system_prompt_uses_editable_text_file_and_skips_comments(self):
+        with tempfile.TemporaryDirectory() as temp:
+            prompt_file = Path(temp) / "princess.txt"
+            prompt_file.write_text("# Guidance only\n\nBe concise and mischievous.\n", encoding="utf-8")
+            with patch.dict(os.environ, {"PRINCESS_PROMPT_FILE": str(prompt_file), "PRINCESS_SYSTEM_PROMPT": ""}, clear=False):
+                self.assertEqual(_load_system_prompt(), "Be concise and mischievous.")
 
 
 if __name__ == "__main__":

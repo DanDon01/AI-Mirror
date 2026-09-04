@@ -165,6 +165,12 @@ The approved Princess reference and two dormant visual candidates live under
 set `VOSK_MODEL_PATH`, and set `ENABLE_PRINCESS=1`; this replaces the legacy
 Realtime/drawn-avatar path with local STT -> OpenAI text -> fal video/audio.
 
+Princess's editable persona is in
+[`assets/princess/princess_prompt.default.txt`](assets/princess/princess_prompt.default.txt).
+Edit only its non-comment text; its comments give brief prompt-writing tips.
+Set `PRINCESS_PROMPT_FILE` to use a separate local prompt file, or
+`PRINCESS_SYSTEM_PROMPT` for a one-line environment override.
+
 Add `FAL_KEY` to the parent `Variables.env`, install `requirements.txt`, then
 run the no-cost preflight before the explicit paid proof:
 
