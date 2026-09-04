@@ -1,6 +1,6 @@
 ﻿# Princess Conversational Avatar - Implementation Plan
 
-Status: Princess-only local-STT/text/fal runtime implemented; Pi dependency and display validation next
+Status: Core Princess runtime, cache, centre playback, and physical Pi validation complete. Remaining V1 scope: grounded live-data answers (Phase 8), formal resilience validation, and demo polish.
 Plan date: 3 September 2026
 Repository baseline: `main` at `baff942`
 
@@ -303,37 +303,55 @@ current morning/afternoon/evening/night tag. Cache-driven invocation remains.
 
 Tests: schema creation/migration idempotence; normalization; cache hit causes zero provider calls; weighted pool selection; use count/last-used update; stale/overused exclusion; interrupted write recovery; corrupt-file quarantine; concurrent read/update; export/import checksum verification.
 
-### Phase 4 - Princess centre overlay (playback adapter complete)
+### Phase 4 - Princess centre overlay (complete)
 
 - Implement ffmpeg-backed playback and add the opt-in centre module.
 - Keep edge modules running during playback.
 
-Progress: `princess_player.py` now decodes cached MP4 frames through ffmpeg and
-plays audio through ffplay when available. `PrincessOverlayModule` is wired
-into the centre overlay behind `ENABLE_PRINCESS`; physical-display validation
-and cache-driven invocation remain.
+Progress: `princess_player.py` decodes MP4 frames through ffmpeg off the UI
+thread and sends audio to `aplay`. `PrincessModule` is wired into the centre
+overlay behind `ENABLE_PRINCESS`; the still portrait remains visible until the
+first video frame arrives, and the final video frame remains visible after
+playback. Physical-display and cache-driven invocation were validated on Pi.
 
 Tests: offline cached clip in `princess_demo.py`; headless draw state tests; repeated play/fade cycles; missing ffmpeg; missing/corrupt audio/video; main loop stays responsive; no controls/rectangle; measured frame drops and A/V drift. Run `smoke_test.py` and create a screenshot of the non-video still states.
 
-### Phase 5 - basic voice input (implemented; Pi validation pending)
+### Phase 5 - basic voice input (complete)
 
 - Princess mode uses hold-Space recording via `arecord`, local Vosk transcription, an OpenAI text-only response, then fal video/audio playback. It disables legacy Realtime voice and the drawn avatar.
 - Preserve existing command parsing: recognized mirror commands execute without also generating Princess chatter; other transcripts route to Princess.
 - Do not add a wake word.
 
+Progress: Pi microphone capture, Vosk transcription, speaker playback,
+portrait positioning, and end-to-end cold/cache paths have been physically
+validated. Background network work is paused from the completed utterance
+until streamed video playback has ended.
+
 Tests: synthetic WAV transcription adapter; capture start/stop/cancel; empty/silent input; device missing; API timeout; no recording overlap; Windows microphone test; Pi `arecord` test; latency fields complete.
 
-### Phase 6 - personality and grounded response generation
+### Phase 6 - personality and grounded response generation (personality complete; grounding pending)
 
 - Add the versioned prompt, deterministic router, Responses API call, output validation, and no-data pools.
 - Limit spoken output and strip markup unsuitable for speech.
 
+Progress: the configurable Princess prompt, GPT response generation, minimal
+reasoning, robust response extraction, and a one-sentence/twelve-word rule
+are live. The response and exact Fal prompt are logged. Live-data grounding is
+deferred to Phase 8.
+
 Tests: greetings stay concise/in character; genuine questions remain useful; sarcasm frequency is restrained; unavailable live information is admitted; prompt-injection text inside headlines/events is treated as data, not instruction; malformed model output falls back safely.
 
-### Phase 7 - configurable common-intent pools
+### Phase 7 - configurable common-intent pools (core reuse complete)
 
 - Implement pool health reporting and explicit prewarm/replenish commands.
 - Start with greeting, morning, evening, goodbye, thanks, and generic confirmation/unknown pools.
+
+Progress: successful non-time-sensitive clips are saved naturally, tagged by
+time of day, and selected before any OpenAI/Fal call. Morning, afternoon, and
+evening greetings use separate pools; old matching clips are promoted into a
+recognised pool. Cache inspection/export/import and corruption quarantine are
+implemented. Pool target/age policy and web-panel reporting remain optional
+future work.
 
 Tests: target/min/age/use configuration overrides; no immediate repeat when alternatives exist; underfilled pool reports but does not auto-spend; a warmed greeting is near-immediate and calls neither LLM, TTS, nor fal.
 
@@ -344,18 +362,27 @@ Tests: target/min/age/use configuration overrides; no immediate repeat when alte
 
 Tests: real-shaped fixtures for each module; absent/stale source behavior; fingerprint invalidation; no duplicate network fetch; factual response references only supplied facts; changed headline/weather/event forces a miss; unchanged fresh snapshot may reuse.
 
-### Phase 9 - Raspberry Pi 5 validation
+### Phase 9 - Raspberry Pi 5 validation (functional validation complete)
 
 - Commit the stable Windows implementation. Operator performs the existing manual pull/deploy workflow.
 - Install/check `ffmpeg`/`ffprobe`, then run the project smoke test before restart.
 - Test an imported cached clip before any paid Pi generation.
 
+Progress: real Pi tests covered `arecord`, Vosk, OpenAI text, Fal generation,
+direct-CDN playback, `aplay` audio, cached playback, portrait layout, final
+frame retention, and measured cold latency. Formal offline/failure and
+resource-stress checks remain before calling the full phase exhaustive.
+
 Tests: portrait scale and black blending; H.264/AAC decoding; A/V synchronization; `arecord`/`aplay`; CPU, memory, temperature, frame rate, and disk growth; API connectivity; network-off fallback; service restart; `journalctl -u ai-mirror -f`. Verify the old mirror remains usable when `ENABLE_PRINCESS=0`.
 
-### Phase 10 - demo polish
+### Phase 10 - demo polish (in progress)
 
 - Tune transition timing, voice, prompt, reference/background treatment, and a reviewed demo pool.
 - Script the "Hello" and real-headlines demo without hardcoding any facts.
+
+Progress: prompt/personality, gesture wording, centred portrait/video sizing,
+black-background prompting, smooth startup, and latency have been tuned. The
+live-headline path and deliberate failure demonstrations remain.
 
 Tests: three cold starts; repeated greeting variation; live headline freshness; forced OpenAI failure; forced fal failure; forced offline mode; visual review on the physical glass.
 

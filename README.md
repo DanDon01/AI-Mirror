@@ -194,6 +194,23 @@ and key check before making a paid call.
 Use `--mode audio --audio <file> --fal-model fal-ai/flashtalk` only when an
 audio-driven FlashTalk comparison is explicitly wanted.
 
+### Future option: Fal Director realtime avatar
+
+The active Princess path deliberately uses short, cached-or-generated MP4
+responses. A possible future upgrade is
+[Fal Director](https://fal.ai/models/minimax/h3-max/director/api), which can
+maintain a continuous WebRTC video/audio stream from the approved reference
+image and accept live prompt updates. That could make the character feel much
+closer to a realtime conversation.
+
+It is not enabled or integrated today: Fal documents Director as an
+experimental alpha JavaScript/WebRTC API, while the mirror uses Python,
+Pygame, and ffmpeg. Its prompt-only contract also needs a proof that spoken
+dialogue follows Nano's response exactly before it can replace the current
+reliable `Say exactly:` video flow. It should be built as an opt-in proof mode
+with the current pipeline retained as fallback, and tested for first-frame
+latency, dialogue accuracy, continuity, and continuous-session cost.
+
 ## Controls
 
 | Key | Action |
