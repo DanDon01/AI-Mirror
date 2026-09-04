@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 sys.modules.setdefault("pygame", SimpleNamespace())
 
-from princess_module import _intent_for, _load_system_prompt, _response_text
+from princess_module import _intent_for, _load_system_prompt, _response_intent_and_text, _response_text
 
 
 class PrincessModuleTests(unittest.TestCase):
@@ -37,6 +37,16 @@ class PrincessModuleTests(unittest.TestCase):
             prompt_file.write_text("# Guidance only\n\nBe concise and mischievous.\n", encoding="utf-8")
             with patch.dict(os.environ, {"PRINCESS_PROMPT_FILE": str(prompt_file), "PRINCESS_SYSTEM_PROMPT": ""}, clear=False):
                 self.assertEqual(_load_system_prompt(), "Be concise and mischievous.")
+
+    def test_response_route_envelope_is_not_sent_to_fal(self):
+        intent, reply = _response_intent_and_text("INTENT: weather\nREPLY: Bring an umbrella, Prince.", "general")
+        self.assertEqual(intent, "weather")
+        self.assertEqual(reply, "Bring an umbrella, Prince.")
+
+    def test_invalid_route_falls_back_without_losing_reply(self):
+        intent, reply = _response_intent_and_text("INTENT: stocks\nREPLY: Markets are lively.", "general")
+        self.assertEqual(intent, "general")
+        self.assertEqual(reply, "Markets are lively.")
 
 
 if __name__ == "__main__":

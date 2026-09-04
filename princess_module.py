@@ -68,6 +68,24 @@ def _response_text(response) -> str:
                 return value.strip()
     return ""
 
+
+def _response_intent_and_text(raw: str, fallback_intent: str) -> tuple[str, str]:
+    """Parse the one-call Nano routing envelope without exposing it to Fal."""
+    intent = fallback_intent
+    reply_lines = []
+    for line in raw.splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.strip().casefold() == "intent":
+            candidate = value.strip().casefold()
+            if candidate in {"general", "news", "weather", "calendar", "smarthome"}:
+                intent = candidate
+        elif separator and key.strip().casefold() == "reply":
+            reply_lines.append(value.strip())
+        elif reply_lines:
+            reply_lines.append(line.strip())
+    reply = " ".join(part for part in reply_lines if part).strip()
+    return intent, reply or raw.strip()
+
 class PrincessModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
@@ -162,13 +180,20 @@ class PrincessModule:
             self.status = "Cold start — asking Princess..."
             system = _load_system_prompt()
             system += " Reply with exactly one natural short sentence, at most 12 words. No markdown."
-            context = (context_snapshot or {}).get(intent)
-            if intent in TIME_SENSITIVE_INTENTS:
-                if context and context.get("available"):
-                    facts = json.dumps(context["data"], ensure_ascii=False, separators=(",", ":"))
-                    system += f" Use only these current {intent} facts; do not invent or add facts: {facts}"
-                else:
-                    system += f" Current {intent} data is unavailable or stale. Say that plainly in character; do not invent facts."
+            if intent == "general":
+                live_context = context_snapshot or {}
+            else:
+                live_context = {intent: (context_snapshot or {}).get(intent, {})}
+            compact_context = {
+                name: {"available": value.get("available", False), "data": value.get("data"), "reason": value.get("reason")}
+                for name, value in live_context.items()
+            }
+            system += (
+                " Classify the user's request as exactly one of general, news, weather, calendar, or smarthome. "
+                "Use live facts only for the matching category; if that category is unavailable, say so plainly and invent nothing. "
+                "Return exactly two lines: INTENT: <category> then REPLY: <your reply>. "
+                f"Current mirror data: {json.dumps(compact_context, ensure_ascii=False, separators=(',', ':'))}"
+            )
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
@@ -177,11 +202,14 @@ class PrincessModule:
             if llm_model.startswith("gpt-5"):
                 request["reasoning"] = {"effort": os.getenv("PRINCESS_LLM_REASONING_EFFORT", "minimal")}
             response = self.openai_client.responses.create(**request)
-            text = _response_text(response)
-            if not text:
+            raw_text = _response_text(response)
+            if not raw_text:
                 status = getattr(response, "status", "unknown")
                 detail = getattr(response, "incomplete_details", None)
                 raise RuntimeError(f"OpenAI returned no visible response text (status={status}, detail={detail})")
+            intent, text = _response_intent_and_text(raw_text, intent)
+            if not text:
+                raise RuntimeError("OpenAI returned no Princess reply text")
             self.status = "Cold start — creating Princess video..."; self.logger.info("Princess text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
             self.logger.info("Princess reply sent to Fal: %s", text)
             cached = self.cache.lookup(text, REFERENCE_HASH, cache_model)
