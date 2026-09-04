@@ -167,6 +167,10 @@ class MagicMirror:
 
         # Initialize modules first
         self.modules = self.initialize_modules()
+        princess = self.modules.get('princess')
+        if princess is not None and hasattr(princess, 'set_context_sources'):
+            princess.set_context_sources(self.modules)
+            logging.info("Princess wired to read-only news, weather, and calendar context")
 
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True

@@ -7,6 +7,7 @@ from queue import Queue
 from princess_cache import PrincessCache, TIME_SENSITIVE_INTENTS, time_of_day_tags
 from princess_player import PrincessPlayer
 from princess_services import FlashTalkService
+from princess_context import PrincessContext
 from background_fetcher import background_network
 import pygame
 
@@ -34,6 +35,9 @@ def _load_system_prompt() -> str:
 
 def _intent_for(text: str) -> str:
     words = text.casefold()
+    if any(term in words for term in ("news", "headlines", "what's happening", "whats happening")): return "news"
+    if any(term in words for term in ("weather", "temperature", "forecast", "rain", "wind")): return "weather"
+    if any(term in words for term in ("calendar", "schedule", "appointments", "what have i got", "what do i have")): return "calendar"
     if "good morning" in words or words.strip(" .!?") == "morning": return "greeting_morning"
     if "good afternoon" in words or words.strip(" .!?") == "afternoon": return "greeting_afternoon"
     if "good evening" in words or words.strip(" .!?") == "evening": return "greeting_evening"
@@ -67,6 +71,7 @@ class PrincessModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
         self.cache = PrincessCache(); self.player = PrincessPlayer(); self.recording = False
+        self.context = PrincessContext()
         self.fal = FlashTalkService(); self.openai_client = None; self._vosk_model = None
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
         self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
@@ -79,6 +84,10 @@ class PrincessModule:
         except Exception as exc:
             self.logger.error("Princess reference image unavailable: %s", exc)
         threading.Thread(target=self._warm_dependencies, daemon=True, name="princess-warmup").start()
+
+    def set_context_sources(self, sources):
+        """Called by the mirror after all data modules are initialized."""
+        self.context.set_sources(sources)
 
     def _warm_dependencies(self):
         """Hide one-off client/model startup work before the first turn."""
@@ -115,7 +124,8 @@ class PrincessModule:
         self.status = "Cold start — transcribing locally..."
         background_network.set_paused(True, "Princess turn")
         self.logger.info("Princess recording stopped; processing local transcription")
-        threading.Thread(target=self._make_video, daemon=True, name="princess-turn").start()
+        snapshot = self.context.snapshot()
+        threading.Thread(target=self._make_video, args=(snapshot,), daemon=True, name="princess-turn").start()
 
     def _transcribe_local(self, path):
         try:
@@ -131,7 +141,7 @@ class PrincessModule:
             while chunk := audio.readframes(4000): recognizer.AcceptWaveform(chunk)
             return json.loads(recognizer.FinalResult()).get("text", "").strip()
 
-    def _make_video(self):
+    def _make_video(self, context_snapshot=None):
         started = time.monotonic()
         try:
             transcript = self._transcribe_local(self.cache.root / "capture.wav")
@@ -151,6 +161,13 @@ class PrincessModule:
             self.status = "Cold start — asking Princess..."
             system = _load_system_prompt()
             system += " Reply with exactly one natural short sentence, at most 12 words. No markdown."
+            context = (context_snapshot or {}).get(intent)
+            if intent in TIME_SENSITIVE_INTENTS:
+                if context and context.get("available"):
+                    facts = json.dumps(context["data"], ensure_ascii=False, separators=(",", ":"))
+                    system += f" Use only these current {intent} facts; do not invent or add facts: {facts}"
+                else:
+                    system += f" Current {intent} data is unavailable or stale. Say that plainly in character; do not invent facts."
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
