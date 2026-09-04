@@ -1,6 +1,6 @@
 ﻿# Princess Conversational Avatar - Implementation Plan
 
-Status: Core Princess runtime, cache, centre playback, and physical Pi validation complete. Remaining V1 scope: grounded live-data answers (Phase 8), formal resilience validation, and demo polish.
+Status: Core Princess runtime, cache, centre playback, live-data grounding, and physical Pi validation are complete. Remaining V1 scope: formal resilience validation and demo polish.
 Plan date: 3 September 2026
 Repository baseline: `main` at `baff942`
 
@@ -114,7 +114,10 @@ Generate a portrait-oriented, camera-facing head/shoulders/chest composition wit
 
 ### Response text
 
-Provisional default: OpenAI Responses API with `gpt-5.6-luna`, reasoning effort `none`, low verbosity, and a strict short-output budget. It is the current cost-sensitive GPT-5.6 tier and is priced at $0.20/M input tokens and $1.20/M output tokens: <https://developers.openai.com/api/docs/models/gpt-5.6-luna>.
+Active default: OpenAI Responses API with the pinned `gpt-5-nano-2025-08-07`
+snapshot, minimal reasoning, and a strict short-output budget. The snapshot is
+used because this project has access to it while the `gpt-5-nano` alias is not
+available. It remains configurable through `PRINCESS_LLM_MODEL`.
 
 The request includes only the Princess prompt, transcript, selected intent, and sanitized module snapshot. It never asks the model to invent missing live data. Output is limited to plain spoken text, normally one or two sentences.
 
@@ -329,15 +332,16 @@ until streamed video playback has ended.
 
 Tests: synthetic WAV transcription adapter; capture start/stop/cancel; empty/silent input; device missing; API timeout; no recording overlap; Windows microphone test; Pi `arecord` test; latency fields complete.
 
-### Phase 6 - personality and grounded response generation (personality complete; grounding pending)
+### Phase 6 - personality and grounded response generation (complete)
 
 - Add the versioned prompt, deterministic router, Responses API call, output validation, and no-data pools.
 - Limit spoken output and strip markup unsuitable for speech.
 
-Progress: the configurable Princess prompt, GPT response generation, minimal
-reasoning, robust response extraction, and a one-sentence/twelve-word rule
-are live. The response and exact Fal prompt are logged. Live-data grounding is
-deferred to Phase 8.
+Progress: the configurable Princess prompt, pinned Nano response generation,
+minimal reasoning, robust response extraction, and a one-sentence/twelve-word
+rule are live. The response and exact Fal prompt are logged. The same Nano
+call resolves implied live-data requests while the local router remains
+authoritative for known live intents.
 
 Tests: greetings stay concise/in character; genuine questions remain useful; sarcasm frequency is restrained; unavailable live information is admitted; prompt-injection text inside headlines/events is treated as data, not instruction; malformed model output falls back safely.
 
@@ -355,10 +359,16 @@ future work.
 
 Tests: target/min/age/use configuration overrides; no immediate repeat when alternatives exist; underfilled pool reports but does not auto-spend; a warmed greeting is near-immediate and calls neither LLM, TTS, nor fal.
 
-### Phase 8 - existing mirror data
+### Phase 8 - existing mirror data (complete)
 
 - Connect news, then weather, then calendar. Add Home Assistant only after those acceptance paths work.
 - Use exact dependency fingerprints and factual expiry.
+
+Progress: snapshots are read-only and freshness-checked. Known live questions
+send only their matching category; locally ambiguous wording sends the compact
+already-fetched snapshot to Nano for one-call classification. Resolved live
+intents cannot reuse or save cached videos, including implied requests such as
+umbrella/weather and “leave anything on”/Home Assistant.
 
 Tests: real-shaped fixtures for each module; absent/stale source behavior; fingerprint invalidation; no duplicate network fetch; factual response references only supplied facts; changed headline/weather/event forces a miss; unchanged fresh snapshot may reuse.
 

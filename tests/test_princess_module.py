@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 sys.modules.setdefault("pygame", SimpleNamespace())
 
-from princess_module import _intent_for, _load_system_prompt, _response_intent_and_text, _response_text
+from princess_module import _effective_intent, _intent_for, _load_system_prompt, _response_intent_and_text, _response_text
 
 
 class PrincessModuleTests(unittest.TestCase):
@@ -47,6 +47,10 @@ class PrincessModuleTests(unittest.TestCase):
         intent, reply = _response_intent_and_text("INTENT: stocks\nREPLY: Markets are lively.", "general")
         self.assertEqual(intent, "general")
         self.assertEqual(reply, "Markets are lively.")
+
+    def test_known_live_route_cannot_be_downgraded_by_model_envelope(self):
+        self.assertEqual(_effective_intent("news", "general"), "news")
+        self.assertEqual(_effective_intent("general", "weather"), "weather")
 
 
 if __name__ == "__main__":

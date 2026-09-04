@@ -125,6 +125,45 @@ Enable voice first: in config.py set `module_visibility` -> `'ai_voice': True`.
 - [ ] Check `api_usage.log` after a few conversations - realtime costs
       should be fractions of a penny per exchange, $1/day hard ceiling
 
+## Princess video mode
+
+Princess is a replacement for the legacy Realtime/drawn-avatar path, not an
+addition to it.  In the parent `Variables.env`, configure:
+
+```text
+ENABLE_PRINCESS=1
+FAL_KEY=<your Fal key>
+VOSK_MODEL_PATH=/absolute/path/to/vosk-model-small-en-us-0.15
+PRINCESS_LLM_MODEL=gpt-5-nano-2025-08-07
+```
+
+`OPENAI_API_KEY` is also required. `PRINCESS_LLM_MODEL` may be omitted because
+the pinned Nano snapshot is now the code default, but setting it makes the Pi
+configuration explicit. Do not set `ENABLE_VOICE` for Princess mode: local
+Vosk handles speech-to-text, Nano produces text, and Fal provides the video
+with its embedded audio.
+
+After `./deploy/deploy.sh`, test each turn with Space once to start recording
+and once to stop it. Confirm these log stages in order: local STT, `Princess
+text reply ready`, Fal submission, `Princess fal video ready`, then playback.
+
+- Ask for the headlines, then ask an implied weather question such as “Will I
+  need an umbrella later?”, then an ambiguous home question such as “Did I
+  leave anything on?”.
+- Check that the reply uses only current module data and that a live-data turn
+  is never saved to the reusable Princess video pool.
+- Repeat a generic greeting at the relevant time of day; after a cache has
+  naturally accumulated, it should log `Princess intent cache hit` and make
+  no OpenAI/Fal request.
+- On a failure, the still portrait/status remains visible and the normal
+  mirror keeps running. Set `ENABLE_PRINCESS=0` and restart to return to the
+  legacy voice/avatar path.
+
+The retained Windows diagnostic `tests/_princess_nano_request_probe.py` uses
+mocked fixture data in the exact compact request shape and makes three paid
+Nano calls when run. It never calls Fal; use it only when deliberately
+checking prompt/routing changes.
+
 ## Service control (it auto-restarts by design)
 
 The mirror runs as a systemd service with Restart=always, so pressing

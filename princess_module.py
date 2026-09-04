@@ -86,6 +86,11 @@ def _response_intent_and_text(raw: str, fallback_intent: str) -> tuple[str, str]
     reply = " ".join(part for part in reply_lines if part).strip()
     return intent, reply or raw.strip()
 
+
+def _effective_intent(local_intent: str, model_intent: str) -> str:
+    """Keep a known local live-data route authoritative over model formatting."""
+    return local_intent if local_intent != "general" else model_intent
+
 class PrincessModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
@@ -168,11 +173,12 @@ class PrincessModule:
             self.logger.info("Princess local STT complete in %.2fs: %s", time.monotonic() - started, transcript)
             model = os.getenv("PRINCESS_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
             cache_model = f"{model}::portrait-v2"
-            intent = _intent_for(transcript)
-            if intent != "general":
-                promoted = self.cache.promote_matching_transcript(transcript, intent)
-                if promoted: self.logger.info("Princess promoted %s existing cached clip(s) to %s", promoted, intent)
-                cached = self.cache.select(transcript, REFERENCE_HASH, cache_model, intent=intent)
+            local_intent = _intent_for(transcript)
+            intent = local_intent
+            if local_intent != "general":
+                promoted = self.cache.promote_matching_transcript(transcript, local_intent)
+                if promoted: self.logger.info("Princess promoted %s existing cached clip(s) to %s", promoted, local_intent)
+                cached = self.cache.select(transcript, REFERENCE_HASH, cache_model, intent=local_intent)
                 if cached:
                     self.status = "Cache hit — playing Princess"
                     self.logger.info("Princess intent cache hit (%s) in %.2fs", intent, time.monotonic() - started)
@@ -207,12 +213,13 @@ class PrincessModule:
                 status = getattr(response, "status", "unknown")
                 detail = getattr(response, "incomplete_details", None)
                 raise RuntimeError(f"OpenAI returned no visible response text (status={status}, detail={detail})")
-            intent, text = _response_intent_and_text(raw_text, intent)
+            model_intent, text = _response_intent_and_text(raw_text, local_intent)
+            intent = _effective_intent(local_intent, model_intent)
             if not text:
                 raise RuntimeError("OpenAI returned no Princess reply text")
             self.status = "Cold start — creating Princess video..."; self.logger.info("Princess text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
             self.logger.info("Princess reply sent to Fal: %s", text)
-            cached = self.cache.lookup(text, REFERENCE_HASH, cache_model)
+            cached = self.cache.lookup(text, REFERENCE_HASH, cache_model) if intent not in TIME_SENSITIVE_INTENTS else None
             if cached:
                 self.logger.info("Princess cache hit")
                 self.ready.put(self.cache.root / cached["media_path"]); return
@@ -235,7 +242,7 @@ class PrincessModule:
             result = self.fal.generate_from_text(REFERENCE, text, staging, model=model, prompt=video_prompt, duration_seconds=5, resolution=os.getenv("PRINCESS_FAL_RESOLUTION", "480P"), on_video_ready=stream_when_ready, defer_download=stream_first)
             self.logger.info("Princess fal video ready in %.2fs (upload %.2fs, queue %.2fs, generation %.2fs, download %.2fs)", time.monotonic() - started, result.timings.get("image_upload", 0), result.timings.get("queue", 0), result.timings.get("generation", 0), result.timings.get("download", 0))
             if streamed.is_set(): self.logger.info("Princess cache download deferred until playback has completed")
-            if not any(word in transcript.casefold() for word in TIME_SENSITIVE_INTENTS):
+            if intent not in TIME_SENSITIVE_INTENTS:
                 if streamed.is_set():
                     self._deferred_cache = {"url": stream_url, "staging": staging, "text": text, "intent": intent, "model": cache_model, "duration_seconds": result.duration_seconds, "transcript": transcript}
                 else:
