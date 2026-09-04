@@ -17,7 +17,7 @@ def normalize_text(text: str) -> str:
     return " ".join(text.casefold().split()).strip(" .!?\t\r\n")
 
 TIME_TAGS = ("morning", "afternoon", "evening", "night")
-TIME_SENSITIVE_INTENTS = {"news", "weather", "stocks", "calendar", "events", "traffic"}
+TIME_SENSITIVE_INTENTS = {"news", "weather", "stocks", "calendar", "events", "traffic", "smarthome"}
 
 def time_of_day_tags(when: datetime | None = None) -> set[str]:
     hour = (when or datetime.now()).hour

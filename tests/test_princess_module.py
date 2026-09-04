@@ -29,6 +29,7 @@ class PrincessModuleTests(unittest.TestCase):
         self.assertEqual(_intent_for("morning"), "greeting_morning")
         self.assertEqual(_intent_for("afternoon"), "greeting_afternoon")
         self.assertEqual(_intent_for("evening"), "greeting_evening")
+        self.assertEqual(_intent_for("are the lights on"), "smarthome")
 
     def test_system_prompt_uses_editable_text_file_and_skips_comments(self):
         with tempfile.TemporaryDirectory() as temp:

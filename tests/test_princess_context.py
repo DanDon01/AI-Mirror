@@ -19,6 +19,18 @@ class PrincessContextTests(unittest.TestCase):
         self.assertEqual(snapshot["calendar"]["data"]["events"][0]["title"], "Lunch")
         self.assertIn("dependency_fingerprint", snapshot["news"])
 
+    def test_copies_only_selected_connected_home_entities(self):
+        now = datetime(2026, 9, 4, 12, 0, 0)
+        home = SimpleNamespace(
+            _connected=True,
+            entities=["light.lounge"],
+            data={"light.lounge": {"state": "on", "attributes": {"friendly_name": "Lounge light"}}},
+            last_update=now - timedelta(seconds=30),
+        )
+        snapshot = PrincessContext({"smarthome": home}).snapshot(now)
+        self.assertTrue(snapshot["smarthome"]["available"])
+        self.assertEqual(snapshot["smarthome"]["data"]["entities"], [{"name": "Lounge light", "state": "on", "unit": ""}])
+
     def test_stale_or_missing_context_is_unavailable(self):
         now = datetime(2026, 9, 4, 12, 0, 0)
         sources = {"news": SimpleNamespace(headlines=[{"title": "Old", "source": "BBC"}], last_fetch=now - timedelta(hours=1))}

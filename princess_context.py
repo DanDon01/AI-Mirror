@@ -10,6 +10,7 @@ MAX_AGE = {
     "news": timedelta(minutes=30),
     "weather": timedelta(minutes=45),
     "calendar": timedelta(hours=2),
+    "smarthome": timedelta(minutes=5),
 }
 
 
@@ -59,6 +60,7 @@ class PrincessContext:
             "news": self._news(now),
             "weather": self._weather(now),
             "calendar": self._calendar(now),
+            "smarthome": self._smarthome(now),
         }
 
     def _news(self, now):
@@ -100,3 +102,22 @@ class PrincessContext:
             if summary and when:
                 payload.append({"title": str(summary)[:200], "start": str(when)[:80]})
         return _record(bool(payload), "calendar", getattr(module, "last_update", None), now, {"events": payload})
+
+    def _smarthome(self, now):
+        module = self.sources.get("smarthome")
+        if not module or not getattr(module, "_connected", False):
+            return _record(False, "smarthome", getattr(module, "last_update", None), now, {})
+        entities = list(getattr(module, "entities", []) or [])
+        states = getattr(module, "data", {}) or {}
+        payload = []
+        for entity_id in entities[:12]:
+            info = states.get(entity_id, {}) if isinstance(states, dict) else {}
+            attributes = info.get("attributes", {}) or {}
+            state = info.get("state")
+            if state and state not in ("unavailable", "unknown"):
+                payload.append({
+                    "name": str(attributes.get("friendly_name", entity_id))[:100],
+                    "state": str(state)[:80],
+                    "unit": str(attributes.get("unit_of_measurement", ""))[:20],
+                })
+        return _record(bool(payload), "smarthome", getattr(module, "last_update", None), now, {"entities": payload})

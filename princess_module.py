@@ -38,6 +38,7 @@ def _intent_for(text: str) -> str:
     if any(term in words for term in ("news", "headlines", "what's happening", "whats happening")): return "news"
     if any(term in words for term in ("weather", "temperature", "forecast", "rain", "wind")): return "weather"
     if any(term in words for term in ("calendar", "schedule", "appointments", "what have i got", "what do i have")): return "calendar"
+    if any(term in words for term in ("smart home", "lights", "light", "heating", "thermostat", "front door", "house status")): return "smarthome"
     if "good morning" in words or words.strip(" .!?") == "morning": return "greeting_morning"
     if "good afternoon" in words or words.strip(" .!?") == "afternoon": return "greeting_afternoon"
     if "good evening" in words or words.strip(" .!?") == "evening": return "greeting_evening"
