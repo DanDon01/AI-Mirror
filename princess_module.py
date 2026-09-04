@@ -144,7 +144,15 @@ class PrincessModule:
     def _stop_recording(self):
         self.recording = False
         if self.proc:
-            self.proc.terminate(); self.proc.wait(timeout=3); self.proc = None
+            try:
+                self.proc.terminate(); self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.logger.warning("Princess recorder did not stop cleanly; killing it")
+                self.proc.kill(); self.proc.wait(timeout=3)
+            except Exception:
+                self.logger.exception("Princess recorder shutdown failed")
+            finally:
+                self.proc = None
         self.status = "Cold start — transcribing locally..."
         background_network.set_paused(True, "Princess turn")
         self.logger.info("Princess recording stopped; processing local transcription")
@@ -262,13 +270,26 @@ class PrincessModule:
                 background_network.set_paused(False)
                 self._hold_background_for_playback = False
                 self.status = f"Error: {item}"; continue
-            if isinstance(item, dict) and "stream_url" in item:
-                self.player.play(item["stream_url"], self._bounds)
-                self.status = "Streaming Princess video..."; self._hold_background_for_playback = True
-            else:
-                self.player.play(item, self._bounds); self.status = "Playing"
+            try:
+                if isinstance(item, dict) and "stream_url" in item:
+                    self.player.play(item["stream_url"], self._bounds)
+                    self.status = "Streaming Princess video..."; self._hold_background_for_playback = True
+                else:
+                    self.player.play(item, self._bounds); self.status = "Playing"
+                    background_network.set_paused(False)
+            except Exception as exc:
+                self.logger.exception("Princess playback startup failed")
+                self._hold_background_for_playback = False
                 background_network.set_paused(False)
-        self.player.update(__import__("pygame"))
+                self.status = f"Playback error: {exc}"
+        try:
+            self.player.update(__import__("pygame"))
+        except Exception as exc:
+            self.logger.exception("Princess playback update failed")
+            self.player.stop()
+            self._hold_background_for_playback = False
+            background_network.set_paused(False)
+            self.status = f"Playback error: {exc}"
         if self._hold_background_for_playback and not self.player.playing:
             self._hold_background_for_playback = False
             background_network.set_paused(False)
