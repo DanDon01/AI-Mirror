@@ -197,7 +197,7 @@ class PrincessModule:
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
-            llm_model = os.getenv("PRINCESS_LLM_MODEL", "gpt-5-nano")
+            llm_model = os.getenv("PRINCESS_LLM_MODEL", "gpt-5-nano-2025-08-07")
             request = {"model": llm_model, "max_output_tokens": int(os.getenv("PRINCESS_LLM_MAX_OUTPUT_TOKENS", "160")), "input": [{"role":"system","content":system}, {"role":"user","content":transcript}]}
             if llm_model.startswith("gpt-5"):
                 request["reasoning"] = {"effort": os.getenv("PRINCESS_LLM_REASONING_EFFORT", "minimal")}

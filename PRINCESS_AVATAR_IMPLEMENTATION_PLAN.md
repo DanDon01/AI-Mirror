@@ -250,7 +250,7 @@ Continue loading secrets only from `../Variables.env`:
 OPENAI_API_KEY=...
 FAL_KEY=...
 ENABLE_PRINCESS=0
-PRINCESS_LLM_MODEL=gpt-5.6-luna
+PRINCESS_LLM_MODEL=gpt-5-nano-2025-08-07
 PRINCESS_STT_MODEL=gpt-transcribe
 PRINCESS_TTS_MODEL=gpt-4o-mini-tts-2025-12-15
 PRINCESS_TTS_VOICE=<approved voice>
