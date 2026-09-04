@@ -135,6 +135,7 @@ ENABLE_PRINCESS=1
 FAL_KEY=<your Fal key>
 VOSK_MODEL_PATH=/absolute/path/to/vosk-model-small-en-us-0.15
 PRINCESS_LLM_MODEL=gpt-5-nano-2025-08-07
+PRINCESS_MAX_REPLY_WORDS=12
 ```
 
 `OPENAI_API_KEY` is also required. `PRINCESS_LLM_MODEL` may be omitted because

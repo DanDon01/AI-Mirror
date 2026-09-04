@@ -12,7 +12,7 @@ from queue import Queue
 sys.modules.setdefault("pygame", SimpleNamespace())
 
 from background_fetcher import background_network
-from princess_module import PrincessModule, _effective_intent, _intent_for, _load_system_prompt, _response_intent_and_text, _response_text
+from princess_module import PrincessModule, _effective_intent, _intent_for, _load_system_prompt, _response_intent_and_text, _response_text, _spoken_reply
 
 
 class PrincessModuleTests(unittest.TestCase):
@@ -59,6 +59,10 @@ class PrincessModuleTests(unittest.TestCase):
         intent, reply = _response_intent_and_text("INTENT: weather\nREPLY: Bring an umbrella, Prince.", "general")
         self.assertEqual(intent, "weather")
         self.assertEqual(reply, "Bring an umbrella, Prince.")
+
+    def test_spoken_reply_strips_markup_and_enforces_word_budget(self):
+        reply = _spoken_reply('**One** "two" three four five six seven eight nine ten eleven twelve thirteen.')
+        self.assertEqual(reply, "One two three four five six seven eight nine ten eleven twelve")
 
     def test_invalid_route_falls_back_without_losing_reply(self):
         intent, reply = _response_intent_and_text("INTENT: stocks\nREPLY: Markets are lively.", "general")

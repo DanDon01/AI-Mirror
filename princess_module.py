@@ -1,6 +1,6 @@
 """Princess-only Pi pipeline: local STT -> OpenAI text -> fal video/audio."""
 from __future__ import annotations
-import json, logging, os, subprocess, threading, time, wave
+import json, logging, os, re, subprocess, threading, time, wave
 from pathlib import Path
 from queue import Queue
 
@@ -90,6 +90,14 @@ def _response_intent_and_text(raw: str, fallback_intent: str) -> tuple[str, str]
 def _effective_intent(local_intent: str, model_intent: str) -> str:
     """Keep a known local live-data route authoritative over model formatting."""
     return local_intent if local_intent != "general" else model_intent
+
+
+def _spoken_reply(text: str, max_words: int = 12) -> str:
+    """Make model output safe, concise, and literal before it reaches Fal."""
+    clean = re.sub(r"[`*_#]+", "", str(text or ""))
+    clean = clean.replace('"', "").replace("\\", "")
+    clean = " ".join(clean.split())
+    return " ".join(clean.split()[:max(1, max_words)]).strip()
 
 class PrincessModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
@@ -223,6 +231,7 @@ class PrincessModule:
                 raise RuntimeError(f"OpenAI returned no visible response text (status={status}, detail={detail})")
             model_intent, text = _response_intent_and_text(raw_text, local_intent)
             intent = _effective_intent(local_intent, model_intent)
+            text = _spoken_reply(text, int(os.getenv("PRINCESS_MAX_REPLY_WORDS", "12")))
             if not text:
                 raise RuntimeError("OpenAI returned no Princess reply text")
             self.status = "Cold start — creating Princess video..."; self.logger.info("Princess text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
