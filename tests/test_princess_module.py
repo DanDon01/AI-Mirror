@@ -176,6 +176,10 @@ class PrincessModuleTests(unittest.TestCase):
         module.update()
         self.assertFalse(module._apparition_pending)
 
+    def test_apparition_cache_generation_is_new(self):
+        source = Path(__file__).resolve().parent.parent / "princess_module.py"
+        self.assertIn('portrait-v3-apparition', source.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

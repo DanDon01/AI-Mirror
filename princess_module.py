@@ -306,7 +306,9 @@ class PrincessModule:
                 self.logger.info("Princess streaming STT ready at response submit: %s", transcript)
             if not transcript: raise RuntimeError("No speech recognised")
             model = os.getenv("PRINCESS_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
-            cache_model = f"{model}::portrait-v2"
+            # Keep legacy clips on disk for review, but do not select clips
+            # created before the apparition/audio and stricter no-mirror path.
+            cache_model = f"{model}::portrait-v3-apparition"
             local_intent = _intent_for(transcript)
             intent = local_intent
             if local_intent != "general":
@@ -360,8 +362,8 @@ class PrincessModule:
                 self.ready.put(self.cache.root / cached["media_path"]); return
             staging = self.cache.root / "staging" / f"turn-{time.time_ns()}.mp4"
             video_prompt = (
-                "A poised royal woman speaks naturally and directly to camera, with subtle confident facial expressions. "
-                "Use a seamless pure black background. No mirror, no reflective glass, no frame, no border, no text, and no hands. "
+                "The uploaded royal woman is the only subject, speaking naturally and directly to camera with subtle confident facial expressions. "
+                "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video. "
                 f'Say exactly: "{text}"'
             )
             self.logger.info("Princess Fal prompt: %s", video_prompt)
@@ -381,7 +383,7 @@ class PrincessModule:
                 if streamed.is_set():
                     self._deferred_cache = {"url": stream_url, "staging": staging, "text": text, "intent": intent, "model": cache_model, "duration_seconds": result.duration_seconds, "transcript": transcript}
                 else:
-                    record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v2"})
+                    record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v3-apparition"})
                     self.ready.put(self.cache.root / record["media_path"])
             else:
                 if not streamed.is_set(): self.ready.put(staging)
@@ -432,7 +434,7 @@ class PrincessModule:
         try:
             self.logger.info("Princess playback complete; downloading response for cache")
             self.fal.download_video(pending["url"], pending["staging"])
-            record = self.cache.add_clip(pending["staging"], spoken_text=pending["text"], intent=pending["intent"], model=pending["model"], reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=pending["duration_seconds"], metadata={"transcript": pending["transcript"], "prompt_version": "portrait-v2"})
+            record = self.cache.add_clip(pending["staging"], spoken_text=pending["text"], intent=pending["intent"], model=pending["model"], reference_sha256=REFERENCE_HASH, tags=sorted(time_of_day_tags()), duration_seconds=pending["duration_seconds"], metadata={"transcript": pending["transcript"], "prompt_version": "portrait-v3-apparition"})
             self.logger.info("Princess response saved to cache: %s", record["media_path"])
         except Exception:
             self.logger.exception("Princess background cache save failed")

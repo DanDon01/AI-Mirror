@@ -73,13 +73,26 @@ class PrincessPlayer:
 
     def stop(self):
         for process in (self.process, self.audio, self.audio_decoder):
-            if process and process.poll() is None: process.terminate()
+            self._stop_process(process)
         self.process = self.audio = self.audio_decoder = None; self.surface = None; self._frames = Queue()
+
+    @staticmethod
+    def _stop_process(process):
+        """Release ALSA/ffmpeg before a new clip tries to claim the device."""
+        if not process or process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=0.4)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            try: process.wait(timeout=0.4)
+            except subprocess.TimeoutExpired: pass
 
     def _finish(self):
         """Release decoder/audio processes but keep the last video frame visible."""
         for process in (self.process, self.audio, self.audio_decoder):
-            if process and process.poll() is None: process.terminate()
+            self._stop_process(process)
         self.process = self.audio = self.audio_decoder = None
 
     def cleanup(self): self.stop()
