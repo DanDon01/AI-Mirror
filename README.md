@@ -171,6 +171,15 @@ Edit only its non-comment text; its comments give brief prompt-writing tips.
 Set `PRINCESS_PROMPT_FILE` to use a separate local prompt file, or
 `PRINCESS_SYSTEM_PROMPT` for a one-line environment override.
 
+On Pi, Princess warms the configured Vosk model and keeps a raw microphone
+stream open by default. It discards PCM until the first Space press, then
+transcribes only the audio between the two presses while writing the diagnostic
+WAV. The second press finalises that already-running recognizer and immediately
+submits the text response. Set `PRINCESS_WARM_MIC=0` to restore per-turn WAV
+capture if necessary. Optional five-second apparition clips in
+[`assets/princess/apparitions/`](assets/princess/apparitions/) begin on the
+first press in parallel with the turn; they never delay the response video.
+
 Add `FAL_KEY` to the parent `Variables.env`, install `requirements.txt`, then
 run the no-cost preflight before the explicit paid proof:
 

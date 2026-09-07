@@ -6,7 +6,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from queue import Queue
 
 sys.modules.setdefault("pygame", SimpleNamespace())
@@ -28,6 +28,11 @@ class PrincessModuleTests(unittest.TestCase):
         module._deferred_cache = None
         module._cache_downloading = False
         module._bounds = (420, 420)
+        module._stream_lock = __import__("threading").RLock()
+        module._stream_recognizer = None
+        module._capture = None
+        module._streaming_capture = False
+        module._last_apparition = None
         module.logger = __import__("logging").getLogger("PrincessTest")
         return module
     def test_response_text_reads_convenience_property(self):
@@ -110,6 +115,52 @@ class PrincessModuleTests(unittest.TestCase):
         module.update()
         self.assertEqual(module.status, "Error: OpenAI request failed")
         self.assertFalse(background_network.paused)
+
+    def test_streaming_transcript_skips_second_vosk_pass_on_cache_hit(self):
+        class IdlePlayer:
+            playing = False
+        class Cache:
+            root = Path("data/princess/library")
+            def promote_matching_transcript(self, *args): return 0
+            def select(self, *args, **kwargs): return {"media_path": "media/clip.mp4"}
+        module = self._bare_module(IdlePlayer())
+        module.cache = Cache()
+        module._transcribe_local = Mock(side_effect=AssertionError("must not reprocess streamed PCM"))
+        module._make_video({}, "good evening")
+        self.assertEqual(module.ready.get_nowait(), module.cache.root / "media/clip.mp4")
+        module._transcribe_local.assert_not_called()
+
+    def test_streaming_stop_finalises_existing_recognizer_without_reading_wav(self):
+        class IdlePlayer:
+            playing = False
+        class ImmediateThread:
+            def __init__(self, target, args=(), **kwargs): self.target = target; self.args = args
+            def start(self): self.target(*self.args)
+        module = self._bare_module(IdlePlayer())
+        module.recording = True
+        module._stream_recognizer = SimpleNamespace(FinalResult=lambda: '{"text":"good evening"}')
+        capture = Mock(); module._capture = capture
+        module.context = SimpleNamespace(snapshot=lambda: {"weather": {"available": True}})
+        module._make_video = Mock()
+        with patch("princess_module.threading.Thread", ImmediateThread):
+            module._stop_recording()
+        self.assertFalse(module.recording)
+        capture.close.assert_called_once()
+        module._make_video.assert_called_once_with({"weather": {"available": True}}, "good evening")
+        self.assertTrue(background_network.paused)
+        background_network.set_paused(False)
+
+    def test_apparition_plays_immediately_without_waiting_for_turn(self):
+        class Player:
+            playing = False
+            def __init__(self): self.calls = []
+            def play(self, path, bounds): self.calls.append((path, bounds))
+        player = Player()
+        module = self._bare_module(player)
+        with tempfile.TemporaryDirectory() as temp, patch("princess_module.APPARITION_DIR", Path(temp)):
+            clip = Path(temp) / "shimmer.mp4"; clip.write_bytes(b"placeholder")
+            module._play_apparition()
+        self.assertEqual(player.calls, [(clip, (420, 420))])
 
 
 if __name__ == "__main__":

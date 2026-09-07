@@ -1,6 +1,6 @@
 """Princess-only Pi pipeline: local STT -> OpenAI text -> fal video/audio."""
 from __future__ import annotations
-import json, logging, os, re, subprocess, threading, time, wave
+import json, logging, os, random, re, shutil, subprocess, threading, time, wave
 from pathlib import Path
 from queue import Queue
 
@@ -14,6 +14,7 @@ import pygame
 ROOT = Path(__file__).resolve().parent
 REFERENCE = ROOT / "assets" / "princess" / "reference_v001.png"
 DEFAULT_PROMPT_FILE = ROOT / "assets" / "princess" / "princess_prompt.default.txt"
+APPARITION_DIR = ROOT / "assets" / "princess" / "apparitions"
 REFERENCE_HASH = "4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7def"
 DEFAULT_SYSTEM_PROMPT = "You are a princess in an enchanted mirror addressing your Prince Dan. Be witty and a little sassy with sarcastic charm."
 
@@ -106,6 +107,9 @@ class PrincessModule:
         self.context = PrincessContext()
         self.fal = FlashTalkService(); self.openai_client = None; self._vosk_model = None
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
+        self._mic_proc = None; self._mic_thread = None; self._mic_stop = threading.Event()
+        self._stream_lock = threading.RLock(); self._stream_recognizer = None; self._capture = None
+        self._streaming_capture = False; self._last_apparition = None
         self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
         self._bounds = (self.size, self.size)
         self.logger = logging.getLogger("Princess")
@@ -122,7 +126,7 @@ class PrincessModule:
         self.context.set_sources(sources)
 
     def _warm_dependencies(self):
-        """Hide one-off client/model startup work before the first turn."""
+        """Hide one-off client/model/microphone startup work before the first turn."""
         try:
             from openai import OpenAI
             self.openai_client = OpenAI()
@@ -130,10 +134,80 @@ class PrincessModule:
             model_path = os.getenv("VOSK_MODEL_PATH", "")
             if model_path:
                 self._vosk_model = Model(model_path)
+                self._start_warmed_microphone()
             self.fal.warm_reference(REFERENCE)
-            self.logger.info("Princess local STT and text client warmed")
+            self.logger.info("Princess local STT and text client warmed; streaming_mic=%s", self._streaming_capture)
         except Exception as exc:
             self.logger.warning("Princess warm-up deferred: %s", exc)
+
+    def _start_warmed_microphone(self):
+        """Keep one raw ALSA stream open; discard PCM until a Princess turn starts."""
+        if os.getenv("PRINCESS_WARM_MIC", "1").lower() not in ("1", "true", "yes", "on"):
+            return
+        if self._mic_proc or self._vosk_model is None or not shutil.which("arecord"):
+            return
+        try:
+            self._mic_stop.clear()
+            self._mic_proc = subprocess.Popen(
+                ["arecord", "-q", "-t", "raw", "-f", "S16_LE", "-r", "16000", "-c", "1", "-D", self.device],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0,
+            )
+            self._mic_thread = threading.Thread(target=self._drain_warmed_microphone, daemon=True, name="princess-vosk-stream")
+            self._mic_thread.start()
+            self._streaming_capture = True
+            self.logger.info("Princess warm microphone opened: device=%s", self.device)
+        except Exception as exc:
+            self._mic_proc = None; self._streaming_capture = False
+            self.logger.warning("Princess warm microphone unavailable; using per-turn recorder: %s", exc)
+
+    def _drain_warmed_microphone(self):
+        process = self._mic_proc
+        try:
+            while process and process.stdout and not self._mic_stop.is_set():
+                pcm = process.stdout.read(4000)
+                if not pcm:
+                    break
+                with self._stream_lock:
+                    if not self.recording or self._stream_recognizer is None:
+                        continue
+                    if self._capture is not None:
+                        self._capture.writeframesraw(pcm)
+                    self._stream_recognizer.AcceptWaveform(pcm)
+        except Exception:
+            if not self._mic_stop.is_set():
+                self.logger.exception("Princess warm microphone stream failed")
+        finally:
+            if not self._mic_stop.is_set():
+                self._streaming_capture = False
+                self.logger.warning("Princess warm microphone ended; using per-turn recorder")
+
+    def _stop_warmed_microphone(self):
+        self._mic_stop.set()
+        with self._stream_lock:
+            if self._capture is not None:
+                self._capture.close(); self._capture = None
+            self._stream_recognizer = None
+        process = self._mic_proc; self._mic_proc = None; self._streaming_capture = False
+        if process and process.poll() is None:
+            process.terminate()
+            try: process.wait(timeout=2)
+            except subprocess.TimeoutExpired: process.kill()
+
+    def _play_apparition(self):
+        """Begin optional theatre immediately; response generation continues in parallel."""
+        if os.getenv("PRINCESS_APPARITIONS", "1").lower() not in ("1", "true", "yes", "on"):
+            return
+        clips = sorted(APPARITION_DIR.glob("*.mp4"))
+        if not clips:
+            return
+        choices = [clip for clip in clips if clip != self._last_apparition] or clips
+        clip = random.choice(choices)
+        try:
+            self.player.play(clip, self._bounds)
+            self._last_apparition = clip
+            self.logger.info("Princess apparition started: %s", clip.name)
+        except Exception:
+            self.logger.exception("Princess apparition playback failed")
 
     def on_button_press(self):
         self.logger.info("Princess Space pressed; recording=%s", self.recording)
@@ -142,6 +216,23 @@ class PrincessModule:
 
     def _start_recording(self):
         path = self.cache.root / "capture.wav"; path.parent.mkdir(parents=True, exist_ok=True)
+        self._play_apparition()
+        if self._streaming_capture and self._vosk_model is not None and self._mic_proc and self._mic_proc.poll() is None:
+            try:
+                from vosk import KaldiRecognizer
+                with self._stream_lock:
+                    self._capture = wave.open(str(path), "wb")
+                    self._capture.setnchannels(1); self._capture.setsampwidth(2); self._capture.setframerate(16000)
+                    self._stream_recognizer = KaldiRecognizer(self._vosk_model, 16000)
+                    self.recording = True
+                self.status = "Listening - press SPACE when finished"
+                self.logger.info("Princess streaming recording started: device=%s", self.device)
+                return
+            except Exception:
+                with self._stream_lock:
+                    if self._capture is not None: self._capture.close()
+                    self._capture = None; self._stream_recognizer = None
+                self.logger.exception("Princess streaming capture setup failed; using per-turn recorder")
         try:
             self.proc = subprocess.Popen(["arecord", "-q", "-f", "S16_LE", "-r", "16000", "-c", "1", "-D", self.device, str(path)])
             self.recording = True; self.status = "Listening — press SPACE when finished"
@@ -150,6 +241,26 @@ class PrincessModule:
             self.status = f"Mic error: {exc}"; self.logger.exception("Princess recording failed")
 
     def _stop_recording(self):
+        if self._stream_recognizer is not None:
+            try:
+                with self._stream_lock:
+                    self.recording = False
+                    recognizer = self._stream_recognizer; self._stream_recognizer = None
+                    if self._capture is not None:
+                        self._capture.close(); self._capture = None
+                    transcript = json.loads(recognizer.FinalResult()).get("text", "").strip()
+                self.status = "Conjuring your answer..."
+                background_network.set_paused(True, "Princess turn")
+                snapshot = self.context.snapshot()
+                self.logger.info("Princess streaming STT finalised instantly: %s", transcript)
+                threading.Thread(target=self._make_video, args=(snapshot, transcript), daemon=True, name="princess-turn").start()
+                return
+            except Exception as exc:
+                self.recording = False
+                self.logger.exception("Princess streaming transcription failed; falling back")
+                self.status = f"STT error: {exc}"
+                background_network.set_paused(False)
+                return
         self.recording = False
         if self.proc:
             try:
@@ -181,12 +292,15 @@ class PrincessModule:
             while chunk := audio.readframes(4000): recognizer.AcceptWaveform(chunk)
             return json.loads(recognizer.FinalResult()).get("text", "").strip()
 
-    def _make_video(self, context_snapshot=None):
+    def _make_video(self, context_snapshot=None, transcript=None):
         started = time.monotonic()
         try:
-            transcript = self._transcribe_local(self.cache.root / "capture.wav")
+            if transcript is None:
+                transcript = self._transcribe_local(self.cache.root / "capture.wav")
+                self.logger.info("Princess local STT complete in %.2fs: %s", time.monotonic() - started, transcript)
+            else:
+                self.logger.info("Princess streaming STT ready at response submit: %s", transcript)
             if not transcript: raise RuntimeError("No speech recognised")
-            self.logger.info("Princess local STT complete in %.2fs: %s", time.monotonic() - started, transcript)
             model = os.getenv("PRINCESS_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
             cache_model = f"{model}::portrait-v2"
             local_intent = _intent_for(transcript)
@@ -336,4 +450,5 @@ class PrincessModule:
         screen.blit(label, (position.get("x", 0) + 12, position.get("y", 0) + 12))
     def cleanup(self):
         background_network.set_paused(False)
+        self._stop_warmed_microphone()
         self.player.cleanup()

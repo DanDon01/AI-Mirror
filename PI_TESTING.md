@@ -136,6 +136,8 @@ FAL_KEY=<your Fal key>
 VOSK_MODEL_PATH=/absolute/path/to/vosk-model-small-en-us-0.15
 PRINCESS_LLM_MODEL=gpt-5-nano-2025-08-07
 PRINCESS_MAX_REPLY_WORDS=12
+PRINCESS_WARM_MIC=1
+PRINCESS_APPARITIONS=1
 ```
 
 `OPENAI_API_KEY` is also required. `PRINCESS_LLM_MODEL` may be omitted because
@@ -147,6 +149,22 @@ with its embedded audio.
 After `./deploy/deploy.sh`, test each turn with Space once to start recording
 and once to stop it. Confirm these log stages in order: local STT, `Princess
 text reply ready`, Fal submission, `Princess fal video ready`, then playback.
+
+For the fastest path, after boot confirm `Princess warm microphone opened` in
+the log. The first Space press should log `Princess streaming recording
+started`; the second should log `Princess streaming STT finalised instantly`
+and move directly to `Princess streaming STT ready at response submit`. This
+means Vosk processed PCM during the utterance and does not need a second WAV
+pass after Space is pressed to stop. If ALSA keeps the microphone busy or this
+path is unsuitable for a device, set `PRINCESS_WARM_MIC=0` to use the earlier
+per-turn recorder fallback.
+
+Add approved five-second theatre clips under
+`assets/princess/apparitions/`. The first Space press starts a random clip in
+parallel with recording; it is interrupted as soon as the response video is
+ready and therefore cannot add response latency. See that directory's README
+for framing requirements. Set `PRINCESS_APPARITIONS=0` to disable clips while
+testing.
 
 - Ask for the headlines, then ask an implied weather question such as “Will I
   need an umbrella later?”, then an ambiguous home question such as “Did I
