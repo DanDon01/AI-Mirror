@@ -33,6 +33,7 @@ class PrincessModuleTests(unittest.TestCase):
         module._capture = None
         module._streaming_capture = False
         module._last_apparition = None
+        module._apparition_pending = False
         module.logger = __import__("logging").getLogger("PrincessTest")
         return module
     def test_response_text_reads_convenience_property(self):
@@ -161,6 +162,19 @@ class PrincessModuleTests(unittest.TestCase):
             clip = Path(temp) / "shimmer.mp4"; clip.write_bytes(b"placeholder")
             module._play_apparition()
         self.assertEqual(player.calls, [(clip, (420, 420))])
+
+    def test_apparition_holds_back_portrait_until_decoder_has_a_frame(self):
+        class BufferingPlayer:
+            playing = True
+            has_frame = False
+            def update(self, pygame_module): pass
+        module = self._bare_module(BufferingPlayer())
+        module._apparition_pending = True
+        module.update()
+        self.assertTrue(module._apparition_pending)
+        module.player.has_frame = True
+        module.update()
+        self.assertFalse(module._apparition_pending)
 
 
 if __name__ == "__main__":

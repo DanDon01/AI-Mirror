@@ -109,7 +109,7 @@ class PrincessModule:
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
         self._mic_proc = None; self._mic_thread = None; self._mic_stop = threading.Event()
         self._stream_lock = threading.RLock(); self._stream_recognizer = None; self._capture = None
-        self._streaming_capture = False; self._last_apparition = None
+        self._streaming_capture = False; self._last_apparition = None; self._apparition_pending = False
         self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
         self._bounds = (self.size, self.size)
         self.logger = logging.getLogger("Princess")
@@ -203,10 +203,14 @@ class PrincessModule:
         choices = [clip for clip in clips if clip != self._last_apparition] or clips
         clip = random.choice(choices)
         try:
+            # Do not show the static portrait while ffmpeg decodes the clip's
+            # deliberately black opening frame.
+            self._apparition_pending = True
             self.player.play(clip, self._bounds)
             self._last_apparition = clip
             self.logger.info("Princess apparition started: %s", clip.name)
         except Exception:
+            self._apparition_pending = False
             self.logger.exception("Princess apparition playback failed")
 
     def on_button_press(self):
@@ -394,6 +398,7 @@ class PrincessModule:
                 self._hold_background_for_playback = False
                 self.status = f"Error: {item}"; continue
             try:
+                self._apparition_pending = False
                 if isinstance(item, dict) and "stream_url" in item:
                     self.player.play(item["stream_url"], self._bounds)
                     self.status = "Streaming Princess video..."; self._hold_background_for_playback = True
@@ -413,6 +418,8 @@ class PrincessModule:
             self._hold_background_for_playback = False
             background_network.set_paused(False)
             self.status = f"Playback error: {exc}"
+        if self._apparition_pending and (self.player.has_frame or not self.player.playing):
+            self._apparition_pending = False
         if self._hold_background_for_playback and not self.player.playing:
             self._hold_background_for_playback = False
             background_network.set_paused(False)
@@ -440,7 +447,7 @@ class PrincessModule:
         if self.player.has_frame:
             self.player.draw(screen, position)
             return
-        if self._portrait is not None and self._alpha > 0.01:
+        if self._portrait is not None and self._alpha > 0.01 and not self._apparition_pending:
             scale = min(width / self._portrait.get_width(), height / self._portrait.get_height())
             image = pygame.transform.smoothscale(self._portrait, (max(1, int(self._portrait.get_width() * scale)), max(1, int(self._portrait.get_height() * scale))))
             image.set_alpha(int(255 * self._alpha))
