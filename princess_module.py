@@ -111,6 +111,7 @@ class PrincessModule:
         self._stream_lock = threading.RLock(); self._stream_recognizer = None; self._capture = None
         self._streaming_capture = False; self._last_apparition = None; self._apparition_pending = False
         self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
+        self._playback_label = "none"
         self._bounds = (self.size, self.size)
         self.logger = logging.getLogger("Princess")
         self._portrait = None; self._alpha = 0.0; self._last_update = time.monotonic()
@@ -206,6 +207,7 @@ class PrincessModule:
             # Do not show the static portrait while ffmpeg decodes the clip's
             # deliberately black opening frame.
             self._apparition_pending = True
+            self._playback_label = f"apparition: {clip.name}"
             self.player.play(clip, self._bounds)
             self._last_apparition = clip
             self.logger.info("Princess apparition started: %s", clip.name)
@@ -402,9 +404,11 @@ class PrincessModule:
             try:
                 self._apparition_pending = False
                 if isinstance(item, dict) and "stream_url" in item:
+                    self._playback_label = "Fal live stream (reply video)"
                     self.player.play(item["stream_url"], self._bounds)
                     self.status = "Streaming Princess video..."; self._hold_background_for_playback = True
                 else:
+                    self._playback_label = f"local clip: {Path(item).name}"
                     self.player.play(item, self._bounds); self.status = "Playing"
                     background_network.set_paused(False)
             except Exception as exc:
@@ -448,8 +452,7 @@ class PrincessModule:
         # first frame; otherwise streaming introduces a black transition.
         if self.player.has_frame:
             self.player.draw(screen, position)
-            return
-        if self._portrait is not None and self._alpha > 0.01 and not self._apparition_pending:
+        elif self._portrait is not None and self._alpha > 0.01 and not self._apparition_pending:
             scale = min(width / self._portrait.get_width(), height / self._portrait.get_height())
             image = pygame.transform.smoothscale(self._portrait, (max(1, int(self._portrait.get_width() * scale)), max(1, int(self._portrait.get_height() * scale))))
             image.set_alpha(int(255 * self._alpha))
@@ -457,6 +460,15 @@ class PrincessModule:
             screen.blit(image, (x, y))
         font = pygame.font.Font(None, 26); label = font.render(self.status, True, (242, 222, 172)); label.set_alpha(235)
         screen.blit(label, (position.get("x", 0) + 12, position.get("y", 0) + 12))
+        # Temporary Pi troubleshooting overlay.  It never displays signed URLs,
+        # prompts, keys, or transcribed speech; only the current local stage.
+        if os.getenv("PRINCESS_DEBUG_OVERLAY", "1").lower() in ("1", "true", "yes", "on"):
+            debug_font = pygame.font.Font(None, 19)
+            lines = ["PRINCESS DEBUG", f"stage: {self.status}", f"source: {self._playback_label}", self.player.diagnostic(), f"apparition_pending={self._apparition_pending} queue={self.ready.qsize()}"]
+            y = position.get("y", 0) + 42
+            for line in lines:
+                debug = debug_font.render(line, True, (180, 230, 255)); debug.set_alpha(245)
+                screen.blit(debug, (position.get("x", 0) + 12, y)); y += 18
     def cleanup(self):
         background_network.set_paused(False)
         self._stop_warmed_microphone()

@@ -8,7 +8,7 @@ class PrincessPlayer:
     def __init__(self, linger_seconds: float = 0.5):
         self.linger_seconds = linger_seconds; self.process = None; self.audio = None; self.audio_decoder = None
         self.surface = None; self.width = self.height = 0; self.ends_at = 0.0
-        self._frames = Queue()
+        self._frames = Queue(); self.frames_decoded = 0; self.started_at = 0.0
 
     @property
     def playing(self): return self.process is not None
@@ -25,7 +25,7 @@ class PrincessPlayer:
         self.process = subprocess.Popen([ffmpeg, "-re", "-loglevel", "error", "-i", source,
             "-vf", f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease,pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2:color=black",
             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        self._frames = Queue()
+        self._frames = Queue(); self.frames_decoded = 0; self.started_at = time.monotonic()
         threading.Thread(target=self._decode_frames, args=(self.process, self.width, self.height, self._frames), daemon=True, name="princess-video-decode").start()
         aplay = shutil.which("aplay")
         if aplay:
@@ -62,6 +62,7 @@ class PrincessPlayer:
                 finished = True
             else:
                 last_frame = frame
+                self.frames_decoded += 1
         if last_frame is not None:
             self.surface = pygame_module.image.frombuffer(last_frame, (self.width, self.height), "RGB").copy()
         if finished:
@@ -74,7 +75,7 @@ class PrincessPlayer:
     def stop(self):
         for process in (self.process, self.audio, self.audio_decoder):
             self._stop_process(process)
-        self.process = self.audio = self.audio_decoder = None; self.surface = None; self._frames = Queue()
+        self.process = self.audio = self.audio_decoder = None; self.surface = None; self._frames = Queue(); self.frames_decoded = 0; self.started_at = 0.0
 
     @staticmethod
     def _stop_process(process):
@@ -96,3 +97,11 @@ class PrincessPlayer:
         self.process = self.audio = self.audio_decoder = None
 
     def cleanup(self): self.stop()
+
+    def diagnostic(self):
+        """Small, safe status snapshot for the temporary on-mirror debug overlay."""
+        def state(process):
+            if process is None: return "off"
+            return "running" if process.poll() is None else f"exit {process.poll()}"
+        age = f"{time.monotonic() - self.started_at:.1f}s" if self.started_at else "-"
+        return f"video={state(self.process)} audio={state(self.audio)} frames={self.frames_decoded} age={age}"
