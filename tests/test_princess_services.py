@@ -214,6 +214,18 @@ class PrincessServiceTests(unittest.TestCase):
             service.download_video(urls[0], output)
             self.assertEqual(output.read_bytes(), b"fake-mp4")
 
+    def test_silent_generic_video_omits_spoken_instruction(self):
+        tracker = FakeTracker()
+        fal = FakeFal()
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {"FAL_KEY": "test"}):
+            root = Path(temp); image = root / "reference.png"; output = root / "apparition.mp4"
+            image.write_bytes(b"png")
+            FlashTalkService(tracker, fal, FakeSession()).generate_from_text(
+                image, "", output, model="minimax/h3-max-turbo/image-to-video",
+                prompt="A silent magical apparition.", duration_seconds=5, allow_silent=True,
+            )
+            self.assertEqual(fal.arguments["prompt"], "A silent magical apparition.")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

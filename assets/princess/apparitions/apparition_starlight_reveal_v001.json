@@ -1,0 +1,51 @@
+{
+  "created_at": "2026-09-07T18:48:58.988502Z",
+  "fal": {
+    "bytes": 2649393,
+    "duration_seconds": 5.0,
+    "estimated_cost_usd": null,
+    "model": "minimax/h3-max-turbo/image-to-video",
+    "provider_timings": {
+      "inference": 0.42326608501025476,
+      "queue_metrics": {
+        "inference_time": 16.788000106811523
+      }
+    },
+    "request_id": "01a07d33-73fc-7c13-a95a-8f4bb07629be",
+    "seed": null,
+    "timings": {
+      "download": 1.437,
+      "fal_total": 20.328,
+      "generation": 17.391,
+      "image_upload": 1.266,
+      "queue": 0.109,
+      "submit": 0.125
+    }
+  },
+  "media": {
+    "audio": {
+      "channels": 1,
+      "codec": "aac",
+      "sample_rate": "44100"
+    },
+    "bytes": 917333,
+    "duration_seconds": 5.0,
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "path": "C:\\Users\\danie\\GitHub\\Projects\\AI-Mirror\\assets\\princess\\apparitions\\apparition_starlight_reveal_v001.mp4",
+    "sha256": "90fc443c0c02fc7f762aa5b447d318be0aa18fb267a2e4e7364d20b789b129ed",
+    "video": {
+      "codec": "h264",
+      "frame_rate": "24/1",
+      "height": 704,
+      "pixel_format": "yuv420p",
+      "width": 480
+    }
+  },
+  "name": "starlight_reveal",
+  "prompt": "Use the supplied Princess portrait as the exact identity, final pose, crop, and framing. Start on an empty pure-black screen: do not show the Princess in the first frame. She materialises from the black in a graceful puff of ancient royal magic, then settles precisely into the supplied reference composition. By the final second, hold the exact supplied reference framing still and clear, with every magic effect fully gone. Keep the pure black background seamless. No speech, no voice, no lip-sync, no text, no logos, no mirror, no reflective glass, no frame, no hands, and no camera movement. A restrained silver-blue starlight shimmer gathers around her silhouette, then fades away.",
+  "reference": {
+    "path": "assets/princess/reference_v001.png",
+    "sha256": "4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7def"
+  },
+  "schema_version": 1
+}

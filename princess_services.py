@@ -357,15 +357,18 @@ class FlashTalkService:
         acceleration: str = "high",
         seed: int | None = 42,
         duration_seconds: int = 3,
+        allow_silent: bool = False,
         on_video_ready: Callable[[str], None] | None = None,
         defer_download: bool = False,
         timeout_seconds: float = 900.0,
     ) -> FalResult:
-        """Generate a talking avatar directly from text via fal's internal TTS."""
+        """Generate a talking avatar, or a silent generic image-to-video clip."""
         image = _existing_file(image_path, "Reference image")
         spoken = " ".join(text.split())
-        if not spoken:
+        if not spoken and not allow_silent:
             raise PrincessConfigurationError("Avatar text must not be empty")
+        if not spoken and "ai-avatar/single-text" in model:
+            raise PrincessConfigurationError("The single-text avatar endpoint requires spoken text")
         if not os.getenv("FAL_KEY", "").strip() and os.getenv("FAL", "").strip():
             os.environ["FAL_KEY"] = os.getenv("FAL", "").strip()
         if not os.getenv("FAL_KEY", "").strip():
@@ -410,9 +413,10 @@ class FlashTalkService:
                 # Generic image-to-video endpoints use the image and a single
                 # natural-language prompt. Keep the spoken line in that
                 # prompt without pretending the endpoint accepts audio fields.
+                prompt_with_speech = f'{prompt} The subject says exactly: "{spoken}"' if spoken else prompt
                 arguments = {
                     "image_url": image_url,
-                    "prompt": f'{prompt} The subject says exactly: "{spoken}"',
+                    "prompt": prompt_with_speech,
                     # Minimax currently rejects values below five seconds.
                     # Keep the caller's target in metadata, but satisfy the
                     # provider schema so a short reply does not fail.
@@ -522,7 +526,7 @@ def _optional_float(value: Any) -> float | None:
         return None
 
 
-def inspect_media(path: str | Path, ffprobe: str | None = None) -> dict[str, Any]:
+def inspect_media(path: str | Path, ffprobe: str | None = None, *, require_audio: bool = True) -> dict[str, Any]:
     source = _existing_file(path, "Video")
     executable = ffprobe or shutil.which("ffprobe")
     if not executable:
@@ -551,7 +555,7 @@ def inspect_media(path: str | Path, ffprobe: str | None = None) -> dict[str, Any
     audio = next((item for item in streams if item.get("codec_type") == "audio"), None)
     if not video:
         raise PrincessServiceError("Generated MP4 has no video stream")
-    if not audio:
+    if not audio and require_audio:
         raise PrincessServiceError("Generated MP4 has no audio stream")
     duration = _optional_float(raw.get("format", {}).get("duration"))
     return {
@@ -571,7 +575,7 @@ def inspect_media(path: str | Path, ffprobe: str | None = None) -> dict[str, Any
             "codec": audio.get("codec_name"),
             "sample_rate": audio.get("sample_rate"),
             "channels": audio.get("channels"),
-        },
+        } if audio else None,
     }
 
 
