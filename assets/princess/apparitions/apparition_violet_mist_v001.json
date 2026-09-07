@@ -22,20 +22,21 @@
       "submit": 0.343
     }
   },
+  "final_reference_hold_seconds": 1.0,
   "media": {
     "audio": {
       "channels": 1,
       "codec": "aac",
       "sample_rate": "44100"
     },
-    "bytes": 966910,
-    "duration_seconds": 5.0,
+    "bytes": 849799,
+    "duration_seconds": 4.96,
     "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
     "path": "C:\\Users\\danie\\GitHub\\Projects\\AI-Mirror\\assets\\princess\\apparitions\\apparition_violet_mist_v001.mp4",
-    "sha256": "492f7c3d8147ee7bdcd0c4c8daffb33f40d3934c7dbc3ec38babfa5ab4f29749",
+    "sha256": "d6e4ebae43a4d9f8edb9fdf0e99efdba4a3ae06b73474a7d622d02b29bed7690",
     "video": {
       "codec": "h264",
-      "frame_rate": "24/1",
+      "frame_rate": "121000000/4963333",
       "height": 704,
       "pixel_format": "yuv420p",
       "width": 480

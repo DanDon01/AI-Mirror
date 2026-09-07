@@ -22,20 +22,21 @@
       "submit": 0.344
     }
   },
+  "final_reference_hold_seconds": 1.0,
   "media": {
     "audio": {
       "channels": 1,
       "codec": "aac",
       "sample_rate": "44100"
     },
-    "bytes": 950165,
-    "duration_seconds": 5.0,
+    "bytes": 860913,
+    "duration_seconds": 4.96,
     "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
     "path": "C:\\Users\\danie\\GitHub\\Projects\\AI-Mirror\\assets\\princess\\apparitions\\apparition_golden_sparks_v001.mp4",
-    "sha256": "3e98cde73ff1b0313235f491e84c9d3fbec02285344e4f8c8f2ccc6842b6ed77",
+    "sha256": "f75ff9816bd5ced4c970575467fdb43c45cae3b10594d3d9c8424ddbc1d86f47",
     "video": {
       "codec": "h264",
-      "frame_rate": "24/1",
+      "frame_rate": "121000000/4963333",
       "height": 704,
       "pixel_format": "yuv420p",
       "width": 480

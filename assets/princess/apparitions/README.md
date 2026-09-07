@@ -27,3 +27,7 @@ python princess_apparitions.py --run --name emerald_mist --prompt "<full silent 
 
 The tool uses the approved reference image, the configured Fal model, a fixed
 five-second duration, and writes a sidecar JSON without keys or signed URLs.
+It also replaces the final second locally with the approved reference image,
+so the transition into a response video is exact rather than prompt-dependent.
+Run `python princess_apparitions.py --finalize-existing` to apply that final
+reference hold to clips made by an older version of the tool.
