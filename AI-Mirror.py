@@ -12,6 +12,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import time
+import subprocess
 import traceback
 import warnings
 
@@ -175,6 +176,9 @@ class MagicMirror:
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
         self.state = "active"
+        self._auto_sleep_active = False
+        self._auto_sleep_pause_until = 0.0
+        self._display_powered_down = False
         self.font = pygame.font.Font(None, 48)
 
         # Create module manager with pre-initialized modules
@@ -388,6 +392,13 @@ class MagicMirror:
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
+                # Any real interaction wakes the scheduled blackout. Apart
+                # from Space (which should immediately begin a Princess turn),
+                # consume the key so a wake-up key cannot accidentally toggle
+                # another UI state.
+                woke_from_auto_sleep = self._wake_auto_sleep_for_input()
+                if woke_from_auto_sleep and event.key != pygame.K_SPACE:
+                    continue
                 if event.key in (pygame.K_q, pygame.K_ESCAPE):
                     self.running = False
                 elif event.key == pygame.K_d:
@@ -425,6 +436,69 @@ class MagicMirror:
                     elif 'ai_interaction' in self.modules:
                         logging.info("Using AIInteractionModule (primary voice unavailable)")
                         self.modules['ai_interaction'].on_button_press()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                self._wake_auto_sleep_for_input()
+
+    @staticmethod
+    def _hour_is_in_range(hour, start_hour, end_hour):
+        """Support ordinary and midnight-crossing quiet-hour windows."""
+        if start_hour == end_hour:
+            return False
+        return start_hour <= hour < end_hour if start_hour < end_hour else (hour >= start_hour or hour < end_hour)
+
+    def _set_display_power(self, on):
+        """Best-effort DPMS control; black rendering remains the fallback."""
+        settings = CONFIG.get('auto_sleep', {})
+        if not settings.get('power_off_display', True) or os.name == 'nt' or not os.getenv('DISPLAY'):
+            return
+        if on and not self._display_powered_down:
+            return
+        if not on and self._display_powered_down:
+            return
+        try:
+            subprocess.run(['xset', 'dpms', 'force', 'on' if on else 'off'], timeout=2, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self._display_powered_down = not on
+            logging.info("Auto sleep display power %s requested", "on" if on else "off")
+        except Exception as exc:
+            logging.debug("Auto sleep DPMS unavailable; retaining black display: %s", exc)
+
+    def _auto_sleep_should_run(self):
+        settings = CONFIG.get('auto_sleep', {})
+        if not settings.get('enabled', True) or time.monotonic() < self._auto_sleep_pause_until:
+            return False
+        if not self._hour_is_in_range(datetime.now().hour, settings.get('start_hour', 1), settings.get('end_hour', 5)):
+            return False
+        home = self.modules.get('smarthome')
+        if home is None or not hasattr(home, 'everyone_away'):
+            return False
+        # None (stale/missing/unknown) is deliberately not enough to sleep.
+        return home.everyone_away(settings.get('presence_max_age_seconds', 300)) is True
+
+    def _update_auto_sleep(self):
+        should_sleep = self._auto_sleep_should_run()
+        if should_sleep and not self._auto_sleep_active:
+            self._auto_sleep_active = True
+            self.change_state('sleep')
+            self._set_display_power(False)
+            logging.info("Auto sleep started: quiet hours and HA confirms everyone away")
+        elif self._auto_sleep_active and not should_sleep:
+            self._wake_auto_sleep('schedule or HA presence changed', grace_seconds=0)
+
+    def _wake_auto_sleep(self, reason, grace_seconds=0):
+        if not self._auto_sleep_active:
+            return False
+        self._set_display_power(True)
+        self._auto_sleep_active = False
+        self._auto_sleep_pause_until = time.monotonic() + grace_seconds
+        if self.state == 'sleep':
+            self.change_state('active')
+        logging.info("Auto sleep ended: %s", reason)
+        return True
+
+    def _wake_auto_sleep_for_input(self):
+        settings = CONFIG.get('auto_sleep', {})
+        return self._wake_auto_sleep('local input', settings.get('wake_grace_seconds', 600))
 
     def draw_modules(self):
         """Draw all visible modules in z-order for mirror layout.
@@ -453,8 +527,10 @@ class MagicMirror:
                 self._draw_module('clock')
 
             elif self.state == "sleep":
-                # Clock only
-                self._draw_module('clock')
+                # Scheduled sleep is deliberately pure black for the mirror's
+                # overnight power-saving state. Manual sleep keeps its clock.
+                if not self._auto_sleep_active:
+                    self._draw_module('clock')
 
             else:
                 # Active state: draw everything except screensaver
@@ -701,12 +777,18 @@ class MagicMirror:
                         continue  # Don't update screensaver during active
                     if self.state == "screensaver" and module_name not in screensaver_names and module_name != 'clock':
                         continue
-                    if self.state == "sleep" and module_name not in sleep_names:
+                    # HA must keep refreshing during auto sleep so a person
+                    # arriving home wakes the mirror without waiting for 05:00.
+                    if self.state == "sleep" and module_name not in sleep_names and not (
+                        self._auto_sleep_active and module_name == 'smarthome'
+                    ):
                         continue
                     if hasattr(module, 'update'):
                         module.update()
                 except Exception as e:
                     logging.error(f"Error updating {module_name}: {e}")
+
+        self._update_auto_sleep()
 
         # Feed weather summary to clock top-bar status line
         if 'clock' in self.modules and 'weather' in self.modules:
@@ -753,6 +835,7 @@ class MagicMirror:
 
     def cleanup(self):
         """Safely clean up all resources."""
+        self._set_display_power(True)
         logging.info("Shutting down Magic Mirror")
         if self.web_panel:
             self.web_panel.stop()

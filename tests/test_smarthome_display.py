@@ -36,6 +36,20 @@ class SmartHomeDisplayTests(unittest.TestCase):
             "Playing: Morning News",
         )
 
+    def test_presence_is_available_without_being_a_visible_dashboard_entity(self):
+        from smarthome_module import SmartHomeModule
+        module = SmartHomeModule("http://preview", "token", entities=["light.hall"], presence_entities=["person.dan"])
+        module._apply_states([
+            {"entity_id": "light.hall", "state": "off", "attributes": {}},
+            {"entity_id": "person.dan", "state": "not_home", "attributes": {}},
+        ])
+        self.assertIs(module.everyone_away(), True)
+        module._apply_states([
+            {"entity_id": "light.hall", "state": "off", "attributes": {}},
+            {"entity_id": "person.dan", "state": "home", "attributes": {}},
+        ])
+        self.assertIs(module.everyone_away(), False)
+
 
 if __name__ == "__main__":
     unittest.main()

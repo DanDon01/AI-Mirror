@@ -476,6 +476,9 @@ CONFIG = {
             'max_entities': 20,      # discovered total (dashboard shows all)
             'mini_entities': 8,      # shown in the left-column mini view
             'dashboard_timeout': 60,  # seconds before dashboard auto-closes
+            # Optional exact people/presence entities for automatic overnight
+            # sleep. Empty uses HA person.* entities only (safe fallback).
+            'presence_entities': [e.strip() for e in os.getenv('HA_PRESENCE_ENTITIES', '').split(',') if e.strip()],
         }
     },
     'sysinfo': {
@@ -559,6 +562,18 @@ CONFIG = {
     # State-specific module settings
     'screensaver_modules': ['retro_characters'],
     'sleep_modules': ['clock'],
+    # Automatic overnight blackout. It only activates when fresh HA presence
+    # data confirms everyone is away; missing/stale HA data always stays awake.
+    'auto_sleep': {
+        'enabled': os.getenv('AUTO_SLEEP_ENABLED', '1').lower() in ('1', 'true', 'yes', 'on'),
+        'start_hour': int(os.getenv('AUTO_SLEEP_START_HOUR', '1')) % 24,
+        'end_hour': int(os.getenv('AUTO_SLEEP_END_HOUR', '5')) % 24,
+        'presence_max_age_seconds': max(30, int(os.getenv('AUTO_SLEEP_PRESENCE_MAX_AGE_SECONDS', '300'))),
+        'wake_grace_seconds': max(0, int(os.getenv('AUTO_SLEEP_WAKE_GRACE_SECONDS', '600'))),
+        # xset DPMS turns off the connected display backlight on desktop/X11
+        # Pi installations. If unavailable, the app still renders pure black.
+        'power_off_display': os.getenv('AUTO_SLEEP_POWER_OFF_DISPLAY', '1').lower() in ('1', 'true', 'yes', 'on'),
+    },
     
     # Debug settings
     'debug': {

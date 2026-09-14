@@ -233,6 +233,29 @@ and target temperature, blinds show position, and media players show what is
 playing. Auto-discovery also includes covers, fans, media players and people,
 but a curated `HA_ENTITIES` list is usually the cleanest mirror display.
 
+## Automatic overnight power saving
+
+Between 01:00 and 05:00, the mirror automatically enters a pure-black sleep
+state only when Home Assistant confirms that everyone is away. It keeps HA
+refreshing while blacked out and wakes as soon as someone returns, at 05:00,
+or after a local key/touch input. Missing, stale, or unclear HA data keeps the
+mirror awake rather than making an unsafe assumption.
+
+Add the exact people entities in `../Variables.env` (recommended):
+
+```env
+HA_PRESENCE_ENTITIES=person.dan
+AUTO_SLEEP_ENABLED=1
+AUTO_SLEEP_START_HOUR=1
+AUTO_SLEEP_END_HOUR=5
+```
+
+If `HA_PRESENCE_ENTITIES` is omitted, the mirror safely auto-detects HA
+`person.*` entities. It will not guess from arbitrary device trackers. On
+desktop/X11 Pi installations it also asks `xset` to turn off the display via
+DPMS; if that is unavailable, the display remains pure black. Set
+`AUTO_SLEEP_POWER_OFF_DISPLAY=0` to disable the DPMS request while testing.
+
 ## Home Assistant URL
 
 HA_URL in ../Variables.env must include the scheme, e.g.

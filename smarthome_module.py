@@ -157,7 +157,8 @@ class SmartHomeModule:
     def __init__(self, ha_url, ha_token, entities=None,
                  update_interval_minutes=2, timeout=10,
                  max_entities=20, mini_entities=8,
-                 dashboard_timeout=60, max_candidates=45, **kwargs):
+                 dashboard_timeout=60, max_candidates=45,
+                 presence_entities=None, **kwargs):
         # Prepend scheme if missing - requests needs http:// or it raises
         # "No connection adapters were found"
         ha_url = (ha_url or '').strip().rstrip('/')
@@ -180,6 +181,12 @@ class SmartHomeModule:
         self._candidates = []   # scored pool for the web panel checklist
         self.data = {}
         self.last_update = datetime.min
+        # Presence is kept separately from the display selection so the
+        # overnight power-saving rule never depends on a person entity being
+        # visible in the dashboard.
+        self.presence_entities = list(presence_entities or [])
+        self._presence_states = {}
+        self._presence_updated = datetime.min
         self.update_interval = timedelta(minutes=update_interval_minutes)
         self.dashboard_update_interval = timedelta(seconds=30)
         self.timeout = timeout
@@ -395,6 +402,18 @@ class SmartHomeModule:
         current_time = datetime.now()
         by_id = {s.get('entity_id'): s for s in all_states}
 
+        # Prefer an explicit HA_PRESENCE_ENTITIES list. Without one, use only
+        # Home Assistant's person.* entities (not arbitrary device trackers),
+        # which is the conservative choice for an unattended display.
+        presence_ids = self.presence_entities or sorted(
+            entity_id for entity_id in by_id if _domain(entity_id) == 'person'
+        )
+        self._presence_states = {
+            entity_id: str(by_id.get(entity_id, {}).get('state', 'unknown')).lower()
+            for entity_id in presence_ids
+        }
+        self._presence_updated = current_time
+
         # Refresh the candidate pool the web panel offers to toggle
         scored = self._score_states(all_states)
         self._candidates = [
@@ -447,6 +466,23 @@ class SmartHomeModule:
                             f"{name}: {new}",
                             COLOR_ACCENT_AMBER, 5000
                         )
+
+    def everyone_away(self, max_age_seconds=300):
+        """Return True only when fresh HA presence data confirms everyone away.
+
+        False means someone is present. None is deliberately fail-safe: HA is
+        unavailable, stale, unconfigured, or has no usable presence entities.
+        """
+        if not self._connected or not self._presence_states:
+            return None
+        if (datetime.now() - self._presence_updated).total_seconds() > max_age_seconds:
+            return None
+        states = tuple(self._presence_states.values())
+        if any(state in ('home', 'on', 'occupied', 'present') for state in states):
+            return False
+        if all(state in ('away', 'not_home', 'off', 'unavailable') for state in states):
+            return True
+        return None
 
     def update(self):
         # Dashboard housekeeping: auto-close and fade
