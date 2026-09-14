@@ -278,6 +278,9 @@ class MagicMirror:
             phone = self.modules['phone']
             if 'calendar' in self.modules:
                 phone.set_calendar_source(self.modules['calendar'])
+            if ('smarthome' in self.modules and hasattr(phone, 'set_home_source')
+                    and getattr(self.modules['smarthome'], 'ha_url', '')):
+                phone.set_home_source(self.modules['smarthome'])
             if not getattr(phone, 'ha_url', '') and 'calendar' not in self.modules:
                 self.module_manager.module_visibility['phone'] = False
                 logging.info("Phone hidden: no HA URL and no calendar")

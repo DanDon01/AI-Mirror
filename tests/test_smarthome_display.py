@@ -50,6 +50,14 @@ class SmartHomeDisplayTests(unittest.TestCase):
         ])
         self.assertIs(module.everyone_away(), False)
 
+    def test_fresh_shared_snapshot_is_available_for_phone_without_another_fetch(self):
+        from smarthome_module import SmartHomeModule
+        module = SmartHomeModule("http://preview", "token", entities=["light.hall"])
+        module._apply_states([{"entity_id": "light.hall", "state": "on", "attributes": {}}])
+        states, updated_at = module.states_snapshot()
+        self.assertEqual(states[0]["entity_id"], "light.hall")
+        self.assertEqual(updated_at, module._states_updated)
+
 
 if __name__ == "__main__":
     unittest.main()

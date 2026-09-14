@@ -187,8 +187,10 @@ class SmartHomeModule:
         self.presence_entities = list(presence_entities or [])
         self._presence_states = {}
         self._presence_updated = datetime.min
+        self._all_states = []
+        self._states_updated = datetime.min
         self.update_interval = timedelta(minutes=update_interval_minutes)
-        self.dashboard_update_interval = timedelta(seconds=30)
+        self.dashboard_update_interval = timedelta(seconds=60)
         self.timeout = timeout
         self._connected = False
         self._last_error = None
@@ -400,6 +402,8 @@ class SmartHomeModule:
 
     def _apply_states(self, all_states):
         current_time = datetime.now()
+        self._all_states = list(all_states)
+        self._states_updated = current_time
         by_id = {s.get('entity_id'): s for s in all_states}
 
         # Prefer an explicit HA_PRESENCE_ENTITIES list. Without one, use only
@@ -483,6 +487,18 @@ class SmartHomeModule:
         if all(state in ('away', 'not_home', 'off', 'unavailable') for state in states):
             return True
         return None
+
+    def states_snapshot(self, max_age_seconds=600):
+        """Fresh raw HA state snapshot for another local mirror module.
+
+        This prevents Phone and Smart Home both polling `/api/states` for the
+        same data. Nothing is copied off-device or sent to another service.
+        """
+        if not self._connected or not self._all_states:
+            return None
+        if (datetime.now() - self._states_updated).total_seconds() > max_age_seconds:
+            return None
+        return self._all_states, self._states_updated
 
     def update(self):
         # Dashboard housekeeping: auto-close and fade

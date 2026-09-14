@@ -472,7 +472,10 @@ CONFIG = {
             # Curate exactly which entities show by setting HA_ENTITIES in
             # Variables.env (comma-separated entity ids). Empty = auto-discover.
             'entities': [e.strip() for e in os.getenv('HA_ENTITIES', '').split(',') if e.strip()],
-            'update_interval_minutes': 2,
+            # One full /api/states snapshot is shared with the Phone module.
+            # Five minutes is responsive enough for a glanceable mirror and
+            # keeps baseline HA traffic near 288 calls/day, not ~1,000.
+            'update_interval_minutes': 5,
             'max_entities': 20,      # discovered total (dashboard shows all)
             'mini_entities': 8,      # shown in the left-column mini view
             'dashboard_timeout': 60,  # seconds before dashboard auto-closes

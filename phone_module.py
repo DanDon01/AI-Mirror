@@ -59,6 +59,8 @@ class PhoneModule:
 
         # Calendar module reference, wired by AI-Mirror
         self._calendar = None
+        self._home_source = None
+        self._home_source_updated = datetime.min
         self._leave = None             # (summary, start_dt, leave_dt)
         self._leave_checked_minute = None
 
@@ -70,6 +72,11 @@ class PhoneModule:
     def set_calendar_source(self, calendar_module):
         """Wire the calendar module whose events drive the leave countdown."""
         self._calendar = calendar_module
+
+    def set_home_source(self, smarthome_module):
+        """Use Smart Home's one shared `/api/states` snapshot when available."""
+        self._home_source = smarthome_module
+        logger.info("Phone battery will reuse the Smart Home HA snapshot")
 
     # ------------------------------------------------------------------
     # Battery via Home Assistant (background fetch)
@@ -173,6 +180,18 @@ class PhoneModule:
             except Exception as e:
                 logger.debug(f"Leave computation failed: {e}")
                 self._leave = None
+
+        # Smart Home already fetches the complete HA state list. Reuse it for
+        # phone battery data rather than doubling requests to `/api/states`.
+        if self._home_source is not None:
+            snapshot = self._home_source.states_snapshot()
+            if snapshot is not None:
+                states, updated_at = snapshot
+                if updated_at != self._home_source_updated:
+                    self._apply_states(states)
+                    self._home_source_updated = updated_at
+                    self.last_update = updated_at
+            return
 
         if not self.ha_url or not self.ha_token:
             return
