@@ -219,11 +219,19 @@ instead, add a comma-separated list to ../Variables.env (survives git
 pulls, stays out of the repo):
 
 ```
-HA_ENTITIES=climate.living_room,lock.front_door,sensor.live_house_cost_per_hour,light.hall
+HA_ENTITIES=lock.front_door,binary_sensor.front_door,climate.living_room,light.hall,cover.lounge_blinds,media_player.living_room
 ```
 
 Then restart. The dashboard ('h' key) shows all of them; the mini view
-shows the first 8.
+shows the first 8. Put the items you care about most in this order;
+open doors, windows, unlocked locks and other security alerts are promoted
+to the top automatically.
+
+The mirror now translates raw HA states into useful status text: open doors
+and windows become `OPEN`, lights show brightness, thermostats show current
+and target temperature, blinds show position, and media players show what is
+playing. Auto-discovery also includes covers, fans, media players and people,
+but a curated `HA_ENTITIES` list is usually the cleanest mirror display.
 
 ## Home Assistant URL
 

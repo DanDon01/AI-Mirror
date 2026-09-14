@@ -47,6 +47,10 @@ DOMAIN_COLORS = {
                             'disarmed': COLOR_ACCENT_RED},
     'climate': {},
     'sensor': {},
+    'cover': {'open': COLOR_ACCENT_AMBER, 'closed': COLOR_ACCENT_GREEN},
+    'fan': {'on': COLOR_ACCENT_GREEN, 'off': COLOR_TEXT_SECONDARY},
+    'media_player': {'playing': COLOR_ACCENT_GREEN, 'paused': COLOR_ACCENT_AMBER,
+                     'idle': COLOR_TEXT_SECONDARY, 'off': COLOR_TEXT_SECONDARY},
 }
 
 # Dashboard section grouping by entity domain
@@ -55,6 +59,9 @@ DOMAIN_SECTIONS = [
     ('Climate', ('climate',)),
     ('Security', ('lock', 'alarm_control_panel')),
     ('Switches', ('switch',)),
+    ('Covers & fans', ('cover', 'fan')),
+    ('Media', ('media_player',)),
+    ('Presence', ('person', 'device_tracker')),
     ('Sensors', ('sensor', 'binary_sensor')),
 ]
 
@@ -63,9 +70,15 @@ def _domain(entity_id):
     return entity_id.split('.')[0] if '.' in entity_id else ''
 
 
-def _state_color(entity_id, state):
+def _state_color(entity_id, state, attrs=None):
     """Pick a display color based on entity domain and state."""
     domain = _domain(entity_id)
+    attrs = attrs or {}
+    device_class = attrs.get('device_class')
+    # An "on" contact sensor means a door/window is open, not healthy.
+    if domain == 'binary_sensor' and state == 'on':
+        if device_class in ('door', 'window', 'garage_door', 'opening', 'moisture', 'smoke', 'gas', 'safety'):
+            return COLOR_ACCENT_RED
     domain_map = DOMAIN_COLORS.get(domain, {})
     if state in domain_map:
         return domain_map[state]
@@ -87,6 +100,57 @@ def _state_color(entity_id, state):
         return COLOR_ACCENT_RED
 
     return COLOR_FONT_BODY
+
+
+def _friendly_state(entity_id, info, max_len=24):
+    """Turn HA's machine-oriented state into a glanceable mirror value."""
+    state = str(info.get('state', '?'))
+    attrs = info.get('attributes', {}) or {}
+    domain = _domain(entity_id)
+    device_class = attrs.get('device_class', '')
+    unit = str(attrs.get('unit_of_measurement', '') or '')
+
+    if state in ('unavailable', 'unknown', 'none'):
+        return 'Unavailable'
+    if domain == 'binary_sensor':
+        labels = {
+            'door': ('Closed', 'OPEN'), 'window': ('Closed', 'OPEN'),
+            'garage_door': ('Closed', 'OPEN'), 'opening': ('Closed', 'OPEN'),
+            'motion': ('Clear', 'Motion'), 'occupancy': ('Clear', 'Occupied'),
+            'presence': ('Away', 'Home'), 'moisture': ('Dry', 'WET'),
+            'smoke': ('Clear', 'SMOKE'), 'gas': ('Clear', 'GAS'),
+            'safety': ('Safe', 'ALERT'), 'battery': ('OK', 'Low battery'),
+        }
+        off, on = labels.get(device_class, ('Off', 'On'))
+        return on if state == 'on' else off if state == 'off' else state.replace('_', ' ').title()
+    if domain == 'light':
+        if state != 'on': return 'Off'
+        brightness = attrs.get('brightness')
+        if isinstance(brightness, (int, float)):
+            return f"On {round(brightness / 255 * 100)}%"
+        return 'On'
+    if domain == 'cover':
+        position = attrs.get('current_position')
+        if isinstance(position, (int, float)) and state not in ('closed', 'closing'):
+            return f"Open {round(position)}%"
+        return state.replace('_', ' ').title()
+    if domain == 'climate':
+        current = attrs.get('current_temperature')
+        target = attrs.get('temperature')
+        suffix = '°C' if unit in ('°C', 'C') else unit
+        if current is not None and target is not None:
+            return f"{current}{suffix} -> {target}{suffix}"
+        if current is not None: return f"{current}{suffix}"
+        return state.replace('_', ' ').title()
+    if domain == 'media_player' and state == 'playing':
+        title = attrs.get('media_title') or attrs.get('media_channel')
+        return f"Playing: {title}" if title else 'Playing'
+    if domain in ('person', 'device_tracker'):
+        return 'Home' if state == 'home' else state.replace('_', ' ').title()
+    if state in ('on', 'off'):
+        return state.title()
+    value = f"{state}{unit}" if unit else state.replace('_', ' ').title()
+    return value if len(value) <= max_len else value[:max_len - 2].rstrip() + '..'
 
 
 class SmartHomeModule:
@@ -267,7 +331,7 @@ class SmartHomeModule:
     _DOMAIN_SCORE = {
         'lock': 10, 'alarm_control_panel': 10, 'climate': 9,
         'light': 7, 'binary_sensor': 6, 'switch': 5, 'sensor': 4,
-        'cover': 6, 'fan': 5, 'media_player': 5,
+        'cover': 6, 'fan': 5, 'media_player': 5, 'person': 8, 'device_tracker': 6,
     }
     # device_class bonus (real home state people glance at)
     _DC_SCORE = {
@@ -443,12 +507,27 @@ class SmartHomeModule:
 
     def _entity_state_text(self, entity_id, max_len=20):
         info = self.data.get(entity_id, {})
-        state_val = info.get('state', '?')
-        unit = info.get('attributes', {}).get('unit_of_measurement', '')
-        if unit:
-            return f"{state_val}{unit}"
-        return (state_val.capitalize() if len(state_val) < max_len
-                else state_val[:max_len - 3] + '..')
+        return _friendly_state(entity_id, info, max_len=max_len)
+
+    def _entity_color(self, entity_id):
+        info = self.data.get(entity_id, {})
+        return _state_color(entity_id, info.get('state', '?'), info.get('attributes', {}))
+
+    def _open_security_entities(self):
+        """Return open/unlocked security items first; these deserve attention."""
+        alerts = []
+        for eid in self.entities:
+            info = self.data.get(eid, {})
+            state = info.get('state')
+            domain = _domain(eid)
+            dc = info.get('attributes', {}).get('device_class')
+            if domain == 'lock' and state == 'unlocked':
+                alerts.append(eid)
+            elif domain == 'binary_sensor' and state == 'on' and dc in (
+                'door', 'window', 'garage_door', 'opening', 'moisture', 'smoke', 'gas', 'safety'
+            ):
+                alerts.append(eid)
+        return alerts
 
     def _summary_text(self):
         """One-line rollup for the mini view, e.g. '3 on - 21.4C'."""
@@ -458,22 +537,30 @@ class SmartHomeModule:
             if _domain(eid) in ('light', 'switch')
             and self.data.get(eid, {}).get('state') == 'on'
         )
-        if any(_domain(eid) in ('light', 'switch') for eid in self.entities):
-            parts.append(f"{on_count} on")
+        if on_count:
+            parts.append(f"{on_count} light{'s' if on_count != 1 else ''} on")
         for eid in self.entities:
             if _domain(eid) in ('climate', 'sensor'):
                 info = self.data.get(eid, {})
                 unit = info.get('attributes', {}).get('unit_of_measurement', '')
-                if 'C' in unit or 'F' in unit:
-                    parts.append(f"{info.get('state', '?')}{unit}")
+                current = info.get('attributes', {}).get('current_temperature')
+                if current is not None:
+                    parts.append(f"{current}°C")
                     break
-        locked = [eid for eid in self.entities if _domain(eid) == 'lock']
-        if locked:
-            all_locked = all(
-                self.data.get(eid, {}).get('state') == 'locked' for eid in locked
-            )
-            parts.append("locked" if all_locked else "UNLOCKED")
-        return "  -  ".join(parts)
+                if 'C' in unit or 'F' in unit:
+                    parts.append(_friendly_state(eid, info))
+                    break
+        alerts = self._open_security_entities()
+        if alerts:
+            parts.append(f"{len(alerts)} SECURITY ALERT" if len(alerts) > 1 else "SECURITY ALERT")
+        else:
+            locked = [eid for eid in self.entities if _domain(eid) == 'lock']
+            if locked:
+                parts.append("secure" if all(self.data.get(eid, {}).get('state') == 'locked' for eid in locked) else "check locks")
+        playing = [eid for eid in self.entities if _domain(eid) == 'media_player' and self.data.get(eid, {}).get('state') == 'playing']
+        if playing:
+            parts.append("media playing")
+        return "  |  ".join(parts)
 
     # ------------------------------------------------------------------
     # Mini view (left column)
@@ -508,9 +595,20 @@ class SmartHomeModule:
                 screen.blit(surf, (x, draw_y))
                 return
 
-            shown = self.entities[:self.mini_entities]
+            # Surface open doors/unlocked locks first, then honour the user's
+            # configured entity order for the rest of the compact view.
+            alerts = self._open_security_entities()
+            shown = (alerts + [eid for eid in self.entities if eid not in alerts])[:self.mini_entities]
+            # Some useful display values live in attributes rather than state
+            # (for example light brightness or a media title), so include
+            # those in the cached-surface key too.
+            display_attrs = ('brightness', 'current_temperature', 'temperature',
+                             'current_position', 'media_title', 'media_channel')
             data_hash = "|".join(
-                f"{eid}={self.data.get(eid, {}).get('state', '?')}"
+                f"{eid}={self.data.get(eid, {}).get('state', '?')};" + ",".join(
+                    str(self.data.get(eid, {}).get('attributes', {}).get(key, ''))
+                    for key in display_attrs
+                )
                 for eid in self.entities
             )
 
@@ -536,7 +634,7 @@ class SmartHomeModule:
                     continue
 
                 state_val = info['state']
-                color = _state_color(entity_id, state_val)
+                color = self._entity_color(entity_id)
 
                 # Colored state dot, then name + state text
                 pygame.draw.circle(screen, color, (x + 4, draw_y + 9), 4)
@@ -647,7 +745,7 @@ class SmartHomeModule:
                     if col_y[col] + line_h > zone_h - 30:
                         break
                     state_val = self.data.get(eid, {}).get('state', '?')
-                    color = _state_color(eid, state_val)
+                    color = self._entity_color(eid)
                     pygame.draw.circle(
                         overlay, color, (col_x[col] + 5, col_y[col] + 11), 4
                     )
