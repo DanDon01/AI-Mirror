@@ -302,7 +302,9 @@ CONFIG = {
             'time_format': '%H:%M:%S',
             'date_format': '%A, %B %d, %Y',
             'timezone': 'local',
-            'scrolling': True
+            # The premium static banner hosts the hourly leave-home forecast.
+            # Scrolling mode is retained in ClockModule as a legacy option.
+            'scrolling': False
         }
     },
     'weather': {

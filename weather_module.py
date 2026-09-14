@@ -201,23 +201,26 @@ class WeatherModule:
 
         Returns (data, source_name) or raises if both sources fail.
         """
-        if self.api_key:
-            try:
-                data = self._fetch_openweathermap()
-                if data:
-                    return data, "OpenWeatherMap"
-            except Exception as e:
-                api_tracker.failure("weather", "openweathermap")
-                logger.warning(f"OpenWeatherMap failed, trying Open-Meteo: {e}")
-
+        # Open-Meteo provides current conditions, hourly precipitation and
+        # sun data in a single free request. Prefer it even when an older OWM
+        # key is configured; OWM remains a robust fallback for outages.
         try:
             data = self._fetch_open_meteo()
             if data:
                 return data, "Open-Meteo"
             raise RuntimeError("Open-Meteo returned no data")
-        except Exception:
+        except Exception as exc:
             api_tracker.failure("weather", "open-meteo")
-            raise
+            logger.warning(f"Open-Meteo failed, trying OpenWeatherMap: {exc}")
+        if self.api_key:
+            try:
+                data = self._fetch_openweathermap()
+                if data:
+                    return data, "OpenWeatherMap"
+            except Exception:
+                api_tracker.failure("weather", "openweathermap")
+                raise
+        raise RuntimeError("Open-Meteo unavailable and no OpenWeatherMap fallback configured")
 
     def update(self):
         # Collect a finished background fetch, if any
