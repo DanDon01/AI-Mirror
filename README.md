@@ -187,6 +187,26 @@ embedded audio, so no WAV is uploaded. A completed response is downloaded and
 cached after playback for reuse when its intent and time-of-day tags make that
 safe.
 
+### Daylight / night readability
+
+The mirror uses a high-contrast midnight-glass palette: white primary text,
+champagne module labels, and clear functional status colours. By default it
+automatically uses a brighter daylight treatment from 07:00 to 20:59 and a
+softer night treatment outside those hours. The body and small text are also
+scaled up for reading through two-way mirror glass.
+
+Optional `Variables.env` tuning, followed by a restart:
+
+```env
+UI_DISPLAY_MODE=auto
+UI_DAY_BRIGHTNESS=1.18
+UI_NIGHT_BRIGHTNESS=0.88
+UI_TEXT_SCALE=1.12
+```
+
+Set `UI_DISPLAY_MODE=day` or `night` to force a mode, or set
+`UI_BRIGHTNESS` to override the automatic brightness multiplier entirely.
+
 ### Future option: Fal Director realtime avatar
 
 The active Princess path deliberately uses short, cached-or-generated MP4

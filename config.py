@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import os
-from datetime import time
+from datetime import time, datetime
 import pygame
 
 # Initialize pygame to access font information
@@ -26,15 +26,36 @@ COLOR_WHITE = (255, 255, 255)
 COLOR_BLACK = (0, 0, 0)
 
 # Content brightness multiplier for two-way mirror glass. The glass only
-# transmits part of the light, so the rendered content must be brighter
-# than on a bare screen. This scales the CONTENT colours only - the black
-# background stays black, so the mirror illusion is preserved (unlike a
-# monitor/gamma brightness boost, which would grey out the whole sheet).
-# Tune in Variables.env: UI_BRIGHTNESS=1.3 (brighter), 1.0 = base.
-try:
-    _UI_BRIGHTNESS = max(0.5, min(float(os.getenv('UI_BRIGHTNESS', '1.0')), 2.0))
-except (TypeError, ValueError):
-    _UI_BRIGHTNESS = 1.0
+# transmits part of the light, so content needs more intensity in daylight;
+# after dark a slightly softer treatment is less glaring while still readable.
+# This scales content only: black remains black so the mirror illusion stays.
+#
+# Variables.env controls (all optional):
+#   UI_DISPLAY_MODE=auto|day|night   UI_DAY_BRIGHTNESS=1.18
+#   UI_NIGHT_BRIGHTNESS=0.88         UI_TEXT_SCALE=1.12
+# `UI_BRIGHTNESS` remains a manual override for a particular installation.
+def _env_float(name, default, low, high):
+    try:
+        return max(low, min(float(os.getenv(name, default)), high))
+    except (TypeError, ValueError):
+        return default
+
+
+_display_mode = os.getenv('UI_DISPLAY_MODE', 'auto').strip().lower()
+if _display_mode not in ('auto', 'day', 'night'):
+    _display_mode = 'auto'
+_is_night = _display_mode == 'night' or (
+    _display_mode == 'auto' and not (7 <= datetime.now().hour < 21)
+)
+if os.getenv('UI_BRIGHTNESS', '').strip():
+    _UI_BRIGHTNESS = _env_float('UI_BRIGHTNESS', 1.0, 0.5, 2.0)
+else:
+    _UI_BRIGHTNESS = _env_float(
+        'UI_NIGHT_BRIGHTNESS' if _is_night else 'UI_DAY_BRIGHTNESS',
+        0.88 if _is_night else 1.18,
+        0.5, 2.0,
+    )
+_UI_TEXT_SCALE = _env_float('UI_TEXT_SCALE', 1.12, 0.85, 1.35)
 
 
 def _bright(color):
@@ -47,8 +68,8 @@ def _bright(color):
 # The hierarchy is compressed (less contrast between tiers) on purpose -
 # legibility through the mirror wins over subtlety.
 COLOR_TEXT_PRIMARY = _bright((255, 255, 255))
-COLOR_TEXT_SECONDARY = _bright((232, 234, 238))
-COLOR_TEXT_DIM = _bright((198, 200, 206))
+COLOR_TEXT_SECONDARY = _bright((238, 240, 244))
+COLOR_TEXT_DIM = _bright((210, 213, 220))
 COLOR_TEXT_ACCENT = _bright((150, 210, 255))
 
 # Single luxury accent: champagne. Module labels, hairline rules, emphasis.
@@ -67,7 +88,7 @@ COLOR_ACCENT_RED = _bright((242, 150, 150))
 COLOR_ACCENT_AMBER = _bright((246, 212, 150))
 
 # Separator lines (subtle dividers between sections)
-COLOR_SEPARATOR = (40, 40, 40)
+COLOR_SEPARATOR = _bright((105, 94, 68))
 
 # Legacy aliases -- modules import these names
 COLOR_FONT_DEFAULT = COLOR_TEXT_PRIMARY
@@ -86,8 +107,9 @@ COLOR_BG_HIGHLIGHT = (0, 0, 0)
 COLOR_BG_MODULE_ALPHA = (0, 0, 0, 0)
 COLOR_BG_HEADER_ALPHA = (0, 0, 0, 0)
 
-# Text opacity (255 = fully opaque; max visibility through the glass)
-TRANSPARENCY = 255
+# Text opacity is softened only at night; it remains fully opaque in daylight
+# to cut through the two-way glass and ambient reflections.
+TRANSPARENCY = 238 if _is_night else 255
 
 # Typography -- Lato (bundled in assets/fonts, OFL licensed) gives the
 # same premium light weights on Windows and the Pi. SysFont names remain
@@ -122,17 +144,17 @@ def load_font(weight, size):
 
 
 FONT_SIZE_CLOCK = 84
-FONT_SIZE_HERO = 56       # large feature values (temperature, etc.)
-FONT_SIZE_TITLE = 28
-FONT_SIZE_SUBTITLE = 22
-FONT_SIZE_BODY = 19
-FONT_SIZE_SMALL = 14
-FONT_SIZE_LABEL = 13      # tracked uppercase module labels
-FONT_SIZE_TICKER = 20
+FONT_SIZE_HERO = int(56 * _UI_TEXT_SCALE)       # large feature values
+FONT_SIZE_TITLE = int(28 * _UI_TEXT_SCALE)
+FONT_SIZE_SUBTITLE = int(22 * _UI_TEXT_SCALE)
+FONT_SIZE_BODY = int(19 * _UI_TEXT_SCALE)
+FONT_SIZE_SMALL = int(14 * _UI_TEXT_SCALE)
+FONT_SIZE_LABEL = int(13 * _UI_TEXT_SCALE)      # tracked uppercase labels
+FONT_SIZE_TICKER = int(20 * _UI_TEXT_SCALE)
 FONT_SIZE = FONT_SIZE_BODY
 
 # Letterspacing (px) for tracked uppercase labels
-LABEL_TRACKING = 4
+LABEL_TRACKING = max(3, int(4 * _UI_TEXT_SCALE))
 
 # Spacing and Dimensions
 LINE_SPACING = 30

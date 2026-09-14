@@ -107,10 +107,12 @@ class ModuleDrawHelper:
             label = ModuleDrawHelper.render_tracked(
                 ModuleDrawHelper._label_font, text.upper(), COLOR_ACCENT_PRIMARY
             )
-            label.set_alpha(235)
+            label.set_alpha(TRANSPARENCY)
             ModuleDrawHelper._title_cache[key] = label
 
-        rule_w = 26
+        # A short champagne keyline gives each module a polished anchor without
+        # placing an opaque card over the mirror surface.
+        rule_w = 42
         if align == 'right':
             lx = x + width - label.get_width()
         else:
@@ -118,8 +120,9 @@ class ModuleDrawHelper:
         screen.blit(label, (lx, y))
 
         rule_y = y + label.get_height() + 5
-        rule = pygame.Surface((rule_w, 1), pygame.SRCALPHA)
-        rule.fill((*COLOR_ACCENT_PRIMARY, 170))
+        rule = pygame.Surface((rule_w, 2), pygame.SRCALPHA)
+        rule.fill((*COLOR_SEPARATOR, min(TRANSPARENCY, 190)))
+        rule.fill((*COLOR_ACCENT_PRIMARY, TRANSPARENCY), (0, 0, 7, 2))
         if align == 'right':
             screen.blit(rule, (x + width - rule_w, rule_y))
         else:
