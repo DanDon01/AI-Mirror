@@ -650,8 +650,6 @@ class MagicMirror:
                 return False
             clip = self.princess_cache.select(response_text, reference_hash, model, intent='general')
             if not clip:
-                if self.princess_autofill:
-                    self.princess_autofill.enqueue(response_text)
                 return False
             position = self.module_positions.get('princess', {'width': 420, 'height': 420})
             self.modules['princess'].play_cached(self.princess_cache.root / clip['media_path'], position)

@@ -50,11 +50,9 @@ PROJECT_MODULES = [
     "princess_services",
     "princess_context",
     "princess_module",
-    "princess_demo",
     "princess_apparitions",
     "princess_cache",
     "princess_player",
-    "princess_overlay_module",
 ]
 
 

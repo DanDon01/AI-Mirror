@@ -180,34 +180,12 @@ capture if necessary. Optional five-second apparition clips in
 [`assets/princess/apparitions/`](assets/princess/apparitions/) begin on the
 first press in parallel with the turn; they never delay the response video.
 
-Add `FAL_KEY` to the parent `Variables.env`, install `requirements.txt`, then
-run the no-cost preflight before the explicit paid proof:
-
-```bash
-python princess_demo.py --check
-python princess_demo.py --run --play
-```
-
-If the OpenAI project does not have TTS entitlement, use a local Windows WAV
-to exercise fal without another OpenAI call:
-
-```bash
-python princess_demo.py --run --audio path\to\speech.wav --play
-```
-
-The default proof sends the approved image and text directly to
-`minimax/h3-max-turbo/image-to-video`; fal generates the talking video and
-its internal audio, so no WAV is uploaded. Short replies (up to eight words)
-request three seconds; longer replies request five seconds. Minimax currently
-enforces a five-second minimum, so short requests are safely clamped and the
-effective provider duration is recorded in `proof.json`. The downloaded MP4
-is validated with FFprobe and normalized to H.264/yuv420p/AAC when required.
-Durable video, request IDs, timings, and cost metadata are stored
-under ignored `data/princess/proofs/`. The command performs every dependency
-and key check before making a paid call.
-
-Use `--mode audio --audio <file> --fal-model fal-ai/flashtalk` only when an
-audio-driven FlashTalk comparison is explicitly wanted.
+Add `FAL_KEY` to the parent `Variables.env` and install `requirements.txt`.
+The live Princess flow sends the approved image and short text directly to
+`minimax/h3-max-turbo/image-to-video`; Fal generates the talking video and its
+embedded audio, so no WAV is uploaded. A completed response is downloaded and
+cached after playback for reuse when its intent and time-of-day tags make that
+safe.
 
 ### Future option: Fal Director realtime avatar
 
