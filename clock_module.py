@@ -15,7 +15,8 @@ import pytz
 from config import (
     FONT_NAME, FONT_SIZE_CLOCK, FONT_SIZE_SMALL, FONT_SIZE_LABEL,
     COLOR_CLOCK_FACE, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
-    COLOR_ACCENT_PRIMARY, TRANSPARENCY, ANIMATION, LABEL_TRACKING,
+    COLOR_ACCENT_PRIMARY, COLOR_ACCENT_BLUE, COLOR_ACCENT_AMBER,
+    TRANSPARENCY, ANIMATION, LABEL_TRACKING,
     load_font,
 )
 
@@ -44,6 +45,8 @@ class ClockModule:
 
         # Status indicators set by main loop
         self._status_text = ""
+        self._weather_timeline = []
+        self._astronomy_text = ""
 
         # Cache: HH:MM changes once a minute; seconds re-render each second
         self._cached_hhmm = None
@@ -55,6 +58,11 @@ class ClockModule:
     def set_status_indicators(self, text):
         """Set status text displayed in the top bar (e.g. weather summary)."""
         self._status_text = text
+
+    def set_weather_timeline(self, timeline, astronomy_text=""):
+        """Receive the compact leave-home outlook from WeatherModule."""
+        self._weather_timeline = list(timeline or [])
+        self._astronomy_text = astronomy_text or ""
 
     def update(self):
         if self.scrolling:
@@ -133,25 +141,81 @@ class ClockModule:
             )
             self._cached_date_surf.set_alpha(TRANSPARENCY)
         date_surf = self._cached_date_surf
-        date_x = x + width - date_surf.get_width() - pad
-
+        status_surf = None
         if self._status_text:
-            status_surf = self.status_font.render(
-                self._status_text, True, COLOR_TEXT_DIM
-            )
+            status_surf = self.status_font.render(self._status_text, True, COLOR_TEXT_DIM)
             status_surf.set_alpha(TRANSPARENCY)
-            block_h = date_surf.get_height() + 8 + status_surf.get_height()
+        astronomy_surf = None
+        if self._astronomy_text:
+            astronomy_surf = self.status_font.render(self._astronomy_text, True, COLOR_ACCENT_AMBER)
+            astronomy_surf.set_alpha(TRANSPARENCY)
+        right_w = max(date_surf.get_width(), *(s.get_width() for s in (status_surf, astronomy_surf) if s is not None))
+        right_x = x + width - right_w - pad
+
+        # The centre of the bar earns its space with a practical five-point
+        # forecast, rather than being decorative empty black.
+        timeline_x = sec_x + sec_surf.get_width() + 34
+        timeline_right = right_x - 26
+        if self._weather_timeline and timeline_right - timeline_x >= 220:
+            self._draw_weather_timeline(screen, timeline_x, timeline_right, y, height)
+
+        if status_surf or astronomy_surf:
+            extra_h = sum(s.get_height() + 4 for s in (astronomy_surf, status_surf) if s is not None)
+            block_h = date_surf.get_height() + 5 + extra_h
             block_y = y + (height - block_h) // 2
-            screen.blit(date_surf, (date_x, block_y))
-            screen.blit(
-                status_surf,
-                (x + width - status_surf.get_width() - pad,
-                 block_y + date_surf.get_height() + 8),
-            )
+            screen.blit(date_surf, (x + width - date_surf.get_width() - pad, block_y))
+            line_y = block_y + date_surf.get_height() + 5
+            for surf in (astronomy_surf, status_surf):
+                if surf is not None:
+                    screen.blit(surf, (x + width - surf.get_width() - pad, line_y))
+                    line_y += surf.get_height() + 4
         else:
             screen.blit(
-                date_surf, (date_x, y + (height - date_surf.get_height()) // 2)
+                date_surf, (x + width - date_surf.get_width() - pad, y + (height - date_surf.get_height()) // 2)
             )
+
+    def _draw_weather_timeline(self, screen, left, right, y, height):
+        entries = self._weather_timeline[:5]
+        if not entries:
+            return
+        slot_w = max(1, (right - left) // len(entries))
+        icon_y = y + height // 2 - 5
+        base_y = y + height - 15
+        pygame.draw.line(screen, (*COLOR_TEXT_DIM, 90), (left, base_y), (right, base_y), 1)
+        for index, entry in enumerate(entries):
+            cx = left + slot_w * index + slot_w // 2
+            time_surf = self.status_font.render(f"{entry['time']}h", True, COLOR_TEXT_DIM)
+            time_surf.set_alpha(TRANSPARENCY)
+            screen.blit(time_surf, (cx - time_surf.get_width() // 2, y + 8))
+            self._draw_weather_mark(screen, cx, icon_y, entry.get('code', 0))
+            temp_surf = self.status_font.render(f"{entry['temp']}°", True, COLOR_TEXT_SECONDARY)
+            temp_surf.set_alpha(TRANSPARENCY)
+            screen.blit(temp_surf, (cx - temp_surf.get_width() // 2, base_y - temp_surf.get_height() - 2))
+            rain = entry.get('rain', 0)
+            if rain >= 25:
+                pygame.draw.circle(screen, COLOR_ACCENT_BLUE, (cx + 15, icon_y + 8), 3)
+                rain_surf = self.status_font.render(str(rain), True, COLOR_ACCENT_BLUE)
+                rain_surf.set_alpha(TRANSPARENCY)
+                screen.blit(rain_surf, (cx + 20, icon_y + 1))
+
+    @staticmethod
+    def _draw_weather_mark(screen, x, y, code):
+        """Tiny vector marks: restrained gold sun, ice cloud/rain, not emoji."""
+        if code >= 95:
+            pygame.draw.circle(screen, COLOR_ACCENT_BLUE, (x, y), 8, 1)
+            pygame.draw.line(screen, COLOR_ACCENT_AMBER, (x + 2, y - 3), (x - 3, y + 7), 2)
+        elif code >= 51:
+            pygame.draw.circle(screen, COLOR_TEXT_SECONDARY, (x, y - 2), 7, 1)
+            for dx in (-5, 0, 5):
+                pygame.draw.line(screen, COLOR_ACCENT_BLUE, (x + dx, y + 6), (x + dx - 2, y + 11), 1)
+        elif code <= 1:
+            pygame.draw.circle(screen, COLOR_ACCENT_AMBER, (x, y), 6, 1)
+            for dx, dy in ((0, -10), (0, 10), (-10, 0), (10, 0)):
+                pygame.draw.line(screen, COLOR_ACCENT_AMBER, (x + dx // 2, y + dy // 2), (x + dx, y + dy), 1)
+        else:
+            pygame.draw.circle(screen, COLOR_TEXT_SECONDARY, (x - 4, y + 1), 5, 1)
+            pygame.draw.circle(screen, COLOR_TEXT_SECONDARY, (x + 3, y - 1), 7, 1)
+            pygame.draw.line(screen, COLOR_TEXT_SECONDARY, (x - 10, y + 6), (x + 10, y + 6), 1)
 
     def _draw_scrolling(self, screen, x, y, width, height):
         """Legacy scrolling time bar."""

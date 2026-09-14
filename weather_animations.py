@@ -182,10 +182,13 @@ class _CloudLayerMixin:
 class SunAnimation(WeatherAnimation):
     """Radiant sun: big breathing glow with slowly rotating rays."""
 
-    def __init__(self, screen_width, screen_height, wind_speed=0.0):
+    def __init__(self, screen_width, screen_height, wind_speed=0.0, sky_progress=0.5):
         super().__init__(screen_width, screen_height, wind_speed)
-        self.cx = int(screen_width * 0.6)
-        self.cy = int(self.h * 0.42)
+        # Follow a shallow daylight arc using the forecast's actual sunrise
+        # and sunset. The slow motion is visible over a day, not a loop.
+        progress = max(0.0, min(float(sky_progress), 1.0))
+        self.cx = int(screen_width * (0.33 + progress * 0.42))
+        self.cy = int(self.h * (0.64 - math.sin(progress * math.pi) * 0.40))
         r = int(self.h * 0.34)
         self._halo = _glow_sprite(r, SUN_TINT, 40, core_frac=0.14)
         self._core = _glow_sprite(int(r * 0.34), SUN_TINT, 120, core_frac=0.55)
@@ -227,13 +230,15 @@ class SunAnimation(WeatherAnimation):
 class MoonAnimation(WeatherAnimation):
     """Crescent moon with a soft halo and drifting twinkling stars."""
 
-    def __init__(self, screen_width, screen_height, cloudy=False, wind_speed=0.0):
+    def __init__(self, screen_width, screen_height, cloudy=False, wind_speed=0.0,
+                 phase=0.5, sky_progress=0.5):
         super().__init__(screen_width, screen_height, wind_speed)
-        self.cx = int(screen_width * 0.6)
-        self.cy = int(self.h * 0.4)
+        progress = max(0.0, min(float(sky_progress), 1.0))
+        self.cx = int(screen_width * (0.35 + progress * 0.40))
+        self.cy = int(self.h * (0.62 - math.sin(progress * math.pi) * 0.36))
         r = int(self.h * 0.16)
         self._halo = _glow_sprite(int(r * 2.0), MOON_TINT, 26, core_frac=0.2)
-        self._crescent = self._make_crescent(r)
+        self._crescent = self._make_moon(r, phase)
         self._stars = [
             {'x': random.uniform(self.screen_width * 0.3, self.screen_width),
              'y': random.uniform(8, self.h - self.fade_depth),
@@ -246,14 +251,20 @@ class MoonAnimation(WeatherAnimation):
         self._cloud_x = -float(screen_width)
 
     @staticmethod
-    def _make_crescent(r):
+    def _make_moon(r, phase):
+        """Render the real calendar phase rather than a perpetual crescent."""
         size = r * 2 + 2
         surf = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.circle(surf, (*MOON_TINT, 150), (r + 1, r + 1), r)
-        punch = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.circle(punch, (255, 255, 255, 150),
-                           (r + 1 + int(r * 0.5), r + 1 - int(r * 0.18)), r)
-        surf.blit(punch, (0, 0), special_flags=pygame.BLEND_RGBA_SUB)
+        # Bright fraction rises from new -> full -> new.  The offset's side
+        # changes after full moon, creating a simple waxing/waning cue.
+        bright = 0.5 - 0.5 * math.cos(math.tau * phase)
+        pygame.draw.circle(surf, (*MOON_TINT, int(45 + 125 * bright)), (r + 1, r + 1), r)
+        if bright < 0.98:
+            punch = pygame.Surface((size, size), pygame.SRCALPHA)
+            offset = int((1.0 - 2.0 * bright) * r * (1 if phase < 0.5 else -1))
+            pygame.draw.circle(punch, (255, 255, 255, 150),
+                               (r + 1 + offset, r + 1 - int(r * 0.10)), r)
+            surf.blit(punch, (0, 0), special_flags=pygame.BLEND_RGBA_SUB)
         return surf
 
     def _step(self, dt):

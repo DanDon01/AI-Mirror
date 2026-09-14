@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from config import (
     CONFIG, FONT_NAME, FONT_SIZE, FONT_SIZE_HERO, COLOR_FONT_DEFAULT,
     COLOR_FONT_BODY, COLOR_PASTEL_RED, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
-    LINE_SPACING, TRANSPARENCY, COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA,
+    COLOR_ACCENT_BLUE, COLOR_ACCENT_AMBER, LINE_SPACING, TRANSPARENCY,
+    COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA,
     load_font,
 )
 import os
@@ -143,6 +144,12 @@ class WeatherModule:
                 "temperature_2m", "relative_humidity_2m", "apparent_temperature",
                 "weather_code", "wind_speed_10m", "pressure_msl", "cloud_cover",
             ]),
+            # One request supplies the current display, practical leave-home
+            # forecast strip, and real solar timing for the sky animation.
+            "hourly": "temperature_2m,precipitation_probability,weather_code,is_day",
+            "daily": "sunrise,sunset",
+            "forecast_days": 2,
+            "timezone": "auto",
             "wind_speed_unit": "ms",
         }
 
@@ -157,6 +164,8 @@ class WeatherModule:
         main_condition = self._wmo_to_main(wmo_code)
 
         # Normalise to the same dict shape the draw() method expects
+        hourly = data.get("hourly", {})
+        daily = data.get("daily", {})
         return {
             "name": geo["name"],
             "sys": {"country": geo["country"]},
@@ -169,6 +178,12 @@ class WeatherModule:
             "weather": [{"main": main_condition, "description": description}],
             "wind": {"speed": current.get("wind_speed_10m", 0)},
             "clouds": {"all": current.get("cloud_cover", 0)},
+            "hourly": hourly,
+            "astronomy": {
+                "sunrise": (daily.get("sunrise") or [None])[0],
+                "sunset": (daily.get("sunset") or [None])[0],
+                "timezone": data.get("timezone", "local"),
+            },
         }
 
     def _fetch_openweathermap(self):
@@ -237,21 +252,24 @@ class WeatherModule:
             weather_main = self.weather_data['weather'][0]['main'].lower()
             weather_description = self.weather_data['weather'][0]['description'].lower()
             wind = self.weather_data.get('wind', {}).get('speed', 0) or 0
-            is_night = not (6 <= datetime.now().hour < 20)
+            astronomy = self.astronomy()
+            is_night = not astronomy["is_day"]
 
             if 'clear' in weather_main:
                 if is_night:
                     self.animation = MoonAnimation(
-                        self.screen_width, self.screen_height, wind_speed=wind)
+                        self.screen_width, self.screen_height, wind_speed=wind,
+                        phase=astronomy["moon_phase"], sky_progress=astronomy["moon_progress"])
                 else:
                     self.animation = SunAnimation(
-                        self.screen_width, self.screen_height, wind_speed=wind)
+                        self.screen_width, self.screen_height, wind_speed=wind,
+                        sky_progress=astronomy["sun_progress"])
             elif 'cloud' in weather_main or 'broken' in weather_description:
                 partly = 'partly' in weather_description or 'broken' in weather_description
                 if is_night and partly:
                     self.animation = MoonAnimation(
                         self.screen_width, self.screen_height, cloudy=True,
-                        wind_speed=wind)
+                        wind_speed=wind, phase=astronomy["moon_phase"], sky_progress=astronomy["moon_progress"])
                 else:
                     self.animation = CloudAnimation(
                         self.screen_width, self.screen_height, partly=partly,
@@ -273,30 +291,73 @@ class WeatherModule:
             logging.error(f"Error creating weather animation: {e}")
             self.animation = None
 
+    @staticmethod
+    def _parse_weather_time(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _moon_phase(now):
+        """0=new, .5=full; sufficient for a graceful long-running sky cue."""
+        known_new_moon = datetime(2000, 1, 6, 18, 14)
+        return ((now - known_new_moon).total_seconds() / 86400 / 29.53058867) % 1.0
+
+    def astronomy(self, now=None):
+        """Solar data plus a continuously changing moon cue for the UI."""
+        now = now or datetime.now()
+        raw = (self.weather_data or {}).get("astronomy", {})
+        sunrise = self._parse_weather_time(raw.get("sunrise"))
+        sunset = self._parse_weather_time(raw.get("sunset"))
+        if sunrise is None or sunset is None or sunset <= sunrise:
+            sunrise = now.replace(hour=6, minute=0, second=0, microsecond=0)
+            sunset = now.replace(hour=20, minute=0, second=0, microsecond=0)
+        is_day = sunrise <= now < sunset
+        day_span = max((sunset - sunrise).total_seconds(), 1)
+        sun_progress = min(1.0, max(0.0, (now - sunrise).total_seconds() / day_span))
+        # The moon traverses the inverse half of the same celestial arc. It is
+        # intentionally atmospheric rather than a false moonrise prediction.
+        night_start = sunset if now >= sunset else sunset - timedelta(days=1)
+        moon_progress = min(1.0, max(0.0, (now - night_start).total_seconds() / (12 * 3600)))
+        phase = self._moon_phase(now)
+        return {"sunrise": sunrise, "sunset": sunset, "is_day": is_day,
+                "sun_progress": sun_progress, "moon_progress": moon_progress,
+                "moon_phase": phase}
+
+    def hourly_timeline(self, slots=5):
+        """Next practical three-hourly outlook for the top bar."""
+        hourly = (self.weather_data or {}).get("hourly", {})
+        times = hourly.get("time") or []
+        temperatures = hourly.get("temperature_2m") or []
+        rain = hourly.get("precipitation_probability") or []
+        codes = hourly.get("weather_code") or []
+        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        options = []
+        for index, stamp in enumerate(times):
+            point = self._parse_weather_time(stamp)
+            if point is None or point < now or index >= len(temperatures):
+                continue
+            if point.hour % 3 != 0 and point != now:
+                continue
+            options.append({"time": point.strftime("%H"), "temp": round(temperatures[index]),
+                            "rain": int(rain[index]) if index < len(rain) and rain[index] is not None else 0,
+                            "code": int(codes[index]) if index < len(codes) and codes[index] is not None else 0})
+            if len(options) >= slots:
+                break
+        return options
+
     def get_temperature_color(self, temperature):
-        # Clamp temperature between 0 and 32
-        t = max(0, min(temperature, 32))
-        
-        if t <= 15:
-            # White (255, 255, 255) to Blue (0, 0, 255)
-            ratio = t / 15
-            r = int(255 * (1 - ratio))
-            g = int(255 * (1 - ratio))
-            b = 255
-        elif t <= 21:
-            # Blue (0, 0, 255) to Yellow (255, 255, 0)
-            ratio = (t - 15) / 6
-            r = int(255 * ratio)
-            g = int(255 * ratio)
-            b = int(255 * (1 - ratio))
-        else:
-            # Yellow (255, 255, 0) to Red (255, 0, 0)
-            ratio = (t - 21) / 11
-            r = 255
-            g = int(255 * (1 - ratio))
-            b = 0
-        
-        return (r, g, b)
+        # Ice blue for cold, platinum for temperate, champagne for warm.
+        # Keep this restrained rather than turning weather into a warning UI.
+        t = float(temperature)
+        if t <= 8:
+            return COLOR_ACCENT_BLUE
+        if t >= 20:
+            return COLOR_ACCENT_AMBER
+        return COLOR_FONT_DEFAULT
 
     def draw(self, screen, position):
         """Draw weather module -- no background, floating text on black."""
@@ -344,7 +405,7 @@ class WeatherModule:
                 # Hero temperature: large, light, platinum
                 def _render_hero():
                     font = load_font('regular', FONT_SIZE_HERO)
-                    s = font.render(f"{temp:.0f}°", True, COLOR_FONT_DEFAULT)
+                    s = font.render(f"{temp:.0f}°", True, self.get_temperature_color(temp))
                     s.set_alpha(TRANSPARENCY)
                     return s
 

@@ -173,6 +173,8 @@ class SmartHomeModule:
         self.entities = entities or []
         # Web-panel selection file wins over HA_ENTITIES / auto-discovery
         file_ents = self._load_entity_override()
+        self._manual_entity_override = bool(file_ents)
+        self._motion_override_fallback = False
         if file_ents:
             self.entities = file_ents
         self.max_entities = max_entities
@@ -345,7 +347,9 @@ class SmartHomeModule:
     # device_class bonus (real home state people glance at)
     _DC_SCORE = {
         'temperature': 9, 'humidity': 7, 'door': 9, 'window': 9, 'garage_door': 9,
-        'motion': 8, 'occupancy': 8, 'presence': 8, 'moisture': 7,
+        # Motion is useful as an alert, not as the main thing a person sees
+        # while standing at the mirror. Keep it available but rank it low.
+        'motion': 1, 'occupancy': 3, 'presence': 8, 'moisture': 7,
         'power': 6, 'energy': 6, 'gas': 6, 'co2': 6, 'pm25': 5, 'battery': 3,
     }
     # device_class values that are noise on a mirror
@@ -429,6 +433,23 @@ class SmartHomeModule:
             }
             for _, eid, attrs in scored[:self.max_candidates]
         ]
+
+        # Older web-panel selections can accidentally contain only motion
+        # sensors. Do not delete the user's file, but use a useful temporary
+        # cross-section for this running display instead of a motion wall.
+        selected_states = [by_id.get(eid, {}) for eid in self.entities]
+        only_motion = bool(selected_states) and all(
+            _domain(eid) == 'binary_sensor'
+            and state.get('attributes', {}).get('device_class') == 'motion'
+            for eid, state in zip(self.entities, selected_states)
+        )
+        if self._manual_entity_override and only_motion and not self._motion_override_fallback:
+            replacement = [eid for _, eid, attrs in scored
+                           if not (_domain(eid) == 'binary_sensor' and attrs.get('device_class') == 'motion')]
+            if replacement:
+                self.entities = replacement[:self.max_entities]
+                self._motion_override_fallback = True
+                logger.warning("HA entity override contained only motion sensors; using useful auto-selection for this session")
 
         if not self.entities:
             self._pick_entities(scored)
@@ -650,7 +671,12 @@ class SmartHomeModule:
             # Surface open doors/unlocked locks first, then honour the user's
             # configured entity order for the rest of the compact view.
             alerts = self._open_security_entities()
-            shown = (alerts + [eid for eid in self.entities if eid not in alerts])[:self.mini_entities]
+            non_motion = [eid for eid in self.entities if eid not in alerts and not (
+                _domain(eid) == 'binary_sensor'
+                and self.data.get(eid, {}).get('attributes', {}).get('device_class') == 'motion'
+            )]
+            motion = [eid for eid in self.entities if eid not in alerts and eid not in non_motion]
+            shown = (alerts + non_motion + motion)[:self.mini_entities]
             # Some useful display values live in attributes rather than state
             # (for example light brightness or a media title), so include
             # those in the cached-surface key too.

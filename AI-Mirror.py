@@ -802,6 +802,12 @@ class MagicMirror:
                     temp = weather.weather_data['main']['temp']
                     cond = weather.weather_data['weather'][0]['description']
                     clock.set_status_indicators(f"{temp:.0f}C  {cond}")
+                    if hasattr(clock, 'set_weather_timeline') and hasattr(weather, 'hourly_timeline'):
+                        sky = weather.astronomy()
+                        clock.set_weather_timeline(
+                            weather.hourly_timeline(),
+                            f"SUN {sky['sunrise']:%H:%M} - {sky['sunset']:%H:%M}",
+                        )
                 except Exception:
                     pass
 
