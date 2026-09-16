@@ -83,12 +83,14 @@ class WeatherAnimation:
     def _build_sky_wash(self):
         """A soft blue atmospheric wash behind the scene -- built once
         (the curve never changes frame to frame) rather than redrawn every
-        frame, since it depends only on y, not time."""
+        frame, since it depends only on y, not time. Precomputing it once
+        means a smooth per-row gradient costs nothing, instead of the
+        visibly banded 8px steps a per-frame version would need to stay cheap."""
         wash = pygame.Surface((self.screen_width, self.h), pygame.SRCALPHA)
-        for yy in range(0, self.h, 8):
+        for yy in range(self.h):
             progress = yy / max(self.h, 1)
             alpha = int(28 * (1.0 - progress) ** 1.8)
-            pygame.draw.rect(wash, (*SKY_TINT, alpha), (0, yy, self.screen_width, 8))
+            pygame.draw.line(wash, (*SKY_TINT, alpha), (0, yy), (self.screen_width, yy))
         return wash
 
     def _new_gust(self, seed_x=False):
@@ -146,15 +148,28 @@ class _CloudLayerMixin:
 
     def _init_clouds(self, count, alphas=(48, 70, 96)):
         self._cloud_band_x = int(self.screen_width * 0.18)
+        # Clouds composite onto this shared, transparent layer (MAX blend,
+        # same trick as the puffs within one cloud) before it's blitted
+        # onto the scene once -- MAX-blending straight onto the scene
+        # surface would corrupt colors, since that surface already has
+        # the (non-transparent) sky wash under it.
+        self._cloud_layer = pygame.Surface((self.screen_width, self.h), pygame.SRCALPHA)
         self._clouds = []
         for i in range(count):
             depth = i % len(alphas)
-            width = random.randint(int(self.screen_width * 0.18),
-                                   int(self.screen_width * 0.34)) - depth * 24
+            # Sized off the band height, not raw screen width -- a cloud
+            # that fit a tall 900px band reads as a solid box once the
+            # band is a modest 480px; keep it proportionate instead.
+            width = max(90, random.randint(int(self.h * 0.38), int(self.h * 0.68)) - depth * 18)
+            surf = _make_cloud(width, alphas[depth])
+            # Seed fully on-screen -- a cloud seeded already hanging off
+            # the screen edge gets hard-clipped by the screen boundary
+            # itself mid-shape, which reads as a rectangle, not a cloud.
+            max_x = max(self._cloud_band_x, self.screen_width - surf.get_width())
             self._clouds.append({
-                'surf': _make_cloud(max(120, width), alphas[depth]),
-                'x': random.uniform(self._cloud_band_x, self.screen_width),
-                'y': random.uniform(-30, self.h * 0.52),
+                'surf': surf,
+                'x': random.uniform(self._cloud_band_x, max_x),
+                'y': random.uniform(10, max(10, self.h * 0.55 - surf.get_height())),
                 'speed': (6.0 + depth * 8.0) * (1.0 + self.wind_speed * 0.07),
             })
 
@@ -162,15 +177,21 @@ class _CloudLayerMixin:
         for c in self._clouds:
             c['x'] += c['speed'] * dt
             if c['x'] > self.screen_width:
+                # Re-enters fully off-screen-left, so it drifts smoothly
+                # into view rather than popping in already clipped.
                 c['x'] = self._cloud_band_x - c['surf'].get_width()
-                c['y'] = random.uniform(-30, self.h * 0.52)
+                c['y'] = random.uniform(10, max(10, self.h * 0.55 - c['surf'].get_height()))
 
     def _draw_clouds(self, surf):
+        layer = self._cloud_layer
+        layer.fill((0, 0, 0, 0))
+        for c in self._clouds:
+            layer.blit(c['surf'], (int(c['x']), int(c['y'])), special_flags=pygame.BLEND_RGBA_MAX)
+
         clip = surf.get_clip()
         surf.set_clip(pygame.Rect(self._cloud_band_x, 0,
                                   self.screen_width - self._cloud_band_x, self.h))
-        for c in self._clouds:
-            surf.blit(c['surf'], (int(c['x']), int(c['y'])))
+        surf.blit(layer, (0, 0))
         surf.set_clip(clip)
 
 

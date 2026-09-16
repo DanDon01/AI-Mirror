@@ -419,6 +419,9 @@ class MagicMirror:
                 elif event.key == pygame.K_h:
                     if 'smarthome' in self.modules:
                         self.modules['smarthome'].toggle_dashboard()
+                elif event.key == pygame.K_m:
+                    started = self.director.trigger_random()
+                    logging.info(f"'m' pressed - trigger a moment: {'ok' if started else 'busy/none'}")
                 elif event.key == pygame.K_s:
                     if self.state == "active":
                         self.change_state("screensaver")

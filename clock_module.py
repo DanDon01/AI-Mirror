@@ -175,11 +175,14 @@ class ClockModule:
             )
 
     def _draw_weather_timeline(self, screen, left, right, y, height):
+        """Five-point forecast strip: time + temp, rain% only when it
+        matters. The old hand-drawn sun/cloud marks read as clip-art at
+        this size, so this stays typographic until real iconography
+        (Moments-era) replaces it."""
         entries = self._weather_timeline[:5]
         if not entries:
             return
         slot_w = max(1, (right - left) // len(entries))
-        icon_y = y + height // 2 - 5
         base_y = y + height - 15
         pygame.draw.line(screen, (*COLOR_TEXT_DIM, 90), (left, base_y), (right, base_y), 1)
         for index, entry in enumerate(entries):
@@ -187,35 +190,17 @@ class ClockModule:
             time_surf = self.status_font.render(f"{entry['time']}h", True, COLOR_TEXT_DIM)
             time_surf.set_alpha(TRANSPARENCY)
             screen.blit(time_surf, (cx - time_surf.get_width() // 2, y + 8))
-            self._draw_weather_mark(screen, cx, icon_y, entry.get('code', 0))
-            temp_surf = self.status_font.render(f"{entry['temp']}°", True, COLOR_TEXT_SECONDARY)
+            rain = entry.get('rain', 0)
+            temp_text = f"{entry['temp']}°"
+            temp_color = COLOR_ACCENT_BLUE if rain >= 25 else COLOR_TEXT_SECONDARY
+            temp_surf = self.status_font.render(temp_text, True, temp_color)
             temp_surf.set_alpha(TRANSPARENCY)
             screen.blit(temp_surf, (cx - temp_surf.get_width() // 2, base_y - temp_surf.get_height() - 2))
-            rain = entry.get('rain', 0)
             if rain >= 25:
-                pygame.draw.circle(screen, COLOR_ACCENT_BLUE, (cx + 15, icon_y + 8), 3)
-                rain_surf = self.status_font.render(str(rain), True, COLOR_ACCENT_BLUE)
+                rain_surf = self.status_font.render(f"{rain}%", True, COLOR_ACCENT_BLUE)
                 rain_surf.set_alpha(TRANSPARENCY)
-                screen.blit(rain_surf, (cx + 20, icon_y + 1))
-
-    @staticmethod
-    def _draw_weather_mark(screen, x, y, code):
-        """Tiny vector marks: restrained gold sun, ice cloud/rain, not emoji."""
-        if code >= 95:
-            pygame.draw.circle(screen, COLOR_ACCENT_BLUE, (x, y), 8, 1)
-            pygame.draw.line(screen, COLOR_ACCENT_AMBER, (x + 2, y - 3), (x - 3, y + 7), 2)
-        elif code >= 51:
-            pygame.draw.circle(screen, COLOR_TEXT_SECONDARY, (x, y - 2), 7, 1)
-            for dx in (-5, 0, 5):
-                pygame.draw.line(screen, COLOR_ACCENT_BLUE, (x + dx, y + 6), (x + dx - 2, y + 11), 1)
-        elif code <= 1:
-            pygame.draw.circle(screen, COLOR_ACCENT_AMBER, (x, y), 6, 1)
-            for dx, dy in ((0, -10), (0, 10), (-10, 0), (10, 0)):
-                pygame.draw.line(screen, COLOR_ACCENT_AMBER, (x + dx // 2, y + dy // 2), (x + dx, y + dy), 1)
-        else:
-            pygame.draw.circle(screen, COLOR_TEXT_SECONDARY, (x - 4, y + 1), 5, 1)
-            pygame.draw.circle(screen, COLOR_TEXT_SECONDARY, (x + 3, y - 1), 7, 1)
-            pygame.draw.line(screen, COLOR_TEXT_SECONDARY, (x - 10, y + 6), (x + 10, y + 6), 1)
+                screen.blit(rain_surf, (cx - rain_surf.get_width() // 2,
+                                        base_y - temp_surf.get_height() - rain_surf.get_height() - 4))
 
     def _draw_scrolling(self, screen, x, y, width, height):
         """Legacy scrolling time bar."""

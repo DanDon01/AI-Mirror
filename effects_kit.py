@@ -30,20 +30,35 @@ def glow_sprite(radius, color, core_alpha, core_frac=0.3):
     return surf
 
 
-def soft_blob(width, color, alpha, puff_range=(5, 8), height_ratio=0.5):
-    """Pre-render a soft lumpy blob from overlapping glow puffs
-    (MAX-blended) -- clouds, smoke, fog, or any organic glow shape."""
+def soft_blob(width, color, alpha, puff_range=(6, 9), height_ratio=0.42):
+    """Pre-render a soft, wispy blob -- clouds, smoke, fog, or any organic
+    glow shape. A faint full-footprint base glow goes down first so gaps
+    between puffs never show through as bare transparency (that gap is
+    what turns "overlapping circles" into an obvious polka-dot pattern);
+    a handful of bigger puffs strung along a roughly horizontal line,
+    overlapping enough to guarantee they merge, sit on top. The canvas
+    is padded well past the puff placement span -- a puff centered near
+    the strip's own end otherwise gets its bright core hard-clipped by
+    the canvas edge itself, which reads as a straight line."""
     height = max(1, int(width * height_ratio))
-    surf = pygame.Surface((width, height), pygame.SRCALPHA)
+    margin = int(width * 0.28)
+    canvas_w = width + margin * 2
+    canvas_h = height + margin
+    surf = pygame.Surface((canvas_w, canvas_h), pygame.SRCALPHA)
+
+    base_r = max(1, int(width * 0.42))
+    base = glow_sprite(base_r, color, int(alpha * 0.55), core_frac=0.55)
+    base = pygame.transform.smoothscale(base, (width, height))
+    surf.blit(base, (margin, margin // 2), special_flags=pygame.BLEND_RGBA_MAX)
+
     puffs = random.randint(*puff_range)
+    cy = margin // 2 + height * 0.55
     for i in range(puffs):
-        r = max(1, random.randint(int(width * 0.12), int(width * 0.20)))
-        puff = glow_sprite(r, color, alpha, core_frac=0.5)
-        px = int((i / max(puffs - 1, 1)) * (width - r * 2) + random.randint(-10, 10))
-        py = random.randint(int(height * 0.2), max(1, height - r * 2))
-        px = max(0, min(px, width - r * 2 - 2))
-        py = max(0, min(py, height - r * 2 - 2))
-        surf.blit(puff, (px, py), special_flags=pygame.BLEND_RGBA_MAX)
+        r = max(1, int(width * random.uniform(0.16, 0.26)))
+        px = int(margin + (i + 0.5) / puffs * width + random.uniform(-width * 0.04, width * 0.04))
+        py = int(cy + random.uniform(-height * 0.18, height * 0.14))
+        puff = glow_sprite(r, color, alpha, core_frac=0.4)
+        surf.blit(puff, (px - r, py - r), special_flags=pygame.BLEND_RGBA_MAX)
     return surf
 
 
