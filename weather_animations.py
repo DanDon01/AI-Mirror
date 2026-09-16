@@ -48,7 +48,7 @@ def _glow_sprite(radius, color, core_alpha, core_frac=0.3):
 
 
 def _make_cloud(width, alpha):
-    """Pre-render a soft cloud from overlapping glow puffs (MAX-blended)."""
+    """A real cloud puff texture, tinted and scaled (see effects_kit.py)."""
     return soft_blob(width, CLOUD_TINT, alpha)
 
 

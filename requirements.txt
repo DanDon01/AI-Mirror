@@ -6,6 +6,7 @@
 # Core display
 pygame==2.6.1
 numpy==2.4.6
+Pillow==10.4.0   # effects_kit.py: real Gaussian blur for cloud/moment textures
 
 # HTTP / parsing
 requests==2.34.2

@@ -10,9 +10,12 @@ cached rather than rebuilt every frame -- the discipline that keeps
 """
 
 import math
+import os
 import random
 
+import numpy as np
 import pygame
+from PIL import Image
 
 
 def glow_sprite(radius, color, core_alpha, core_frac=0.3):
@@ -30,36 +33,45 @@ def glow_sprite(radius, color, core_alpha, core_frac=0.3):
     return surf
 
 
-def soft_blob(width, color, alpha, puff_range=(6, 9), height_ratio=0.42):
-    """Pre-render a soft, wispy blob -- clouds, smoke, fog, or any organic
-    glow shape. A faint full-footprint base glow goes down first so gaps
-    between puffs never show through as bare transparency (that gap is
-    what turns "overlapping circles" into an obvious polka-dot pattern);
-    a handful of bigger puffs strung along a roughly horizontal line,
-    overlapping enough to guarantee they merge, sit on top. The canvas
-    is padded well past the puff placement span -- a puff centered near
-    the strip's own end otherwise gets its bright core hard-clipped by
-    the canvas edge itself, which reads as a straight line."""
+_CLOUD_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'clouds')
+_cloud_sources = None
+
+
+def _load_cloud_sources():
+    """Real cloud puff textures (CC0, Kenney "Smoke Particles" pack --
+    see assets/clouds/LICENSE.txt), loaded once and reused. Procedurally
+    stamped circles or blurred ellipses read as computer graphics no
+    matter how much you tune them; a hand-painted irregular puff with
+    real detail in its silhouette reads as an actual cloud."""
+    global _cloud_sources
+    if _cloud_sources is None:
+        _cloud_sources = []
+        for fname in sorted(os.listdir(_CLOUD_ASSET_DIR)):
+            if fname.lower().endswith('.png'):
+                path = os.path.join(_CLOUD_ASSET_DIR, fname)
+                _cloud_sources.append(Image.open(path).convert('RGBA'))
+    return _cloud_sources
+
+
+def soft_blob(width, color, alpha, height_ratio=0.42, seed=None):
+    """A real cloud texture, tinted and scaled -- clouds, smoke, fog, or
+    any organic glow shape. Built once per shape (not per frame); the
+    caller keeps the returned Surface for as long as that shape is on
+    screen."""
+    sources = _load_cloud_sources()
+    rng = random.Random(seed)
+    src = rng.choice(sources)
+
     height = max(1, int(width * height_ratio))
-    margin = int(width * 0.28)
-    canvas_w = width + margin * 2
-    canvas_h = height + margin
-    surf = pygame.Surface((canvas_w, canvas_h), pygame.SRCALPHA)
+    resized = src.resize((width, height), Image.LANCZOS)
 
-    base_r = max(1, int(width * 0.42))
-    base = glow_sprite(base_r, color, int(alpha * 0.55), core_frac=0.55)
-    base = pygame.transform.smoothscale(base, (width, height))
-    surf.blit(base, (margin, margin // 2), special_flags=pygame.BLEND_RGBA_MAX)
-
-    puffs = random.randint(*puff_range)
-    cy = margin // 2 + height * 0.55
-    for i in range(puffs):
-        r = max(1, int(width * random.uniform(0.16, 0.26)))
-        px = int(margin + (i + 0.5) / puffs * width + random.uniform(-width * 0.04, width * 0.04))
-        py = int(cy + random.uniform(-height * 0.18, height * 0.14))
-        puff = glow_sprite(r, color, alpha, core_frac=0.4)
-        surf.blit(puff, (px - r, py - r), special_flags=pygame.BLEND_RGBA_MAX)
-    return surf
+    a = np.asarray(resized.split()[-1], dtype=np.float32) / 255.0
+    rgba = np.empty((height, width, 4), dtype=np.uint8)
+    rgba[..., 0] = color[0]
+    rgba[..., 1] = color[1]
+    rgba[..., 2] = color[2]
+    rgba[..., 3] = (a * alpha).astype(np.uint8)
+    return pygame.image.frombuffer(rgba.tobytes(), (width, height), 'RGBA')
 
 
 def vertical_gradient(width, height, top_color, bottom_color, top_alpha=255, bottom_alpha=255):
