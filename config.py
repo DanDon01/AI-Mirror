@@ -240,7 +240,9 @@ LAYOUT = {
 
 LAYOUT_V2 = {
     'zones': {
-        'top_bar': {'y': 0, 'height': 95},
+        # A generous sky-stage: the clock and the live forecast become part
+        # of the mirror scene, rather than a thin dashboard strip.
+        'top_bar': {'y': 0, 'height': 158},
         'bottom_bar': {'height': 40},
         'left_column': {'x': 0, 'width_pct': 0.22},
         'right_column': {'width_pct': 0.22},

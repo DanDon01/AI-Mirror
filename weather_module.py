@@ -388,6 +388,13 @@ class WeatherModule:
             if self.font is None:
                 self.font = self.body_font
 
+            # Paint the atmospheric scene first.  The weather copy and every
+            # other module then stay crisp above it, including when rain is
+            # travelling down the whole pane of glass.
+            if self.animation:
+                self.animation.update()
+                self.animation.draw(screen)
+
             # Title label
             from module_base import ModuleDrawHelper
             draw_y = ModuleDrawHelper.draw_module_title(
@@ -456,10 +463,6 @@ class WeatherModule:
                     screen.blit(surf, (x, draw_y))
                     draw_y += 24
 
-                # Weather animation across full screen (clouds, sun, rain, etc.)
-                if self.animation:
-                    self.animation.update()
-                    self.animation.draw(screen)
             else:
                 err = self.body_font.render("Weather unavailable", True, COLOR_PASTEL_RED)
                 err.set_alpha(TRANSPARENCY)

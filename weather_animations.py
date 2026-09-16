@@ -1,17 +1,13 @@
-"""Weather ambience for the AI-Mirror top zone.
+"""Weather ambience for the AI-Mirror sky-stage.
 
-The sky lives in a band at the top of the screen - taller than the clock
-banner so it reads as a feature, not a hint - and dissolves before the
-module columns below. Procedural soft-glow drawing only (no icon PNGs):
-a radiant rayed sun, a crescent moon with drifting stars, layered cloud
-banks, wind-slanted rain with splashes, drifting snow, and storm
-lightning.
+The weather is an atmospheric scene rather than an icon beside a number.
+It uses procedural soft-glow drawing only (no icon PNGs): a radiant rayed
+sun, a calendar-aware moon with drifting stars, deep cloud banks, rain on
+the glass, drifting snow, and storm lightning.
 
 Design:
-  - Confined to the top band (EFFECT_H), alpha-faded at the bottom so the
-    mirror's centre stays clear.
-  - Bolder than a hint but still behind the text: the clock/date draw on
-    top afterwards.
+  - Occupies the upper half of the mirror and dissolves into the reflection.
+  - The scene draws before text, so the information remains highly legible.
   - All motion is dt-based (px/sec) for frame-rate independence.
 
 Class names / constructors are unchanged; each accepts wind_speed (m/s).
@@ -29,16 +25,17 @@ BANNER_H = LAYOUT_V2.get('zones', {}).get('top_bar', {}).get('height', 95)
 WINDY_THRESHOLD = 7.0    # m/s above which gust streaks appear
 
 # Palette
-PLATINUM = (228, 230, 235)
-RAIN_TINT = (176, 198, 224)
-SUN_TINT = (240, 216, 168)
-MOON_TINT = (208, 216, 232)
-CLOUD_TINT = (198, 202, 212)
+PLATINUM = (236, 242, 248)
+RAIN_TINT = (128, 194, 242)
+SUN_TINT = (255, 209, 112)
+MOON_TINT = (201, 222, 255)
+CLOUD_TINT = (157, 187, 218)
+SKY_TINT = (32, 93, 151)
 
 
 def _effect_height(screen_height):
-    """Top band height: a feature strip, ~3-4x the clock banner."""
-    return max(BANNER_H * 2, min(int(screen_height * 0.16), 420))
+    """A substantial but fading sky-stage, sized for portrait mirrors."""
+    return max(BANNER_H * 3, min(int(screen_height * 0.50), 900))
 
 
 def _glow_sprite(radius, color, core_alpha, core_frac=0.3):
@@ -80,7 +77,7 @@ class WeatherAnimation:
         self.screen_height = screen_height
         self.wind_speed = wind_speed or 0.0
         self.h = _effect_height(screen_height)
-        self.fade_depth = int(self.h * 0.42)
+        self.fade_depth = int(self.h * 0.34)
         self._surf = pygame.Surface((screen_width, self.h), pygame.SRCALPHA)
         self._fade_mask = self._build_fade_mask()
         self._last = time.monotonic()
@@ -139,6 +136,12 @@ class WeatherAnimation:
 
     def draw(self, screen):
         self._surf.fill((0, 0, 0, 0))
+        # A very soft blue atmospheric wash gives the scene depth without
+        # turning the mirror into an opaque TV panel.
+        for yy in range(0, self.h, 8):
+            progress = yy / max(self.h, 1)
+            alpha = int(28 * (1.0 - progress) ** 1.8)
+            pygame.draw.rect(self._surf, (*SKY_TINT, alpha), (0, yy, self.screen_width, 8))
         self._draw_scene(self._surf)
         self._draw_gusts(self._surf)
         self._surf.blit(self._fade_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
@@ -149,8 +152,8 @@ class _CloudLayerMixin:
     """Drifting cloud banks (parallax: far = slower + fainter). Clouds
     keep clear of the time digits at top-left."""
 
-    def _init_clouds(self, count, alphas=(34, 48, 64)):
-        self._cloud_band_x = int(self.screen_width * 0.28)
+    def _init_clouds(self, count, alphas=(48, 70, 96)):
+        self._cloud_band_x = int(self.screen_width * 0.18)
         self._clouds = []
         for i in range(count):
             depth = i % len(alphas)
@@ -159,8 +162,8 @@ class _CloudLayerMixin:
             self._clouds.append({
                 'surf': _make_cloud(max(120, width), alphas[depth]),
                 'x': random.uniform(self._cloud_band_x, self.screen_width),
-                'y': random.uniform(-20, self.h * 0.4),
-                'speed': (5.0 + depth * 6.0) * (1.0 + self.wind_speed * 0.07),
+                'y': random.uniform(-30, self.h * 0.52),
+                'speed': (6.0 + depth * 8.0) * (1.0 + self.wind_speed * 0.07),
             })
 
     def _step_clouds(self, dt):
@@ -168,7 +171,7 @@ class _CloudLayerMixin:
             c['x'] += c['speed'] * dt
             if c['x'] > self.screen_width:
                 c['x'] = self._cloud_band_x - c['surf'].get_width()
-                c['y'] = random.uniform(-20, self.h * 0.4)
+                c['y'] = random.uniform(-30, self.h * 0.52)
 
     def _draw_clouds(self, surf):
         clip = surf.get_clip()
@@ -189,10 +192,10 @@ class SunAnimation(WeatherAnimation):
         progress = max(0.0, min(float(sky_progress), 1.0))
         self.cx = int(screen_width * (0.33 + progress * 0.42))
         self.cy = int(self.h * (0.64 - math.sin(progress * math.pi) * 0.40))
-        r = int(self.h * 0.34)
-        self._halo = _glow_sprite(r, SUN_TINT, 40, core_frac=0.14)
-        self._core = _glow_sprite(int(r * 0.34), SUN_TINT, 120, core_frac=0.55)
-        self._rays = self._make_rays(int(self.h * 0.62))
+        r = int(self.h * 0.22)
+        self._halo = _glow_sprite(int(r * 1.65), SUN_TINT, 96, core_frac=0.10)
+        self._core = _glow_sprite(int(r * 0.62), SUN_TINT, 235, core_frac=0.50)
+        self._rays = self._make_rays(int(self.h * 0.42))
 
     def _make_rays(self, reach):
         size = reach * 2 + 2
@@ -206,7 +209,7 @@ class SunAnimation(WeatherAnimation):
             y1 = c + math.sin(ang) * inner
             x2 = c + math.cos(ang) * outer
             y2 = c + math.sin(ang) * outer
-            pygame.draw.line(surf, (*SUN_TINT, 34), (x1, y1), (x2, y2), 3)
+            pygame.draw.line(surf, (*SUN_TINT, 92), (x1, y1), (x2, y2), 3)
         return surf
 
     def _draw_scene(self, surf):
@@ -216,7 +219,7 @@ class SunAnimation(WeatherAnimation):
         rays = pygame.transform.rotate(self._rays, (self.t * 6) % 360)
         rr = rays.get_rect(center=(self.cx, self.cy))
         rscaled = rays.copy()
-        rscaled.set_alpha(int(120 + 90 * breath))
+        rscaled.set_alpha(int(150 + 95 * breath))
         surf.blit(rscaled, rr)
 
         scale = 0.9 + breath * 0.2
@@ -225,6 +228,7 @@ class SunAnimation(WeatherAnimation):
         surf.blit(halo, (self.cx - sz // 2, self.cy - sz // 2))
         surf.blit(self._core, (self.cx - self._core.get_width() // 2,
                                self.cy - self._core.get_height() // 2))
+        pygame.draw.circle(surf, (255, 248, 210, 235), (self.cx, self.cy), max(8, int(self.h * 0.028)))
 
 
 class MoonAnimation(WeatherAnimation):
@@ -236,16 +240,16 @@ class MoonAnimation(WeatherAnimation):
         progress = max(0.0, min(float(sky_progress), 1.0))
         self.cx = int(screen_width * (0.35 + progress * 0.40))
         self.cy = int(self.h * (0.62 - math.sin(progress * math.pi) * 0.36))
-        r = int(self.h * 0.16)
-        self._halo = _glow_sprite(int(r * 2.0), MOON_TINT, 26, core_frac=0.2)
+        r = int(self.h * 0.13)
+        self._halo = _glow_sprite(int(r * 2.4), MOON_TINT, 86, core_frac=0.16)
         self._crescent = self._make_moon(r, phase)
         self._stars = [
             {'x': random.uniform(self.screen_width * 0.3, self.screen_width),
              'y': random.uniform(8, self.h - self.fade_depth),
              'phase': random.uniform(0, math.tau),
              'rate': random.uniform(0.4, 1.2),
-             'r': random.choice((1, 1, 2))}
-            for _ in range(14)
+             'r': random.choice((1, 1, 1, 2, 2, 3))}
+            for _ in range(54)
         ]
         self._cloud = _make_cloud(int(screen_width * 0.3), 30) if cloudy else None
         self._cloud_x = -float(screen_width)
@@ -280,8 +284,10 @@ class MoonAnimation(WeatherAnimation):
     def _draw_scene(self, surf):
         for s in self._stars:
             tw = 0.5 + 0.5 * math.sin(self.t * s['rate'] + s['phase'])
-            a = int(30 + 90 * tw)
+            a = int(42 + 150 * tw)
             pygame.draw.circle(surf, (*PLATINUM, a), (int(s['x']), int(s['y'])), s['r'])
+            if s['r'] >= 2 and tw > 0.75:
+                pygame.draw.line(surf, (*MOON_TINT, a // 2), (int(s['x']) - 4, int(s['y'])), (int(s['x']) + 4, int(s['y'])), 1)
         surf.blit(self._halo, (self.cx - self._halo.get_width() // 2,
                                self.cy - self._halo.get_height() // 2))
         surf.blit(self._crescent, (self.cx - self._crescent.get_width() // 2,
@@ -296,10 +302,10 @@ class CloudAnimation(_CloudLayerMixin, WeatherAnimation):
     def __init__(self, screen_width, screen_height, partly=False, wind_speed=0.0):
         super().__init__(screen_width, screen_height, wind_speed)
         self.partly = partly
-        self._init_clouds(4 if partly else 7)
+        self._init_clouds(5 if partly else 8)
         self._sun_cx = int(screen_width * 0.62)
         self._sun_cy = int(self.h * 0.36)
-        self._sun = _glow_sprite(int(self.h * 0.26), SUN_TINT, 60, core_frac=0.3) if partly else None
+        self._sun = _glow_sprite(int(self.h * 0.30), SUN_TINT, 100, core_frac=0.22) if partly else None
 
     def _step(self, dt):
         self._step_clouds(dt)
@@ -319,11 +325,15 @@ class RainAnimation(_CloudLayerMixin, WeatherAnimation):
     def __init__(self, screen_width, screen_height, heavy=False, wind_speed=0.0):
         super().__init__(screen_width, screen_height, wind_speed)
         self.heavy = heavy
-        self._init_clouds(5, alphas=(40, 56, 72))
+        self._init_clouds(6, alphas=(60, 84, 112))
         count = 150 if heavy else 95
         self._slant = min(0.08 + self.wind_speed * 0.04, 0.5)
         self._drops = [self._new_drop(seed=True) for _ in range(count)]
         self._splashes = []
+        # Slow, heavy droplets in the foreground make rain feel like it is
+        # running down the mirror glass rather than falling behind it.
+        glass_count = 42 if heavy else 28
+        self._glass_drops = [self._new_glass_drop(seed=True) for _ in range(glass_count)]
 
     def _new_drop(self, seed=False):
         return {
@@ -332,6 +342,18 @@ class RainAnimation(_CloudLayerMixin, WeatherAnimation):
             'len': random.uniform(12, 26) * (1.3 if self.heavy else 1.0),
             'speed': random.uniform(620, 980) * (1.25 if self.heavy else 1.0),
             'alpha': random.randint(60, 140),
+        }
+
+    def _new_glass_drop(self, seed=False):
+        return {
+            'x': random.uniform(0, self.screen_width),
+            'y': random.uniform(-40, self.screen_height) if seed else random.uniform(-120, -8),
+            'len': random.uniform(22, 90) * (1.35 if self.heavy else 1.0),
+            'speed': random.uniform(45, 140) * (1.35 if self.heavy else 1.0),
+            'width': random.choice((1, 1, 1, 2, 2, 3)),
+            'alpha': random.randint(48, 115),
+            'wobble': random.uniform(0.8, 2.0),
+            'phase': random.uniform(0, math.tau),
         }
 
     def _step(self, dt):
@@ -349,6 +371,11 @@ class RainAnimation(_CloudLayerMixin, WeatherAnimation):
             s['r'] += 36 * dt
             s['a'] -= 220 * dt
         self._splashes = [s for s in self._splashes if s['a'] > 0]
+        for d in self._glass_drops:
+            d['y'] += d['speed'] * dt
+            d['x'] += math.sin(self.t * d['wobble'] + d['phase']) * 6 * dt
+            if d['y'] - d['len'] > self.screen_height:
+                d.update(self._new_glass_drop())
 
     def _draw_scene(self, surf):
         self._draw_clouds(surf)
@@ -364,6 +391,18 @@ class RainAnimation(_CloudLayerMixin, WeatherAnimation):
             pygame.draw.circle(
                 surf, (*RAIN_TINT, int(max(0, s['a']))),
                 (int(s['x']), int(s['y'])), int(s['r']), 1)
+
+    def draw(self, screen):
+        super().draw(screen)
+        glass = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        for d in self._glass_drops:
+            x = int(d['x'])
+            y = int(d['y'])
+            tail_y = int(y - d['len'])
+            pygame.draw.line(glass, (*RAIN_TINT, max(12, d['alpha'] // 3)), (x, tail_y), (x, y), d['width'] + 2)
+            pygame.draw.line(glass, (232, 246, 255, d['alpha']), (x, tail_y + 2), (x, y), d['width'])
+            pygame.draw.circle(glass, (226, 244, 255, min(180, d['alpha'] + 35)), (x, y), max(1, d['width']))
+        screen.blit(glass, (0, 0))
 
 
 class StormAnimation(RainAnimation):
