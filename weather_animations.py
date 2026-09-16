@@ -20,6 +20,7 @@ import time
 import pygame
 
 from config import LAYOUT_V2
+from effects_kit import glow_sprite, soft_blob, vertical_gradient, flash_alpha_envelope, jagged_bolt
 
 BANNER_H = LAYOUT_V2.get('zones', {}).get('top_bar', {}).get('height', 95)
 WINDY_THRESHOLD = 7.0    # m/s above which gust streaks appear
@@ -34,39 +35,21 @@ SKY_TINT = (32, 93, 151)
 
 
 def _effect_height(screen_height):
-    """A substantial but fading sky-stage, sized for portrait mirrors."""
-    return max(BANNER_H * 3, min(int(screen_height * 0.50), 900))
+    """The ambient sky-stage for ordinary glances -- kept modest so the
+    center stays clear day to day. Storm/etc. "moments" are the ones
+    allowed to take over the full screen, briefly and rarely."""
+    return max(BANNER_H * 3, min(int(screen_height * 0.20), 480))
 
 
 def _glow_sprite(radius, color, core_alpha, core_frac=0.3):
-    """Pre-render a smooth radial glow (built once, blitted per frame)."""
-    size = radius * 2 + 2
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    center = (radius + 1, radius + 1)
-    for r in range(radius, 0, -1):
-        t = r / radius
-        if t <= core_frac:
-            a = core_alpha
-        else:
-            a = core_alpha * ((1.0 - t) / (1.0 - core_frac)) ** 2
-        pygame.draw.circle(surf, (*color, int(a)), center, r)
-    return surf
+    """Back-compat wrapper -- glow_sprite now lives in effects_kit so the
+    Moments Director can reuse it for full-screen takeovers."""
+    return glow_sprite(radius, color, core_alpha, core_frac)
 
 
 def _make_cloud(width, alpha):
     """Pre-render a soft cloud from overlapping glow puffs (MAX-blended)."""
-    height = int(width * 0.5)
-    surf = pygame.Surface((width, height), pygame.SRCALPHA)
-    puffs = random.randint(5, 8)
-    for i in range(puffs):
-        r = random.randint(int(width * 0.12), int(width * 0.20))
-        puff = _glow_sprite(r, CLOUD_TINT, alpha, core_frac=0.5)
-        px = int((i / max(puffs - 1, 1)) * (width - r * 2) + random.randint(-10, 10))
-        py = random.randint(int(height * 0.2), height - r * 2)
-        px = max(0, min(px, width - r * 2 - 2))
-        py = max(0, min(py, height - r * 2 - 2))
-        surf.blit(puff, (px, py), special_flags=pygame.BLEND_RGBA_MAX)
-    return surf
+    return soft_blob(width, CLOUD_TINT, alpha)
 
 
 class WeatherAnimation:
@@ -77,9 +60,10 @@ class WeatherAnimation:
         self.screen_height = screen_height
         self.wind_speed = wind_speed or 0.0
         self.h = _effect_height(screen_height)
-        self.fade_depth = int(self.h * 0.34)
+        self.fade_depth = int(self.h * 0.38)
         self._surf = pygame.Surface((screen_width, self.h), pygame.SRCALPHA)
         self._fade_mask = self._build_fade_mask()
+        self._sky_wash = self._build_sky_wash()
         self._last = time.monotonic()
         self.t = 0.0
 
@@ -95,6 +79,17 @@ class WeatherAnimation:
             y = self.h - self.fade_depth + i
             pygame.draw.line(mask, (255, 255, 255, a), (0, y), (self.screen_width, y))
         return mask
+
+    def _build_sky_wash(self):
+        """A soft blue atmospheric wash behind the scene -- built once
+        (the curve never changes frame to frame) rather than redrawn every
+        frame, since it depends only on y, not time."""
+        wash = pygame.Surface((self.screen_width, self.h), pygame.SRCALPHA)
+        for yy in range(0, self.h, 8):
+            progress = yy / max(self.h, 1)
+            alpha = int(28 * (1.0 - progress) ** 1.8)
+            pygame.draw.rect(wash, (*SKY_TINT, alpha), (0, yy, self.screen_width, 8))
+        return wash
 
     def _new_gust(self, seed_x=False):
         return {
@@ -137,11 +132,8 @@ class WeatherAnimation:
     def draw(self, screen):
         self._surf.fill((0, 0, 0, 0))
         # A very soft blue atmospheric wash gives the scene depth without
-        # turning the mirror into an opaque TV panel.
-        for yy in range(0, self.h, 8):
-            progress = yy / max(self.h, 1)
-            alpha = int(28 * (1.0 - progress) ** 1.8)
-            pygame.draw.rect(self._surf, (*SKY_TINT, alpha), (0, yy, self.screen_width, 8))
+        # turning the mirror into an opaque TV panel (precomputed once).
+        self._surf.blit(self._sky_wash, (0, 0))
         self._draw_scene(self._surf)
         self._draw_gusts(self._surf)
         self._surf.blit(self._fade_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
@@ -334,6 +326,9 @@ class RainAnimation(_CloudLayerMixin, WeatherAnimation):
         # running down the mirror glass rather than falling behind it.
         glass_count = 42 if heavy else 28
         self._glass_drops = [self._new_glass_drop(seed=True) for _ in range(glass_count)]
+        # Preallocated once and cleared per frame -- a fresh full-screen
+        # SRCALPHA surface every frame was a real Pi 5 frame-time cost.
+        self._glass_surf = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
 
     def _new_drop(self, seed=False):
         return {
@@ -394,7 +389,8 @@ class RainAnimation(_CloudLayerMixin, WeatherAnimation):
 
     def draw(self, screen):
         super().draw(screen)
-        glass = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        glass = self._glass_surf
+        glass.fill((0, 0, 0, 0))
         for d in self._glass_drops:
             x = int(d['x'])
             y = int(d['y'])
@@ -414,27 +410,13 @@ class StormAnimation(RainAnimation):
         self._flash_started = None
         self._bolt = None
 
-    @staticmethod
-    def _flash_alpha(age):
-        if age < 0.08:
-            return age / 0.08
-        if age < 0.18:
-            return 1.0 - (age - 0.08) / 0.10 * 0.6
-        if age < 0.30:
-            return 0.4 + (age - 0.18) / 0.12 * 0.5
-        if age < 0.5:
-            return 0.9 * (1.0 - (age - 0.30) / 0.20)
-        return 0.0
-
     def _make_bolt(self):
-        x = random.uniform(self.screen_width * 0.35, self.screen_width * 0.9)
-        pts = [(x, 0)]
-        y = 0
-        while y < self.h * 0.8:
-            y += random.uniform(self.h * 0.10, self.h * 0.2)
-            x += random.uniform(-40, 40)
-            pts.append((x, y))
-        return pts
+        return jagged_bolt(
+            x_range=(self.screen_width * 0.35, self.screen_width * 0.9),
+            y_range=(0, self.h * 0.8),
+            width=self.screen_width,
+            segment_height_range=(self.h * 0.10, self.h * 0.2),
+        )
 
     def _step(self, dt):
         super()._step(dt)
@@ -448,7 +430,7 @@ class StormAnimation(RainAnimation):
 
     def _draw_scene(self, surf):
         if self._flash_started is not None:
-            level = self._flash_alpha(self.t - self._flash_started)
+            level = flash_alpha_envelope(self.t - self._flash_started)
             if level > 0:
                 glow = pygame.Surface((self.screen_width, self.h), pygame.SRCALPHA)
                 glow.fill((*PLATINUM, int(46 * level)))

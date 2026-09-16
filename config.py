@@ -240,9 +240,11 @@ LAYOUT = {
 
 LAYOUT_V2 = {
     'zones': {
-        # A generous sky-stage: the clock and the live forecast become part
-        # of the mirror scene, rather than a thin dashboard strip.
-        'top_bar': {'y': 0, 'height': 158},
+        # Room for the clock plus the live forecast timeline/astronomy
+        # line -- bigger than a thin dashboard strip, but the real
+        # spectacle lives in triggered "moments", not a permanently huge
+        # banner (see event_director.py).
+        'top_bar': {'y': 0, 'height': 115},
         'bottom_bar': {'height': 40},
         'left_column': {'x': 0, 'width_pct': 0.22},
         'right_column': {'width_pct': 0.22},
@@ -271,6 +273,27 @@ ANIMATION = {
     'scroll_speed_clock': 0.5,
     'scroll_speed_ticker': 1.0,
     'pulse_speed_alert': 2.0,
+}
+
+#########################################
+# MOMENTS (event_director.py / moments_library.py)
+#########################################
+# Rare, short, whole-display theatrical takeovers -- see the project plan
+# ("The Glo-Up") for the full moment library and phasing. `frequency`
+# scales how often ambient/idle moments and the minimum gap between any
+# two moments behave: >1 more often (guests over), <1 quieter (a normal
+# weekday). `daily_cap` is a hard ceiling so a long active day can't turn
+# into a highlight reel. `guest_mode` is flipped by the web panel's
+# manual "trigger a moment" button, which fires on demand and skips
+# per-moment cooldowns.
+
+MOMENTS = {
+    'enabled': True,
+    'frequency': 1.0,
+    'guest_mode': False,
+    'min_gap_s': 240.0,
+    'daily_cap': 40,
+    'recent_history': 6,
 }
 
 #########################################
@@ -632,7 +655,8 @@ CONFIG = {
         }
     },
 
-    # Layout V2 and animation references
+    # Layout V2, animation, and moments references
     'layout_v2': LAYOUT_V2,
-    'animation': ANIMATION
+    'animation': ANIMATION,
+    'moments': MOMENTS,
 }

@@ -209,6 +209,16 @@ class MagicMirror:
             if hasattr(module, 'set_notification_callback'):
                 module.set_notification_callback(self.animation_manager.push_notification)
 
+        # Moments Director: whole-display theatrical takeovers, drawn over
+        # everything including the center (see event_director.py)
+        from event_director import Director
+        import moments_library
+        self.director = Director(
+            self.screen.get_width(), self.screen.get_height(),
+            CONFIG.get('moments', {})
+        )
+        moments_library.register_all(self.director)
+
         # Premium boot: modules fade in one after another (bars first,
         # then columns top to bottom)
         layout_v2 = CONFIG.get('layout_v2', {})
@@ -514,6 +524,7 @@ class MagicMirror:
 
             # Advance animation timers
             self.animation_manager.update()
+            self.director.update()
 
             layout_v2 = CONFIG.get('layout_v2', {})
             left_names = layout_v2.get('left_modules', [])
@@ -579,6 +590,10 @@ class MagicMirror:
             # Center notifications (on top of everything in all states)
             self.animation_manager.draw_notifications(self.screen)
 
+            # Moments: whole-display takeovers draw last, over everything
+            # including the center (see event_director.py)
+            self.director.draw(self.screen)
+
             # Debug overlay
             if self.debug_layout:
                 self._draw_debug_overlay()
@@ -642,6 +657,11 @@ class MagicMirror:
         debug_font = pygame.font.Font(None, 20)
         dims = debug_font.render(f"{sw}x{sh}", True, red)
         self.screen.blit(dims, (10, sh - 20))
+        fps = debug_font.render(f"{self.clock.get_fps():.1f} FPS", True, red)
+        self.screen.blit(fps, (10, sh - 38))
+        if self.director.is_active:
+            moment = debug_font.render(f"moment: {self.director.active_name}", True, red)
+            self.screen.blit(moment, (10, sh - 56))
 
     def toggle_debug(self):
         """Toggle debug mode on/off (includes visible layout grid)."""

@@ -72,6 +72,12 @@ PAGE = """<!DOCTYPE html>
 <h2>State</h2>
 <div class="row" id="states"></div>
 
+<h2>Moments</h2>
+<div class="row">
+  <button onclick="post('/api/trigger_moment')">Trigger a moment</button>
+</div>
+<div class="meta" id="momentMeta">Fires something now for guests, ignoring the usual rarity cooldowns.</div>
+
 <h2>Modules</h2>
 <div class="row" id="modules"></div>
 
@@ -148,6 +154,13 @@ function render(s) {
   document.getElementById("apiTotals").textContent =
     s.api.total_calls_24h + " calls, $" + s.api.total_cost.toFixed(3)
     + " estimated, up " + s.api.uptime_hours.toFixed(1) + "h";
+
+  const momentMeta = document.getElementById("momentMeta");
+  if (s.moments && s.moments.active) {
+    momentMeta.textContent = "Playing now: " + s.moments.active;
+  } else {
+    momentMeta.textContent = "Fires something now for guests, ignoring the usual rarity cooldowns.";
+  }
 }
 
 async function refreshLog() {
@@ -265,6 +278,11 @@ class WebPanel:
                     sh = self.mirror.modules.get("smarthome")
                     if sh and hasattr(sh, "set_entities"):
                         sh.set_entities(value)
+                elif cmd == "trigger_moment":
+                    director = getattr(self.mirror, "director", None)
+                    if director:
+                        started = director.trigger_random()
+                        logger.info(f"Panel triggered a moment: {'ok' if started else 'busy/none'}")
             except Exception as e:
                 logger.error(f"Panel command {cmd}={value} failed: {e}")
 
@@ -311,7 +329,10 @@ class WebPanel:
             def do_POST(self):
                 url = urlparse(self.path)
                 qs = parse_qs(url.query)
-                if url.path == "/api/toggle":
+                if url.path == "/api/trigger_moment":
+                    panel.commands.put(("trigger_moment", None))
+                    self._send(200, json.dumps({"ok": True}))
+                elif url.path == "/api/toggle":
                     module = qs.get("module", [""])[0]
                     if module in panel.mirror.modules:
                         panel.commands.put(("toggle", module))
@@ -371,6 +392,7 @@ class WebPanel:
 
     def status(self):
         mm = self.mirror.module_manager
+        director = getattr(self.mirror, "director", None)
         return {
             "state": self.mirror.state,
             "modules": {
@@ -378,6 +400,9 @@ class WebPanel:
                 for name in sorted(self.mirror.modules.keys())
             },
             "api": api_tracker.get_summary(),
+            "moments": {
+                "active": director.active_name if director else None,
+            } if director else None,
         }
 
     def tail_log(self, lines):
