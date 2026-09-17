@@ -35,6 +35,8 @@ PROJECT_MODULES = [
     "moments_seasonal",
     "moments_library",
     "seasonal_theme",
+    "theme",
+    "portal_ring",
     "weather_animations",
     "clock_module",
     "weather_module",

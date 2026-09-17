@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, date, timezone
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_BODY,
     COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM, COLOR_ACCENT_GREEN,
-    COLOR_ACCENT_RED, COLOR_ACCENT_AMBER, COLOR_ACCENT_BLUE,
+    COLOR_ACCENT_RED, COLOR_ACCENT_AMBER, COLOR_ACCENT_BLUE, COLOR_ACCENT_GOLD,
     TRANSPARENCY,
 )
 from module_base import ModuleDrawHelper, SurfaceCache
@@ -497,8 +497,9 @@ class OctopusEnergyModule:
                 self.body_font = bf
                 self.small_font = sf
 
+            import theme
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Energy", x, y, width, align=align
+                screen, "Energy", x, y, width, align=align, accent_color=theme.module_accent('octopus_energy')
             )
 
             # No API key configured

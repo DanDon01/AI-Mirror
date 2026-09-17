@@ -26,7 +26,7 @@ from config import (
     FONT_NAME, FONT_SIZE, COLOR_FONT_DEFAULT,
     COLOR_PASTEL_GREEN, COLOR_PASTEL_RED, LINE_SPACING,
     TRANSPARENCY, CONFIG, COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY,
-    COLOR_ACCENT_PRIMARY, load_font,
+    COLOR_ACCENT_PRIMARY, COLOR_ACCENT_GOLD, load_font,
 )
 from visual_effects import VisualEffects
 from api_tracker import api_tracker
@@ -676,8 +676,9 @@ class StocksModule:
                 self._grid_fonts_ready = True
 
             from module_base import ModuleDrawHelper
+            import theme
             current_y = ModuleDrawHelper.draw_module_title(
-                screen, "Stocks", x, y, width
+                screen, "Stocks", x, y, width, accent_color=theme.module_accent('stocks')
             )
 
             if not self.stock_data:

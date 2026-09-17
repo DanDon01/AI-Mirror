@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
     COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_TEXT_DIM,
+    COLOR_ACCENT_RED,
 )
 from background_fetcher import BackgroundFetcher
 from effects_kit import draw_flare
@@ -192,8 +193,9 @@ class NewsModule:
             align = position.get('align', 'left') if isinstance(position, dict) else 'left'
 
             from module_base import ModuleDrawHelper
+            import theme
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "News", x, y, width, align=align
+                screen, "News", x, y, width, align=align, accent_color=theme.module_accent('news')
             )
 
             if self._headline_changed_at is not None:

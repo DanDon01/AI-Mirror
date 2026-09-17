@@ -21,7 +21,7 @@ except ImportError:
 from config import (
     COLOR_FONT_BODY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_GREEN,
     COLOR_ACCENT_AMBER, COLOR_ACCENT_RED, COLOR_ACCENT_BLUE,
-    TRANSPARENCY,
+    COLOR_ACCENT_STEEL, TRANSPARENCY,
 )
 from module_base import ModuleDrawHelper, SurfaceCache
 from effects_kit import draw_trace_progress
@@ -239,8 +239,9 @@ class SysInfoModule:
 
             align = position.get('align', 'left') if isinstance(position, dict) else 'left'
 
+            import theme
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "System", x, y, width, align=align
+                screen, "System", x, y, width, align=align, accent_color=theme.module_accent('sysinfo')
             )
 
             if not self.stats:

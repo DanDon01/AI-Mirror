@@ -481,8 +481,9 @@ class WeatherModule:
 
             # Title label
             from module_base import ModuleDrawHelper
+            import theme
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Weather", x, y, width
+                screen, "Weather", x, y, width, accent_color=theme.module_accent('weather')
             )
 
             if self.weather_data:

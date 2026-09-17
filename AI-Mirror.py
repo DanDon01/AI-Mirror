@@ -75,9 +75,11 @@ sys.stderr = sys.__stderr__
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # --- Project imports ---
-from config import CONFIG
+from config import CONFIG, IS_NIGHT
 import seasonal_theme
 import moments_seasonal
+import theme
+from portal_ring import PortalRing
 from calendar_module import CalendarModule
 from weather_module import WeatherModule
 from fitbit_module import FitbitModule
@@ -220,6 +222,12 @@ class MagicMirror:
             CONFIG.get('moments', {})
         )
         moments_library.register_all(self.director)
+
+        # Portal Ring: always-on ambient depth/HUD frame around the clear
+        # center (see portal_ring.py) -- not a Moment, permanent baseline
+        self.portal_ring = PortalRing(
+            self.screen.get_width(), self.screen.get_height(), is_night=IS_NIGHT
+        )
 
         # Wire moment-trigger callbacks for modules that support them (see
         # each module's set_moment_callback -- notify() is cheap to call
@@ -431,6 +439,12 @@ class MagicMirror:
                 elif event.key == pygame.K_m:
                     started = self.director.trigger_random()
                     logging.info(f"'m' pressed - trigger a moment: {'ok' if started else 'busy/none'}")
+                elif event.key == pygame.K_t:
+                    new_theme = theme.cycle()
+                    logging.info(f"'t' pressed - theme: {new_theme}")
+                    self.animation_manager.push_notification(
+                        f"Theme: {dict(theme.names())[new_theme]}", duration_ms=2500
+                    )
                 elif event.key == pygame.K_s:
                     if self.state == "active":
                         self.change_state("screensaver")
@@ -540,6 +554,20 @@ class MagicMirror:
             seasonal_theme.update(1.0 / max(self.frame_rate, 1))
             moments_seasonal.check_calendar_moments(self.director)
 
+            # Portal Ring backdrop: full-canvas starfield + the center ring,
+            # drawn first so modules sit on top of it (see portal_ring.py)
+            if self.state == "active":
+                weather_mod = self.modules.get('weather')
+                condition = None
+                wd = getattr(weather_mod, 'weather_data', None) if weather_mod else None
+                if wd:
+                    condition = (wd.get('weather') or [{}])[0].get('main', '').lower()
+                self.portal_ring.set_conditions(IS_NIGHT, condition)
+                self.portal_ring.draw(
+                    self.screen, dt=1.0 / max(self.frame_rate, 1),
+                    moment_active=self.director.is_active,
+                )
+
             layout_v2 = CONFIG.get('layout_v2', {})
             left_names = layout_v2.get('left_modules', [])
             right_names = layout_v2.get('right_modules', [])
@@ -605,6 +633,11 @@ class MagicMirror:
             # petals) for the active date range, if any (see seasonal_theme.py)
             if self.state == "active":
                 seasonal_theme.draw(self.screen)
+
+            # HUD viewfinder brackets frame the whole screen, on top of the
+            # modules -- the "looking through a ship's display" cue.
+            if self.state == "active":
+                self.portal_ring.draw_hud_frame(self.screen)
 
             # Center notifications (on top of everything in all states)
             self.animation_manager.draw_notifications(self.screen)

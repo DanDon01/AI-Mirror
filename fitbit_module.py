@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import time as time_module
 import pygame
 import logging
-from config import CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, TRANSPARENCY, COLOR_FONT_SUBTITLE, COLOR_FONT_BODY, COLOR_TEXT_SECONDARY
+from config import CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, TRANSPARENCY, COLOR_FONT_SUBTITLE, COLOR_FONT_BODY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_GREEN
 from api_tracker import api_tracker
 import os
 from pathlib import Path
@@ -322,8 +322,9 @@ class FitbitModule:
             align = position.get('align', 'left') if isinstance(position, dict) else 'left'
 
             from module_base import ModuleDrawHelper
+            import theme
             current_y = ModuleDrawHelper.draw_module_title(
-                screen, "Fitbit", x, y, width, align=align
+                screen, "Fitbit", x, y, width, align=align, accent_color=theme.module_accent('fitbit')
             )
 
             if self._api_retired:

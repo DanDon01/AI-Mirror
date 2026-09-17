@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import traceback
 from api_tracker import api_tracker
 from google_auth_oauthlib.flow import Flow
-from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY
+from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY, COLOR_ACCENT_PURPLE
 from background_fetcher import BackgroundFetcher
 from effects_kit import draw_flare
 from module_base import FLARE_DURATION_S
@@ -208,8 +208,9 @@ class CalendarModule:
                 self.small_font = small_f
 
             from module_base import ModuleDrawHelper
+            import theme
             current_y = ModuleDrawHelper.draw_module_title(
-                screen, "Calendar", x, y, width
+                screen, "Calendar", x, y, width, accent_color=theme.module_accent('calendar')
             )
 
             if self._events_changed_at is not None:

@@ -156,6 +156,7 @@ HA_TOKEN=
 | `d` | Toggle debug overlay (red grid + module bounds) |
 | `h` | Toggle Home Assistant dashboard overlay |
 | `m` | Trigger a random Moment now, ignoring cooldowns (see event_director.py) |
+| `t` | Cycle visual theme: Sci-Fi -> Luxury -> Sunset -> Mono (see theme.py) |
 | `q` / `Esc` | Quit application |
 | `1`-`9`, `0` | Toggle module visibility (1=weather, 2=calendar, 3=countdown, 4=smarthome, 5=greeting, 6=quote, 7=news, 8=fitbit, 9=openclaw, 0=sysinfo) |
 

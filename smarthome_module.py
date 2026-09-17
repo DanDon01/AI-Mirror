@@ -24,7 +24,7 @@ from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_BODY,
     COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM, COLOR_TITLE_BLUE,
     COLOR_ACCENT_GREEN, COLOR_ACCENT_RED, COLOR_ACCENT_AMBER,
-    COLOR_ACCENT_BLUE, TRANSPARENCY,
+    COLOR_ACCENT_BLUE, COLOR_ACCENT_TEAL, TRANSPARENCY,
 )
 from module_base import ModuleDrawHelper, SurfaceCache
 from effects_kit import draw_flare
@@ -69,6 +69,20 @@ DOMAIN_SECTIONS = [
 
 def _domain(entity_id):
     return entity_id.split('.')[0] if '.' in entity_id else ''
+
+
+def _draw_shield_check(screen, cx, cy, color, size=9):
+    """A small hand-drawn shield-with-checkmark glyph -- "all quiet" reads
+    as reassurance rather than another line of text to parse."""
+    pts = [
+        (cx, cy - size), (cx + size * 0.8, cy - size * 0.6),
+        (cx + size * 0.8, cy + size * 0.3), (cx, cy + size),
+        (cx - size * 0.8, cy + size * 0.3), (cx - size * 0.8, cy - size * 0.6),
+    ]
+    pygame.draw.polygon(screen, color, pts, 1)
+    pygame.draw.lines(screen, color, False, [
+        (cx - size * 0.35, cy), (cx - size * 0.05, cy + size * 0.3), (cx + size * 0.4, cy - size * 0.35),
+    ], 2)
 
 
 def _state_color(entity_id, state, attrs=None):
@@ -501,6 +515,11 @@ class SmartHomeModule:
                             )
                         if self._moment_callback and new in ('locked', 'armed_home', 'armed_away'):
                             self._moment_callback('house_armed', {'name': name})
+                    elif (self._moment_callback and old == 'off' and new == 'on'
+                          and _domain(eid) == 'binary_sensor'
+                          and self.data[eid].get('attributes', {}).get('device_class') == 'motion'):
+                        name = self.data[eid].get('attributes', {}).get('friendly_name', eid)
+                        self._moment_callback('motion_detected', {'name': name, 'side': 'left'})
 
         # A whole-house "all lights off" moment fires once on the
         # transition, not every update cycle while it stays dark.
@@ -671,8 +690,9 @@ class SmartHomeModule:
                 width, height = 300, 300
 
             self._ensure_fonts()
+            import theme
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Smart Home", x, y, width
+                screen, "Smart Home", x, y, width, accent_color=theme.module_accent('smarthome')
             )
 
             if not self.ha_url or not self.ha_token:
@@ -696,7 +716,14 @@ class SmartHomeModule:
                 and self.data.get(eid, {}).get('attributes', {}).get('device_class') == 'motion'
             )]
             motion = [eid for eid in self.entities if eid not in alerts and eid not in non_motion]
-            shown = (alerts + non_motion + motion)[:self.mini_entities]
+            # A wall of "Motion sensor.. Clear" repeated N times is the
+            # single worst offender for reading like a spreadsheet instead
+            # of a dashboard. Quiet motion sensors collapse into one line;
+            # only ones that actually triggered earn their own row.
+            motion_active = [eid for eid in motion
+                             if self.data.get(eid, {}).get('state') == 'on']
+            motion_clear = [eid for eid in motion if eid not in motion_active]
+            shown = (alerts + non_motion + motion_active)[:self.mini_entities]
             # Some useful display values live in attributes rather than state
             # (for example light brightness or a media title), so include
             # those in the cached-surface key too.
@@ -754,6 +781,23 @@ class SmartHomeModule:
 
                 surf = self._surface_cache.get_or_render(
                     f"ha_line_{i}", _render_line, data_hash
+                )
+                screen.blit(surf, (x + 14, draw_y))
+                draw_y += line_height
+
+            # Quiet motion sensors collapse into one reassuring line
+            # instead of N identical "Clear" rows.
+            if motion_clear and draw_y <= y + height - line_height:
+                _draw_shield_check(screen, x + 1, draw_y + 9, COLOR_ACCENT_GREEN)
+                label = "All quiet" if not shown else f"+{len(motion_clear)} quiet"
+
+                def _render_clear(lbl=label):
+                    surf = self.small_font.render(lbl, True, COLOR_TEXT_DIM)
+                    surf.set_alpha(TRANSPARENCY)
+                    return surf
+
+                surf = self._surface_cache.get_or_render(
+                    "ha_motion_clear", _render_clear, data_hash
                 )
                 screen.blit(surf, (x + 14, draw_y))
                 draw_y += line_height

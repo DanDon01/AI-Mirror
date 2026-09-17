@@ -73,10 +73,12 @@ COLOR_TEXT_SECONDARY = _bright((238, 240, 244))
 COLOR_TEXT_DIM = _bright((210, 213, 220))
 COLOR_TEXT_ACCENT = _bright((150, 210, 255))
 
-# Single luxury accent: champagne. Module labels, hairline rules, emphasis.
-COLOR_ACCENT_PRIMARY = _bright((242, 222, 172))
+# House accent: electric cyan, not champagne -- a ship's-HUD read, not
+# a minimal-luxury one. Module labels, hairline rules, emphasis, and the
+# default for anything not given its own accent in MODULE_ACCENTS below.
+COLOR_ACCENT_PRIMARY = _bright((110, 214, 255))
 
-# Module title color (legacy name; now the champagne accent)
+# Module title color (legacy name; now the house cyan accent)
 COLOR_TITLE_BLUE = COLOR_ACCENT_PRIMARY
 
 # Clock face: pure white, reads as engraved
@@ -88,8 +90,35 @@ COLOR_ACCENT_GREEN = _bright((150, 228, 178))
 COLOR_ACCENT_RED = _bright((242, 150, 150))
 COLOR_ACCENT_AMBER = _bright((246, 212, 150))
 
-# Separator lines (subtle dividers between sections)
-COLOR_SEPARATOR = _bright((105, 94, 68))
+# Per-module category accents -- every module used to share one champagne
+# label/hairline color, which is a big part of why the mirror read as one
+# flat look regardless of what data was actually on screen. These give
+# each module its own identity while staying in the same "bright enough
+# to read through glass" family as the accents above.
+COLOR_ACCENT_PURPLE = _bright((188, 160, 238))
+COLOR_ACCENT_TEAL = _bright((120, 224, 208))
+COLOR_ACCENT_GOLD = _bright((235, 188, 90))
+COLOR_ACCENT_CYAN = _bright((110, 202, 232))
+COLOR_ACCENT_STEEL = _bright((150, 176, 204))
+
+# Separator lines (subtle dividers between sections) -- cool steel-blue,
+# not the old warm champagne-adjacent grey.
+COLOR_SEPARATOR = _bright((70, 90, 110))
+
+# Module name -> its own label/hairline accent (module_base.draw_module_title).
+# Anything not listed falls back to the house cyan COLOR_ACCENT_PRIMARY.
+MODULE_ACCENTS = {
+    'weather': COLOR_ACCENT_BLUE,
+    'calendar': COLOR_ACCENT_PURPLE,
+    'countdown': COLOR_ACCENT_AMBER,
+    'smarthome': COLOR_ACCENT_TEAL,
+    'octopus_energy': COLOR_ACCENT_GOLD,
+    'stocks': COLOR_ACCENT_GOLD,
+    'news': COLOR_ACCENT_RED,
+    'fitbit': COLOR_ACCENT_GREEN,
+    'openclaw': COLOR_ACCENT_CYAN,
+    'sysinfo': COLOR_ACCENT_STEEL,
+}
 
 # Legacy aliases -- modules import these names
 COLOR_FONT_DEFAULT = COLOR_TEXT_PRIMARY
@@ -292,8 +321,13 @@ MOMENTS = {
     'enabled': True,
     'frequency': 1.0,
     'guest_mode': False,
-    'min_gap_s': 240.0,
-    'daily_cap': 40,
+    # A 4-minute minimum gap meant a normal few-minute look at the mirror
+    # had near-zero odds of ever showing anything built -- the code
+    # worked, but nobody would ever see it work. 90s/120-a-day is still
+    # far from constant, but it means something actually happens within
+    # a short session instead of only over many hours.
+    'min_gap_s': 90.0,
+    'daily_cap': 120,
     'recent_history': 6,
 }
 

@@ -10,8 +10,11 @@ import math
 from datetime import datetime, timedelta
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
-    COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY,
+    COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_ACCENT_AMBER,
+    COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM, LABEL_TRACKING,
+    load_font,
 )
+from effects_kit import draw_hero_glow
 
 logger = logging.getLogger("Countdown")
 
@@ -37,14 +40,11 @@ class CountdownModule:
 
     def _init_fonts(self):
         if self.title_font is None:
-            styling = CONFIG.get("module_styling", {})
-            fonts = styling.get("fonts", {})
-            title_size = fonts.get("title", {}).get("size", 18)
-            body_size = fonts.get("body", {}).get("size", 14)
-            small_size = fonts.get("small", {}).get("size", 12)
-            self.title_font = pygame.font.SysFont(FONT_NAME, title_size)
-            self.body_font = pygame.font.SysFont(FONT_NAME, body_size)
-            self.small_font = pygame.font.SysFont(FONT_NAME, small_size)
+            self.title_font = load_font('regular', 18)
+            self.body_font = load_font('regular', 14)
+            self.small_font = load_font('regular', 12)
+            self.hero_font = load_font('light', 52)
+            self.hero_unit_font = load_font('regular', 14)
 
     def set_notification_callback(self, callback):
         """Register a callback for center-screen notifications."""
@@ -125,8 +125,9 @@ class CountdownModule:
             self._init_fonts()
 
             from module_base import ModuleDrawHelper
+            import theme
             draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Countdowns", x, y, width
+                screen, "Countdowns", x, y, width, accent_color=theme.module_accent('countdown')
             )
 
             # Active timer
@@ -148,41 +149,69 @@ class CountdownModule:
                 screen.blit(timer_surf, (x, draw_y))
                 draw_y += 25
 
-            # Event countdowns
+            # Event countdowns. The soonest event is the hero stat -- a big
+            # number reads at a glance; "Christmas: 98 days" as a sentence
+            # doesn't. The rest stay compact but still number-led (23d
+            # Dentist, not Dentist: 23 days), so the eye lands on the count
+            # first everywhere in the module, not just the top one.
             countdowns = self._get_countdowns()
             max_display = 5 if timer_remaining is None else 4
 
+            if countdowns and draw_y <= y + height - 90:
+                hero = countdowns[0]
+                days = hero["days"]
+                if days == 0:
+                    num_text, unit_text, color = "TODAY", "", (152, 251, 152)
+                elif days == 1:
+                    num_text, unit_text, color = "1", "DAY", (173, 216, 230)
+                else:
+                    num_text, unit_text, color = str(days), "DAYS", COLOR_TEXT_PRIMARY
+
+                accent = theme.module_accent('countdown')
+                name_label = ModuleDrawHelper.render_tracked(
+                    self.small_font, hero["name"].upper(), accent
+                )
+                name_label.set_alpha(TRANSPARENCY)
+                screen.blit(name_label, (x, draw_y))
+
+                num_y = draw_y + name_label.get_height() + 4
+                num_surf = self.hero_font.render(num_text, True, color)
+                num_surf.set_alpha(TRANSPARENCY)
+                draw_hero_glow(screen, num_surf, x, num_y, accent, intensity=0.5)
+                screen.blit(num_surf, (x, num_y))
+                if unit_text:
+                    unit_surf = self.hero_unit_font.render(unit_text, True, COLOR_TEXT_DIM)
+                    unit_surf.set_alpha(TRANSPARENCY)
+                    screen.blit(unit_surf, (x + num_surf.get_width() + 8,
+                                            num_y + num_surf.get_height() - unit_surf.get_height() - 6))
+                draw_y = num_y + num_surf.get_height() + 12
+                countdowns = countdowns[1:]
+                max_display -= 1
+
             for event in countdowns[:max_display]:
+                if draw_y > y + height - 22:
+                    break
                 days = event["days"]
                 name = event["name"]
 
                 if days == 0:
-                    text = f"{name}: TODAY!"
-                    color = (152, 251, 152)
+                    count_text, color = "Today", (152, 251, 152)
                 elif days == 1:
-                    text = f"{name}: Tomorrow"
-                    color = (173, 216, 230)
-                elif days <= 7:
-                    text = f"{name}: {days} days"
-                    color = (173, 216, 230)
+                    count_text, color = "Tmrw", (173, 216, 230)
                 elif days <= 30:
-                    text = f"{name}: {days} days"
-                    color = COLOR_FONT_BODY
+                    count_text, color = f"{days}d", COLOR_FONT_BODY
                 else:
-                    text = f"{name}: {days} days"
-                    color = COLOR_FONT_SMALL
+                    count_text, color = f"{days}d", COLOR_FONT_SMALL
 
-                event_surf = self.body_font.render(text, True, color)
-                event_surf.set_alpha(TRANSPARENCY)
-                screen.blit(event_surf, (x, draw_y))
+                count_surf = self.body_font.render(f"{count_text:>4}", True, color)
+                count_surf.set_alpha(TRANSPARENCY)
+                screen.blit(count_surf, (x, draw_y))
 
-                # Date below
-                date_str = event["date"].strftime("%d %b %Y")
-                date_surf = self.small_font.render(date_str, True, COLOR_FONT_SMALL)
-                date_surf.set_alpha(TRANSPARENCY)
-                screen.blit(date_surf, (x + 10, draw_y + 18))
+                name_surf = self.body_font.render(name, True, COLOR_TEXT_SECONDARY)
+                name_surf.set_alpha(TRANSPARENCY)
+                screen.blit(name_surf, (x + count_surf.get_width() + 10, draw_y))
 
-                draw_y += 35
+                draw_y += 24
 
             if not countdowns and timer_remaining is None:
                 empty = self.body_font.render("No events configured", True, COLOR_FONT_SMALL)

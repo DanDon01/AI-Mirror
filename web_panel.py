@@ -72,6 +72,9 @@ PAGE = """<!DOCTYPE html>
 <h2>State</h2>
 <div class="row" id="states"></div>
 
+<h2>Theme</h2>
+<div class="row" id="themes"></div>
+
 <h2>Moments</h2>
 <div class="row">
   <button onclick="post('/api/trigger_moment')">Trigger a moment</button>
@@ -119,6 +122,27 @@ async function getStatus() {
 async function post(path) {
   await fetch(path, { method: "POST" });
   refresh();
+}
+
+async function loadThemes() {
+  try {
+    const r = await fetch("/api/themes");
+    const j = await r.json();
+    const box = document.getElementById("themes");
+    box.innerHTML = "";
+    for (const [key, label] of j.themes) {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (key === j.current) b.className = "state-active";
+      b.onclick = () => postTheme(key);
+      box.appendChild(b);
+    }
+  } catch (e) {}
+}
+
+async function postTheme(key) {
+  await fetch("/api/theme?value=" + key, { method: "POST" });
+  loadThemes();
 }
 
 function render(s) {
@@ -234,8 +258,10 @@ refresh();
 refreshLog();
 loadTickers();
 loadEntities();
+loadThemes();
 setInterval(refresh, 5000);
 setInterval(refreshLog, 10000);
+setInterval(loadThemes, 10000);
 </script>
 </body>
 </html>
@@ -295,6 +321,14 @@ class WebPanel:
                     if director:
                         director.guest_mode = not director.guest_mode
                         logger.info(f"Panel set guest mode: {'ON' if director.guest_mode else 'OFF'}")
+                elif cmd == "set_theme":
+                    import theme
+                    if theme.set_theme(value):
+                        logger.info(f"Panel set theme: {value}")
+                        if hasattr(self.mirror, "animation_manager"):
+                            self.mirror.animation_manager.push_notification(
+                                f"Theme: {dict(theme.names())[value]}", duration_ms=2500,
+                            )
             except Exception as e:
                 logger.error(f"Panel command {cmd}={value} failed: {e}")
 
@@ -335,6 +369,11 @@ class WebPanel:
                     opts = (sh.get_entity_options()
                             if sh and hasattr(sh, "get_entity_options") else [])
                     self._send(200, json.dumps({"entities": opts}))
+                elif url.path == "/api/themes":
+                    import theme
+                    self._send(200, json.dumps({
+                        "themes": theme.names(), "current": theme.current(),
+                    }))
                 else:
                     self._send(404, json.dumps({"error": "not found"}))
 
@@ -346,6 +385,10 @@ class WebPanel:
                     self._send(200, json.dumps({"ok": True}))
                 elif url.path == "/api/guest_mode":
                     panel.commands.put(("guest_mode", None))
+                    self._send(200, json.dumps({"ok": True}))
+                elif url.path == "/api/theme":
+                    value = qs.get("value", [""])[0]
+                    panel.commands.put(("set_theme", value))
                     self._send(200, json.dumps({"ok": True}))
                 elif url.path == "/api/toggle":
                     module = qs.get("module", [""])[0]

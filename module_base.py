@@ -119,25 +119,32 @@ class ModuleDrawHelper:
     _title_cache = {}
 
     @staticmethod
-    def draw_module_title(screen, text, x, y, width, align='left'):
+    def draw_module_title(screen, text, x, y, width, align='left', accent_color=None):
         """Draw a module label: tracked uppercase with a short hairline
-        rule in the champagne accent underneath.
+        rule in the given accent underneath (champagne by default, but
+        every module now gets its own category color -- see MODULE_ACCENTS
+        in config.py -- so the mirror reads as more than one flat look).
 
         Returns the y-offset below the label for content to start.
         """
         ModuleDrawHelper._ensure_fonts()
+        if accent_color is not None:
+            accent = accent_color
+        else:
+            import theme
+            accent = theme.primary()
 
-        key = (text, align)
+        key = (text, align, accent)
         label = ModuleDrawHelper._title_cache.get(key)
         if label is None:
             label = ModuleDrawHelper.render_tracked(
-                ModuleDrawHelper._label_font, text.upper(), COLOR_ACCENT_PRIMARY
+                ModuleDrawHelper._label_font, text.upper(), accent
             )
             label.set_alpha(TRANSPARENCY)
             ModuleDrawHelper._title_cache[key] = label
 
-        # A short champagne keyline gives each module a polished anchor without
-        # placing an opaque card over the mirror surface.
+        # A short keyline in the module's own accent gives each one a
+        # distinct anchor without placing an opaque card over the mirror.
         rule_w = 42
         if align == 'right':
             lx = x + width - label.get_width()
@@ -145,10 +152,11 @@ class ModuleDrawHelper:
             lx = x
         screen.blit(label, (lx, y))
 
+        import theme
         rule_y = y + label.get_height() + 5
         rule = pygame.Surface((rule_w, 2), pygame.SRCALPHA)
-        rule.fill((*COLOR_SEPARATOR, min(TRANSPARENCY, 190)))
-        rule.fill((*COLOR_ACCENT_PRIMARY, TRANSPARENCY), (0, 0, 7, 2))
+        rule.fill((*theme.separator(), min(TRANSPARENCY, 190)))
+        rule.fill((*accent, TRANSPARENCY), (0, 0, 7, 2))
         if align == 'right':
             screen.blit(rule, (x + width - rule_w, rule_y))
         else:
