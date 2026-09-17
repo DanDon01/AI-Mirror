@@ -194,6 +194,7 @@ HA_TOKEN=
 - Falls back to a simple procedural face when assets/avatar/ has no frames.
 
 ## Known Gotchas
+- `pygame.transform.smoothscale` segfaults (kills the whole process, not a catchable exception) when scaling from a zero-width or zero-height source surface -- e.g. `font.render('')` on a missing/empty string. Use `effects_kit.safe_smoothscale()` instead of calling `pygame.transform.smoothscale` directly anywhere a scaled surface's source text could plausibly be empty (moment banners, dynamic labels).
 - `Variables.env` path is `os.path.join(current_dir, '..', 'Variables.env')` - file must be in parent directory
 - Screen resolution is auto-detected at startup (`pygame.display.Info()`) - config values are overridden with actual display size
 - Audio device indices are hardware-specific (USB mic typically card 2 or 3 on Pi)
