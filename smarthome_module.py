@@ -27,6 +27,7 @@ from config import (
     COLOR_ACCENT_BLUE, TRANSPARENCY,
 )
 from module_base import ModuleDrawHelper, SurfaceCache
+from effects_kit import draw_flare
 from api_tracker import api_tracker
 from background_fetcher import BackgroundFetcher
 
@@ -719,6 +720,8 @@ class SmartHomeModule:
                 surf = self._surface_cache.get_or_render(
                     "ha_summary", _render_summary, data_hash
                 )
+                draw_flare(screen, x, draw_y, surf.get_width(), surf.get_height(),
+                          self._surface_cache.flare_alpha("ha_summary"))
                 screen.blit(surf, (x, draw_y))
                 draw_y += 24
 

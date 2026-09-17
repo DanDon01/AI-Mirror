@@ -6,6 +6,8 @@ rendering helpers, and surface caching. All modules use these helpers
 for a unified minimal-luxury visual style.
 """
 
+import time
+
 import pygame
 from config import (
     CONFIG, FONT_NAME, FONT_SIZE_TITLE, FONT_SIZE_BODY, FONT_SIZE_SMALL,
@@ -13,15 +15,21 @@ from config import (
     COLOR_TEXT_DIM, COLOR_ACCENT_PRIMARY, COLOR_SEPARATOR, TRANSPARENCY,
 )
 
+FLARE_DURATION_S = 1.4
+
 
 class SurfaceCache:
     """Cache rendered text surfaces to avoid per-frame font.render() calls.
 
-    Only re-renders when the source data actually changes.
+    Only re-renders when the source data actually changes -- and remembers
+    *when* it last changed, so callers can flash a brief "flare" (see
+    effects_kit.draw_flare) to draw the eye to what's new. Calm baseline,
+    loud change: static data stays quiet, changed data gets a moment.
     """
 
     def __init__(self):
         self._cache = {}
+        self._changed_at = {}
 
     def get_or_render(self, key, render_func, data_hash):
         """Return cached surface if data_hash unchanged, else re-render."""
@@ -30,14 +38,32 @@ class SurfaceCache:
             return entry[0]
         surface = render_func()
         self._cache[key] = (surface, data_hash)
+        # A key's first render (entry is None) doesn't count as a "change"
+        # worth flaring -- that's just the module appearing on boot.
+        if entry is not None:
+            self._changed_at[key] = time.time()
         return surface
+
+    def flare_alpha(self, key, duration=FLARE_DURATION_S):
+        """0-255, peaking right after `key` last changed and easing to 0
+        over `duration` seconds. 0 if it's never changed (or boot-rendered)."""
+        changed_at = self._changed_at.get(key)
+        if changed_at is None:
+            return 0
+        age = time.time() - changed_at
+        if age >= duration:
+            return 0
+        t = 1.0 - (age / duration)
+        return int(255 * (t * t))
 
     def invalidate(self, key=None):
         """Clear specific key or entire cache."""
         if key:
             self._cache.pop(key, None)
+            self._changed_at.pop(key, None)
         else:
             self._cache.clear()
+            self._changed_at.clear()
 
 
 class ModuleDrawHelper:

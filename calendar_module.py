@@ -12,6 +12,8 @@ from api_tracker import api_tracker
 from google_auth_oauthlib.flow import Flow
 from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY
 from background_fetcher import BackgroundFetcher
+from effects_kit import draw_flare
+from module_base import FLARE_DURATION_S
 import time
 
 # Google Calendar color mapping - these match the standard Google Calendar colors
@@ -54,6 +56,8 @@ class CalendarModule:
         self.today_highlight_color = (0, 40, 80, 120)
         self.color_map = None
         self._fetcher = BackgroundFetcher("calendar")
+        self._events_key = None
+        self._events_changed_at = None
 
         # Show last-good events immediately after a restart
         from data_cache import data_cache
@@ -162,6 +166,14 @@ class CalendarModule:
                 from data_cache import data_cache
                 data_cache.save("calendar", self.events)
                 logging.info(f"Calendar updated: {len(self.events)} events")
+
+                # "Calm for static, flare on change": a brief highlight the
+                # instant the event list actually differs, not on every
+                # routine refresh that comes back unchanged.
+                key = tuple(e.get('id', e.get('summary', '')) for e in self.events)
+                if self._events_key is not None and key != self._events_key:
+                    self._events_changed_at = time.time()
+                self._events_key = key
             else:
                 logging.error(f"Error updating Calendar data: {value}")
                 # Keep showing the previous events rather than blanking
@@ -199,7 +211,13 @@ class CalendarModule:
             current_y = ModuleDrawHelper.draw_module_title(
                 screen, "Calendar", x, y, width
             )
-            
+
+            if self._events_changed_at is not None:
+                age = time.time() - self._events_changed_at
+                if age < FLARE_DURATION_S:
+                    flare_a = int(255 * (1.0 - age / FLARE_DURATION_S) ** 2)
+                    draw_flare(screen, x, current_y, width, min(height, 120), flare_a)
+
             if not self.events:
                 debug_text = self.font.render("No calendar events", True, COLOR_TEXT_SECONDARY)
                 debug_text.set_alpha(TRANSPARENCY)

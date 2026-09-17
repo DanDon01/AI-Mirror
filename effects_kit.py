@@ -99,6 +99,20 @@ def soft_blob(width, color, alpha, height_ratio=0.42, seed=None):
     return pygame.image.frombuffer(rgba.tobytes(), (width, height), 'RGBA')
 
 
+def draw_flare(screen, x, y, w, h, flare_alpha, color=(196, 174, 128)):
+    """A brief soft highlight behind a rect whose data just changed --
+    the "loud change" half of "calm baseline, loud change" (see
+    module_base.SurfaceCache.flare_alpha, which supplies flare_alpha).
+    No-op when flare_alpha is 0, so calling this every frame for every
+    module is cheap."""
+    if flare_alpha <= 0:
+        return
+    radius = max(4, int(max(w, h) * 0.6))
+    glow = glow_sprite(radius, color, int(flare_alpha * 0.55), core_frac=0.2)
+    cx, cy = x + w // 2, y + h // 2
+    screen.blit(glow, (cx - glow.get_width() // 2, cy - glow.get_height() // 2))
+
+
 def vertical_gradient(width, height, top_color, bottom_color, top_alpha=255, bottom_alpha=255):
     """Precompute a linear top-to-bottom gradient (build once)."""
     surf = pygame.Surface((width, max(1, height)), pygame.SRCALPHA)

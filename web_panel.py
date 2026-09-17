@@ -75,8 +75,10 @@ PAGE = """<!DOCTYPE html>
 <h2>Moments</h2>
 <div class="row">
   <button onclick="post('/api/trigger_moment')">Trigger a moment</button>
+  <button id="guestModeBtn" onclick="post('/api/guest_mode')">Guest mode</button>
 </div>
 <div class="meta" id="momentMeta">Fires something now for guests, ignoring the usual rarity cooldowns.</div>
+<div class="meta" id="guestModeMeta">Guest mode: moments fire much more often while it's on -- for a party, not a normal day.</div>
 
 <h2>Modules</h2>
 <div class="row" id="modules"></div>
@@ -161,6 +163,11 @@ function render(s) {
   } else {
     momentMeta.textContent = "Fires something now for guests, ignoring the usual rarity cooldowns.";
   }
+
+  const guestBtn = document.getElementById("guestModeBtn");
+  const guestOn = !!(s.moments && s.moments.guest_mode);
+  guestBtn.className = guestOn ? "on" : "off";
+  guestBtn.textContent = guestOn ? "Guest mode: ON" : "Guest mode: OFF";
 }
 
 async function refreshLog() {
@@ -283,6 +290,11 @@ class WebPanel:
                     if director:
                         started = director.trigger_random()
                         logger.info(f"Panel triggered a moment: {'ok' if started else 'busy/none'}")
+                elif cmd == "guest_mode":
+                    director = getattr(self.mirror, "director", None)
+                    if director:
+                        director.guest_mode = not director.guest_mode
+                        logger.info(f"Panel set guest mode: {'ON' if director.guest_mode else 'OFF'}")
             except Exception as e:
                 logger.error(f"Panel command {cmd}={value} failed: {e}")
 
@@ -331,6 +343,9 @@ class WebPanel:
                 qs = parse_qs(url.query)
                 if url.path == "/api/trigger_moment":
                     panel.commands.put(("trigger_moment", None))
+                    self._send(200, json.dumps({"ok": True}))
+                elif url.path == "/api/guest_mode":
+                    panel.commands.put(("guest_mode", None))
                     self._send(200, json.dumps({"ok": True}))
                 elif url.path == "/api/toggle":
                     module = qs.get("module", [""])[0]
@@ -402,6 +417,7 @@ class WebPanel:
             "api": api_tracker.get_summary(),
             "moments": {
                 "active": director.active_name if director else None,
+                "guest_mode": bool(director.guest_mode) if director else False,
             } if director else None,
         }
 

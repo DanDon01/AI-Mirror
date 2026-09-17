@@ -14,6 +14,8 @@ from config import (
     COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_TEXT_DIM,
 )
 from background_fetcher import BackgroundFetcher
+from effects_kit import draw_flare
+from module_base import FLARE_DURATION_S
 
 logger = logging.getLogger("News")
 
@@ -43,6 +45,7 @@ class NewsModule:
         self._known_titles = set()
         self._notify = None
         self._moment_notify = None
+        self._headline_changed_at = None
         self.current_index = 0
         self.last_rotation = time_module.time()
         self.last_fetch = datetime.min
@@ -111,6 +114,7 @@ class NewsModule:
                 for h in new_headlines[:2]:
                     if h['title'] not in self._known_titles:
                         self._notify(h['title'], duration_ms=6000)
+                        self._headline_changed_at = time_module.time()
                         if self._moment_notify:
                             self._moment_notify('breaking_news', {'headline': h['title']})
                         break  # One notification per fetch cycle
@@ -191,6 +195,12 @@ class NewsModule:
             draw_y = ModuleDrawHelper.draw_module_title(
                 screen, "News", x, y, width, align=align
             )
+
+            if self._headline_changed_at is not None:
+                age = time_module.time() - self._headline_changed_at
+                if age < FLARE_DURATION_S:
+                    flare_a = int(255 * (1.0 - age / FLARE_DURATION_S) ** 2)
+                    draw_flare(screen, x, draw_y, width, 60, flare_a)
 
             if not self.headlines:
                 empty = self.headline_font.render("Loading headlines...", True, COLOR_FONT_SMALL)

@@ -62,6 +62,12 @@ class Director:
         self.frequency = max(0.05, cfg.get('frequency', 1.0))
         self.min_gap_s = cfg.get('min_gap_s', 240.0)
         self.daily_cap = cfg.get('daily_cap', 40)
+        # Guests over: moments fire much more eagerly for as long as this
+        # stays on (a shorter gap and a livelier idle roll), independent of
+        # force_trigger/trigger_random which fire a single moment on demand.
+        self.guest_mode = cfg.get('guest_mode', False)
+        self._guest_gap_divisor = 6.0
+        self._guest_idle_multiplier = 5.0
 
         self._moments = {}
         self._pending_events = []
@@ -156,9 +162,14 @@ class Director:
 
         events, self._pending_events = self._pending_events, []
 
-        if self._played_today >= self.daily_cap:
+        # Guest mode ignores the daily cap entirely (a party is exactly
+        # the day the cap would otherwise start throttling things).
+        if self._played_today >= self.daily_cap and not self.guest_mode:
             return
-        if time.time() - self._last_played_at < self.min_gap_s / self.frequency:
+        gap = self.min_gap_s / self.frequency
+        if self.guest_mode:
+            gap /= self._guest_gap_divisor
+        if time.time() - self._last_played_at < gap:
             return
 
         # Event-triggered candidates take priority over ambient whimsy.
@@ -173,7 +184,10 @@ class Director:
 
         # Ambient/whimsy moments (no specific trigger) compete for idle
         # airtime -- scaled so they stay a rare surprise, not a tic.
-        if random.random() < 0.0006 * self.frequency:
+        idle_chance = 0.0006 * self.frequency
+        if self.guest_mode:
+            idle_chance *= self._guest_idle_multiplier
+        if random.random() < idle_chance:
             candidates = [
                 m for m in self._moments.values()
                 if not m.trigger_events and self._cooldown_ok(m)

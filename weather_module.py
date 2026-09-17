@@ -13,7 +13,7 @@ from config import (
 import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 from visual_effects import VisualEffects
-from effects_kit import draw_hero_glow
+from effects_kit import draw_hero_glow, draw_flare
 from config import draw_module_background_fallback
 from api_tracker import api_tracker
 from background_fetcher import BackgroundFetcher
@@ -508,6 +508,9 @@ class WeatherModule:
                 )
                 draw_hero_glow(screen, hero, x, draw_y, self.get_temperature_color(temp),
                                intensity=1.0 if IS_NIGHT else 0.3)
+                draw_flare(screen, x, draw_y, hero.get_width(), hero.get_height(),
+                          self._surface_cache.flare_alpha("weather_hero"),
+                          self.get_temperature_color(temp))
                 screen.blit(hero, (x, draw_y))
 
                 # Condition sits beside the hero, baseline-ish aligned
