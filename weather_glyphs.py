@@ -239,19 +239,19 @@ def wind_compass(surf, cx, cy, r, color, deg=None):
                          (cx + math.cos(ang) * r, cy + math.sin(ang) * r), 1)
     if deg is None:
         return
-    # Meteorological bearing is the direction the wind blows FROM.
-    ang = math.radians(float(deg) - 90)
-    tip = (cx + math.cos(ang) * r * 0.66, cy + math.sin(ang) * r * 0.66)
-    back = math.radians(float(deg) + 90)
-    tail = (cx + math.cos(back) * r * 0.30, cy + math.sin(back) * r * 0.30)
-    left = math.radians(float(deg) + 150)
-    right = math.radians(float(deg) - 210)
-    pygame.draw.polygon(surf, (*color, 235), [
-        tip,
-        (cx + math.cos(left) * r * 0.26, cy + math.sin(left) * r * 0.26),
-        tail,
-        (cx + math.cos(right) * r * 0.26, cy + math.sin(right) * r * 0.26),
+    # Meteorological bearing is the direction the wind blows FROM, so the
+    # arrowhead sits on that side of the rose. A solid arrowhead reads at
+    # a glance where a thin quad just disappears against the rose ticks.
+    base = float(deg) - 90.0
+
+    def at(offset, radius):
+        a = math.radians(base + offset)
+        return (cx + math.cos(a) * r * radius, cy + math.sin(a) * r * radius)
+
+    pygame.draw.polygon(surf, (*color, 245), [
+        at(0, 0.74), at(150, 0.38), at(180, 0.16), at(-150, 0.38),
     ])
+    pygame.draw.circle(surf, (*color, 180), (int(cx), int(cy)), 2)
 
 
 def compass_label(deg):

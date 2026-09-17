@@ -12,11 +12,11 @@ from datetime import datetime, timedelta
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
     COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_TEXT_DIM,
-    COLOR_ACCENT_RED,
+    COLOR_ACCENT_RED, COLOR_ACCENT_AMBER, COLOR_TEXT_SECONDARY,
 )
 from background_fetcher import BackgroundFetcher
 from effects_kit import draw_flare
-from module_base import FLARE_DURATION_S
+from module_base import FLARE_DURATION_S, InstrumentPanel
 
 logger = logging.getLogger("News")
 
@@ -29,7 +29,7 @@ DEFAULT_FEEDS = [
 ]
 
 
-class NewsModule:
+class NewsModule(InstrumentPanel):
     """Displays scrolling news headlines from RSS feeds."""
 
     def __init__(self, feeds=None, rotation_interval=15, max_headlines=8, **kwargs):
@@ -178,69 +178,105 @@ class NewsModule:
             self.current_index = (self.current_index + 1) % len(self.headlines)
             self.last_rotation = time_module.time()
 
-    def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position["x"], position["y"]
-                width = position.get("width", 300)
-                height = position.get("height", 200)
+    def _wrap(self, font_key, text, max_w):
+        font = getattr(self, font_key)
+        words, lines, line = text.split(), [], ""
+        for word in words:
+            trial = f"{line} {word}".strip()
+            if font.size(trial)[0] <= max_w or not line:
+                line = trial
             else:
-                x, y = position
-                width, height = 300, 200
+                lines.append(line)
+                line = word
+        if line:
+            lines.append(line)
+        return lines
 
-            self._init_fonts()
+    def draw(self, screen, position):
+        """COMMS: inbound headline feed."""
+        self.draw_instrument(screen, position, default=(300, 200))
 
-            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+    def _render_panel(self, surf, width, height, position=None):
+        from effects_kit import draw_chamfer_frame
+        import theme
+        accent = theme.module_accent('news')
+        pad = 6
+        ix, iw = pad, width - pad * 2
 
-            from module_base import ModuleDrawHelper
-            import theme
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "News", x, y, width, align=align, accent_color=theme.module_accent('news')
-            )
+        count = len(self.headlines or [])
+        cur = self._panel_header(
+            surf, ix, 0, iw, "Comms", accent, align='right',
+            subtitle="INBOUND FEED",
+            right_text=f"{count} ITEMS" if count else "NO SIGNAL",
+            right_color=COLOR_TEXT_DIM if count else COLOR_ACCENT_AMBER)
 
-            if self._headline_changed_at is not None:
-                age = time_module.time() - self._headline_changed_at
-                if age < FLARE_DURATION_S:
-                    flare_a = int(255 * (1.0 - age / FLARE_DURATION_S) ** 2)
-                    draw_flare(screen, x, draw_y, width, 60, flare_a)
+        if not self.headlines:
+            msg = self._text('f_small', "ACQUIRING FEED...", COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(msg, (ix + iw - msg.get_width(), cur + 8))
+            return
 
-            if not self.headlines:
-                empty = self.headline_font.render("Loading headlines...", True, COLOR_FONT_SMALL)
-                ModuleDrawHelper.blit_aligned(screen, empty, x, draw_y, width, align)
-                return
+        current = self.headlines[self.current_index % count]
 
-            # Draw current headline (large, wrapped)
-            text_width = width - 20
-            current = self.headlines[self.current_index]
-            lines = self._word_wrap(current["title"], self.headline_font, text_width)
+        # Active transmission card
+        body_lines = self._wrap('f_small', current.get('title', ''), iw - 20)[:4]
+        card_h = 26 + len(body_lines) * 17 + 8
+        card_h = min(card_h, max(50, height - cur - 60))
+        draw_chamfer_frame(surf, ix, cur, iw, card_h, accent, alpha=55, cut=8)
 
-            for line in lines[:3]:  # Max 3 lines per headline
-                line_surf = self.headline_font.render(line, True, COLOR_FONT_BODY)
-                line_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, line_surf, x, draw_y, width, align)
-                draw_y += 20
+        # Source chip plus a signal-strength tick group
+        src = (current.get('source') or 'FEED').upper()[:14]
+        chip = self._text('f_nano', src, accent, spacing=1)
+        chip_w = chip.get_width() + 12
+        pygame.draw.rect(surf, (*accent, 30), (ix + 8, cur + 6, chip_w, 13))
+        pygame.draw.rect(surf, (*accent, 140), (ix + 8, cur + 6, chip_w, 13), 1)
+        surf.blit(chip, (ix + 14, cur + 7))
 
-            # Source and position indicator
-            draw_y += 5
-            source_text = current["source"]
-            pos_text = f"{self.current_index + 1}/{len(self.headlines)}"
-            source_surf = self.source_font.render(f"{source_text}  |  {pos_text}", True, COLOR_FONT_SMALL)
-            source_surf.set_alpha(TRANSPARENCY)
-            ModuleDrawHelper.blit_aligned(screen, source_surf, x, draw_y, width, align)
+        for i in range(4):
+            bx = ix + iw - 10 - (3 - i) * 5
+            bh = 3 + i * 2
+            pygame.draw.rect(surf, (*accent, 220 if i < 3 else 70),
+                             (bx, cur + 18 - bh, 3, bh))
 
-            # Thin progress bar showing position in headlines
-            draw_y += 15
-            bar_width = min(width, 120)
-            segment_w = bar_width // max(len(self.headlines), 1)
-            bar_total_w = len(self.headlines) * (segment_w + 2) - 2
-            bar_x = x + width - bar_total_w if align == 'right' else x
-            for i in range(len(self.headlines)):
-                color = (200, 200, 200) if i == self.current_index else (40, 40, 40)
-                sx = bar_x + i * (segment_w + 2)
-                pygame.draw.rect(screen, color, (sx, draw_y, segment_w, 2))
+        ty = cur + 24
+        for line in body_lines:
+            ls = self._text('f_small', line, COLOR_FONT_BODY)
+            surf.blit(ls, (ix + 10, ty))
+            ty += 17
+        cur += card_h + 8
 
-        except Exception as e:
-            logger.error(f"Error drawing news module: {e}")
+        # Rotation position: one cell per item in the feed
+        # Capped so a two-item feed does not render as two huge slabs
+        cell_w = max(3, min(26, int((iw - (count - 1) * 2) / max(1, count))))
+        for i in range(count):
+            cx = ix + i * (cell_w + 2)
+            if cx + cell_w > ix + iw:
+                break
+            lit = (i == self.current_index % count)
+            pygame.draw.rect(surf, (*accent, 235 if lit else 45),
+                             (cx, cur, cell_w, 3 if lit else 2))
+        cur += 10
+
+        # Queued headlines
+        if cur + 20 < height:
+            ql = self._text('f_nano', "QUEUE", accent, spacing=2)
+            surf.blit(ql, (ix + iw - ql.get_width(), cur))
+            cur += ql.get_height() + 4
+            for offset in range(1, min(4, count)):
+                if cur + 14 > height:
+                    break
+                item = self.headlines[(self.current_index + offset) % count]
+                title = item.get('title', '')
+                trimmed = self._wrap('f_nano', title, iw - 16)[:1]
+                if not trimmed:
+                    continue
+                text = trimmed[0]
+                if len(text) < len(title):
+                    text = text.rstrip() + ".."
+                ts = self._text('f_nano', text, COLOR_TEXT_DIM, spacing=1)
+                pygame.draw.circle(surf, (*accent, 150),
+                                   (int(ix + iw - 4), int(cur + 5)), 2)
+                surf.blit(ts, (ix + iw - 12 - ts.get_width(), cur))
+                cur += 14
 
     def cleanup(self):
         pass

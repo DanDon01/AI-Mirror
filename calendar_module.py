@@ -10,10 +10,10 @@ from dotenv import load_dotenv
 import traceback
 from api_tracker import api_tracker
 from google_auth_oauthlib.flow import Flow
-from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY, COLOR_ACCENT_PURPLE
+from config import FONT_NAME, COLOR_FONT_DEFAULT, COLOR_FONT_BODY, COLOR_PASTEL_RED, TRANSPARENCY, CONFIG, COLOR_TEXT_DIM, COLOR_TEXT_SECONDARY, COLOR_ACCENT_PURPLE
 from background_fetcher import BackgroundFetcher
 from effects_kit import draw_flare
-from module_base import FLARE_DURATION_S
+from module_base import FLARE_DURATION_S, InstrumentPanel
 import time
 
 # Google Calendar color mapping - these match the standard Google Calendar colors
@@ -40,7 +40,7 @@ DEFAULT_CALENDAR_COLORS = [
     (240, 140, 140)   # Red
 ]
 
-class CalendarModule:
+class CalendarModule(InstrumentPanel):
     def __init__(self, config):
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
         self.config = config
@@ -186,114 +186,137 @@ class CalendarModule:
             return
         self._fetcher.submit(self._fetch_events_blocking)
 
-    def draw(self, screen, position):
-        """Draw calendar with floating text on black -- no background."""
-        try:
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
-                width = position.get('width', 300)
-                height = position.get('height', 300)
-            else:
-                x, y = position
-                width, height = 300, 300
-
-            styling = CONFIG.get('module_styling', {})
-            line_height = styling.get('spacing', {}).get('line_height', 28)
-
-            if not self.font:
-                from module_base import ModuleDrawHelper
-                title_f, body_f, small_f = ModuleDrawHelper.get_fonts()
-                self.title_font = title_f
-                self.font = body_f
-                self.small_font = small_f
-
-            from module_base import ModuleDrawHelper
-            import theme
-            current_y = ModuleDrawHelper.draw_module_title(
-                screen, "Calendar", x, y, width, accent_color=theme.module_accent('calendar')
-            )
-
-            if self._events_changed_at is not None:
-                age = time.time() - self._events_changed_at
-                if age < FLARE_DURATION_S:
-                    flare_a = int(255 * (1.0 - age / FLARE_DURATION_S) ** 2)
-                    draw_flare(screen, x, current_y, width, min(height, 120), flare_a)
-
-            if not self.events:
-                debug_text = self.font.render("No calendar events", True, COLOR_TEXT_SECONDARY)
-                debug_text.set_alpha(TRANSPARENCY)
-                screen.blit(debug_text, (x, current_y))
-                return
-            
-            for event in self.events[:6]:
-                if current_y > y + height - line_height:
-                    break
+    def parsed_events(self, limit=7):
+        """Events resolved to real datetimes, soonest first."""
+        out = []
+        now = datetime.datetime.now()
+        for event in self.events or []:
+            start = event.get('start', {})
+            when, all_day = None, False
+            if 'dateTime' in start:
                 try:
-                    event_color = self.get_event_color(event)
+                    when = datetime.datetime.fromisoformat(
+                        str(start['dateTime']).replace('Z', '+00:00'))
+                    when = when.astimezone().replace(tzinfo=None)
+                except (TypeError, ValueError):
+                    when = None
+            elif 'date' in start:
+                try:
+                    when = datetime.datetime.fromisoformat(str(start['date']))
+                    all_day = True
+                except (TypeError, ValueError):
+                    when = None
+            if when is None:
+                continue
+            out.append({
+                'when': when,
+                'all_day': all_day,
+                'summary': event.get('summary', 'No title'),
+                'color': self.get_event_color(event),
+                'delta': when - now,
+            })
+        out.sort(key=lambda e: e['when'])
+        return out[:limit]
 
-                    # Check if event is today
-                    is_today = False
-                    start = event.get('start', {})
-                    if 'dateTime' in start:
-                        try:
-                            dt = datetime.datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                            is_today = dt.date() == datetime.datetime.now().date()
-                        except Exception:
-                            pass
-                    elif 'date' in start:
-                        try:
-                            dt = datetime.datetime.fromisoformat(start['date'])
-                            is_today = dt.date() == datetime.datetime.now().date()
-                        except Exception:
-                            pass
+    @staticmethod
+    def _day_chip(when, now):
+        days = (when.date() - now.date()).days
+        if days == 0:
+            return "TODAY"
+        if days == 1:
+            return "TOMORROW"
+        if days < 7:
+            return when.strftime("%A").upper()
+        return when.strftime("%a %d %b").upper()
 
-                    # Today's events get a slightly wider indicator bar
-                    # instead of a background box (boxes break the
-                    # floating-on-glass look)
-                    bar_w = 3 if is_today else 2
-                    pygame.draw.rect(screen, event_color, (x, current_y + 2, bar_w, 34))
+    @staticmethod
+    def _countdown_label(delta):
+        seconds = delta.total_seconds()
+        if seconds < 0:
+            return "NOW"
+        if seconds < 3600:
+            return f"IN {int(seconds // 60)}M"
+        if seconds < 86400:
+            return f"IN {int(seconds // 3600)}H"
+        return f"IN {int(seconds // 86400)}D"
 
-                    # Format start time/date
-                    start = event.get('start', {})
-                    if 'dateTime' in start:
-                        try:
-                            dt = datetime.datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                            date_str = dt.strftime('%a %H:%M')
-                        except Exception:
-                            date_str = start['dateTime'][:16].replace('T', ' ')
-                    else:
-                        date_str = "All day"
+    def draw(self, screen, position):
+        """SCHEDULE: the calendar as a timeline rail."""
+        self.draw_instrument(screen, position, default=(300, 300))
 
-                    date_surface = self.small_font.render(date_str, True, COLOR_TEXT_DIM)
-                    date_surface.set_alpha(TRANSPARENCY)
-                    screen.blit(date_surface, (x + 10, current_y))
+    def _render_panel(self, surf, width, height, position=None):
+        import theme
+        accent = theme.module_accent('calendar')
+        pad = 6
+        ix, iw = pad, width - pad * 2
 
-                    # Event title
-                    title = event.get('summary', 'No title')
-                    max_chars = max(20, (width - 15) // 8)
-                    if len(title) > max_chars:
-                        title = title[:max_chars - 3] + "..."
-                    title_surface = self.font.render(title, True, event_color)
-                    title_surface.set_alpha(TRANSPARENCY)
-                    screen.blit(title_surface, (x + 10, current_y + 16))
+        events = self.parsed_events(7)
+        cur = self._panel_header(
+            surf, ix, 0, iw, "Schedule", accent,
+            subtitle=datetime.datetime.now().strftime("%a %d %B").upper(),
+            right_text=f"{len(events)} LOGGED" if events else None)
 
-                    current_y += 38
+        if not events:
+            msg = self._text('f_small', "NO EVENTS SCHEDULED",
+                             COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(msg, (ix, cur + 8))
+            return
 
-                except Exception as e:
-                    logging.error(f"Error drawing event: {e}")
-                    current_y += 28
-        
-        except Exception as e:
-            logging.error(f"Error drawing calendar: {e}")
-            logging.error(traceback.format_exc())
-            
-            # Draw error message
-            try:
-                error_font = pygame.font.Font(None, 24)
-                error_text = error_font.render("Calendar Error", True, (255, 50, 50))
-                screen.blit(error_text, (x + 10, y + 10))
-            except Exception:
-                pass  # Last resort - if even error display fails
+        rail_x = ix + 16
+        now = datetime.datetime.now()
+
+        # "NOW" origin marker at the top of the rail
+        pygame.draw.circle(surf, (255, 255, 255, 235), (int(rail_x), int(cur + 5)), 3)
+        now_lbl = self._text('f_nano', "NOW", COLOR_TEXT_SECONDARY, spacing=2)
+        surf.blit(now_lbl, (rail_x + 12, cur))
+        time_lbl = self._text('f_nano', now.strftime("%H:%M"), COLOR_TEXT_DIM, spacing=1)
+        surf.blit(time_lbl, (ix + iw - time_lbl.get_width(), cur))
+        cur += 14
+
+        last_chip = None
+        rail_top = cur
+        rail_bottom = cur
+        for item in events:
+            if cur + 34 > height:
+                break
+
+            chip = self._day_chip(item['when'], now)
+            if chip != last_chip:
+                if cur + 48 > height:
+                    break
+                cs = self._text('f_nano', chip, accent, spacing=2)
+                surf.blit(cs, (rail_x + 12, cur))
+                pygame.draw.line(surf, (*accent, 45),
+                                 (rail_x + 16 + cs.get_width(), cur + cs.get_height() / 2),
+                                 (ix + iw, cur + cs.get_height() / 2), 1)
+                cur += cs.get_height() + 5
+                last_chip = chip
+
+            node_y = cur + 9
+            pygame.draw.circle(surf, (*item['color'], 70), (int(rail_x), int(node_y)), 6)
+            pygame.draw.circle(surf, (*item['color'], 245), (int(rail_x), int(node_y)), 3)
+            pygame.draw.line(surf, (*item['color'], 120),
+                             (rail_x + 6, node_y), (rail_x + 12, node_y), 1)
+
+            when_text = "ALL DAY" if item['all_day'] else item['when'].strftime("%H:%M")
+            wt = self._text('f_small', when_text, COLOR_FONT_BODY)
+            surf.blit(wt, (rail_x + 16, cur))
+            cd = self._text('f_nano', self._countdown_label(item['delta']),
+                            COLOR_TEXT_DIM, spacing=1)
+            surf.blit(cd, (ix + iw - cd.get_width(), cur + 3))
+
+            title = item['summary']
+            max_chars = max(14, int((iw - 26) / 5.6))
+            if len(title) > max_chars:
+                title = title[:max_chars - 2].rstrip() + ".."
+            ts = self._text('f_nano', title.upper(), item['color'], spacing=1)
+            surf.blit(ts, (rail_x + 16, cur + wt.get_height() - 1))
+
+            rail_bottom = node_y
+            cur += 32
+
+        pygame.draw.line(surf, (*accent, 55), (rail_x, rail_top),
+                         (rail_x, rail_bottom), 1)
 
     def get_event_color(self, event):
         """Get the color for an event based on Google Calendar color scheme"""

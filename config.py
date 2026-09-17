@@ -294,10 +294,10 @@ LAYOUT_V2 = {
     # graph -- and needs several times the room a few lines of text do.
     'module_weights': {
         # Graphical instrument panels need room; text modules do not.
-        'weather': 2.15, 'smarthome': 1.35, 'octopus_energy': 1.14,
-        'calendar': 1.08, 'countdown': 0.78,
-        'fitbit': 2.9, 'news': 1.15, 'sysinfo': 0.72, 'openclaw': 0.85,
-        'phone': 0.7, 'quote': 0.6, 'greeting': 0.55,
+        'weather': 2.15, 'smarthome': 1.5, 'octopus_energy': 1.3,
+        'calendar': 0.95, 'countdown': 0.45,
+        'fitbit': 2.6, 'news': 1.05, 'sysinfo': 0.65, 'openclaw': 0.8,
+        'phone': 0.42, 'quote': 0.32, 'greeting': 0.26,
     },
 }
 

@@ -13,8 +13,8 @@ import pygame
 from config import (
     COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_BLUE,
     TRANSPARENCY, load_font,
-)
-from module_base import ModuleDrawHelper, SurfaceCache
+    COLOR_TEXT_DIM,)
+from module_base import ModuleDrawHelper, SurfaceCache, InstrumentPanel
 
 logger = logging.getLogger("Greeting")
 
@@ -78,7 +78,7 @@ def _get_time_period():
     return 'night'
 
 
-class GreetingModule:
+class GreetingModule(InstrumentPanel):
     def __init__(self, rotation_interval=60, **kwargs):
         self.rotation_interval = timedelta(seconds=rotation_interval)
         self.last_rotation = datetime.min
@@ -116,76 +116,48 @@ class GreetingModule:
             self.last_rotation = now
 
     def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
-                width = position.get('width', 300)
-                height = position.get('height', 300)
+        """A greeting is text by nature -- it gets the house typography and
+        rule, not a gauge."""
+        self.draw_instrument(screen, position, default=(300, 200))
+
+    def _render_panel(self, surf, width, height, position=None):
+        import theme
+        accent = theme.module_accent('greeting')
+        pad = 6
+        ix, iw = pad, width - pad * 2
+        cur = 4
+
+        if self.current_greeting:
+            hero = self._text('f_big', str(self.current_greeting), COLOR_TEXT_PRIMARY)
+            surf.blit(hero, (ix + iw - hero.get_width(), cur))
+            cur += hero.get_height() + 4
+            lead = int(iw * 0.34)
+            pygame.draw.line(surf, (*accent, 45), (ix, cur), (ix + iw - lead, cur), 1)
+            pygame.draw.line(surf, (*accent, 170), (ix + iw - lead, cur), (ix + iw, cur), 1)
+            cur += 7
+
+        if self.current_affirmation and cur + 14 < height:
+            for line in self._wrap_text(str(self.current_affirmation), iw):
+                if cur + 14 > height:
+                    break
+                ls = self._text('f_nano', line.upper(), COLOR_TEXT_DIM, spacing=1)
+                surf.blit(ls, (ix + iw - ls.get_width(), cur))
+                cur += 13
+
+    def _wrap_text(self, text, max_w):
+        font = self.f_nano
+        words, lines, line = text.split(), [], ""
+        for word in words:
+            trial = f"{line} {word}".strip()
+            if font.size(trial.upper())[0] <= max_w or not line:
+                line = trial
             else:
-                x, y = position
-                width, height = 300, 300
+                lines.append(line)
+                line = word
+        if line:
+            lines.append(line)
+        return lines[:3]
 
-            if self.title_font is None:
-                title_f, body_f, small_f = ModuleDrawHelper.get_fonts()
-                self.title_font = title_f
-                self.body_font = body_f
-                self.small_font = small_f
-
-            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
-
-            # No label: the greeting is its own hero, a label adds clutter
-            draw_y = y + 6
-
-            data_hash = f"{self.current_greeting}|{self.current_affirmation}"
-
-            if self.current_greeting:
-                def _render_greeting(text=self.current_greeting):
-                    # The greeting is this module's hero: large and light
-                    font = load_font('regular', 30)
-                    surf = font.render(text, True, COLOR_TEXT_PRIMARY)
-                    surf.set_alpha(TRANSPARENCY)
-                    return surf
-
-                greeting_surf = self._surface_cache.get_or_render(
-                    "greeting", _render_greeting, data_hash
-                )
-                ModuleDrawHelper.blit_aligned(screen, greeting_surf, x, draw_y, width, align)
-                draw_y += greeting_surf.get_height() + 8
-
-            if self.current_affirmation:
-                # Word-wrap the affirmation to fit the column width
-                words = self.current_affirmation.split()
-                lines = []
-                current_line = ""
-                for word in words:
-                    test = f"{current_line} {word}".strip()
-                    test_w = self.small_font.size(test)[0]
-                    if test_w > width - 4:
-                        if current_line:
-                            lines.append(current_line)
-                        current_line = word
-                    else:
-                        current_line = test
-                if current_line:
-                    lines.append(current_line)
-
-                for i, line in enumerate(lines):
-                    if draw_y > y + height - 20:
-                        break
-
-                    def _render_line(text=line, idx=i):
-                        surf = self.small_font.render(text, True, COLOR_TEXT_SECONDARY)
-                        surf.set_alpha(TRANSPARENCY)
-                        return surf
-
-                    line_surf = self._surface_cache.get_or_render(
-                        f"affirm_{i}", _render_line, data_hash
-                    )
-                    ModuleDrawHelper.blit_aligned(screen, line_surf, x, draw_y, width, align)
-                    draw_y += line_surf.get_height() + 2
-
-        except Exception as e:
-            logger.error(f"Error drawing greeting module: {e}")
 
     def cleanup(self):
         pass

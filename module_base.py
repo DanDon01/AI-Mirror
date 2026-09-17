@@ -132,6 +132,22 @@ class InstrumentPanel:
             self._layer = layer
         return layer
 
+    def _cached_panel(self, key, width, height, data_hash, render_fn):
+        """Cache an expensive but static sub-panel, rebuilding only when
+        its data changes. A forecast strip redraws dozens of vector glyphs
+        and a full curve; doing that 30 times a second for data that moves
+        twice an hour is the single easiest thing to stop paying for."""
+        store = getattr(self, '_subpanels', None)
+        if store is None:
+            store = self._subpanels = {}
+        entry = store.get(key)
+        if entry is not None and entry[1] == data_hash and entry[0].get_size() == (width, height):
+            return entry[0]
+        surf = pygame.Surface((max(1, width), max(1, height)), pygame.SRCALPHA)
+        render_fn(surf)
+        store[key] = (surf, data_hash)
+        return surf
+
     @staticmethod
     def _panel_geometry(position, default=(300, 200)):
         if isinstance(position, dict):

@@ -28,6 +28,7 @@ PROJECT_MODULES = [
     "voice_commands",
     "effects_kit",
     "body_scan",
+    "weather_glyphs",
     "event_director",
     "moments_weather",
     "moments_life",

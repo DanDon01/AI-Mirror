@@ -13,13 +13,15 @@ from config import (
     COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_ACCENT_AMBER,
     COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM, LABEL_TRACKING,
     load_font,
-)
+    COLOR_ACCENT_GREEN,
+    COLOR_ACCENT_BLUE,)
+from module_base import InstrumentPanel
 from effects_kit import draw_hero_glow
 
 logger = logging.getLogger("Countdown")
 
 
-class CountdownModule:
+class CountdownModule(InstrumentPanel):
     """Displays countdowns to configured events and a voice-activated timer."""
 
     def __init__(self, events=None, **kwargs):
@@ -113,113 +115,80 @@ class CountdownModule:
                 self._moment_notify('countdown_zero', {'label': self.timer_label})
 
     def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position["x"], position["y"]
-                width = position.get("width", 300)
-                height = position.get("height", 200)
+        """COUNTDOWN: time-to-event markers."""
+        self.draw_instrument(screen, position, default=(300, 200))
+
+    def _render_panel(self, surf, width, height, position=None):
+        from effects_kit import draw_bar_meter
+        import theme
+        accent = theme.module_accent('countdown')
+        pad = 6
+        ix, iw = pad, width - pad * 2
+
+        countdowns = self._get_countdowns()
+        timer_remaining = self._get_timer_remaining()
+        cur = self._panel_header(
+            surf, ix, 0, iw, "Countdown", accent,
+            right_text=f"{len(countdowns)} MARKED" if countdowns else None)
+
+        # A running voice timer outranks the date markers
+        if timer_remaining is not None:
+            if timer_remaining <= 0:
+                pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 200.0)
+                color = (255, int(120 + 100 * pulse), int(120 + 100 * pulse))
+                label = "TIME UP"
             else:
-                x, y = position
-                width, height = 300, 200
+                color = COLOR_ACCENT_GREEN
+                label = f"{int(timer_remaining // 60):02d}:{int(timer_remaining % 60):02d}"
+            name = self._text('f_nano', str(self.timer_label).upper(), accent, spacing=2)
+            surf.blit(name, (ix, cur))
+            val = self._text('f_big', label, color)
+            surf.blit(val, (ix, cur + name.get_height() + 1))
+            cur += name.get_height() + val.get_height() + 8
 
-            self._init_fonts()
+        if not countdowns:
+            if timer_remaining is None:
+                msg = self._text('f_small', "NO MARKERS SET", COLOR_TEXT_SECONDARY, spacing=1)
+                surf.blit(msg, (ix, cur + 4))
+            return
 
-            from module_base import ModuleDrawHelper
-            import theme
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Countdowns", x, y, width, accent_color=theme.module_accent('countdown')
-            )
+        horizon = max(max(c["days"] for c in countdowns), 1)
 
-            # Active timer
-            timer_remaining = self._get_timer_remaining()
-            if timer_remaining is not None:
-                if timer_remaining <= 0:
-                    # Timer finished -- pulsing alert
-                    pulse = int(128 + 127 * math.sin(pygame.time.get_ticks() / 200))
-                    color = (255, pulse, pulse)
-                    label = f"{self.timer_label}: TIME UP!"
-                else:
-                    color = (152, 251, 152)  # pastel green
-                    mins = int(timer_remaining // 60)
-                    secs = int(timer_remaining % 60)
-                    label = f"{self.timer_label}: {mins:02d}:{secs:02d}"
+        hero = countdowns[0]
+        days = hero["days"]
+        if days == 0:
+            num_text, unit_text, color = "TODAY", "", COLOR_ACCENT_GREEN
+        elif days == 1:
+            num_text, unit_text, color = "1", "DAY", COLOR_ACCENT_BLUE
+        else:
+            num_text, unit_text, color = str(days), "DAYS", COLOR_TEXT_PRIMARY
 
-                timer_surf = self.body_font.render(label, True, color)
-                timer_surf.set_alpha(TRANSPARENCY)
-                screen.blit(timer_surf, (x, draw_y))
-                draw_y += 25
+        name_label = self._text('f_nano', hero["name"].upper(), accent, spacing=2)
+        surf.blit(name_label, (ix, cur))
+        num_y = cur + name_label.get_height() + 2
+        num_surf = self._text('f_hero', num_text, color)
+        draw_hero_glow(surf, num_surf, ix, num_y, accent, intensity=0.5)
+        surf.blit(num_surf, (ix, num_y))
+        if unit_text:
+            unit = self._text('f_nano', unit_text, COLOR_TEXT_DIM, spacing=2)
+            surf.blit(unit, (ix + num_surf.get_width() + 7,
+                             num_y + num_surf.get_height() - unit.get_height() - 7))
+        cur = num_y + num_surf.get_height() + 8
 
-            # Event countdowns. The soonest event is the hero stat -- a big
-            # number reads at a glance; "Christmas: 98 days" as a sentence
-            # doesn't. The rest stay compact but still number-led (23d
-            # Dentist, not Dentist: 23 days), so the eye lands on the count
-            # first everywhere in the module, not just the top one.
-            countdowns = self._get_countdowns()
-            max_display = 5 if timer_remaining is None else 4
+        # Remaining markers as relative-distance bars
+        for event in countdowns[1:5]:
+            if cur + 20 > height:
+                break
+            name = self._text('f_nano', event["name"].upper()[:18],
+                              COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(name, (ix, cur))
+            dv = self._text('f_nano', f"{event['days']}D", COLOR_FONT_BODY, spacing=1)
+            surf.blit(dv, (ix + iw - dv.get_width(), cur))
+            draw_bar_meter(surf, ix, cur + name.get_height() + 2, iw, 4,
+                           1.0 - (event["days"] / horizon), accent,
+                           segments=max(8, int(iw / 12)))
+            cur += name.get_height() + 12
 
-            if countdowns and draw_y <= y + height - 90:
-                hero = countdowns[0]
-                days = hero["days"]
-                if days == 0:
-                    num_text, unit_text, color = "TODAY", "", (152, 251, 152)
-                elif days == 1:
-                    num_text, unit_text, color = "1", "DAY", (173, 216, 230)
-                else:
-                    num_text, unit_text, color = str(days), "DAYS", COLOR_TEXT_PRIMARY
-
-                accent = theme.module_accent('countdown')
-                name_label = ModuleDrawHelper.render_tracked(
-                    self.small_font, hero["name"].upper(), accent
-                )
-                name_label.set_alpha(TRANSPARENCY)
-                screen.blit(name_label, (x, draw_y))
-
-                num_y = draw_y + name_label.get_height() + 4
-                num_surf = self.hero_font.render(num_text, True, color)
-                num_surf.set_alpha(TRANSPARENCY)
-                draw_hero_glow(screen, num_surf, x, num_y, accent, intensity=0.5)
-                screen.blit(num_surf, (x, num_y))
-                if unit_text:
-                    unit_surf = self.hero_unit_font.render(unit_text, True, COLOR_TEXT_DIM)
-                    unit_surf.set_alpha(TRANSPARENCY)
-                    screen.blit(unit_surf, (x + num_surf.get_width() + 8,
-                                            num_y + num_surf.get_height() - unit_surf.get_height() - 6))
-                draw_y = num_y + num_surf.get_height() + 12
-                countdowns = countdowns[1:]
-                max_display -= 1
-
-            for event in countdowns[:max_display]:
-                if draw_y > y + height - 22:
-                    break
-                days = event["days"]
-                name = event["name"]
-
-                if days == 0:
-                    count_text, color = "Today", (152, 251, 152)
-                elif days == 1:
-                    count_text, color = "Tmrw", (173, 216, 230)
-                elif days <= 30:
-                    count_text, color = f"{days}d", COLOR_FONT_BODY
-                else:
-                    count_text, color = f"{days}d", COLOR_FONT_SMALL
-
-                count_surf = self.body_font.render(f"{count_text:>4}", True, color)
-                count_surf.set_alpha(TRANSPARENCY)
-                screen.blit(count_surf, (x, draw_y))
-
-                name_surf = self.body_font.render(name, True, COLOR_TEXT_SECONDARY)
-                name_surf.set_alpha(TRANSPARENCY)
-                screen.blit(name_surf, (x + count_surf.get_width() + 10, draw_y))
-
-                draw_y += 24
-
-            if not countdowns and timer_remaining is None:
-                empty = self.body_font.render("No events configured", True, COLOR_FONT_SMALL)
-                empty.set_alpha(TRANSPARENCY)
-                screen.blit(empty, (x, draw_y))
-
-        except Exception as e:
-            logger.error(f"Error drawing countdown module: {e}")
 
     def cleanup(self):
         pass

@@ -13,7 +13,8 @@ from datetime import datetime, date
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
     COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY,
-)
+    COLOR_TEXT_DIM,)
+from module_base import InstrumentPanel
 
 logger = logging.getLogger("Quote")
 
@@ -32,7 +33,7 @@ _BUILTIN_QUOTES = [
 ]
 
 
-class QuoteModule:
+class QuoteModule(InstrumentPanel):
     """Displays a daily inspirational quote."""
 
     def __init__(self, quotes_file=None, **kwargs):
@@ -146,63 +147,56 @@ class QuoteModule:
         self._fetcher.submit(self._fetch_daily_quote)
 
     def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position["x"], position["y"]
-                width = position.get("width", 300)
-                height = position.get("height", 200)
+        """A quote is text by nature; it gets typography, not a chart."""
+        self.draw_instrument(screen, position, default=(300, 200))
+
+    def _render_panel(self, surf, width, height, position=None):
+        import theme
+        accent = theme.module_accent('quote')
+        pad = 6
+        ix, iw = pad, width - pad * 2
+
+        cur = self._panel_header(surf, ix, 0, iw, "Log", accent, align='right')
+
+        if not self.current_quote:
+            msg = self._text('f_nano', "LOADING...", COLOR_TEXT_DIM, spacing=1)
+            surf.blit(msg, (ix + iw - msg.get_width(), cur))
+            return
+
+        # An oversized opening quote mark anchors the block
+        mark = self._text('f_hero', '"', (*accent[:3],))
+        mark.set_alpha(70)
+        surf.blit(mark, (ix + iw - mark.get_width() - 2, cur - 12))
+
+        cur += 6
+        for line in self._panel_wrap(self.current_quote, iw - 14):
+            if cur + 17 > height - 14:
+                break
+            ls = self._text('f_small', line, COLOR_FONT_BODY)
+            surf.blit(ls, (ix + iw - ls.get_width(), cur))
+            cur += 17
+
+        if self.current_author and cur + 14 < height:
+            pygame.draw.line(surf, (*accent, 90),
+                             (ix + iw - 28, cur + 5), (ix + iw, cur + 5), 1)
+            au = self._text('f_nano', str(self.current_author).upper(),
+                            COLOR_TEXT_DIM, spacing=2)
+            surf.blit(au, (ix + iw - au.get_width(), cur + 10))
+
+    def _panel_wrap(self, text, max_w):
+        font = self.f_small
+        words, lines, line = str(text).split(), [], ""
+        for word in words:
+            trial = f"{line} {word}".strip()
+            if font.size(trial)[0] <= max_w or not line:
+                line = trial
             else:
-                x, y = position
-                width, height = 300, 200
+                lines.append(line)
+                line = word
+        if line:
+            lines.append(line)
+        return lines
 
-            self._init_fonts()
-
-            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
-
-            from module_base import ModuleDrawHelper
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Quote", x, y, width, align=align
-            )
-
-            if not self.current_quote:
-                empty = self.quote_font.render("Loading...", True, COLOR_FONT_SMALL)
-                ModuleDrawHelper.blit_aligned(screen, empty, x, draw_y, width, align)
-                return
-
-            # Word-wrap the quote (cached until quote changes)
-            text_width = width - 20
-            if not self._wrapped_lines:
-                self._wrapped_lines = self._word_wrap(self.current_quote, self.quote_font, text_width)
-
-            quote_hash = self.current_quote[:30] + (self.current_author or "")
-
-            for i, line in enumerate(self._wrapped_lines):
-                def _render_line(l=line):
-                    s = self.quote_font.render(l, True, COLOR_FONT_BODY)
-                    s.set_alpha(TRANSPARENCY)
-                    return s
-
-                line_surf = self._surface_cache.get_or_render(
-                    f"quote_line_{i}", _render_line, quote_hash
-                )
-                ModuleDrawHelper.blit_aligned(screen, line_surf, x, draw_y, width, align)
-                draw_y += 22
-
-            draw_y += 5
-            author_text = self.current_author or ""
-
-            def _render_author():
-                s = self.author_font.render(author_text, True, COLOR_FONT_SMALL)
-                s.set_alpha(TRANSPARENCY)
-                return s
-
-            author_surf = self._surface_cache.get_or_render(
-                "quote_author", _render_author, quote_hash
-            )
-            ModuleDrawHelper.blit_aligned(screen, author_surf, x, draw_y, width, align)
-
-        except Exception as e:
-            logger.error(f"Error drawing quote module: {e}")
 
     def cleanup(self):
         pass

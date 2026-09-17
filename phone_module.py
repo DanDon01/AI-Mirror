@@ -22,7 +22,7 @@ from config import (
     COLOR_TEXT_DIM, COLOR_ACCENT_GREEN, COLOR_ACCENT_RED,
     COLOR_ACCENT_AMBER, load_font,
 )
-from module_base import ModuleDrawHelper, SurfaceCache
+from module_base import ModuleDrawHelper, SurfaceCache, InstrumentPanel
 from api_tracker import api_tracker
 from background_fetcher import BackgroundFetcher
 
@@ -31,7 +31,7 @@ logger = logging.getLogger("Phone")
 import requests
 
 
-class PhoneModule:
+class PhoneModule(InstrumentPanel):
     def __init__(self, ha_url='', ha_token='', battery_entity='',
                  travel_minutes=25, lead_window_minutes=180,
                  update_interval_minutes=5, **kwargs):
@@ -222,103 +222,76 @@ class PhoneModule:
             return COLOR_ACCENT_AMBER
         return COLOR_ACCENT_GREEN
 
+    @staticmethod
+    def _battery_glyph(surf, x, y, w, h, level, color, charging):
+        """A real battery cell: shell, terminal, segmented charge."""
+        pygame.draw.rect(surf, (*color, 190), (int(x), int(y), int(w), int(h)), 1)
+        pygame.draw.rect(surf, (*color, 190),
+                         (int(x + w), int(y + h * 0.3), 2, int(h * 0.4)))
+        inner_w = (w - 4) * max(0.0, min(1.0, level / 100.0))
+        if inner_w > 0:
+            pygame.draw.rect(surf, (*color, 235),
+                             (int(x + 2), int(y + 2), int(inner_w), int(h - 4)))
+        if charging:
+            cx, cy = x + w / 2, y + h / 2
+            pygame.draw.polygon(surf, (255, 255, 255, 240), [
+                (cx + 1, cy - 6), (cx - 4, cy + 1), (cx, cy + 1),
+                (cx - 1, cy + 6), (cx + 4, cy - 1), (cx, cy - 1)])
+
     def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
-                width = position.get('width', 300)
-                height = position.get('height', 200)
+        """UPLINK: personal device state and departure timing."""
+        self.draw_instrument(screen, position, default=(300, 200))
+
+    def _render_panel(self, surf, width, height, position=None):
+        from effects_kit import draw_bar_meter
+        import theme
+        accent = theme.module_accent('phone')
+        pad = 6
+        ix, iw = pad, width - pad * 2
+
+        now = datetime.now(timezone.utc).astimezone()
+        mins_left = None
+        if self._leave:
+            mins_left = int((self._leave[2] - now).total_seconds() // 60)
+
+        charging = (self.battery_state or '').lower() in ('charging', 'full')
+        cur = self._panel_header(
+            surf, ix, 0, iw, "Uplink", accent, align='right',
+            subtitle="PERSONAL DEVICE",
+            right_text="CHARGING" if charging else None,
+            right_color=COLOR_ACCENT_GREEN)
+
+        # Departure timing is the actionable value, so it leads
+        if self._leave:
+            summary, start_dt, _leave_dt = self._leave
+            if mins_left is not None and mins_left > 0:
+                hero_text, hero_color = str(mins_left), COLOR_TEXT_PRIMARY
+                unit = "MIN TO LEAVE"
             else:
-                x, y = position
-                width, height = 300, 200
+                hero_text, hero_color = "GO", COLOR_ACCENT_AMBER
+                unit = "LEAVE NOW"
+            hero = self._text('f_hero', hero_text, hero_color)
+            surf.blit(hero, (ix + iw - hero.get_width(), cur))
+            ul = self._text('f_nano', unit, COLOR_TEXT_DIM, spacing=2)
+            surf.blit(ul, (ix + iw - ul.get_width(), cur + hero.get_height() - 2))
+            sub = self._text('f_nano',
+                             f"{str(summary)[:20].upper()}  {start_dt.astimezone().strftime('%H:%M')}",
+                             COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(sub, (ix + iw - sub.get_width(),
+                            cur + hero.get_height() + ul.get_height()))
+            cur += hero.get_height() + ul.get_height() + sub.get_height() + 8
 
-            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+        if self.battery_level is not None and cur + 22 < height:
+            color = self._battery_color()
+            lbl = self._text('f_nano', "CELL", COLOR_TEXT_SECONDARY, spacing=2)
+            surf.blit(lbl, (ix, cur))
+            pct = self._text('f_small', f"{self.battery_level}%", color)
+            surf.blit(pct, (ix + iw - pct.get_width(), cur - 3))
+            self._battery_glyph(surf, ix + 30, cur - 1, 30, 13,
+                                self.battery_level, color, charging)
+            draw_bar_meter(surf, ix, cur + 15, iw, 4, self.battery_level / 100.0,
+                           color, segments=max(8, int(iw / 12)))
 
-            if self.title_font is None:
-                tf, bf, sf = ModuleDrawHelper.get_fonts()
-                self.title_font = tf
-                self.body_font = bf
-                self.small_font = sf
-
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Phone", x, y, width, align=align
-            )
-
-            now = datetime.now(timezone.utc).astimezone()
-            mins_left = None
-            if self._leave:
-                mins_left = int((self._leave[2] - now).total_seconds() // 60)
-
-            data_hash = f"{mins_left}|{self.battery_level}|{self.battery_state}"
-
-            # Leave countdown hero
-            if self._leave:
-                summary, start_dt, leave_dt = self._leave
-                if mins_left is not None and mins_left > 0:
-                    hero_text = f"Leave in {mins_left} min"
-                    hero_color = COLOR_TEXT_PRIMARY
-                else:
-                    hero_text = "Leave now"
-                    hero_color = COLOR_ACCENT_AMBER
-
-                def _render_hero(t=hero_text, c=hero_color):
-                    s = load_font('regular', 26).render(t, True, c)
-                    s.set_alpha(TRANSPARENCY)
-                    return s
-
-                hero = self._surface_cache.get_or_render(
-                    "leave_hero", _render_hero, data_hash
-                )
-                ModuleDrawHelper.blit_aligned(screen, hero, x, draw_y, width, align)
-                draw_y += hero.get_height() + 4
-
-                sub_text = f"{summary[:24]}  {start_dt.astimezone().strftime('%H:%M')}"
-
-                def _render_sub(t=sub_text):
-                    s = self.small_font.render(t, True, COLOR_TEXT_DIM)
-                    s.set_alpha(TRANSPARENCY)
-                    return s
-
-                sub = self._surface_cache.get_or_render(
-                    "leave_sub", _render_sub, data_hash
-                )
-                ModuleDrawHelper.blit_aligned(screen, sub, x, draw_y, width, align)
-                draw_y += sub.get_height() + 12
-
-            # Battery row
-            if self.battery_level is not None:
-                charging = (self.battery_state or '').lower() in ('charging', 'full')
-                batt_text = f"Battery {self.battery_level}%"
-                if charging:
-                    batt_text += "  charging"
-
-                def _render_batt(t=batt_text, c=self._battery_color()):
-                    label = self.small_font.render("Battery ", True, COLOR_TEXT_SECONDARY)
-                    value = self.small_font.render(
-                        t.replace("Battery ", ""), True, c
-                    )
-                    combined = pygame.Surface(
-                        (label.get_width() + value.get_width(),
-                         max(label.get_height(), value.get_height())),
-                        pygame.SRCALPHA,
-                    )
-                    combined.blit(label, (0, 0))
-                    combined.blit(value, (label.get_width(), 0))
-                    combined.set_alpha(TRANSPARENCY)
-                    return combined
-
-                batt = self._surface_cache.get_or_render(
-                    "battery", _render_batt, data_hash
-                )
-                ModuleDrawHelper.blit_aligned(screen, batt, x, draw_y, width, align)
-                draw_y += batt.get_height() + 6
-            elif self.ha_url and not self._leave:
-                msg = self.small_font.render("Waiting for phone data...", True, COLOR_TEXT_DIM)
-                msg.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, msg, x, draw_y, width, align)
-
-        except Exception as e:
-            logger.error(f"Error drawing phone module: {e}")
 
     def cleanup(self):
         pass

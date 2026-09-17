@@ -19,7 +19,10 @@ from datetime import datetime
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT,
     COLOR_FONT_BODY, COLOR_FONT_SMALL, TRANSPARENCY, COLOR_ACCENT_CYAN,
-)
+    COLOR_ACCENT_GREEN,
+    COLOR_ACCENT_RED,
+    COLOR_TEXT_DIM,)
+from module_base import InstrumentPanel
 
 logger = logging.getLogger("OpenClaw")
 
@@ -47,7 +50,7 @@ CHANNEL_LABELS = {
 }
 
 
-class OpenClawModule:
+class OpenClawModule(InstrumentPanel):
     """OpenClaw Gateway client for the AI-Mirror.
 
     Connects to a remote OpenClaw Gateway via WebSocket, receives
@@ -290,104 +293,78 @@ class OpenClawModule:
             ]
 
     def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position["x"], position["y"]
-                width = position.get("width", 300)
-                height = position.get("height", 200)
+        """RELAY: multi-channel inbound message queue."""
+        self.draw_instrument(screen, position, default=(300, 200))
+
+    def _render_panel(self, surf, width, height, position=None):
+        import theme
+        accent = theme.module_accent('openclaw')
+        pad = 6
+        ix, iw = pad, width - pad * 2
+
+        with self._lock:
+            inbox = list(self.inbox)
+
+        online = bool(self.connected)
+        cur = self._panel_header(
+            surf, ix, 0, iw, "Relay", accent, align='right',
+            subtitle=f"{len(inbox)} IN QUEUE" if inbox else "QUEUE EMPTY",
+            right_text="LINKED" if online else "OFFLINE",
+            right_color=COLOR_ACCENT_GREEN if online else COLOR_ACCENT_RED)
+
+        # Link strength ticks next to the status
+        for i in range(4):
+            bx = ix + 44 + i * 5
+            bh = 3 + i * 2
+            lit = online and i < 3
+            pygame.draw.rect(surf, (*accent, 220 if lit else 45),
+                             (bx, 12 - bh, 3, bh))
+
+        if not inbox:
+            if not online and not self.gateway_url:
+                msg = "NO GATEWAY CONFIGURED"
+            elif not online:
+                msg = "LINKING..."
             else:
-                x, y = position
-                width, height = 300, 200
+                msg = "NO TRAFFIC"
+            ms = self._text('f_nano', msg, COLOR_TEXT_DIM, spacing=1)
+            surf.blit(ms, (ix + iw - ms.get_width(), cur + 4))
+            return
 
-            self._init_fonts()
-            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+        for msg in inbox[:4]:
+            if cur + 28 > height:
+                break
+            channel = msg.get("channel", "")
+            ch_color = CHANNEL_COLORS.get(channel, (150, 150, 150))
+            ch_label = CHANNEL_LABELS.get(channel, str(channel)[:2].upper())
 
-            from module_base import ModuleDrawHelper
-            import theme
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "OpenClaw", x, y, width, align=align, accent_color=theme.module_accent('openclaw')
-            )
-
-            # Connection indicator dot next to title
-            status_color = (80, 200, 120) if self.connected else (220, 80, 80)
-            title_w = ModuleDrawHelper._small_font.size("OPENCLAW")[0]
-            if align == 'right':
-                dot_x = x + width - title_w - 14
+            ago = (datetime.now() - msg["timestamp"]).total_seconds()
+            if ago < 60:
+                time_str = "NOW"
+            elif ago < 3600:
+                time_str = f"{int(ago // 60)}M"
             else:
-                dot_x = x + title_w + 10
-            pygame.draw.circle(screen, status_color, (dot_x, y + 8), 4)
+                time_str = f"{int(ago // 3600)}H"
 
-            # Connection error
-            if self.connect_error and not self.connected:
-                err_text = self.connect_error[:30]
-                err_surf = self.small_font.render(err_text, True, (255, 162, 173))
-                err_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, err_surf, x, draw_y, width, align)
-                draw_y += 20
+            chip = self._text('f_nano', ch_label, ch_color, spacing=1)
+            chip_w = chip.get_width() + 10
+            chip_x = ix + iw - chip_w
+            pygame.draw.rect(surf, (*ch_color, 28), (chip_x, cur, chip_w, 12))
+            pygame.draw.rect(surf, (*ch_color, 150), (chip_x, cur, chip_w, 12), 1)
+            surf.blit(chip, (chip_x + 5, cur))
 
-            # Inbox
-            with self._lock:
-                inbox_copy = list(self.inbox)
+            sender = self._text('f_nano', str(msg.get("sender", ""))[:18].upper(),
+                                COLOR_FONT_BODY, spacing=1)
+            surf.blit(sender, (chip_x - 6 - sender.get_width(), cur + 1))
+            ts = self._text('f_nano', time_str, COLOR_TEXT_DIM, spacing=1)
+            surf.blit(ts, (ix, cur + 1))
 
-            if not inbox_copy and self.connected:
-                empty = self.body_font.render("No messages", True, COLOR_FONT_SMALL)
-                empty.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, empty, x, draw_y, width, align)
-            elif not inbox_copy and not self.connected:
-                if not self.gateway_url:
-                    hint = self.small_font.render("Set OPENCLAW_GATEWAY_URL", True, COLOR_FONT_SMALL)
-                else:
-                    hint = self.small_font.render("Connecting...", True, COLOR_FONT_SMALL)
-                hint.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, hint, x, draw_y, width, align)
-            else:
-                for msg in inbox_copy[:4]:
-                    channel = msg["channel"]
-                    ch_color = CHANNEL_COLORS.get(channel, (150, 150, 150))
-                    ch_label = CHANNEL_LABELS.get(channel, channel[:2].upper())
-
-                    # Build a single line: [CH] sender  time
-                    badge_surf = self.channel_font.render(f"[{ch_label}]", True, ch_color)
-                    sender_surf = self.small_font.render(msg["sender"], True, COLOR_FONT_BODY)
-                    sender_surf.set_alpha(TRANSPARENCY)
-
-                    ago = (datetime.now() - msg["timestamp"]).total_seconds()
-                    if ago < 60:
-                        time_str = "now"
-                    elif ago < 3600:
-                        time_str = f"{int(ago // 60)}m"
-                    else:
-                        time_str = f"{int(ago // 3600)}h"
-                    time_surf = self.small_font.render(time_str, True, COLOR_FONT_SMALL)
-
-                    if align == 'right':
-                        # Right-align: time on far right, badge+sender before it
-                        time_x = x + width - time_surf.get_width()
-                        sender_x = time_x - sender_surf.get_width() - 5
-                        badge_x = sender_x - badge_surf.get_width() - 5
-                    else:
-                        badge_x = x
-                        sender_x = x + badge_surf.get_width() + 5
-                        time_x = x + width - time_surf.get_width()
-
-                    screen.blit(badge_surf, (badge_x, draw_y))
-                    screen.blit(sender_surf, (sender_x, draw_y))
-                    screen.blit(time_surf, (time_x, draw_y))
-
-                    draw_y += 16
-
-                    # Message preview (truncated)
-                    preview = msg["text"][:35]
-                    if len(msg["text"]) > 35:
-                        preview += "..."
-                    preview_surf = self.small_font.render(preview, True, COLOR_FONT_SMALL)
-                    preview_surf.set_alpha(TRANSPARENCY)
-                    ModuleDrawHelper.blit_aligned(screen, preview_surf, x, draw_y, width, align)
-
-                    draw_y += 22
-
-        except Exception as e:
-            logger.error(f"Error drawing OpenClaw module: {e}")
+            preview = str(msg.get("text", ""))
+            if len(preview) > 40:
+                preview = preview[:38].rstrip() + ".."
+            ps = self._text('f_nano', preview, COLOR_TEXT_DIM, spacing=0)
+            surf.blit(ps, (ix + iw - ps.get_width(), cur + 14))
+            cur += 28
 
     def cleanup(self):
         """Close WebSocket connection."""

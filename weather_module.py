@@ -713,8 +713,22 @@ class WeatherModule(InstrumentPanel):
         return y + h
 
     def _draw_forecast(self, surf, x, y, w, h, accent):
+        series = self.hourly_series(24)
+        data_hash = (
+            accent, len(series),
+            series[0]['time'].isoformat() if series else '',
+            tuple(round(p['temp'], 1) for p in series),
+            tuple(p['rain'] for p in series),
+        )
+        panel = self._cached_panel(
+            'forecast', w, h, data_hash,
+            lambda s: self._render_forecast(s, 0, 0, w, h, accent, series))
+        surf.blit(panel, (x, y))
+        return y + h
+
+    def _render_forecast(self, surf, x, y, w, h, accent, series):
         """Real hourly temperature curve: condition glyphs and temperatures
-        at three-hourly marks, rain probability beneath, calibrated axis."""
+        at four-hourly marks, rain probability beneath, calibrated axis."""
         import weather_glyphs
         from effects_kit import draw_chamfer_frame
         draw_chamfer_frame(surf, x, y, w, h, accent, alpha=50, cut=8)
@@ -724,7 +738,6 @@ class WeatherModule(InstrumentPanel):
         today = self._text('f_nano', "TODAY", COLOR_TEXT_DIM, spacing=1)
         surf.blit(today, (x + w - pad - today.get_width(), y + 5))
 
-        series = self.hourly_series(24)
         axis_w = 22
         plot_x = x + pad
         plot_w = w - pad * 2 - axis_w
@@ -769,9 +782,11 @@ class WeatherModule(InstrumentPanel):
 
         pygame.draw.lines(surf, (*accent, 230), False, pts, 2)
 
-        # Marks every four hours: dropline, node, temperature, glyph
+        # Marks every four hours: dropline, node, temperature, glyph.
+        # This panel is cached, so the glyphs are drawn at a fixed phase --
+        # a forecast icon has nothing to animate anyway.
         step = max(1, len(series) // 5)
-        t = pygame.time.get_ticks() / 1000.0
+        t = 0.0
         for i in range(0, len(series), step):
             point = series[i]
             px, py = pts[i]
@@ -804,8 +819,8 @@ class WeatherModule(InstrumentPanel):
         # South is left off: the speed readout lives in that lower segment,
         # and a letter there collides with it at this size.
         for label, ang in (("N", -90), ("E", 0), ("W", 180)):
-            lx = cx + math.cos(math.radians(ang)) * (r - 12)
-            ly = cy - r * 0.16 + math.sin(math.radians(ang)) * (r - 12)
+            lx = cx + math.cos(math.radians(ang)) * (r - 8)
+            ly = cy - r * 0.16 + math.sin(math.radians(ang)) * (r - 8)
             ls = self._text('f_nano', label, COLOR_TEXT_DIM)
             surf.blit(ls, (lx - ls.get_width() / 2, ly - ls.get_height() / 2))
         spd = self._text('f_small', f"{wind:.0f}", COLOR_FONT_BODY)
@@ -909,19 +924,32 @@ class WeatherModule(InstrumentPanel):
         return cur
 
     def _draw_outlook(self, surf, x, y, w, h, accent, height):
-        """Multi-day outlook cards from the real daily forecast."""
-        import weather_glyphs
         outlook = (self.weather_data or {}).get('outlook') or []
         if len(outlook) < 2 or y + 40 > height:
             return y
+        card_h = min(h - 15, height - y - 17)
+        panel_h = max(1, int(15 + card_h))
+        data_hash = (accent, tuple(
+            (d.get('date'), d.get('tmax'), d.get('tmin'), d.get('code'))
+            for d in outlook[:4]))
+        panel = self._cached_panel(
+            'outlook', w, panel_h, data_hash,
+            lambda s: self._render_outlook(s, 0, 0, w, panel_h, accent, outlook))
+        surf.blit(panel, (x, y))
+        return y + panel_h
+
+    def _render_outlook(self, surf, x, y, w, h, accent, outlook):
+        """Multi-day outlook cards from the real daily forecast."""
+        import weather_glyphs
+        height = y + h
         lbl = self._text('f_nano', "4 DAY OUTLOOK", accent, spacing=2)
         surf.blit(lbl, (x, y))
         cur = y + lbl.get_height() + 4
 
         days = outlook[:4]
         step = w / len(days)
-        t = pygame.time.get_ticks() / 1000.0
-        card_h = min(h - (cur - y), height - cur - 2)
+        t = 0.0
+        card_h = max(1, height - cur - 2)
         for i, day in enumerate(days):
             cx = x + step * (i + 0.5)
             try:

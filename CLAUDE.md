@@ -54,6 +54,8 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
                                sleep-stage timeline, 7-day activity graph)
        body_scan.py          - Anatomical scan figure used by the biometric
                                monitor (vector human + sweeping scan band)
+       weather_glyphs.py     - Vector condition glyphs, compass rose and
+                               readout icons for the ENVIRONMENT panel
        countdown_module.py   - Event countdowns + voice timer + center alerts
        quote_module.py       - Daily quote (ZenQuotes API + local JSON + builtin fallback)
        news_module.py        - RSS news headlines (feedparser) + breaking news notifications
