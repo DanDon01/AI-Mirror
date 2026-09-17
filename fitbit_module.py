@@ -6,8 +6,8 @@ import pygame
 import logging
 from config import (
     CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, TRANSPARENCY, COLOR_FONT_SUBTITLE,
-    COLOR_FONT_BODY, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM, COLOR_ACCENT_GREEN,
-    COLOR_ACCENT_RED, COLOR_ACCENT_AMBER, load_font,
+    COLOR_FONT_BODY, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM, COLOR_TEXT_ACCENT,
+    COLOR_ACCENT_GREEN, COLOR_ACCENT_RED, COLOR_ACCENT_AMBER, load_font,
 )
 from api_tracker import api_tracker
 import os
@@ -19,7 +19,7 @@ from fitbit.api import Fitbit
 from fitbit.exceptions import HTTPUnauthorized
 from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
 from background_fetcher import BackgroundFetcher
-from effects_kit import draw_trace_progress, draw_hero_glow
+from effects_kit import draw_hero_glow
 import base64
 
 class FitbitModule:
@@ -59,10 +59,30 @@ class FitbitModule:
         self._api_retired = False  # set if the legacy API starts returning 410
         self._moment_notify = None
         self._goal_hit_date = None  # date() the goal was last celebrated, so it fires once/day
+        # Built up from real observed updates over the runtime session (no
+        # extra API call) -- starts empty on restart, fills in over the day.
+        self._step_history = []
+        self._step_history_date = None
 
     def set_moment_callback(self, callback):
         """Register a callback for Director moment triggers (event_director.py)."""
         self._moment_notify = callback
+
+    def _record_step_history(self):
+        """One sample per hourly refresh, reset at midnight -- a real
+        (if coarse) today-so-far trend, built from data already being
+        fetched rather than a new API call."""
+        try:
+            steps = int(self.data.get('steps', 0))
+        except (TypeError, ValueError):
+            return
+        today = datetime.now().date()
+        if self._step_history_date != today:
+            self._step_history = []
+            self._step_history_date = today
+        if not self._step_history or self._step_history[-1] != steps:
+            self._step_history.append(steps)
+            self._step_history = self._step_history[-24:]
 
     def _check_goal_hit(self):
         if not self._moment_notify:
@@ -114,9 +134,21 @@ class FitbitModule:
             time_module.sleep(1)  # be polite between calls
             heart_data = self.make_api_call(self.client.intraday_time_series, resource='activities/heart', base_date=today, detail_level='1min')
             result['resting_heart_rate'] = heart_data['activities-heart'][0]['value'].get('restingHeartRate', 'N/A')
+            # The intraday call above already returns a full per-minute
+            # dataset for today -- only the resting summary was ever used.
+            # Downsample it for a real BPM trend line instead of a
+            # decorative fake waveform.
+            dataset = heart_data.get('activities-heart-intraday', {}).get('dataset', [])
+            if dataset:
+                values = [pt['value'] for pt in dataset if 'value' in pt]
+                step = max(1, len(values) // 60)
+                result['hr_trend'] = values[::step][-60:]
+            else:
+                result['hr_trend'] = []
         except Exception as e:
             logging.error(f"Error fetching heart rate data: {e}")
             result['resting_heart_rate'] = 'N/A'
+            result['hr_trend'] = []
 
         # Fetch sleep data
         try:
@@ -143,6 +175,7 @@ class FitbitModule:
                 api_tracker.record("fitbit", "fitbit")
                 logging.info("Fitbit data updated successfully")
                 self._check_goal_hit()
+                self._record_step_history()
             else:
                 api_tracker.failure("fitbit", "fitbit")
                 logging.error(f"Error updating Fitbit data: {value}")
@@ -283,8 +316,8 @@ class FitbitModule:
         logging.info("Fitbit tokens have been saved to environment file")
 
     @staticmethod
-    def _draw_heart_icon(screen, cx, cy, size, color):
-        r = size * 0.26
+    def _draw_heart_icon(screen, cx, cy, size, color, scale=1.0):
+        r = size * 0.26 * scale
         pygame.draw.circle(screen, color, (int(cx - r * 0.9), int(cy - r * 0.3)), int(r))
         pygame.draw.circle(screen, color, (int(cx + r * 0.9), int(cy - r * 0.3)), int(r))
         pts = [(cx - r * 1.8, cy - r * 0.1), (cx, cy + r * 1.9), (cx + r * 1.8, cy - r * 0.1)]
@@ -318,15 +351,30 @@ class FitbitModule:
             return (240, 180, 40)
         return (80, 200, 120)
 
-    def draw_step_frame(self, screen, x, y, w, h, fraction, thickness=3):
-        """Trace a coloured line around the module's outline as step
-        progress grows, closing into a full square at the goal (the house
-        progress idiom -- see effects_kit.draw_trace_progress)."""
-        draw_trace_progress(screen, x, y, w, h, fraction,
-                            self._progress_color(fraction), thickness)
+    def _readiness_fraction(self, steps_frac, sleep_frac, resting_hr):
+        """A simple composite from real inputs (not a proprietary score --
+        this mirror doesn't have one to show). Steps and sleep weigh most;
+        resting HR contributes a coarse health-band signal."""
+        if resting_hr in (None, 'N/A'):
+            hr_score = 0.6
+        else:
+            try:
+                hr = float(resting_hr)
+                if hr <= 70:
+                    hr_score = 1.0
+                elif hr <= 85:
+                    hr_score = 0.6
+                else:
+                    hr_score = 0.3
+            except (TypeError, ValueError):
+                hr_score = 0.6
+        return max(0.0, min(1.0, 0.4 * steps_frac + 0.35 * sleep_frac + 0.25 * hr_score))
 
     def draw(self, screen, position):
-        """Draw Fitbit data -- floating text on black, no background."""
+        """BIOMETRICS: a small habitat's vital-signs readout -- circular
+        gauges, real trend lines and icons, no "Label: value" text. Not a
+        rectangular card (see AI-Mirror.py's NO_PANEL_FRAME) -- its own
+        arcs and rings provide the structure."""
         try:
             if isinstance(position, dict):
                 x, y = position['x'], position['y']
@@ -336,9 +384,6 @@ class FitbitModule:
                 x, y = position
                 width, height = 300, 200
 
-            styling = CONFIG.get('module_styling', {})
-            line_height = styling.get('spacing', {}).get('line_height', 28)
-
             if not hasattr(self, '_fonts_ready') or not self._fonts_ready:
                 from module_base import ModuleDrawHelper
                 title_f, body_f, small_f = ModuleDrawHelper.get_fonts()
@@ -346,6 +391,7 @@ class FitbitModule:
                 self.body_font = body_f
                 self.small_font = small_f
                 self.hero_font = load_font('light', 34)
+                self.stat_font = load_font('light', 22)
                 self.tile_label_font = load_font('regular', 10)
                 self._fonts_ready = True
 
@@ -355,100 +401,120 @@ class FitbitModule:
             align = position.get('align', 'left') if isinstance(position, dict) else 'left'
 
             from module_base import ModuleDrawHelper
+            from effects_kit import draw_ring_progress, draw_sparkline
             import theme
+            accent = theme.module_accent('fitbit')
             current_y = ModuleDrawHelper.draw_module_title(
-                screen, "Fitbit", x, y, width, align=align, accent_color=theme.module_accent('fitbit')
+                screen, "Biometrics", x, y, width, align=align, accent_color=accent
             )
 
             if self._api_retired:
                 msg = self.body_font.render("Fitbit API retired", True, label_color)
                 ModuleDrawHelper.blit_aligned(screen, msg, x, current_y, width, align)
                 return
-
-            # Check if we have data
             if not self.data:
-                no_data_text = self.body_font.render("No Fitbit data available", True, value_color)
+                no_data_text = self.body_font.render("Connecting...", True, value_color)
                 ModuleDrawHelper.blit_aligned(screen, no_data_text, x, current_y, width, align)
                 return
 
-            # Get steps and goal for progress bar
-            steps = self.data.get('steps', '0')
-            step_goal = 10000  # Default
+            step_goal = 10000
             if 'goals' in self.data and 'steps' in self.data['goals']:
                 step_goal = int(self.data['goals']['steps'])
-
-            # Try to convert steps to int for progress bar
             try:
-                steps_int = int(steps)
-            except Exception:
+                steps_int = int(self.data.get('steps', 0))
+            except (TypeError, ValueError):
                 steps_int = 0
+            steps_frac = steps_int / step_goal if step_goal else 0.0
 
-            fraction = steps_int / step_goal if step_goal else 0.0
+            sleep_text = self.data.get('sleep')
+            sleep_hours = None
+            if sleep_text not in (None, 'N/A') and ':' in str(sleep_text):
+                h, m = sleep_text.split(':')
+                sleep_hours = int(h) + int(m) / 60.0
+            sleep_target = 8.0
+            sleep_frac = min(1.0, (sleep_hours or 0) / sleep_target)
 
-            # A trace-frame square with the steps count as a hero number
-            # inside it -- the frame itself already shows progress toward
-            # goal, so the number just needs to be big, not prefixed with
-            # "Steps:". Everything else (HR/sleep/active/cal) becomes a
-            # small icon + number tile grid below -- no "Label: value"
-            # text anywhere in this module.
-            pad = 14
-            side = min(width, 128)
-            ring_r = side // 2
-            frame_top = current_y
-            frame_x = x + width - side if align == 'right' else x
-            ring_cx, ring_cy = frame_x + ring_r, frame_top + ring_r
-            from effects_kit import draw_ring_progress
-            draw_ring_progress(screen, ring_cx, ring_cy, ring_r - 6, fraction,
-                               self._progress_color(fraction), thickness=8)
+            hr = self.data.get('resting_heart_rate')
+            hr_trend = self.data.get('hr_trend') or []
 
+            cx = x + width // 2
+
+            # -- Steps: the big ring, with today-so-far trend beneath it --
+            ring_r = min(width, 150) // 2 - 4
+            ring_cy = current_y + ring_r + 6
+            draw_ring_progress(screen, cx, ring_cy, ring_r - 4, steps_frac,
+                               self._progress_color(steps_frac), thickness=8)
             steps_surf = self.hero_font.render(f"{steps_int:,}", True, value_color)
             steps_surf.set_alpha(TRANSPARENCY)
             steps_y = ring_cy - steps_surf.get_height() // 2 - 6
-            draw_hero_glow(screen, steps_surf, ring_cx - steps_surf.get_width() // 2,
-                           steps_y, self._progress_color(fraction), intensity=0.4)
-            screen.blit(steps_surf, (ring_cx - steps_surf.get_width() // 2, steps_y))
-            unit_surf = self.tile_label_font.render("STEPS", True, COLOR_TEXT_DIM)
+            draw_hero_glow(screen, steps_surf, cx - steps_surf.get_width() // 2,
+                           steps_y, self._progress_color(steps_frac), intensity=0.4)
+            screen.blit(steps_surf, (cx - steps_surf.get_width() // 2, steps_y))
+            unit_surf = self.tile_label_font.render("STEPS TODAY", True, COLOR_TEXT_DIM)
             unit_surf.set_alpha(TRANSPARENCY)
-            screen.blit(unit_surf, (ring_cx - unit_surf.get_width() // 2,
+            screen.blit(unit_surf, (cx - unit_surf.get_width() // 2,
                                     steps_y + steps_surf.get_height() + 2))
 
-            # Icon tiles: 2 per row, filling to the module's edge.
-            tiles = []
-            hr = self.data.get('resting_heart_rate')
-            if hr not in (None, 'N/A'):
-                tiles.append((self._draw_heart_icon, str(hr), "BPM", COLOR_ACCENT_RED))
-            sleep = self.data.get('sleep')
-            if sleep not in (None, 'N/A'):
-                tiles.append((None, str(sleep), "SLEEP", value_color))
-            active = self.data.get('active_minutes')
-            if active not in (None, 'N/A'):
-                tiles.append((self._draw_bolt_icon, str(active), "ACTIVE MIN", COLOR_ACCENT_AMBER))
-            cal = self.data.get('calories')
-            if cal not in (None, 'N/A'):
-                tiles.append((self._draw_flame_icon, str(cal), "CAL", COLOR_ACCENT_AMBER))
+            draw_y = ring_cy + ring_r + 18
+            if len(self._step_history) >= 2 and draw_y + 24 < y + height:
+                spark_w = min(width - 20, 180)
+                draw_sparkline(screen, cx - spark_w // 2, draw_y, spark_w, 20,
+                               self._step_history, self._progress_color(steps_frac), vmin=0)
+                draw_y += 30
 
-            tile_y = frame_top + side + 16
-            tile_w = width // 2
-            icon_r = 16
-            for i, (icon_fn, value_text, unit_text, color) in enumerate(tiles):
-                col = i % 2
-                row = i // 2
-                tx = x + col * tile_w
-                ty = tile_y + row * 52
-                icon_cx = tx + icon_r + 2 if align != 'right' else tx + tile_w - icon_r - 2
-                if icon_fn:
-                    icon_fn(screen, icon_cx, ty + icon_r, icon_r * 2, color)
-                else:
-                    z = self.small_font.render("z", True, color)
-                    z.set_alpha(TRANSPARENCY)
-                    screen.blit(z, (icon_cx - z.get_width() // 2, ty))
-                val_surf = self.body_font.render(value_text, True, value_color)
-                val_surf.set_alpha(TRANSPARENCY)
-                unit_surf2 = self.tile_label_font.render(unit_text, True, COLOR_TEXT_DIM)
-                unit_surf2.set_alpha(TRANSPARENCY)
-                text_x = icon_cx + icon_r + 8 if align != 'right' else icon_cx - icon_r - 8 - val_surf.get_width()
-                screen.blit(val_surf, (text_x, ty - 2))
-                screen.blit(unit_surf2, (text_x, ty + val_surf.get_height() - 4))
+            # -- Heart rate: pulsing icon (real BPM sets the pulse rate) --
+            if hr not in (None, 'N/A') and draw_y + 40 < y + height:
+                try:
+                    bpm = float(hr)
+                    pulse_hz = bpm / 60.0
+                except (TypeError, ValueError):
+                    bpm, pulse_hz = None, 1.0
+                phase = (pygame.time.get_ticks() / 1000.0) * pulse_hz
+                import math as _math
+                scale = 1.0 + 0.18 * max(0.0, _math.sin(phase * _math.tau))
+                icon_x = x + 16
+                self._draw_heart_icon(screen, icon_x, draw_y + 14, 30, COLOR_ACCENT_RED, scale=scale)
+                bpm_surf = self.stat_font.render(f"{hr}", True, value_color)
+                bpm_surf.set_alpha(TRANSPARENCY)
+                unit2 = self.tile_label_font.render("BPM RESTING", True, COLOR_TEXT_DIM)
+                unit2.set_alpha(TRANSPARENCY)
+                screen.blit(bpm_surf, (icon_x + 22, draw_y))
+                screen.blit(unit2, (icon_x + 22 + bpm_surf.get_width() + 8,
+                                    draw_y + bpm_surf.get_height() - unit2.get_height() - 2))
+                if len(hr_trend) >= 2:
+                    spark_x = icon_x + 22
+                    draw_sparkline(screen, spark_x, draw_y + bpm_surf.get_height() + 2,
+                                  width - (spark_x - x) - 10, 16, hr_trend, COLOR_ACCENT_RED)
+                draw_y += 58
+
+            # -- Sleep: a half-arc (distinct from the full steps ring) --
+            if sleep_hours is not None and draw_y + 60 < y + height:
+                arc_r = min(width, 140) // 2 - 10
+                arc_cy = draw_y + 6
+                draw_ring_progress(screen, cx, arc_cy, arc_r, sleep_frac, COLOR_TEXT_ACCENT,
+                                   thickness=7, start_deg=160, end_deg=380)
+                sleep_surf = self.stat_font.render(sleep_text, True, value_color)
+                sleep_surf.set_alpha(TRANSPARENCY)
+                screen.blit(sleep_surf, (cx - sleep_surf.get_width() // 2, arc_cy - 6))
+                unit3 = self.tile_label_font.render("SLEEP", True, COLOR_TEXT_DIM)
+                unit3.set_alpha(TRANSPARENCY)
+                screen.blit(unit3, (cx - unit3.get_width() // 2, arc_cy + sleep_surf.get_height() - 4))
+                draw_y = arc_cy + arc_r * 0.55 + 20
+
+            # -- Readiness: small composite ring, real inputs, no card --
+            if draw_y + 60 < y + height:
+                readiness = self._readiness_fraction(steps_frac, sleep_frac, hr)
+                r_r = 30
+                r_cx = x + r_r + 4
+                r_cy = draw_y + r_r
+                r_color = self._progress_color(readiness)
+                draw_ring_progress(screen, r_cx, r_cy, r_r - 5, readiness, r_color, thickness=5)
+                pct_surf = self.tile_label_font.render(f"{int(readiness * 100)}%", True, value_color)
+                pct_surf.set_alpha(TRANSPARENCY)
+                screen.blit(pct_surf, (r_cx - pct_surf.get_width() // 2, r_cy - pct_surf.get_height() // 2))
+                label = self.tile_label_font.render("READINESS", True, COLOR_TEXT_DIM)
+                label.set_alpha(TRANSPARENCY)
+                screen.blit(label, (r_cx + r_r + 10, r_cy - label.get_height() // 2))
 
         except Exception as e:
             logging.error(f"Error drawing Fitbit data: {e}")

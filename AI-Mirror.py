@@ -683,9 +683,12 @@ class MagicMirror:
         # not a filled box (the mirror stays see-through), just enough
         # structure that the whole display doesn't read as undifferentiated
         # floating text. Clock/stocks/center-overlays are framed elsewhere
-        # or intentionally borderless.
+        # or intentionally borderless. Not every module should be a
+        # rectangle, though -- a few build their own circular/arc structure
+        # instead and opt out here.
+        NO_PANEL_FRAME = {'fitbit'}
         layout_v2 = CONFIG.get('layout_v2', {})
-        if name in layout_v2.get('left_modules', []) + layout_v2.get('right_modules', []):
+        if name not in NO_PANEL_FRAME and name in layout_v2.get('left_modules', []) + layout_v2.get('right_modules', []):
             from effects_kit import draw_panel_frame
             draw_panel_frame(
                 self.screen, position.get('x', 0), position.get('y', 0),

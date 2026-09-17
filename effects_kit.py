@@ -155,28 +155,50 @@ def draw_dial_gauge(screen, cx, cy, radius, value, vmin, vmax, zones,
     pygame.draw.circle(screen, (*color, 255), (int(cx), int(cy)), 5)
 
 
-def draw_ring_progress(screen, cx, cy, radius, fraction, color, thickness=10, track_alpha=40):
-    """A circular progress ring (steps-vs-goal, any 0-1 completion) --
-    a dim full-circle track plus a bright arc from the top, clockwise,
+def draw_ring_progress(screen, cx, cy, radius, fraction, color, thickness=10,
+                       track_alpha=40, start_deg=-90, end_deg=270):
+    """A circular (or partial-arc) progress ring -- steps-vs-goal as a
+    full ring, sleep-vs-target as a half-arc (pass e.g. start_deg=180,
+    end_deg=360 for a bottom half-circle), any 0-1 completion either way.
+    A dim track over the full span plus a bright arc from the start,
     proportional to fraction. Same live-drawn small-segment technique as
     the dial gauge and portal ring, for a consistent look."""
     fraction = max(0.0, min(1.0, fraction))
-    steps = 72
+    span = end_deg - start_deg
+    steps = max(24, int(abs(span) / 5))
     for i in range(steps):
-        a0 = math.radians(-90 + (i / steps) * 360)
-        a1 = math.radians(-90 + ((i + 1) / steps) * 360)
+        a0 = math.radians(start_deg + (i / steps) * span)
+        a1 = math.radians(start_deg + ((i + 1) / steps) * span)
         x0, y0 = cx + math.cos(a0) * radius, cy + math.sin(a0) * radius
         x1, y1 = cx + math.cos(a1) * radius, cy + math.sin(a1) * radius
         pygame.draw.line(screen, (*color, track_alpha), (x0, y0), (x1, y1), thickness)
 
     lit = int(steps * fraction)
     for i in range(lit):
-        a0 = math.radians(-90 + (i / steps) * 360)
-        a1 = math.radians(-90 + ((i + 1) / steps) * 360)
+        a0 = math.radians(start_deg + (i / steps) * span)
+        a1 = math.radians(start_deg + ((i + 1) / steps) * span)
         x0, y0 = cx + math.cos(a0) * radius, cy + math.sin(a0) * radius
         x1, y1 = cx + math.cos(a1) * radius, cy + math.sin(a1) * radius
         pygame.draw.line(screen, (*color, 235), (x0, y0), (x1, y1), thickness)
         pygame.draw.circle(screen, (*color, 235), (int(x1), int(y1)), thickness // 2)
+
+
+def draw_sparkline(screen, x, y, w, h, values, color, alpha=220, vmin=None, vmax=None):
+    """A minimal trend line -- real data (however coarse) communicates a
+    lot more than a single number, and costs almost nothing to draw."""
+    if not values or len(values) < 2:
+        return
+    lo = vmin if vmin is not None else min(values)
+    hi = vmax if vmax is not None else max(values)
+    span = max(1e-6, hi - lo)
+    n = len(values)
+    pts = [
+        (x + (i / (n - 1)) * w, y + h - ((v - lo) / span) * h)
+        for i, v in enumerate(values)
+    ]
+    pygame.draw.lines(screen, (*color, alpha), False, pts, 2)
+    for px, py in (pts[-1],):
+        pygame.draw.circle(screen, (*color, 255), (int(px), int(py)), 3)
 
 
 def draw_panel_frame(screen, x, y, w, h, color, alpha=70, corner_len=16):
