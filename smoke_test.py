@@ -28,7 +28,13 @@ PROJECT_MODULES = [
     "voice_commands",
     "effects_kit",
     "event_director",
+    "moments_weather",
+    "moments_life",
+    "moments_fun",
+    "moments_arcade",
+    "moments_seasonal",
     "moments_library",
+    "seasonal_theme",
     "weather_animations",
     "clock_module",
     "weather_module",
@@ -99,6 +105,32 @@ def main():
     except Exception as e:
         failures.append(("frame-test", e))
         print(f"  FAIL frame test: {e}")
+        traceback.print_exc()
+
+    print("== Moments sweep (every registered moment, several elapsed times) ==")
+    # pygame.transform.smoothscale segfaults -- not a catchable exception --
+    # on a zero-size source surface (e.g. font.render('') on a missing ctx
+    # value), so this can't be wrapped in try/except like the checks above:
+    # a regression here crashes this whole process instead of printing
+    # FAIL. That's still a real signal in CI (a non-zero/crashed exit
+    # instead of "SMOKE TEST PASSED"); the per-moment print below at
+    # least leaves a breadcrumb for which one did it.
+    try:
+        from event_director import Director
+        import moments_library
+        director = Director(1440, 2560, {'enabled': True})
+        moments_library.register_all(director)
+        sweep_screen = pygame.Surface((1440, 2560))
+        for name in director.moment_names():
+            moment = director._moments[name]
+            print(f"  testing {name}...", flush=True)
+            for frac in (0.05, 0.5, 0.95):
+                sweep_screen.fill((8, 10, 18))
+                moment.render(sweep_screen, moment.duration_s * frac, None)
+        print(f"  ok   {len(director.moment_names())} moments x 3 elapsed samples each")
+    except Exception as e:
+        failures.append(("moments-sweep", e))
+        print(f"  FAIL moments sweep: {e}")
         traceback.print_exc()
 
     if failures:

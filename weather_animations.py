@@ -430,6 +430,9 @@ class StormAnimation(RainAnimation):
         self._next_flash = self.t + random.uniform(2.5, 6.0)
         self._flash_started = None
         self._bolt = None
+        # Set by weather_module.py so a real bolt can (occasionally) trigger
+        # the full-screen "Storm Takeover" Moment, not just the ambient band.
+        self.on_flash = None
 
     def _make_bolt(self):
         return jagged_bolt(
@@ -444,6 +447,8 @@ class StormAnimation(RainAnimation):
         if self._flash_started is None and self.t >= self._next_flash:
             self._flash_started = self.t
             self._bolt = self._make_bolt()
+            if self.on_flash:
+                self.on_flash()
         if self._flash_started is not None and self.t - self._flash_started > 0.5:
             self._flash_started = None
             self._bolt = None

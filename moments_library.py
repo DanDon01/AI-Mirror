@@ -1,15 +1,18 @@
 """The Moments library -- registers every themed moment with the Director.
 
-Phase 1 (current): a single placeholder that proves the Director's
-plumbing end to end -- cooldown/weighted-pick/timed render, drawn over
-everything including the center. Real moments (Storm Takeover, Catherine
-Wheel, HAL's Red Eye, ...) land in later phases; see the project plan.
-Each phase adds its moments here via its own `_register_<phase>` helper
-called from `register_all()`, so the Director itself never needs to change.
+Each category lives in its own module (moments_weather.py, moments_life.py,
+moments_fun.py, moments_arcade.py, moments_seasonal.py) with a
+`register(director)` entry point; this file just calls all of them, so
+the Director and individual category files never need to know about
+each other.
 """
+
+import logging
 
 from effects_kit import glow_sprite, ease_out_cubic
 from event_director import Moment
+
+logger = logging.getLogger("Moments")
 
 _ACCENT = (196, 174, 128)
 
@@ -47,5 +50,21 @@ def _register_phase1(director):
     ))
 
 
+_CATEGORY_MODULES = (
+    "moments_weather",
+    "moments_life",
+    "moments_fun",
+    "moments_arcade",
+    "moments_seasonal",
+)
+
+
 def register_all(director):
     _register_phase1(director)
+    for name in _CATEGORY_MODULES:
+        try:
+            module = __import__(name)
+            module.register(director)
+        except Exception:
+            logger.exception("Failed to register moments from %s", name)
+    logger.info("Moments registered: %d", len(director.moment_names()))

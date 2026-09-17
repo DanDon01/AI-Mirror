@@ -199,6 +199,8 @@ class SmartHomeModule:
         self._surface_cache = SurfaceCache()
         self._last_data_hash = None
         self._notification_callback = None
+        self._moment_callback = None
+        self._lights_were_on = False
         self._fetcher = BackgroundFetcher("smarthome")
 
         # Dashboard overlay state
@@ -216,6 +218,10 @@ class SmartHomeModule:
     def set_notification_callback(self, callback):
         """Allow main app to wire center notifications."""
         self._notification_callback = callback
+
+    def set_moment_callback(self, callback):
+        """Register a callback for Director moment triggers (event_director.py)."""
+        self._moment_callback = callback
 
     # ------------------------------------------------------------------
     # Dashboard control (voice command / keyboard)
@@ -480,17 +486,30 @@ class SmartHomeModule:
         self._last_error = None
 
         # Push notification if a notable state changed
-        if self._notification_callback:
+        if self._notification_callback or self._moment_callback:
             for eid in self.entities:
                 old = old_states.get(eid)
                 new = self.data.get(eid, {}).get('state')
                 if old and new and old != new:
                     if _domain(eid) in ('lock', 'alarm_control_panel'):
                         name = self.data[eid].get('attributes', {}).get('friendly_name', eid)
-                        self._notification_callback(
-                            f"{name}: {new}",
-                            COLOR_ACCENT_AMBER, 5000
-                        )
+                        if self._notification_callback:
+                            self._notification_callback(
+                                f"{name}: {new}",
+                                COLOR_ACCENT_AMBER, 5000
+                            )
+                        if self._moment_callback and new in ('locked', 'armed_home', 'armed_away'):
+                            self._moment_callback('house_armed', {'name': name})
+
+        # A whole-house "all lights off" moment fires once on the
+        # transition, not every update cycle while it stays dark.
+        if self._moment_callback:
+            light_states = [self.data.get(eid, {}).get('state')
+                            for eid in self.entities if _domain(eid) == 'light']
+            lights_on_now = any(s == 'on' for s in light_states)
+            if self._lights_were_on and not lights_on_now and light_states:
+                self._moment_callback('all_lights_off', None)
+            self._lights_were_on = lights_on_now
 
     def everyone_away(self, max_age_seconds=300):
         """Return True only when fresh HA presence data confirms everyone away.

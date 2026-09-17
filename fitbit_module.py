@@ -15,6 +15,7 @@ from fitbit.api import Fitbit
 from fitbit.exceptions import HTTPUnauthorized
 from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
 from background_fetcher import BackgroundFetcher
+from effects_kit import draw_trace_progress
 import base64
 
 class FitbitModule:
@@ -52,6 +53,25 @@ class FitbitModule:
         self._fetcher = BackgroundFetcher("fitbit")
         self._retry_after = 0  # unix time; set from a 429 Retry-After header
         self._api_retired = False  # set if the legacy API starts returning 410
+        self._moment_notify = None
+        self._goal_hit_date = None  # date() the goal was last celebrated, so it fires once/day
+
+    def set_moment_callback(self, callback):
+        """Register a callback for Director moment triggers (event_director.py)."""
+        self._moment_notify = callback
+
+    def _check_goal_hit(self):
+        if not self._moment_notify:
+            return
+        try:
+            steps = int(self.data.get('steps', 0))
+        except (TypeError, ValueError):
+            return
+        goal = self.step_goal or 10000
+        today = datetime.now().date()
+        if steps >= goal and self._goal_hit_date != today:
+            self._goal_hit_date = today
+            self._moment_notify('fitbit_goal_hit', {'steps': steps, 'goal': goal})
         
     def initialize_client(self):
         try:
@@ -118,6 +138,7 @@ class FitbitModule:
                 self.data = value
                 api_tracker.record("fitbit", "fitbit")
                 logging.info("Fitbit data updated successfully")
+                self._check_goal_hit()
             else:
                 api_tracker.failure("fitbit", "fitbit")
                 logging.error(f"Error updating Fitbit data: {value}")
@@ -268,47 +289,10 @@ class FitbitModule:
 
     def draw_step_frame(self, screen, x, y, w, h, fraction, thickness=3):
         """Trace a coloured line around the module's outline as step
-        progress grows, closing into a full square at the goal.
-
-        Starts at the top-left and runs clockwise (top -> right -> bottom
-        -> left). Only the filled coloured portion is drawn - no track.
-        """
-        fraction = max(0.0, min(fraction, 1.0))
-        if fraction <= 0:
-            return
-        t = thickness
-        # Draw onto a SRCALPHA layer so colours blend softly on the glass
-        surf = pygame.Surface((w + t, h + t), pygame.SRCALPHA)
-        inset = t / 2.0
-        x0, y0 = inset, inset
-        x1, y1 = w - inset, h - inset
-
-        color = (*self._progress_color(fraction), 230)
-        perim = 2 * ((x1 - x0) + (y1 - y0))
-        remaining = fraction * perim
-        edges = [
-            ((x0, y0), (x1, y0)),   # top
-            ((x1, y0), (x1, y1)),   # right
-            ((x1, y1), (x0, y1)),   # bottom
-            ((x0, y1), (x0, y0)),   # left
-        ]
-        for (ax, ay), (bx, by) in edges:
-            if remaining <= 0:
-                break
-            seg = math.hypot(bx - ax, by - ay)
-            if seg <= 0:
-                continue
-            if remaining >= seg:
-                pygame.draw.line(surf, color, (ax, ay), (bx, by), t)
-                remaining -= seg
-            else:
-                f = remaining / seg
-                pygame.draw.line(
-                    surf, color, (ax, ay),
-                    (ax + (bx - ax) * f, ay + (by - ay) * f), t,
-                )
-                remaining = 0
-        screen.blit(surf, (x, y))
+        progress grows, closing into a full square at the goal (the house
+        progress idiom -- see effects_kit.draw_trace_progress)."""
+        draw_trace_progress(screen, x, y, w, h, fraction,
+                            self._progress_color(fraction), thickness)
 
     def draw(self, screen, position):
         """Draw Fitbit data -- floating text on black, no background."""

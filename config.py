@@ -56,6 +56,7 @@ else:
         0.5, 2.0,
     )
 _UI_TEXT_SCALE = _env_float('UI_TEXT_SCALE', 1.12, 0.85, 1.35)
+IS_NIGHT = _is_night  # public alias -- glow/moment intensity leans on this too
 
 
 def _bright(color):
@@ -294,6 +295,18 @@ MOMENTS = {
     'min_gap_s': 240.0,
     'daily_cap': 40,
     'recent_history': 6,
+}
+
+# Ticker -> themed moment, checked on a big single-day gain (stocks_module.py
+# doesn't track true 52-week-high data, so a large gain is used as a proxy).
+# Add your own watchlist tickers here for a bespoke cameo instead of the
+# generic 'stock_big_gain' moment.
+MOMENT_TICKER_EVENTS = {
+    'BTC-USD': 'crypto_ath',
+    'BTC/USD': 'crypto_ath',
+    'ETH-USD': 'crypto_ath',
+    'SPCE': 'rocket_stock_ath',
+    'RKLB': 'rocket_stock_ath',
 }
 
 #########################################

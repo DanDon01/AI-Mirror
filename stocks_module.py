@@ -154,6 +154,7 @@ class StocksModule:
         self.alert_pulse_speed = 0.8
         self.alert_bg_color = (60, 20, 20)
         self._notify = None
+        self._moment_notify = None
         self._prev_changes = {}
 
         logger.info(
@@ -163,6 +164,10 @@ class StocksModule:
 
     def set_notification_callback(self, callback):
         self._notify = callback
+
+    def set_moment_callback(self, callback):
+        """Register a callback for Director moment triggers (event_director.py)."""
+        self._moment_notify = callback
 
     # ------------------------------------------------------------------
     # CSV loading
@@ -614,7 +619,9 @@ class StocksModule:
             f"Fetch round complete: {valid}/{len(self.tickers)} with data"
         )
 
-        if self._notify:
+        if self._notify or self._moment_notify:
+            from config import MOMENT_TICKER_EVENTS
+            ticker_events = MOMENT_TICKER_EVENTS
             for ticker, data in self.stock_data.items():
                 pct = data.get('percent_change', 0)
                 if isinstance(pct, (int, float)) and abs(pct) >= 5:
@@ -624,10 +631,22 @@ class StocksModule:
                         color = (
                             COLOR_PASTEL_GREEN if pct > 0 else COLOR_PASTEL_RED
                         )
-                        self._notify(
-                            f"{ticker} {arrow} {abs(pct):.1f}%",
-                            color=color, duration_ms=6000,
-                        )
+                        if self._notify:
+                            self._notify(
+                                f"{ticker} {arrow} {abs(pct):.1f}%",
+                                color=color, duration_ms=6000,
+                            )
+                        if self._moment_notify:
+                            price = data.get('price')
+                            payload = {'ticker': ticker, 'pct': pct,
+                                      'price': f"{price:.2f}" if isinstance(price, (int, float)) else ''}
+                            special = ticker_events.get(ticker) if pct > 0 else None
+                            if special:
+                                self._moment_notify(special, payload)
+                            else:
+                                self._moment_notify(
+                                    'stock_big_gain' if pct > 0 else 'stock_big_drop', payload
+                                )
             self._prev_changes = {
                 t: d.get('percent_change', 0)
                 for t, d in self.stock_data.items()

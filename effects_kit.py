@@ -18,8 +18,30 @@ import pygame
 from PIL import Image
 
 
+def safe_smoothscale(surf, size):
+    """pygame.transform.smoothscale segfaults -- crashes the whole
+    process, not a catchable exception -- when the source surface has a
+    zero width or height (e.g. font.render('') on a missing/empty ctx
+    value). Falls back to a plain (non-filtered) scale for a degenerate
+    source, and clamps the target size to at least 1x1 either way."""
+    w, h = max(1, size[0]), max(1, size[1])
+    if surf.get_width() <= 0 or surf.get_height() <= 0:
+        return pygame.transform.scale(surf, (w, h))
+    return pygame.transform.smoothscale(surf, (w, h))
+
+
+_glow_cache = {}
+
+
 def glow_sprite(radius, color, core_alpha, core_frac=0.3):
-    """Pre-render a smooth radial glow (build once, blit many times)."""
+    """A smooth radial glow, cached by its exact parameters -- callers
+    that rebuild "the same" glow every frame (e.g. a hero-number glow
+    whose intensity tracks a slowly-changing day/night curve) get a
+    cache hit instead of repaying the render cost every frame."""
+    key = (radius, color, core_alpha, core_frac)
+    cached = _glow_cache.get(key)
+    if cached is not None:
+        return cached
     size = radius * 2 + 2
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
     center = (radius + 1, radius + 1)
@@ -30,6 +52,9 @@ def glow_sprite(radius, color, core_alpha, core_frac=0.3):
         else:
             a = core_alpha * ((1.0 - t) / (1.0 - core_frac)) ** 2
         pygame.draw.circle(surf, (*color, int(a)), center, r)
+    if len(_glow_cache) > 512:
+        _glow_cache.clear()
+    _glow_cache[key] = surf
     return surf
 
 
@@ -83,6 +108,64 @@ def vertical_gradient(width, height, top_color, bottom_color, top_alpha=255, bot
         alpha = int(top_alpha + (bottom_alpha - top_alpha) * t)
         pygame.draw.line(surf, (*color, alpha), (0, y), (width, y))
     return surf
+
+
+def draw_trace_progress(screen, x, y, w, h, fraction, color, thickness=3, alpha=230):
+    """Trace a coloured line clockwise around a rectangle's outline as
+    progress grows (top -> right -> bottom -> left), closing into a full
+    frame at 1.0. The house progress idiom (originally Fitbit's step
+    frame) -- generalized so any module can show a 0-1 value this way
+    instead of a plain filled bar."""
+    fraction = max(0.0, min(fraction, 1.0))
+    if fraction <= 0:
+        return
+    t = thickness
+    surf = pygame.Surface((w + t, h + t), pygame.SRCALPHA)
+    inset = t / 2.0
+    x0, y0 = inset, inset
+    x1, y1 = w - inset, h - inset
+
+    line_color = (*color, alpha)
+    perim = 2 * ((x1 - x0) + (y1 - y0))
+    remaining = fraction * perim
+    edges = [
+        ((x0, y0), (x1, y0)),
+        ((x1, y0), (x1, y1)),
+        ((x1, y1), (x0, y1)),
+        ((x0, y1), (x0, y0)),
+    ]
+    for (ax, ay), (bx, by) in edges:
+        if remaining <= 0:
+            break
+        seg = math.hypot(bx - ax, by - ay)
+        if seg <= 0:
+            continue
+        if remaining >= seg:
+            pygame.draw.line(surf, line_color, (ax, ay), (bx, by), t)
+            remaining -= seg
+        else:
+            f = remaining / seg
+            pygame.draw.line(
+                surf, line_color, (ax, ay),
+                (ax + (bx - ax) * f, ay + (by - ay) * f), t,
+            )
+            remaining = 0
+    screen.blit(surf, (x, y))
+
+
+def draw_hero_glow(screen, text_surf, x, y, color, intensity=1.0):
+    """A soft ambient glow behind a hero number (clock time, temperature)
+    -- built fresh each call but cheap (one glow_sprite at a size tied to
+    the text), and scaled by `intensity` so callers can dim it in bright
+    daylight and let it bloom at night."""
+    if intensity <= 0.01:
+        return
+    radius = max(4, int(max(text_surf.get_width(), text_surf.get_height()) * 0.42))
+    peak = int(70 * intensity)
+    glow = glow_sprite(radius, color, peak, core_frac=0.35)
+    cx = x + text_surf.get_width() // 2
+    cy = y + text_surf.get_height() // 2
+    screen.blit(glow, (cx - glow.get_width() // 2, cy - glow.get_height() // 2))
 
 
 def flash_alpha_envelope(age):

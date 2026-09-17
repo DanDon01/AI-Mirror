@@ -42,6 +42,7 @@ class NewsModule:
         self.headlines = []
         self._known_titles = set()
         self._notify = None
+        self._moment_notify = None
         self.current_index = 0
         self.last_rotation = time_module.time()
         self.last_fetch = datetime.min
@@ -110,6 +111,8 @@ class NewsModule:
                 for h in new_headlines[:2]:
                     if h['title'] not in self._known_titles:
                         self._notify(h['title'], duration_ms=6000)
+                        if self._moment_notify:
+                            self._moment_notify('breaking_news', {'headline': h['title']})
                         break  # One notification per fetch cycle
 
             self._known_titles = {h['title'] for h in new_headlines}
@@ -123,6 +126,10 @@ class NewsModule:
     def set_notification_callback(self, callback):
         """Register a callback for center-screen notifications."""
         self._notify = callback
+
+    def set_moment_callback(self, callback):
+        """Register a callback for Director moment triggers (event_director.py)."""
+        self._moment_notify = callback
 
     def _word_wrap(self, text, font, max_width):
         """Wrap text to fit within max_width pixels."""

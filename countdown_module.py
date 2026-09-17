@@ -29,6 +29,7 @@ class CountdownModule:
         self.timer_end = None
         self.timer_label = None
         self._notify = None
+        self._moment_notify = None
         self._timer_notified = False
         self.title_font = None
         self.body_font = None
@@ -48,6 +49,10 @@ class CountdownModule:
     def set_notification_callback(self, callback):
         """Register a callback for center-screen notifications."""
         self._notify = callback
+
+    def set_moment_callback(self, callback):
+        """Register a callback for Director moment triggers (event_director.py)."""
+        self._moment_notify = callback
 
     def set_timer(self, seconds, label="Timer"):
         """Start a countdown timer for the given number of seconds."""
@@ -104,6 +109,8 @@ class CountdownModule:
                     color=(255, 120, 120),
                     duration_ms=8000,
                 )
+            if self._moment_notify:
+                self._moment_notify('countdown_zero', {'label': self.timer_label})
 
     def draw(self, screen, position):
         try:

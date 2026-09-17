@@ -16,9 +16,10 @@ from config import (
     FONT_NAME, FONT_SIZE_CLOCK, FONT_SIZE_SMALL, FONT_SIZE_LABEL,
     COLOR_CLOCK_FACE, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
     COLOR_ACCENT_PRIMARY, COLOR_ACCENT_BLUE, COLOR_ACCENT_AMBER,
-    TRANSPARENCY, ANIMATION, LABEL_TRACKING,
+    TRANSPARENCY, ANIMATION, LABEL_TRACKING, IS_NIGHT,
     load_font,
 )
+from effects_kit import draw_hero_glow
 
 logger = logging.getLogger("Clock")
 
@@ -123,6 +124,8 @@ class ClockModule:
             self._cached_hhmm_surf.set_alpha(TRANSPARENCY)
         time_surf = self._cached_hhmm_surf
         time_y = y + (height - time_surf.get_height()) // 2
+        draw_hero_glow(screen, time_surf, x + pad, time_y, COLOR_ACCENT_PRIMARY,
+                       intensity=1.0 if IS_NIGHT else 0.3)
         screen.blit(time_surf, (x + pad, time_y))
 
         # Seconds: smaller, dimmer, baseline-aligned to the big digits

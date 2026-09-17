@@ -24,6 +24,7 @@ from config import (
     TRANSPARENCY,
 )
 from module_base import ModuleDrawHelper, SurfaceCache
+from effects_kit import draw_trace_progress
 
 logger = logging.getLogger("SysInfo")
 
@@ -253,29 +254,37 @@ class SysInfoModule:
 
             lines = [
                 ("CPU", self.stats.get('cpu_temp', 'N/A'),
-                 _temp_color(self.stats.get('_cpu_temp_val'))),
+                 _temp_color(self.stats.get('_cpu_temp_val')), None),
                 ("Load", self.stats.get('cpu_load', 'N/A'),
-                 _usage_color(self.stats.get('_cpu_load_val', 0))),
+                 _usage_color(self.stats.get('_cpu_load_val', 0)),
+                 self.stats.get('_cpu_load_val', 0) / 100.0),
                 ("Mem", self.stats.get('memory', 'N/A'),
-                 _usage_color(self.stats.get('_mem_pct', 0))),
+                 _usage_color(self.stats.get('_mem_pct', 0)),
+                 self.stats.get('_mem_pct', 0) / 100.0),
                 ("Disk", self.stats.get('disk', 'N/A'),
-                 _usage_color(self.stats.get('_disk_pct', 0))),
-                ("Up", self.stats.get('uptime', 'N/A'), COLOR_ACCENT_BLUE),
+                 _usage_color(self.stats.get('_disk_pct', 0)),
+                 self.stats.get('_disk_pct', 0) / 100.0),
+                ("Up", self.stats.get('uptime', 'N/A'), COLOR_ACCENT_BLUE, None),
             ]
 
             line_height = 22
-            for i, (label, value, color) in enumerate(lines):
+            gauge = 14
+            for i, (label, value, color, frac) in enumerate(lines):
                 if draw_y > y + height - line_height:
                     break
 
-                def _render(lbl=label, val=value, clr=color):
+                def _render(lbl=label, val=value, clr=color, fr=frac):
                     lbl_surf = self.small_font.render(f"{lbl}  ", True, COLOR_TEXT_SECONDARY)
                     val_surf = self.small_font.render(val, True, clr)
-                    total_w = lbl_surf.get_width() + val_surf.get_width()
-                    h = max(lbl_surf.get_height(), val_surf.get_height())
+                    lead = gauge + 6 if fr is not None else 0
+                    total_w = lead + lbl_surf.get_width() + val_surf.get_width()
+                    h = max(lbl_surf.get_height(), val_surf.get_height(), gauge)
                     combined = pygame.Surface((total_w, h), pygame.SRCALPHA)
-                    combined.blit(lbl_surf, (0, 0))
-                    combined.blit(val_surf, (lbl_surf.get_width(), 0))
+                    if fr is not None:
+                        draw_trace_progress(combined, 0, (h - gauge) // 2, gauge, gauge,
+                                            fr, clr, thickness=2)
+                    combined.blit(lbl_surf, (lead, 0))
+                    combined.blit(val_surf, (lead + lbl_surf.get_width(), 0))
                     combined.set_alpha(TRANSPARENCY)
                     return combined
 

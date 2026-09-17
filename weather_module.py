@@ -1,17 +1,19 @@
 import requests
 import pygame
 import logging
+import random
 from datetime import datetime, timedelta
 from config import (
     CONFIG, FONT_NAME, FONT_SIZE, FONT_SIZE_HERO, COLOR_FONT_DEFAULT,
     COLOR_FONT_BODY, COLOR_PASTEL_RED, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM,
     COLOR_ACCENT_BLUE, COLOR_ACCENT_AMBER, LINE_SPACING, TRANSPARENCY,
-    COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA,
+    COLOR_BG_MODULE_ALPHA, COLOR_BG_HEADER_ALPHA, IS_NIGHT,
     load_font,
 )
 import os
 from weather_animations import CloudAnimation, RainAnimation, SunAnimation, StormAnimation, SnowAnimation, MoonAnimation
 from visual_effects import VisualEffects
+from effects_kit import draw_hero_glow
 from config import draw_module_background_fallback
 from api_tracker import api_tracker
 from background_fetcher import BackgroundFetcher
@@ -53,6 +55,13 @@ class WeatherModule:
         self._last_data_hash = None
         self._fetcher = BackgroundFetcher("weather")
         self._retry_after = datetime.min  # backoff after a failed fetch
+        self._moment_notify = None
+        self._prev_animation_kind = None
+        self._sunrise_fired_date = None
+        self._sunset_fired_date = None
+        self._full_moon_fired_date = None
+        self._heatwave_notified_at = datetime.min
+        self._high_wind_notified_at = datetime.min
 
         # Show last-good data immediately after a restart (refresh still
         # runs on the first update since last_update stays at datetime.min)
@@ -250,6 +259,10 @@ class WeatherModule:
         # Kick off a fetch without blocking the render loop
         self._fetcher.submit(self._fetch_weather_blocking)
 
+    def set_moment_callback(self, callback):
+        """Register a callback for Director moment triggers (event_director.py)."""
+        self._moment_notify = callback
+
     def update_animation(self):
         try:
             weather_main = self.weather_data['weather'][0]['main'].lower()
@@ -290,9 +303,79 @@ class WeatherModule:
                     self.screen_width, self.screen_height, wind_speed=wind)
             else:
                 self.animation = None
+
+            if isinstance(self.animation, StormAnimation):
+                self.animation.on_flash = self._on_lightning_flash
+
+            self._check_condition_onset(weather_main, is_night, astronomy)
         except Exception as e:
             logging.error(f"Error creating weather animation: {e}")
             self.animation = None
+
+    def _on_lightning_flash(self):
+        """Called by StormAnimation on every ambient bolt. Most flashes
+        stay ambient -- only occasionally do they earn the full-screen
+        Storm Takeover Moment, so it stays a surprise rather than firing
+        on every single strike during a storm."""
+        if self._moment_notify and random.random() < 0.35:
+            self._moment_notify('lightning_strike', None)
+
+    def _check_condition_onset(self, weather_main, is_night, astronomy):
+        """Fires a Moment once on the transition INTO a condition, not
+        continuously while it holds (e.g. once when rain starts, not
+        every frame it keeps raining)."""
+        if 'thunderstorm' in weather_main:
+            kind = 'storm'
+        elif 'rain' in weather_main or 'drizzle' in weather_main:
+            kind = 'rain'
+        elif 'snow' in weather_main:
+            kind = 'snow'
+        else:
+            kind = weather_main
+
+        if self._moment_notify and kind != self._prev_animation_kind:
+            if kind in ('rain', 'storm'):
+                self._moment_notify('rain_onset', None)
+            elif kind == 'snow':
+                self._moment_notify('snow_onset', None)
+            elif kind == 'clear' and self._prev_animation_kind in ('rain', 'storm', 'drizzle'):
+                self._moment_notify('rain_stopped_sun_out', None)
+        self._prev_animation_kind = kind
+
+        if self._moment_notify and is_night:
+            phase = astronomy.get('moon_phase', 0)
+            near_full = 0.47 <= phase <= 0.53
+            today = datetime.now().date()
+            if near_full and self._full_moon_fired_date != today:
+                self._full_moon_fired_date = today
+                self._moment_notify('full_moon_night', None)
+
+    def check_time_based_moments(self):
+        """Sunrise/sunset curtain and heatwave/high-wind checks -- run
+        every frame from draw() since these are time/data thresholds,
+        not condition-class transitions like _check_condition_onset."""
+        if not self._moment_notify or not self.weather_data:
+            return
+        now = datetime.now()
+        today = now.date()
+        astro = self.astronomy()
+
+        if abs((now - astro['sunrise']).total_seconds()) <= 60 and self._sunrise_fired_date != today:
+            self._sunrise_fired_date = today
+            self._moment_notify('sunrise', None)
+        if abs((now - astro['sunset']).total_seconds()) <= 60 and self._sunset_fired_date != today:
+            self._sunset_fired_date = today
+            self._moment_notify('sunset', None)
+
+        temp = self.weather_data.get('main', {}).get('temp')
+        if isinstance(temp, (int, float)) and temp >= 28 and (now - self._heatwave_notified_at).total_seconds() > 1800:
+            self._heatwave_notified_at = now
+            self._moment_notify('heatwave', None)
+
+        wind = self.weather_data.get('wind', {}).get('speed', 0) or 0
+        if wind >= 12 and (now - self._high_wind_notified_at).total_seconds() > 900:
+            self._high_wind_notified_at = now
+            self._moment_notify('high_wind', None)
 
     @staticmethod
     def _parse_weather_time(value):
@@ -394,6 +477,7 @@ class WeatherModule:
             if self.animation:
                 self.animation.update()
                 self.animation.draw(screen)
+            self.check_time_based_moments()
 
             # Title label
             from module_base import ModuleDrawHelper
@@ -422,6 +506,8 @@ class WeatherModule:
                 hero = self._surface_cache.get_or_render(
                     "weather_hero", _render_hero, data_hash
                 )
+                draw_hero_glow(screen, hero, x, draw_y, self.get_temperature_color(temp),
+                               intensity=1.0 if IS_NIGHT else 0.3)
                 screen.blit(hero, (x, draw_y))
 
                 # Condition sits beside the hero, baseline-ish aligned

@@ -76,6 +76,8 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # --- Project imports ---
 from config import CONFIG
+import seasonal_theme
+import moments_seasonal
 from calendar_module import CalendarModule
 from weather_module import WeatherModule
 from fitbit_module import FitbitModule
@@ -218,6 +220,13 @@ class MagicMirror:
             CONFIG.get('moments', {})
         )
         moments_library.register_all(self.director)
+
+        # Wire moment-trigger callbacks for modules that support them (see
+        # each module's set_moment_callback -- notify() is cheap to call
+        # speculatively, the Director itself decides if/when to actually play)
+        for name, module in self.modules.items():
+            if hasattr(module, 'set_moment_callback'):
+                module.set_moment_callback(self.director.notify)
 
         # Premium boot: modules fade in one after another (bars first,
         # then columns top to bottom)
@@ -528,6 +537,8 @@ class MagicMirror:
             # Advance animation timers
             self.animation_manager.update()
             self.director.update()
+            seasonal_theme.update(1.0 / max(self.frame_rate, 1))
+            moments_seasonal.check_calendar_moments(self.director)
 
             layout_v2 = CONFIG.get('layout_v2', {})
             left_names = layout_v2.get('left_modules', [])
@@ -589,6 +600,11 @@ class MagicMirror:
                 for name in self.modules:
                     if name not in drawn:
                         self._draw_module(name)
+
+            # Seasonal skin: persistent light overlay (string lights, fog,
+            # petals) for the active date range, if any (see seasonal_theme.py)
+            if self.state == "active":
+                seasonal_theme.draw(self.screen)
 
             # Center notifications (on top of everything in all states)
             self.animation_manager.draw_notifications(self.screen)
