@@ -107,10 +107,26 @@ def fake_smarthome(module):
 
 
 def fake_fitbit(module):
+    stages = [
+        ("light", 1800), ("deep", 2700), ("light", 2400), ("rem", 1500),
+        ("wake", 300), ("light", 3000), ("deep", 1800), ("rem", 2100),
+        ("light", 2700), ("wake", 420), ("light", 2400), ("rem", 1800),
+        ("light", 3000),
+    ]
+    today = datetime.now()
+    weekly = [
+        ((today - timedelta(days=6 - i)).strftime("%Y-%m-%d"), steps)
+        for i, steps in enumerate([6120, 9840, 7310, 11260, 5480, 12346, 7842])
+    ]
     module.data = {
         "steps": "7842", "calories": "1936", "active_minutes": 42,
-        "sleep": "07:12", "resting_heart_rate": "58",
+        "sleep": "07:12", "resting_heart_rate": "58", "distance": 5.6,
+        "hr_min": 52, "hr_avg": 58, "hr_max": 72,
+        "hr_trend": [56, 58, 61, 59, 57, 64, 70, 66, 60, 58],
+        "sleep_stages": stages, "sleep_start": "00:14", "sleep_end": "07:28",
+        "weekly_steps": weekly,
     }
+    module.last_update = today - timedelta(minutes=12)
 
 
 def fake_stocks(module):

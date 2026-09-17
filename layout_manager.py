@@ -111,18 +111,25 @@ class LayoutManager:
     def _stack_column(self, module_names, x, width, top_y, bottom_y, gap):
         """Stack modules vertically within a column zone.
 
-        Distributes available vertical space equally among modules.
+        Vertical space is split by weight, not equally: a dense graphical
+        module (the biometric monitor's scan figure, ECG and gauges) needs
+        several times the room a few lines of text do. Weights come from
+        LAYOUT_V2['module_weights']; anything unlisted is 1.0.
         """
         positions = {}
         count = len(module_names)
         if count == 0:
             return positions
 
-        available = bottom_y - top_y
-        module_h = (available - (count - 1) * gap) // count
+        weights = self.layout.get('module_weights', {})
+        module_weights = [max(0.1, float(weights.get(n, 1.0))) for n in module_names]
+        total_weight = sum(module_weights)
+
+        available = (bottom_y - top_y) - (count - 1) * gap
         current_y = top_y
 
-        for name in module_names:
+        for name, weight in zip(module_names, module_weights):
+            module_h = int(available * weight / total_weight)
             positions[name] = {
                 'x': x, 'y': current_y,
                 'width': width, 'height': module_h,

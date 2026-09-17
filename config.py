@@ -216,21 +216,21 @@ MONITOR_CONFIGS = {
         'module_scale': 1.0,
         'font_scale': 1.0,
         'left_col_width': 320,
-        'right_col_width': 320,
+        'right_col_width': 380,
     },
     '24_portrait': {
         'resolution': (1200, 1920),
         'module_scale': 0.833,
         'font_scale': 0.85,
         'left_col_width': 265,
-        'right_col_width': 265,
+        'right_col_width': 315,
     },
     '21_portrait': {
         'resolution': (768, 1024),
         'module_scale': 0.533,
         'font_scale': 0.65,
         'left_col_width': 170,
-        'right_col_width': 170,
+        'right_col_width': 205,
     }
 }
 
@@ -277,8 +277,8 @@ LAYOUT_V2 = {
         'top_bar': {'y': 0, 'height': 115},
         'bottom_bar': {'height': 40},
         'left_column': {'x': 0, 'width_pct': 0.22},
-        'right_column': {'width_pct': 0.22},
-        'center': {'width_pct': 0.56},
+        'right_column': {'width_pct': 0.26},
+        'center': {'width_pct': 0.52},
     },
     'left_modules': ['weather', 'calendar', 'countdown', 'smarthome', 'octopus_energy'],
     'right_modules': ['greeting', 'phone', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
@@ -288,6 +288,13 @@ LAYOUT_V2 = {
     'fullscreen_overlay_modules': ['retro_characters'],
     'module_gap': 15,
     'edge_padding': 15,
+    # Column height is split by weight, not equally (layout_manager
+    # ._stack_column). The biometric monitor is a dense instrument
+    # composition -- scan figure, ECG, gauges, sleep timeline, weekly
+    # graph -- and needs several times the room a few lines of text do.
+    'module_weights': {
+        'fitbit': 2.9,
+    },
 }
 
 #########################################

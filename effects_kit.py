@@ -155,34 +155,6 @@ def draw_dial_gauge(screen, cx, cy, radius, value, vmin, vmax, zones,
     pygame.draw.circle(screen, (*color, 255), (int(cx), int(cy)), 5)
 
 
-def draw_ring_progress(screen, cx, cy, radius, fraction, color, thickness=10,
-                       track_alpha=40, start_deg=-90, end_deg=270):
-    """A circular (or partial-arc) progress ring -- steps-vs-goal as a
-    full ring, sleep-vs-target as a half-arc (pass e.g. start_deg=180,
-    end_deg=360 for a bottom half-circle), any 0-1 completion either way.
-    A dim track over the full span plus a bright arc from the start,
-    proportional to fraction. Same live-drawn small-segment technique as
-    the dial gauge and portal ring, for a consistent look."""
-    fraction = max(0.0, min(1.0, fraction))
-    span = end_deg - start_deg
-    steps = max(24, int(abs(span) / 5))
-    for i in range(steps):
-        a0 = math.radians(start_deg + (i / steps) * span)
-        a1 = math.radians(start_deg + ((i + 1) / steps) * span)
-        x0, y0 = cx + math.cos(a0) * radius, cy + math.sin(a0) * radius
-        x1, y1 = cx + math.cos(a1) * radius, cy + math.sin(a1) * radius
-        pygame.draw.line(screen, (*color, track_alpha), (x0, y0), (x1, y1), thickness)
-
-    lit = int(steps * fraction)
-    for i in range(lit):
-        a0 = math.radians(start_deg + (i / steps) * span)
-        a1 = math.radians(start_deg + ((i + 1) / steps) * span)
-        x0, y0 = cx + math.cos(a0) * radius, cy + math.sin(a0) * radius
-        x1, y1 = cx + math.cos(a1) * radius, cy + math.sin(a1) * radius
-        pygame.draw.line(screen, (*color, 235), (x0, y0), (x1, y1), thickness)
-        pygame.draw.circle(screen, (*color, 235), (int(x1), int(y1)), thickness // 2)
-
-
 def draw_sparkline(screen, x, y, w, h, values, color, alpha=220, vmin=None, vmax=None):
     """A minimal trend line -- real data (however coarse) communicates a
     lot more than a single number, and costs almost nothing to draw."""
@@ -221,6 +193,100 @@ def draw_panel_frame(screen, x, y, w, h, color, alpha=70, corner_len=16):
     ):
         pygame.draw.line(screen, (*color, bright), (px, py), (px + L * dx, py), 2)
         pygame.draw.line(screen, (*color, bright), (px, py), (px, py + L * dy), 2)
+
+
+def chamfer_points(x, y, w, h, cut):
+    """The corner-cut octagon path used by every console panel in the
+    biometric monitor -- an angled corner reads as machined hardware where
+    a rounded rect reads as a web card."""
+    return [
+        (x + cut, y), (x + w - cut, y), (x + w, y + cut),
+        (x + w, y + h - cut), (x + w - cut, y + h), (x + cut, y + h),
+        (x, y + h - cut), (x, y + cut),
+    ]
+
+
+def draw_chamfer_frame(screen, x, y, w, h, color, alpha=60, cut=9,
+                       corner_alpha=190, corner_len=14):
+    """A chamfered instrument-panel outline: faint full border plus bright
+    stubs running off each cut corner. Outline only -- the mirror stays
+    see-through, so nothing ever gets a filled background."""
+    if w <= 4 or h <= 4:
+        return
+    cut = int(max(3, min(cut, w // 3, h // 3)))
+    surf = pygame.Surface((w + 1, h + 1), pygame.SRCALPHA)
+    pygame.draw.polygon(surf, (*color, alpha), chamfer_points(0, 0, w, h, cut), 1)
+    screen.blit(surf, (x, y))
+
+    L = int(max(4, min(corner_len, w // 4, h // 4)))
+    bright = (*color, corner_alpha)
+    for (cx0, cy0), (dx, dy) in (
+        ((x + cut, y), (1, 0)), ((x + w - cut, y), (-1, 0)),
+        ((x + cut, y + h), (1, 0)), ((x + w - cut, y + h), (-1, 0)),
+        ((x, y + cut), (0, 1)), ((x, y + h - cut), (0, -1)),
+        ((x + w, y + cut), (0, 1)), ((x + w, y + h - cut), (0, -1)),
+    ):
+        pygame.draw.line(screen, bright, (cx0, cy0),
+                         (cx0 + L * dx, cy0 + L * dy), 1)
+
+
+def draw_segmented_ring(screen, cx, cy, radius, fraction, color, segments=36,
+                        thickness=7, gap_deg=2.4, track_alpha=42, lit_alpha=240,
+                        start_deg=-90, end_deg=270):
+    """A radial gauge built from discrete lit segments rather than one
+    smooth arc -- the difference between an instrument and a progress bar.
+    The segment straddling the current value is partially lit so the gauge
+    still reads continuously."""
+    fraction = max(0.0, min(1.0, fraction))
+    span = end_deg - start_deg
+    seg_span = span / max(1, segments)
+    lit_edge = fraction * segments
+    sub = max(2, int(abs(seg_span) / 4))
+
+    for i in range(segments):
+        if i + 1 <= lit_edge:
+            alpha = lit_alpha
+        elif i < lit_edge:
+            alpha = int(track_alpha + (lit_alpha - track_alpha) * (lit_edge - i))
+        else:
+            alpha = track_alpha
+        a_start = start_deg + i * seg_span + gap_deg / 2.0
+        a_end = start_deg + (i + 1) * seg_span - gap_deg / 2.0
+        prev = None
+        for s in range(sub + 1):
+            ang = math.radians(a_start + (a_end - a_start) * (s / sub))
+            pt = (cx + math.cos(ang) * radius, cy + math.sin(ang) * radius)
+            if prev is not None:
+                pygame.draw.line(screen, (*color, alpha), prev, pt, thickness)
+            prev = pt
+
+
+def draw_arc_segment(screen, cx, cy, radius, start_deg, end_deg, color,
+                     thickness=2, alpha=200):
+    """A plain bright arc -- the slow-rotating ambient accents flanking the
+    body scan, and the sweep hands on the readiness gauges."""
+    span = end_deg - start_deg
+    steps = max(3, int(abs(span) / 4))
+    prev = None
+    for i in range(steps + 1):
+        ang = math.radians(start_deg + span * (i / steps))
+        pt = (cx + math.cos(ang) * radius, cy + math.sin(ang) * radius)
+        if prev is not None:
+            pygame.draw.line(screen, (*color, alpha), prev, pt, thickness)
+        prev = pt
+
+
+def draw_tick_scale(screen, x, y, w, color, count=20, major_every=5,
+                    minor_h=3, major_h=6, alpha=110):
+    """A measurement scale under a readout. Pure instrument grammar: it
+    carries no data, it tells the eye this is a calibrated device."""
+    if w <= 0 or count <= 0:
+        return
+    for i in range(count + 1):
+        tx = x + (w * i / count)
+        h = major_h if (i % major_every == 0) else minor_h
+        a = alpha if (i % major_every == 0) else int(alpha * 0.55)
+        pygame.draw.line(screen, (*color, a), (tx, y), (tx, y + h), 1)
 
 
 def draw_flare(screen, x, y, w, h, flare_alpha, color=(196, 174, 128)):

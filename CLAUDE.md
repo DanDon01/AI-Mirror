@@ -30,7 +30,7 @@ Entry point: `AI-Mirror.py` -> `MagicMirror` class -> `run()` main loop at 30 FP
 - **Minimal luxury:** platinum text on black -- primary (226,228,232), secondary (148,150,156), dim (96,98,104). Single champagne accent (196,174,128) for module labels and hairline rules only. Muted functional green/red/amber. Module labels are tracked uppercase with a short hairline rule. Full-width hairlines under the top banner and above the ticker frame the mirror space.
 - **Typography:** Bundled Lato (assets/fonts, OFL) -- light weight for body/hero values, regular for small labels. load_font(weight, size) in config.py; SysFont stack is the fallback. Hero values (temperature, greeting, clock) are large and light.
 - **Design preview:** `python design_preview.py` renders the full UI with fake data to data/preview.png headlessly -- judge design changes on the dev box before deploying.
-- **Layout:** Zone-based with edge padding. Left column (22% width): weather, calendar, countdown, smarthome. Right column (22% width, right-aligned text): greeting, quote, news, fitbit, openclaw, sysinfo. Top bar: scrolling monospace clock + date + weather status. Bottom bar: scrolling stock ticker.
+- **Layout:** Zone-based with edge padding. Left column (22% width): weather, calendar, countdown, smarthome. Right column (26% width, right-aligned text): greeting, quote, news, fitbit, openclaw, sysinfo. Column height is split by *weight*, not equally -- `LAYOUT_V2['module_weights']` gives a dense graphical module more room than a text one (fitbit is 2.9x). Centre stays ~50% clear for the mirror. Top bar: scrolling monospace clock + date + weather status. Bottom bar: scrolling stock ticker.
 - **Center clear zone:** Reserved for mirror reflection. AI/voice overlays only appear when active. Center notification queue for alerts (stock moves, timer completion, new messages).
 - **Fonts:** Segoe UI / DejaVu Sans (body), Consolas / DejaVu Sans Mono (clock). Sizes scaled for arm's length readability.
 - **Animations:** Per-module eased fade transitions via AnimationManager with staggered boot. Headline rotation with crossfade.
@@ -49,7 +49,11 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
        weather_module.py     - OpenWeatherMap + Open-Meteo fallback + weather animations
        stocks_module.py      - Scrolling bottom ticker (yfinance, batch + history fallback)
        calendar_module.py    - Google Calendar events
-       fitbit_module.py      - Fitbit health data + step progress bar
+       fitbit_module.py      - BIOMETRIC MONITOR: habitat-style vital-signs
+                               instrument (scan figure, ECG, segmented gauges,
+                               sleep-stage timeline, 7-day activity graph)
+       body_scan.py          - Anatomical scan figure used by the biometric
+                               monitor (vector human + sweeping scan band)
        countdown_module.py   - Event countdowns + voice timer + center alerts
        quote_module.py       - Daily quote (ZenQuotes API + local JSON + builtin fallback)
        news_module.py        - RSS news headlines (feedparser) + breaking news notifications
@@ -103,7 +107,8 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
 | `weather_module.py` | Dual-source weather (OpenWeatherMap + Open-Meteo) + animations | ~327 |
 | `stocks_module.py` | Bottom ticker: batch + history fallback, scrolling render | ~480 |
 | `calendar_module.py` | Google Calendar integration | ~250 |
-| `fitbit_module.py` | Fitbit health data + thin progress bars | ~362 |
+| `fitbit_module.py` | BIOMETRIC MONITOR instrument panel + Fitbit API plumbing | ~990 |
+| `body_scan.py` | Vector anatomical figure + scan-band animation | ~220 |
 | `countdown_module.py` | Event countdowns + voice-activated timer + center alerts | ~190 |
 | `quote_module.py` | Daily quote (ZenQuotes API / local JSON / builtin) | ~202 |
 | `news_module.py` | RSS headlines via feedparser + breaking news notifications | ~189 |
@@ -196,6 +201,7 @@ HA_TOKEN=
 - Falls back to a simple procedural face when assets/avatar/ has no frames.
 
 ## Known Gotchas
+- `pygame.draw.*` IGNORES the alpha channel of its colour. Passing `(r,g,b,40)` to `draw.line/rect/circle/polygon` renders at full brightness, on plain *and* SRCALPHA surfaces. Anything relying on a dim "track" vs a bright "value" (gauge tracks, grid ruling, scale ticks) silently renders as one flat solid shape. Fix: draw into an SRCALPHA layer and blit that once (`fitbit_module._render`), which makes alpha meaningful and composites correctly. Alpha *does* apply when a surface is blitted, which is why `draw_panel_frame`/`draw_chamfer_frame` (draw-to-temp-surface-then-blit) look correct.
 - `pygame.transform.smoothscale` segfaults (kills the whole process, not a catchable exception) when scaling from a zero-width or zero-height source surface -- e.g. `font.render('')` on a missing/empty string. Use `effects_kit.safe_smoothscale()` instead of calling `pygame.transform.smoothscale` directly anywhere a scaled surface's source text could plausibly be empty (moment banners, dynamic labels).
 - `Variables.env` path is `os.path.join(current_dir, '..', 'Variables.env')` - file must be in parent directory
 - Screen resolution is auto-detected at startup (`pygame.display.Info()`) - config values are overridden with actual display size

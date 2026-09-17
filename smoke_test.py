@@ -27,6 +27,7 @@ PROJECT_MODULES = [
     "visual_effects",
     "voice_commands",
     "effects_kit",
+    "body_scan",
     "event_director",
     "moments_weather",
     "moments_life",
