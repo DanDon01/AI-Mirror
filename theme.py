@@ -62,6 +62,11 @@ _THEMES = {
 _ORDER = ['scifi', 'luxury', 'sunset', 'mono']
 _current = 'scifi'
 
+# Independent of which theme is active -- a theme can still say the ring
+# looks wrong for its palette (ring_enabled: False, e.g. "Luxury"), but
+# this is the user's own explicit on/off, checked first.
+portal_ring_enabled = True
+
 
 def _apply_brightness(color):
     from config import _UI_BRIGHTNESS
@@ -105,7 +110,11 @@ def module_accent(name):
 
 
 def ring_colors():
-    """(day_color, night_color), or None if this theme hides the portal ring."""
+    """(day_color, night_color), or None if the ring should be hidden --
+    either the user turned it off directly, or the active theme doesn't
+    use one (e.g. "Luxury")."""
+    if not portal_ring_enabled:
+        return None
     t = _THEMES[_current]
     if not t['ring_enabled']:
         return None

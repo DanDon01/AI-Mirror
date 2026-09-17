@@ -522,19 +522,33 @@ class OctopusEnergyModule:
 
             line_h = 24
 
-            # Current rate with off-peak indicator
+            # Current rate as a speedometer-style dial -- a number in a
+            # sentence ("23.4p/kWh") doesn't read as "is this expensive
+            # right now", a needle in a colored zone does at a glance.
             if self.current_rate is not None:
+                from effects_kit import draw_dial_gauge
                 rate_color = self._rate_color(self.current_rate)
-                rate_text = f"{self.current_rate:.1f}p/kWh"
-                if self.is_offpeak:
-                    rate_text += "  OFF-PEAK"
-
-                rate_surf = self.body_font.render(rate_text, True, rate_color)
-                rate_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(
-                    screen, rate_surf, x, draw_y, width, align
+                dial_r = min(int(width * 0.30), 78)
+                dial_cx = x + width - dial_r - 6 if align == 'right' else x + dial_r + 6
+                dial_cy = draw_y + dial_r + 4
+                zones = [(RATE_CHEAP, COLOR_ACCENT_GREEN),
+                        (RATE_EXPENSIVE, COLOR_ACCENT_AMBER),
+                        (RATE_EXPENSIVE * 1.6, COLOR_ACCENT_RED)]
+                draw_dial_gauge(
+                    screen, dial_cx, dial_cy, dial_r, self.current_rate,
+                    0, RATE_EXPENSIVE * 1.6, zones, thickness=max(8, dial_r // 8),
+                    needle_color=COLOR_TEXT_SECONDARY,
                 )
-                draw_y += line_h
+                rate_label = self.body_font.render(f"{self.current_rate:.1f}p", True, rate_color)
+                rate_label.set_alpha(TRANSPARENCY)
+                screen.blit(rate_label, (dial_cx - rate_label.get_width() // 2,
+                                         dial_cy + dial_r * 0.35))
+                if self.is_offpeak:
+                    badge = self.small_font.render("OFF-PEAK", True, COLOR_ACCENT_GREEN)
+                    badge.set_alpha(TRANSPARENCY)
+                    screen.blit(badge, (dial_cx - badge.get_width() // 2,
+                                        dial_cy + dial_r * 0.35 + rate_label.get_height() + 2))
+                draw_y += dial_r * 2 + 10
 
             # Today's consumption
             if self.consumption_today_kwh is not None:

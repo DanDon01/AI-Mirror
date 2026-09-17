@@ -99,6 +99,108 @@ def soft_blob(width, color, alpha, height_ratio=0.42, seed=None):
     return pygame.image.frombuffer(rgba.tobytes(), (width, height), 'RGBA')
 
 
+def draw_dial_gauge(screen, cx, cy, radius, value, vmin, vmax, zones,
+                    thickness=10, start_deg=125, end_deg=415, needle_color=None):
+    """A speedometer-style arc dial: a colored-zone track plus a bright
+    needle marking the current value. Live-drawn each frame (small line
+    segments, same cheap pattern as the portal ring's ticks) rather than
+    a pre-rendered bitmap, since `value` changes.
+
+    zones: [(upper_bound, color), ...] ascending -- the zone a given point
+    on the arc falls into is whichever is the first zone whose upper_bound
+    it's under. The last zone's color covers everything above the
+    second-to-last bound.
+    """
+    span = end_deg - start_deg
+    steps = max(24, int(span / 3))
+    frac_range = max(1e-6, vmax - vmin)
+
+    def zone_color(v):
+        for bound, color in zones:
+            if v <= bound:
+                return color
+        return zones[-1][1] if zones else (200, 200, 200)
+
+    for i in range(steps):
+        t0 = i / steps
+        t1 = (i + 1) / steps
+        v_mid = vmin + ((t0 + t1) / 2) * frac_range
+        ang0 = math.radians(start_deg + t0 * span)
+        ang1 = math.radians(start_deg + t1 * span)
+        x0, y0 = cx + math.cos(ang0) * radius, cy + math.sin(ang0) * radius
+        x1, y1 = cx + math.cos(ang1) * radius, cy + math.sin(ang1) * radius
+        pygame.draw.line(screen, (*zone_color(v_mid), 235), (x0, y0), (x1, y1), thickness)
+        # A small round joint between segments -- pygame line segments
+        # have square ends, so a jointless polyline at this thickness
+        # shows visible notches at each seam.
+        pygame.draw.circle(screen, (*zone_color(v_mid), 235), (int(x1), int(y1)), thickness // 2)
+
+    # Rounded end caps at the very start/end of the track.
+    a0 = math.radians(start_deg)
+    a1 = math.radians(end_deg)
+    p0 = (cx + math.cos(a0) * radius, cy + math.sin(a0) * radius)
+    p1 = (cx + math.cos(a1) * radius, cy + math.sin(a1) * radius)
+    pygame.draw.circle(screen, (*zone_color(vmin), 235), (int(p0[0]), int(p0[1])), thickness // 2)
+    pygame.draw.circle(screen, (*zone_color(vmax), 235), (int(p1[0]), int(p1[1])), thickness // 2)
+
+    # Needle: a bright line from center out past the track, plus a small hub.
+    t = max(0.0, min(1.0, (value - vmin) / frac_range))
+    ang = math.radians(start_deg + t * span)
+    color = needle_color or (255, 255, 255)
+    nx = cx + math.cos(ang) * (radius + thickness * 0.9)
+    ny = cy + math.sin(ang) * (radius + thickness * 0.9)
+    ix = cx + math.cos(ang) * (radius * 0.25)
+    iy = cy + math.sin(ang) * (radius * 0.25)
+    pygame.draw.line(screen, (*color, 255), (ix, iy), (nx, ny), 3)
+    pygame.draw.circle(screen, (*color, 255), (int(cx), int(cy)), 5)
+
+
+def draw_ring_progress(screen, cx, cy, radius, fraction, color, thickness=10, track_alpha=40):
+    """A circular progress ring (steps-vs-goal, any 0-1 completion) --
+    a dim full-circle track plus a bright arc from the top, clockwise,
+    proportional to fraction. Same live-drawn small-segment technique as
+    the dial gauge and portal ring, for a consistent look."""
+    fraction = max(0.0, min(1.0, fraction))
+    steps = 72
+    for i in range(steps):
+        a0 = math.radians(-90 + (i / steps) * 360)
+        a1 = math.radians(-90 + ((i + 1) / steps) * 360)
+        x0, y0 = cx + math.cos(a0) * radius, cy + math.sin(a0) * radius
+        x1, y1 = cx + math.cos(a1) * radius, cy + math.sin(a1) * radius
+        pygame.draw.line(screen, (*color, track_alpha), (x0, y0), (x1, y1), thickness)
+
+    lit = int(steps * fraction)
+    for i in range(lit):
+        a0 = math.radians(-90 + (i / steps) * 360)
+        a1 = math.radians(-90 + ((i + 1) / steps) * 360)
+        x0, y0 = cx + math.cos(a0) * radius, cy + math.sin(a0) * radius
+        x1, y1 = cx + math.cos(a1) * radius, cy + math.sin(a1) * radius
+        pygame.draw.line(screen, (*color, 235), (x0, y0), (x1, y1), thickness)
+        pygame.draw.circle(screen, (*color, 235), (int(x1), int(y1)), thickness // 2)
+
+
+def draw_panel_frame(screen, x, y, w, h, color, alpha=70, corner_len=16):
+    """A thin glowing card border -- not a filled background (the mirror
+    stays see-through, no opaque boxes), just enough structure that a
+    module reads as a panel instead of text floating with no edge. A
+    faint full rounded-rect outline plus brighter corner accents, the
+    same "HUD panel" language as the portal ring's screen-corner brackets."""
+    if w <= 0 or h <= 0:
+        return
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(surf, (*color, alpha), surf.get_rect(), width=1, border_radius=10)
+    screen.blit(surf, (x, y))
+
+    bright = min(255, alpha + 110)
+    L = min(corner_len, w // 3, h // 3)
+    for (px, py), (dx, dy) in (
+        ((x, y), (1, 1)), ((x + w, y), (-1, 1)),
+        ((x, y + h), (1, -1)), ((x + w, y + h), (-1, -1)),
+    ):
+        pygame.draw.line(screen, (*color, bright), (px, py), (px + L * dx, py), 2)
+        pygame.draw.line(screen, (*color, bright), (px, py), (px, py + L * dy), 2)
+
+
 def draw_flare(screen, x, y, w, h, flare_alpha, color=(196, 174, 128)):
     """A brief soft highlight behind a rect whose data just changed --
     the "loud change" half of "calm baseline, loud change" (see

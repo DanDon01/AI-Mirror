@@ -4,7 +4,11 @@ from datetime import datetime, timedelta
 import time as time_module
 import pygame
 import logging
-from config import CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, TRANSPARENCY, COLOR_FONT_SUBTITLE, COLOR_FONT_BODY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_GREEN
+from config import (
+    CONFIG, FONT_NAME, COLOR_FONT_DEFAULT, TRANSPARENCY, COLOR_FONT_SUBTITLE,
+    COLOR_FONT_BODY, COLOR_TEXT_SECONDARY, COLOR_TEXT_DIM, COLOR_ACCENT_GREEN,
+    COLOR_ACCENT_RED, COLOR_ACCENT_AMBER, load_font,
+)
 from api_tracker import api_tracker
 import os
 from pathlib import Path
@@ -15,7 +19,7 @@ from fitbit.api import Fitbit
 from fitbit.exceptions import HTTPUnauthorized
 from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
 from background_fetcher import BackgroundFetcher
-from effects_kit import draw_trace_progress
+from effects_kit import draw_trace_progress, draw_hero_glow
 import base64
 
 class FitbitModule:
@@ -279,6 +283,33 @@ class FitbitModule:
         logging.info("Fitbit tokens have been saved to environment file")
 
     @staticmethod
+    def _draw_heart_icon(screen, cx, cy, size, color):
+        r = size * 0.26
+        pygame.draw.circle(screen, color, (int(cx - r * 0.9), int(cy - r * 0.3)), int(r))
+        pygame.draw.circle(screen, color, (int(cx + r * 0.9), int(cy - r * 0.3)), int(r))
+        pts = [(cx - r * 1.8, cy - r * 0.1), (cx, cy + r * 1.9), (cx + r * 1.8, cy - r * 0.1)]
+        pygame.draw.polygon(screen, color, pts)
+
+    @staticmethod
+    def _draw_flame_icon(screen, cx, cy, size, color):
+        r = size * 0.32
+        pts = [
+            (cx, cy - r * 1.3), (cx + r * 0.7, cy - r * 0.2), (cx + r * 0.55, cy + r * 0.9),
+            (cx, cy + r * 1.3), (cx - r * 0.55, cy + r * 0.9), (cx - r * 0.7, cy - r * 0.2),
+        ]
+        pygame.draw.polygon(screen, color, pts)
+        pygame.draw.circle(screen, color, (int(cx), int(cy + r * 0.2)), int(r * 0.35))
+
+    @staticmethod
+    def _draw_bolt_icon(screen, cx, cy, size, color):
+        r = size * 0.34
+        pts = [
+            (cx + r * 0.15, cy - r * 1.2), (cx - r * 0.65, cy + r * 0.15), (cx - r * 0.05, cy + r * 0.15),
+            (cx - r * 0.15, cy + r * 1.2), (cx + r * 0.65, cy - r * 0.15), (cx + r * 0.05, cy - r * 0.15),
+        ]
+        pygame.draw.polygon(screen, color, pts)
+
+    @staticmethod
     def _progress_color(fraction):
         """Red below 50%, amber below 80%, green at/above goal."""
         if fraction < 0.5:
@@ -314,6 +345,8 @@ class FitbitModule:
                 self.title_font = title_f
                 self.body_font = body_f
                 self.small_font = small_f
+                self.hero_font = load_font('light', 34)
+                self.tile_label_font = load_font('regular', 10)
                 self._fonts_ready = True
 
             label_color = COLOR_FONT_SUBTITLE
@@ -352,62 +385,71 @@ class FitbitModule:
 
             fraction = steps_int / step_goal if step_goal else 0.0
 
-            # Build the stat rows as surfaces first, so the frame can be
-            # sized to hug the actual text rather than the module box.
-            rows = []
+            # A trace-frame square with the steps count as a hero number
+            # inside it -- the frame itself already shows progress toward
+            # goal, so the number just needs to be big, not prefixed with
+            # "Steps:". Everything else (HR/sleep/active/cal) becomes a
+            # small icon + number tile grid below -- no "Label: value"
+            # text anywhere in this module.
+            pad = 14
+            side = min(width, 128)
+            ring_r = side // 2
+            frame_top = current_y
+            frame_x = x + width - side if align == 'right' else x
+            ring_cx, ring_cy = frame_x + ring_r, frame_top + ring_r
+            from effects_kit import draw_ring_progress
+            draw_ring_progress(screen, ring_cx, ring_cy, ring_r - 6, fraction,
+                               self._progress_color(fraction), thickness=8)
 
-            sl = self.body_font.render("Steps:", True, label_color)
-            sv = self.body_font.render(str(steps), True, value_color)
-            gap = 5
-            srow = pygame.Surface(
-                (sl.get_width() + gap + sv.get_width(),
-                 max(sl.get_height(), sv.get_height())), pygame.SRCALPHA)
-            srow.blit(sl, (0, 0))
-            srow.blit(sv, (sl.get_width() + gap, 0))
-            rows.append(srow)
+            steps_surf = self.hero_font.render(f"{steps_int:,}", True, value_color)
+            steps_surf.set_alpha(TRANSPARENCY)
+            steps_y = ring_cy - steps_surf.get_height() // 2 - 6
+            draw_hero_glow(screen, steps_surf, ring_cx - steps_surf.get_width() // 2,
+                           steps_y, self._progress_color(fraction), intensity=0.4)
+            screen.blit(steps_surf, (ring_cx - steps_surf.get_width() // 2, steps_y))
+            unit_surf = self.tile_label_font.render("STEPS", True, COLOR_TEXT_DIM)
+            unit_surf.set_alpha(TRANSPARENCY)
+            screen.blit(unit_surf, (ring_cx - unit_surf.get_width() // 2,
+                                    steps_y + steps_surf.get_height() + 2))
 
+            # Icon tiles: 2 per row, filling to the module's edge.
+            tiles = []
             hr = self.data.get('resting_heart_rate')
             if hr not in (None, 'N/A'):
-                rows.append(self.body_font.render(f"HR: {hr} bpm", True, value_color))
-            if self.data.get('sleep') not in (None, 'N/A'):
-                rows.append(self.body_font.render(
-                    f"Sleep: {self.data['sleep']}", True, value_color))
-            if 'active_minutes' in self.data:
-                rows.append(self.body_font.render(
-                    f"Active: {self.data['active_minutes']} min", True, value_color))
+                tiles.append((self._draw_heart_icon, str(hr), "BPM", COLOR_ACCENT_RED))
+            sleep = self.data.get('sleep')
+            if sleep not in (None, 'N/A'):
+                tiles.append((None, str(sleep), "SLEEP", value_color))
+            active = self.data.get('active_minutes')
+            if active not in (None, 'N/A'):
+                tiles.append((self._draw_bolt_icon, str(active), "ACTIVE MIN", COLOR_ACCENT_AMBER))
             cal = self.data.get('calories')
             if cal not in (None, 'N/A'):
-                rows.append(self.body_font.render(f"Cal: {cal}", True, value_color))
+                tiles.append((self._draw_flame_icon, str(cal), "CAL", COLOR_ACCENT_AMBER))
 
-            for r in rows:
-                r.set_alpha(TRANSPARENCY)
-
-            # Square sized to hug the text block (+ inner padding), anchored
-            # to the module's outer edge below the title.
-            pad = 12
-            content_w = max(r.get_width() for r in rows)
-            content_h = len(rows) * line_height
-            side = max(content_w, content_h) + 2 * pad
-            # Never exceed the module box
-            side = min(side, width, (y + height) - (current_y - pad) - 4)
-
-            frame_top = current_y - pad
-            if align == 'right':
-                frame_x = x + width - side
-            else:
-                frame_x = x
-            self.draw_step_frame(screen, frame_x, frame_top, side, side, fraction)
-
-            # Blit rows inside the frame with pad from the inner edge
-            row_y = current_y
-            for r in rows:
-                if align == 'right':
-                    rx = frame_x + side - pad - r.get_width()
+            tile_y = frame_top + side + 16
+            tile_w = width // 2
+            icon_r = 16
+            for i, (icon_fn, value_text, unit_text, color) in enumerate(tiles):
+                col = i % 2
+                row = i // 2
+                tx = x + col * tile_w
+                ty = tile_y + row * 52
+                icon_cx = tx + icon_r + 2 if align != 'right' else tx + tile_w - icon_r - 2
+                if icon_fn:
+                    icon_fn(screen, icon_cx, ty + icon_r, icon_r * 2, color)
                 else:
-                    rx = frame_x + pad
-                screen.blit(r, (rx, row_y))
-                row_y += line_height
-            
+                    z = self.small_font.render("z", True, color)
+                    z.set_alpha(TRANSPARENCY)
+                    screen.blit(z, (icon_cx - z.get_width() // 2, ty))
+                val_surf = self.body_font.render(value_text, True, value_color)
+                val_surf.set_alpha(TRANSPARENCY)
+                unit_surf2 = self.tile_label_font.render(unit_text, True, COLOR_TEXT_DIM)
+                unit_surf2.set_alpha(TRANSPARENCY)
+                text_x = icon_cx + icon_r + 8 if align != 'right' else icon_cx - icon_r - 8 - val_surf.get_width()
+                screen.blit(val_surf, (text_x, ty - 2))
+                screen.blit(unit_surf2, (text_x, ty + val_surf.get_height() - 4))
+
         except Exception as e:
             logging.error(f"Error drawing Fitbit data: {e}")
             logging.error(traceback.format_exc())

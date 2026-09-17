@@ -74,6 +74,9 @@ PAGE = """<!DOCTYPE html>
 
 <h2>Theme</h2>
 <div class="row" id="themes"></div>
+<div class="row" style="margin-top:8px">
+  <button id="ringBtn" onclick="postRing()">Portal ring</button>
+</div>
 
 <h2>Moments</h2>
 <div class="row">
@@ -145,6 +148,11 @@ async function postTheme(key) {
   loadThemes();
 }
 
+async function postRing() {
+  await fetch("/api/portal_ring", { method: "POST" });
+  refresh();
+}
+
 function render(s) {
   const states = document.getElementById("states");
   states.innerHTML = "";
@@ -192,6 +200,10 @@ function render(s) {
   const guestOn = !!(s.moments && s.moments.guest_mode);
   guestBtn.className = guestOn ? "on" : "off";
   guestBtn.textContent = guestOn ? "Guest mode: ON" : "Guest mode: OFF";
+
+  const ringBtn = document.getElementById("ringBtn");
+  ringBtn.className = s.portal_ring ? "on" : "off";
+  ringBtn.textContent = s.portal_ring ? "Portal ring: ON" : "Portal ring: OFF";
 }
 
 async function refreshLog() {
@@ -321,6 +333,10 @@ class WebPanel:
                     if director:
                         director.guest_mode = not director.guest_mode
                         logger.info(f"Panel set guest mode: {'ON' if director.guest_mode else 'OFF'}")
+                elif cmd == "portal_ring":
+                    import theme
+                    theme.portal_ring_enabled = not theme.portal_ring_enabled
+                    logger.info(f"Panel set portal ring: {'ON' if theme.portal_ring_enabled else 'OFF'}")
                 elif cmd == "set_theme":
                     import theme
                     if theme.set_theme(value):
@@ -390,6 +406,9 @@ class WebPanel:
                     value = qs.get("value", [""])[0]
                     panel.commands.put(("set_theme", value))
                     self._send(200, json.dumps({"ok": True}))
+                elif url.path == "/api/portal_ring":
+                    panel.commands.put(("portal_ring", None))
+                    self._send(200, json.dumps({"ok": True}))
                 elif url.path == "/api/toggle":
                     module = qs.get("module", [""])[0]
                     if module in panel.mirror.modules:
@@ -449,6 +468,7 @@ class WebPanel:
     # ----- data assembly --------------------------------------------------
 
     def status(self):
+        import theme
         mm = self.mirror.module_manager
         director = getattr(self.mirror, "director", None)
         return {
@@ -462,6 +482,7 @@ class WebPanel:
                 "active": director.active_name if director else None,
                 "guest_mode": bool(director.guest_mode) if director else False,
             } if director else None,
+            "portal_ring": bool(theme.portal_ring_enabled),
         }
 
     def tail_log(self, lines):

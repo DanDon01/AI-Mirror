@@ -71,6 +71,23 @@ def _domain(entity_id):
     return entity_id.split('.')[0] if '.' in entity_id else ''
 
 
+TOGGLE_DOMAINS = ('light', 'switch', 'lock', 'fan')
+
+
+def _draw_toggle(screen, x, y, on, on_color, w=26, h=14):
+    """A real toggle-switch pill -- on/off reads instantly without a
+    status word, the way any phone settings screen shows it, instead of
+    a colored dot that needs a text label next to it to mean anything."""
+    track_color = on_color if on else (90, 92, 98)
+    track = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(track, (*track_color, 130 if on else 90), track.get_rect(), border_radius=h // 2)
+    pygame.draw.rect(track, (*track_color, 220), track.get_rect(), width=1, border_radius=h // 2)
+    screen.blit(track, (x, y))
+    r = h // 2 - 2
+    cx = x + w - r - 2 if on else x + r + 2
+    pygame.draw.circle(screen, (*track_color, 255), (cx, y + h // 2), r)
+
+
 def _draw_shield_check(screen, cx, cy, color, size=9):
     """A small hand-drawn shield-with-checkmark glyph -- "all quiet" reads
     as reassurance rather than another line of text to parse."""
@@ -685,9 +702,11 @@ class SmartHomeModule:
                 x, y = position['x'], position['y']
                 width = position.get('width', 300)
                 height = position.get('height', 300)
+                align = position.get('align', 'left')
             else:
                 x, y = position
                 width, height = 300, 300
+                align = 'left'
 
             self._ensure_fonts()
             import theme
@@ -762,14 +781,27 @@ class SmartHomeModule:
 
                 state_val = info['state']
                 color = self._entity_color(entity_id)
+                domain = _domain(entity_id)
 
-                # Colored state dot, then name + state text
-                pygame.draw.circle(screen, color, (x + 4, draw_y + 9), 4)
+                if domain in TOGGLE_DOMAINS and state_val in ('on', 'off', 'locked', 'unlocked'):
+                    # A real toggle switch -- on/off reads without needing
+                    # a status word next to it.
+                    is_on = state_val in ('on', 'locked')
+                    toggle_x = x if align != 'right' else x + 2
+                    _draw_toggle(screen, toggle_x, draw_y + 3, is_on, color)
+                    label_x = x + 34
+                else:
+                    # Continuous/non-binary state (temperature, media, ...)
+                    # still needs the actual value as text.
+                    pygame.draw.circle(screen, color, (x + 4, draw_y + 9), 4)
+                    label_x = x + 14
 
                 def _render_line(name=self._entity_label(entity_id),
                                  st=self._entity_state_text(entity_id),
-                                 c=color):
+                                 c=color, is_toggle=(domain in TOGGLE_DOMAINS and state_val in ('on', 'off', 'locked', 'unlocked'))):
                     name_surf = self.small_font.render(f"{name}  ", True, COLOR_TEXT_SECONDARY)
+                    if is_toggle:
+                        return name_surf
                     state_surf = self.small_font.render(st, True, c)
                     total_w = name_surf.get_width() + state_surf.get_width()
                     h = max(name_surf.get_height(), state_surf.get_height())
@@ -782,7 +814,7 @@ class SmartHomeModule:
                 surf = self._surface_cache.get_or_render(
                     f"ha_line_{i}", _render_line, data_hash
                 )
-                screen.blit(surf, (x + 14, draw_y))
+                screen.blit(surf, (label_x, draw_y))
                 draw_y += line_height
 
             # Quiet motion sensors collapse into one reassuring line

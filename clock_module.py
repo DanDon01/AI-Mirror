@@ -19,7 +19,7 @@ from config import (
     TRANSPARENCY, ANIMATION, LABEL_TRACKING, IS_NIGHT,
     load_font,
 )
-from effects_kit import draw_hero_glow
+from effects_kit import draw_hero_glow, draw_trace_progress
 
 logger = logging.getLogger("Clock")
 
@@ -43,6 +43,11 @@ class ClockModule:
         self.scroll_speed = ANIMATION.get('scroll_speed_clock', 0.5)
         self.screen_width = 0
         self.total_width = 0
+
+        # The right-hand info ticker (date/status/astronomy/forecast, all
+        # in one continuously scrolling strip -- see _draw_info_ticker)
+        self._info_scroll_x = 0.0
+        self._info_scroll_speed = 0.6
 
         # Status indicators set by main loop
         self._status_text = ""
@@ -70,6 +75,7 @@ class ClockModule:
             self.scroll_position -= self.scroll_speed
             if self.total_width > 0 and self.scroll_position < -self.total_width:
                 self.scroll_position = self.screen_width
+        self._info_scroll_x -= self._info_scroll_speed
 
     def _render_tracked(self, font, text, color, tracking=LABEL_TRACKING):
         glyphs = [font.render(ch, True, color) for ch in text]
@@ -111,11 +117,15 @@ class ClockModule:
             logger.error(f"Error drawing clock: {e}")
 
     def _draw_static(self, screen, x, y, width, height):
-        """Premium static banner: HH:MM large, seconds quiet, date right."""
+        """HH:MM hero on the left with a live seconds ring (real motion,
+        not a static digit); everything else -- date, status, astronomy,
+        forecast -- flows as one continuously scrolling info ticker on
+        the right instead of stacked static text blocks."""
+        import theme
         now = datetime.now(self.tz) if self.tz else datetime.now()
         hhmm = now.strftime('%H:%M')
-        secs = now.strftime('%S')
         pad = 22
+        accent = theme.primary()
 
         # HH:MM (cached per minute)
         if hhmm != self._cached_hhmm:
@@ -124,86 +134,89 @@ class ClockModule:
             self._cached_hhmm_surf.set_alpha(TRANSPARENCY)
         time_surf = self._cached_hhmm_surf
         time_y = y + (height - time_surf.get_height()) // 2
-        draw_hero_glow(screen, time_surf, x + pad, time_y, COLOR_ACCENT_PRIMARY,
+        draw_hero_glow(screen, time_surf, x + pad, time_y, accent,
                        intensity=1.0 if IS_NIGHT else 0.3)
         screen.blit(time_surf, (x + pad, time_y))
 
-        # Seconds: smaller, dimmer, baseline-aligned to the big digits
-        sec_surf = self.seconds_font.render(secs, True, COLOR_TEXT_DIM)
+        # A live seconds ring -- constant, satisfying motion next to the
+        # digits, instead of a plain re-rendered "07" that just sits there.
+        ring_r = 15
+        ring_cx = x + pad + time_surf.get_width() + 22
+        ring_cy = time_y + time_surf.get_height() - ring_r - 8
+        sec_frac = (now.second * 1_000_000 + now.microsecond) / 60_000_000
+        draw_trace_progress(screen, ring_cx - ring_r, ring_cy - ring_r,
+                            ring_r * 2, ring_r * 2, sec_frac, accent, thickness=2)
+        sec_surf = self.seconds_font.render(str(now.second).zfill(2), True, COLOR_TEXT_DIM)
         sec_surf.set_alpha(TRANSPARENCY)
-        sec_x = x + pad + time_surf.get_width() + 12
-        sec_y = time_y + time_surf.get_height() - sec_surf.get_height() - 12
-        screen.blit(sec_surf, (sec_x, sec_y))
+        screen.blit(sec_surf, (ring_cx - sec_surf.get_width() // 2, ring_cy - sec_surf.get_height() // 2))
 
-        # Date: tracked small caps, right-aligned (cached per day)
+        ticker_left = ring_cx + ring_r + 26
+        self._draw_info_ticker(screen, ticker_left, x + width - pad, y, height)
+
+    def _info_chips(self):
+        """Build (surface, is_divider) chips for the scrolling info
+        ticker: date, status, astronomy, then the forecast strip -- one
+        flowing sequence instead of separate static blocks."""
+        import theme
+        accent = theme.primary()
+        chips = []
+
         date_text = self.get_current_date().upper()
-        if date_text != self._cached_date:
-            self._cached_date = date_text
-            self._cached_date_surf = self._render_tracked(
-                self.date_font, date_text, COLOR_TEXT_SECONDARY, tracking=2
-            )
-            self._cached_date_surf.set_alpha(TRANSPARENCY)
-        date_surf = self._cached_date_surf
-        status_surf = None
+        chips.append(self._render_tracked(self.date_font, date_text, COLOR_TEXT_SECONDARY, tracking=2))
         if self._status_text:
-            status_surf = self.status_font.render(self._status_text, True, COLOR_TEXT_DIM)
-            status_surf.set_alpha(TRANSPARENCY)
-        astronomy_surf = None
+            chips.append(self.status_font.render(self._status_text.upper(), True, COLOR_TEXT_DIM))
         if self._astronomy_text:
-            astronomy_surf = self.status_font.render(self._astronomy_text, True, COLOR_ACCENT_AMBER)
-            astronomy_surf.set_alpha(TRANSPARENCY)
-        right_w = max(date_surf.get_width(), *(s.get_width() for s in (status_surf, astronomy_surf) if s is not None))
-        right_x = x + width - right_w - pad
+            chips.append(self.status_font.render(self._astronomy_text.upper(), True, COLOR_ACCENT_AMBER))
 
-        # The centre of the bar earns its space with a practical five-point
-        # forecast, rather than being decorative empty black.
-        timeline_x = sec_x + sec_surf.get_width() + 34
-        timeline_right = right_x - 26
-        if self._weather_timeline and timeline_right - timeline_x >= 220:
-            self._draw_weather_timeline(screen, timeline_x, timeline_right, y, height)
-
-        if status_surf or astronomy_surf:
-            extra_h = sum(s.get_height() + 4 for s in (astronomy_surf, status_surf) if s is not None)
-            block_h = date_surf.get_height() + 5 + extra_h
-            block_y = y + (height - block_h) // 2
-            screen.blit(date_surf, (x + width - date_surf.get_width() - pad, block_y))
-            line_y = block_y + date_surf.get_height() + 5
-            for surf in (astronomy_surf, status_surf):
-                if surf is not None:
-                    screen.blit(surf, (x + width - surf.get_width() - pad, line_y))
-                    line_y += surf.get_height() + 4
-        else:
-            screen.blit(
-                date_surf, (x + width - date_surf.get_width() - pad, y + (height - date_surf.get_height()) // 2)
-            )
-
-    def _draw_weather_timeline(self, screen, left, right, y, height):
-        """Five-point forecast strip: time + temp, rain% only when it
-        matters. The old hand-drawn sun/cloud marks read as clip-art at
-        this size, so this stays typographic until real iconography
-        (Moments-era) replaces it."""
-        entries = self._weather_timeline[:5]
-        if not entries:
-            return
-        slot_w = max(1, (right - left) // len(entries))
-        base_y = y + height - 15
-        pygame.draw.line(screen, (*COLOR_TEXT_DIM, 90), (left, base_y), (right, base_y), 1)
-        for index, entry in enumerate(entries):
-            cx = left + slot_w * index + slot_w // 2
-            time_surf = self.status_font.render(f"{entry['time']}h", True, COLOR_TEXT_DIM)
-            time_surf.set_alpha(TRANSPARENCY)
-            screen.blit(time_surf, (cx - time_surf.get_width() // 2, y + 8))
+        for entry in self._weather_timeline[:6]:
             rain = entry.get('rain', 0)
-            temp_text = f"{entry['temp']}°"
             temp_color = COLOR_ACCENT_BLUE if rain >= 25 else COLOR_TEXT_SECONDARY
-            temp_surf = self.status_font.render(temp_text, True, temp_color)
-            temp_surf.set_alpha(TRANSPARENCY)
-            screen.blit(temp_surf, (cx - temp_surf.get_width() // 2, base_y - temp_surf.get_height() - 2))
+            label = f"{entry['time']}h  {entry['temp']}°"
             if rain >= 25:
-                rain_surf = self.status_font.render(f"{rain}%", True, COLOR_ACCENT_BLUE)
-                rain_surf.set_alpha(TRANSPARENCY)
-                screen.blit(rain_surf, (cx - rain_surf.get_width() // 2,
-                                        base_y - temp_surf.get_height() - rain_surf.get_height() - 4))
+                label += f"  {rain}%"
+            chips.append(self.status_font.render(label, True, temp_color))
+
+        dot = self.status_font.render("·", True, accent)
+        out = []
+        for i, c in enumerate(chips):
+            c.set_alpha(TRANSPARENCY)
+            out.append(c)
+            if i < len(chips) - 1:
+                out.append(dot)
+        return out
+
+    def _draw_info_ticker(self, screen, left, right, y, height):
+        """Seamless continuous scroll (same technique as the bottom stock
+        ticker), clipped to [left, right] so it never collides with the
+        HH:MM hero or run off the screen edge."""
+        avail = right - left
+        if avail < 60:
+            return
+        chips = self._info_chips()
+        if not chips:
+            return
+
+        gap = 22
+        total_w = sum(c.get_width() for c in chips) + gap * len(chips)
+        if total_w <= 0:
+            return
+
+        old_clip = screen.get_clip()
+        screen.set_clip(pygame.Rect(left, y, avail, height))
+
+        draw_x = left + (self._info_scroll_x % total_w)
+        if draw_x > left:
+            draw_x -= total_w
+        row_y = y + height // 2 - chips[0].get_height() // 2
+        while draw_x < right:
+            for c in chips:
+                if draw_x + c.get_width() > left and draw_x < right:
+                    screen.blit(c, (draw_x, row_y))
+                draw_x += c.get_width() + gap
+
+        screen.set_clip(old_clip)
+        if self._info_scroll_x < -total_w:
+            self._info_scroll_x += total_w
 
     def _draw_scrolling(self, screen, x, y, width, height):
         """Legacy scrolling time bar."""

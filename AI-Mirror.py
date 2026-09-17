@@ -445,6 +445,12 @@ class MagicMirror:
                     self.animation_manager.push_notification(
                         f"Theme: {dict(theme.names())[new_theme]}", duration_ms=2500
                     )
+                elif event.key == pygame.K_p:
+                    theme.portal_ring_enabled = not theme.portal_ring_enabled
+                    logging.info(f"'p' pressed - portal ring: {'ON' if theme.portal_ring_enabled else 'OFF'}")
+                    self.animation_manager.push_notification(
+                        f"Portal ring: {'ON' if theme.portal_ring_enabled else 'OFF'}", duration_ms=2000
+                    )
                 elif event.key == pygame.K_s:
                     if self.state == "active":
                         self.change_state("screensaver")
@@ -672,6 +678,20 @@ class MagicMirror:
         alpha = self.animation_manager.get_module_alpha(name)
         if alpha <= 0:
             return  # Fully faded out
+
+        # Left/right column modules get a thin glowing card border --
+        # not a filled box (the mirror stays see-through), just enough
+        # structure that the whole display doesn't read as undifferentiated
+        # floating text. Clock/stocks/center-overlays are framed elsewhere
+        # or intentionally borderless.
+        layout_v2 = CONFIG.get('layout_v2', {})
+        if name in layout_v2.get('left_modules', []) + layout_v2.get('right_modules', []):
+            from effects_kit import draw_panel_frame
+            draw_panel_frame(
+                self.screen, position.get('x', 0), position.get('y', 0),
+                position.get('width', 300), position.get('height', 300),
+                theme.module_accent(name),
+            )
 
         if self.animation_manager.is_module_fading(name):
             # Render to temp surface and apply alpha
