@@ -21,10 +21,9 @@ except ImportError:
 from config import (
     COLOR_FONT_BODY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_GREEN,
     COLOR_ACCENT_AMBER, COLOR_ACCENT_RED, COLOR_ACCENT_BLUE,
-    COLOR_ACCENT_STEEL, TRANSPARENCY,
+    COLOR_ACCENT_STEEL, COLOR_TEXT_DIM, TRANSPARENCY,
 )
-from module_base import ModuleDrawHelper, SurfaceCache
-from effects_kit import draw_trace_progress
+from module_base import ModuleDrawHelper, SurfaceCache, InstrumentPanel
 
 logger = logging.getLogger("SysInfo")
 
@@ -98,7 +97,7 @@ def _usage_color(percent):
     return COLOR_ACCENT_RED
 
 
-class SysInfoModule:
+class SysInfoModule(InstrumentPanel):
     def __init__(self, update_interval_seconds=10, **kwargs):
         self.update_interval = timedelta(seconds=update_interval_seconds)
         self.last_update = datetime.min
@@ -222,81 +221,86 @@ class SysInfoModule:
         return {'text': 'N/A', 'percent': 0}
 
     def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
-                width = position.get('width', 300)
-                height = position.get('height', 300)
-            else:
-                x, y = position
-                width, height = 300, 300
+        """SYSTEMS: the mirror reporting on its own hardware."""
+        self.draw_instrument(screen, position, default=(300, 200))
 
-            if self.title_font is None:
-                title_f, body_f, small_f = ModuleDrawHelper.get_fonts()
-                self.title_font = title_f
-                self.body_font = body_f
-                self.small_font = small_f
+    def _render_panel(self, surf, width, height, position=None):
+        from effects_kit import draw_segmented_ring, draw_bar_meter, draw_tick_scale
+        import theme
+        accent = theme.module_accent('sysinfo')
+        pad = 6
+        ix, iw = pad, width - pad * 2
 
-            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
+        temp_val = self.stats.get('_cpu_temp_val')
+        if temp_val is None:
+            status, status_color = "NO PROBE", COLOR_TEXT_DIM
+        elif temp_val >= 75:
+            status, status_color = "THERMAL", COLOR_ACCENT_RED
+        elif temp_val >= 65:
+            status, status_color = "WARM", COLOR_ACCENT_AMBER
+        else:
+            status, status_color = "NOMINAL", COLOR_ACCENT_GREEN
 
-            import theme
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "System", x, y, width, align=align, accent_color=theme.module_accent('sysinfo')
-            )
+        cur = self._panel_header(
+            surf, ix, 0, iw, "Systems", accent, align='right',
+            subtitle=(self.stats.get('host') or '') or None,
+            right_text=status, right_color=status_color)
 
-            if not self.stats:
-                surf = self.small_font.render("Loading...", True, COLOR_TEXT_SECONDARY)
-                surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, surf, x, draw_y, width, align)
-                return
+        if not self.stats:
+            msg = self._text('f_small', "BOOTING...", COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(msg, (ix + iw - msg.get_width(), cur + 6))
+            return
 
-            data_hash = "|".join(f"{k}={v}" for k, v in self.stats.items()
-                                 if not k.startswith('_'))
+        # Core temperature as a dial with a real thermal range
+        r = int(min(34, (height - cur) * 0.20))
+        cx = ix + r + 4
+        cy = cur + r + 6
+        frac = 0.0 if temp_val is None else max(0.0, min(1.0, (temp_val - 25.0) / 60.0))
+        ring_color = status_color if temp_val is not None else COLOR_TEXT_DIM
+        draw_segmented_ring(surf, cx, cy, r, frac, ring_color, segments=20, thickness=5)
+        val = self._text('f_value', f"{temp_val:.0f}" if temp_val is not None else "--",
+                         COLOR_FONT_BODY)
+        surf.blit(val, (cx - val.get_width() / 2 - 3, cy - val.get_height() / 2))
+        deg = self._text('f_nano', "C", COLOR_TEXT_DIM)
+        surf.blit(deg, (cx + val.get_width() / 2 - 2, cy - 2))
+        lbl = self._text('f_nano', "CORE", accent, spacing=1)
+        surf.blit(lbl, (cx - lbl.get_width() / 2, cy + r + 4))
 
-            lines = [
-                ("CPU", self.stats.get('cpu_temp', 'N/A'),
-                 _temp_color(self.stats.get('_cpu_temp_val')), None),
-                ("Load", self.stats.get('cpu_load', 'N/A'),
-                 _usage_color(self.stats.get('_cpu_load_val', 0)),
-                 self.stats.get('_cpu_load_val', 0) / 100.0),
-                ("Mem", self.stats.get('memory', 'N/A'),
-                 _usage_color(self.stats.get('_mem_pct', 0)),
-                 self.stats.get('_mem_pct', 0) / 100.0),
-                ("Disk", self.stats.get('disk', 'N/A'),
-                 _usage_color(self.stats.get('_disk_pct', 0)),
-                 self.stats.get('_disk_pct', 0) / 100.0),
-                ("Up", self.stats.get('uptime', 'N/A'), COLOR_ACCENT_BLUE, None),
-            ]
+        # Load / memory / storage as panel meters
+        bx = cx + r + 14
+        bw = (ix + iw) - bx
+        by = cur + 4
+        rows = [
+            ("LOAD", self.stats.get('cpu_load', 'N/A'),
+             (self.stats.get('_cpu_load_val') or 0) / 100.0),
+            ("MEMORY", self.stats.get('memory', 'N/A'),
+             (self.stats.get('_mem_pct') or 0) / 100.0),
+            ("STORAGE", self.stats.get('disk', 'N/A'),
+             (self.stats.get('_disk_pct') or 0) / 100.0),
+        ]
+        for label, value, fraction in rows:
+            if by + 24 > height:
+                break
+            lb = self._text('f_nano', label, COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(lb, (bx, by))
+            # The meter stays accent-coloured and the value carries the
+            # warning colour -- three full-width traffic-light bars read as
+            # an alarm panel rather than a status readout.
+            usage_color = _usage_color(max(0.0, min(1.0, fraction)) * 100)
+            vl = self._text('f_nano', str(value), usage_color, spacing=1)
+            surf.blit(vl, (bx + bw - vl.get_width(), by))
+            draw_bar_meter(surf, bx, by + lb.get_height() + 2, bw, 6,
+                           fraction, accent, segments=max(8, int(bw / 11)))
+            by += lb.get_height() + 14
 
-            line_height = 22
-            gauge = 14
-            for i, (label, value, color, frac) in enumerate(lines):
-                if draw_y > y + height - line_height:
-                    break
-
-                def _render(lbl=label, val=value, clr=color, fr=frac):
-                    lbl_surf = self.small_font.render(f"{lbl}  ", True, COLOR_TEXT_SECONDARY)
-                    val_surf = self.small_font.render(val, True, clr)
-                    lead = gauge + 6 if fr is not None else 0
-                    total_w = lead + lbl_surf.get_width() + val_surf.get_width()
-                    h = max(lbl_surf.get_height(), val_surf.get_height(), gauge)
-                    combined = pygame.Surface((total_w, h), pygame.SRCALPHA)
-                    if fr is not None:
-                        draw_trace_progress(combined, 0, (h - gauge) // 2, gauge, gauge,
-                                            fr, clr, thickness=2)
-                    combined.blit(lbl_surf, (lead, 0))
-                    combined.blit(val_surf, (lead + lbl_surf.get_width(), 0))
-                    combined.set_alpha(TRANSPARENCY)
-                    return combined
-
-                surf = self._surface_cache.get_or_render(
-                    f"sys_line_{i}", _render, data_hash
-                )
-                ModuleDrawHelper.blit_aligned(screen, surf, x, draw_y, width, align)
-                draw_y += line_height
-
-        except Exception as e:
-            logger.error(f"Error drawing sysinfo module: {e}")
+        # Uptime on a calibrated footer strip
+        foot_y = max(by, cy + r + 18) + 4
+        if foot_y + 14 < height:
+            draw_tick_scale(surf, ix, foot_y, iw * 0.45, accent,
+                            count=16, major_every=4, alpha=80)
+            up = self._text('f_nano', f"UPTIME {self.stats.get('uptime', 'N/A')}".upper(),
+                            COLOR_TEXT_DIM, spacing=1)
+            surf.blit(up, (ix + iw - up.get_width(), foot_y - 2))
 
     def cleanup(self):
         pass

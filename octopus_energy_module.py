@@ -21,7 +21,7 @@ from config import (
     COLOR_ACCENT_RED, COLOR_ACCENT_AMBER, COLOR_ACCENT_BLUE, COLOR_ACCENT_GOLD,
     TRANSPARENCY,
 )
-from module_base import ModuleDrawHelper, SurfaceCache
+from module_base import ModuleDrawHelper, SurfaceCache, InstrumentPanel
 from api_tracker import api_tracker
 from background_fetcher import BackgroundFetcher
 
@@ -35,7 +35,7 @@ RATE_CHEAP = 10.0
 RATE_EXPENSIVE = 28.0
 
 
-class OctopusEnergyModule:
+class OctopusEnergyModule(InstrumentPanel):
     def __init__(self, api_key='', account_number='', **kwargs):
         self.api_key = api_key
         self.account_number = account_number
@@ -479,219 +479,205 @@ class OctopusEnergyModule:
     # Drawing
     # ------------------------------------------------------------------
 
-    def draw(self, screen, position):
-        try:
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
-                width = position.get('width', 300)
-                height = position.get('height', 300)
-            else:
-                x, y = position
-                width, height = 300, 300
-
-            align = position.get('align', 'left') if isinstance(position, dict) else 'left'
-
-            if self.title_font is None:
-                tf, bf, sf = ModuleDrawHelper.get_fonts()
-                self.title_font = tf
-                self.body_font = bf
-                self.small_font = sf
-
-            import theme
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Energy", x, y, width, align=align, accent_color=theme.module_accent('octopus_energy')
-            )
-
-            # No API key configured
-            if not self.api_key:
-                msg = self.body_font.render(
-                    "Configure OCTOPUS_API_KEY", True, COLOR_TEXT_SECONDARY
-                )
-                msg.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, msg, x, draw_y, width, align)
-                return
-
-            # Not yet fetched
-            if not self._account_fetched:
-                msg = self.body_font.render(
-                    "Connecting...", True, COLOR_TEXT_SECONDARY
-                )
-                msg.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(screen, msg, x, draw_y, width, align)
-                return
-
-            line_h = 24
-
-            # Current rate as a speedometer-style dial -- a number in a
-            # sentence ("23.4p/kWh") doesn't read as "is this expensive
-            # right now", a needle in a colored zone does at a glance.
-            if self.current_rate is not None:
-                from effects_kit import draw_dial_gauge
-                rate_color = self._rate_color(self.current_rate)
-                dial_r = min(int(width * 0.30), 78)
-                dial_cx = x + width - dial_r - 6 if align == 'right' else x + dial_r + 6
-                dial_cy = draw_y + dial_r + 4
-                zones = [(RATE_CHEAP, COLOR_ACCENT_GREEN),
-                        (RATE_EXPENSIVE, COLOR_ACCENT_AMBER),
-                        (RATE_EXPENSIVE * 1.6, COLOR_ACCENT_RED)]
-                draw_dial_gauge(
-                    screen, dial_cx, dial_cy, dial_r, self.current_rate,
-                    0, RATE_EXPENSIVE * 1.6, zones, thickness=max(8, dial_r // 8),
-                    needle_color=COLOR_TEXT_SECONDARY,
-                )
-                rate_label = self.body_font.render(f"{self.current_rate:.1f}p", True, rate_color)
-                rate_label.set_alpha(TRANSPARENCY)
-                screen.blit(rate_label, (dial_cx - rate_label.get_width() // 2,
-                                         dial_cy + dial_r * 0.35))
-                if self.is_offpeak:
-                    badge = self.small_font.render("OFF-PEAK", True, COLOR_ACCENT_GREEN)
-                    badge.set_alpha(TRANSPARENCY)
-                    screen.blit(badge, (dial_cx - badge.get_width() // 2,
-                                        dial_cy + dial_r * 0.35 + rate_label.get_height() + 2))
-                draw_y += dial_r * 2 + 10
-
-            # Today's consumption
-            if self.consumption_today_kwh is not None:
-                kwh_text = f"Today: {self.consumption_today_kwh:.1f} kWh"
-                if self.cost_today_pence is not None:
-                    cost_pounds = self.cost_today_pence / 100
-                    kwh_text += f"  ~{cost_pounds:.2f}"
-                kwh_surf = self.body_font.render(
-                    kwh_text, True, COLOR_FONT_BODY
-                )
-                kwh_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(
-                    screen, kwh_surf, x, draw_y, width, align
-                )
-                draw_y += line_h
-
-            # Standing charge
-            if self.standing_charge is not None:
-                sc_text = f"Standing: {self.standing_charge:.1f}p/day"
-                sc_surf = self.small_font.render(
-                    sc_text, True, COLOR_TEXT_DIM
-                )
-                sc_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(
-                    screen, sc_surf, x, draw_y, width, align
-                )
-                draw_y += line_h
-
-            # Tariff name
-            if self._tariff_code:
-                label = "Intelligent Go" if self._is_intelligent else "Fixed"
-                tariff_surf = self.small_font.render(
-                    label, True, COLOR_TEXT_DIM
-                )
-                tariff_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(
-                    screen, tariff_surf, x, draw_y, width, align
-                )
-                draw_y += line_h + 4
-
-            # EV / Intelligent Go section
-            if self._is_intelligent and draw_y < y + height - line_h:
-                self._draw_ev_section(
-                    screen, x, draw_y, width, height - (draw_y - y),
-                    align, line_h,
-                )
-
-            # Error indicator
-            if self._last_error and draw_y < y + height - 16:
-                err_surf = self.small_font.render(
-                    "API error", True, COLOR_ACCENT_RED
-                )
-                err_surf.set_alpha(TRANSPARENCY // 2)
-                ModuleDrawHelper.blit_aligned(
-                    screen, err_surf, x, y + height - 16, width, align
-                )
-
-        except Exception as e:
-            logger.error(f"Error drawing energy module: {e}")
-            logger.error(traceback.format_exc())
-
-    def _draw_ev_section(self, screen, x, draw_y, width, remaining_h, align, line_h):
-        """Draw EV charging info if available."""
-        # Separator
-        ModuleDrawHelper.draw_separator(screen, x, draw_y, width)
-        draw_y += 8
-
-        if not self.ev_device and not self.planned_dispatches:
-            # No EV registered yet
-            hint = self.small_font.render(
-                "No EV registered", True, COLOR_TEXT_DIM
-            )
-            hint.set_alpha(TRANSPARENCY)
-            ModuleDrawHelper.blit_aligned(
-                screen, hint, x, draw_y, width, align
-            )
-            return
-
-        # EV device info
-        if self.ev_device:
-            make = self.ev_device.get('vehicleMake', '')
-            model = self.ev_device.get('vehicleModel', '')
-            if make or model:
-                ev_text = f"EV: {make} {model}".strip()
-                ev_surf = self.small_font.render(
-                    ev_text, True, COLOR_ACCENT_BLUE
-                )
-                ev_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(
-                    screen, ev_surf, x, draw_y, width, align
-                )
-                draw_y += line_h
-
-        # Next planned dispatch
-        if self.planned_dispatches:
-            next_d = self.planned_dispatches[0]
+    def upcoming_rates(self, hours=12):
+        """Next half-hourly unit rates, soonest first -- the real tariff
+        schedule, which was being fetched but never shown."""
+        slots = []
+        now = datetime.now().astimezone()
+        for entry in self.rates_today or []:
             try:
                 start = datetime.fromisoformat(
-                    next_d['startDt'].replace('Z', '+00:00')
-                )
+                    str(entry['valid_from']).replace('Z', '+00:00')).astimezone()
+            except (KeyError, TypeError, ValueError):
+                continue
+            try:
                 end = datetime.fromisoformat(
-                    next_d['endDt'].replace('Z', '+00:00')
-                )
-                start_local = start.astimezone()
-                end_local = end.astimezone()
-                dispatch_text = (
-                    f"Charge: {start_local.strftime('%H:%M')}"
-                    f"-{end_local.strftime('%H:%M')}"
-                )
-                kwh = next_d.get('deltaKwh')
-                if kwh:
-                    dispatch_text += f" ({kwh:.1f}kWh)"
+                    str(entry.get('valid_to')).replace('Z', '+00:00')).astimezone()
+            except (TypeError, ValueError):
+                end = start + timedelta(minutes=30)
+            if end <= now:
+                continue
+            value = entry.get('value_inc_vat')
+            if value is None:
+                continue
+            slots.append({'start': start, 'end': end, 'value': float(value)})
+        slots.sort(key=lambda s: s['start'])
+        return slots[:int(hours * 2)]
 
-                d_surf = self.body_font.render(
-                    dispatch_text, True, COLOR_ACCENT_GREEN
-                )
-                d_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(
-                    screen, d_surf, x, draw_y, width, align
-                )
-                draw_y += line_h
-            except Exception as e:
-                logger.debug(f"Error parsing dispatch time: {e}")
+    def draw(self, screen, position):
+        """ENERGY: tariff, draw, and the cheap-window schedule."""
+        self.draw_instrument(screen, position, default=(300, 300))
 
-        # Charging preferences (target SOC)
-        if self.charge_prefs and draw_y < x + remaining_h - line_h:
-            is_weekend = datetime.now().weekday() >= 5
-            soc_key = 'weekendTargetSoc' if is_weekend else 'weekdayTargetSoc'
-            time_key = 'weekendTargetTime' if is_weekend else 'weekdayTargetTime'
-            target_soc = self.charge_prefs.get(soc_key)
-            target_time = self.charge_prefs.get(time_key)
+    def _render_panel(self, surf, width, height, position=None):
+        from effects_kit import draw_dial_gauge, draw_bar_meter
+        import theme
+        accent = theme.module_accent('octopus_energy')
+        pad = 6
+        ix, iw = pad, width - pad * 2
 
-            if target_soc is not None:
-                pref_text = f"Target: {target_soc}%"
-                if target_time:
-                    pref_text += f" by {target_time}"
-                pref_surf = self.small_font.render(
-                    pref_text, True, COLOR_TEXT_SECONDARY
-                )
-                pref_surf.set_alpha(TRANSPARENCY)
-                ModuleDrawHelper.blit_aligned(
-                    screen, pref_surf, x, draw_y, width, align
-                )
+        tariff = None
+        if self._tariff_code:
+            tariff = "INTELLIGENT GO" if self._is_intelligent else "FIXED TARIFF"
+        if self.current_rate is None:
+            status, status_color = "NO RATE", COLOR_TEXT_DIM
+        elif self.is_offpeak:
+            status, status_color = "OFF-PEAK", COLOR_ACCENT_GREEN
+        elif self.current_rate >= RATE_EXPENSIVE:
+            status, status_color = "PEAK", COLOR_ACCENT_RED
+        else:
+            status, status_color = "STANDARD", COLOR_ACCENT_AMBER
+
+        cur = self._panel_header(surf, ix, 0, iw, "Energy", accent,
+                                 subtitle=tariff, right_text=status,
+                                 right_color=status_color)
+
+        if not self.api_key:
+            msg = self._text('f_small', "NO API KEY", COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(msg, (ix, cur + 6))
+            return
+        if not self._account_fetched:
+            msg = self._text('f_small', "LINKING...", COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(msg, (ix, cur + 6))
+            return
+
+        # Current unit rate on a zoned dial
+        if self.current_rate is not None:
+            dial_r = int(min(iw * 0.21, 62))
+            dial_cx = ix + dial_r + 2
+            dial_cy = cur + dial_r + 2
+            zones = [(RATE_CHEAP, COLOR_ACCENT_GREEN),
+                     (RATE_EXPENSIVE, COLOR_ACCENT_AMBER),
+                     (RATE_EXPENSIVE * 1.6, COLOR_ACCENT_RED)]
+            draw_dial_gauge(surf, dial_cx, dial_cy, dial_r, self.current_rate,
+                            0, RATE_EXPENSIVE * 1.6, zones,
+                            thickness=max(6, dial_r // 8),
+                            needle_color=COLOR_TEXT_SECONDARY)
+            rate = self._text('f_value', f"{self.current_rate:.1f}",
+                              self._rate_color(self.current_rate))
+            surf.blit(rate, (dial_cx - rate.get_width() / 2 - 4,
+                             dial_cy + dial_r * 0.24))
+            unit = self._text('f_nano', "P/KWH", COLOR_TEXT_DIM, spacing=1)
+            surf.blit(unit, (dial_cx - unit.get_width() / 2,
+                             dial_cy + dial_r * 0.24 + rate.get_height()))
+
+            # Draw and spend beside the dial
+            sx = dial_cx + dial_r + 12
+            sw = (ix + iw) - sx
+            sy = cur + 4
+            if self.consumption_today_kwh is not None and sw > 60:
+                lb = self._text('f_nano', "DRAW TODAY", COLOR_TEXT_SECONDARY, spacing=1)
+                surf.blit(lb, (sx, sy))
+                kw = self._text('f_value', f"{self.consumption_today_kwh:.1f}",
+                                COLOR_FONT_BODY)
+                surf.blit(kw, (sx, sy + lb.get_height()))
+                un = self._text('f_nano', "KWH", COLOR_TEXT_DIM, spacing=1)
+                surf.blit(un, (sx + kw.get_width() + 4,
+                               sy + lb.get_height() + kw.get_height()
+                               - un.get_height() - 2))
+                draw_bar_meter(surf, sx, sy + lb.get_height() + kw.get_height() + 2,
+                               sw, 5, min(1.0, self.consumption_today_kwh / 12.0),
+                               accent, segments=max(8, int(sw / 10)))
+                sy += lb.get_height() + kw.get_height() + 12
+            if self.cost_today_pence is not None and sw > 60:
+                cl = self._text('f_nano', "SPEND", COLOR_TEXT_SECONDARY, spacing=1)
+                surf.blit(cl, (sx, sy))
+                cv = self._text('f_small', f"{self.cost_today_pence / 100:.2f}",
+                                COLOR_FONT_BODY)
+                surf.blit(cv, (sx + sw - cv.get_width(), sy - 2))
+            cur = max(dial_cy + dial_r + 16, sy + 16)
+
+        cur = self._draw_rate_timeline(surf, ix, cur, iw, accent, height)
+
+        if self.standing_charge is not None and cur + 14 < height:
+            sc = self._text('f_nano', f"STANDING {self.standing_charge:.1f}P/DAY",
+                            COLOR_TEXT_DIM, spacing=1)
+            surf.blit(sc, (ix, cur))
+            cur += sc.get_height() + 4
+
+        if self._is_intelligent and cur + 20 < height:
+            cur = self._draw_ev_strip(surf, ix, cur + 2, iw, accent, height)
+
+        if self._last_error and cur < height - 12:
+            err = self._text('f_nano', "API ERROR", COLOR_ACCENT_RED, spacing=1)
+            surf.blit(err, (ix + iw - err.get_width(), height - 11))
+
+    def _draw_rate_timeline(self, surf, x, y, w, accent, height):
+        """The next twelve hours of half-hourly pricing with the cheapest
+        window marked -- the actual decision this data supports."""
+        slots = self.upcoming_rates(12)
+        if not slots or y + 60 > height:
+            return y
+        lbl = self._text('f_nano', "RATE SCHEDULE  12H", accent, spacing=2)
+        surf.blit(lbl, (x, y))
+        cheapest = min(slots, key=lambda s: s['value'])
+        cheap_lbl = self._text('f_nano',
+                               f"BEST {cheapest['start'].strftime('%H:%M')}",
+                               COLOR_ACCENT_GREEN, spacing=1)
+        surf.blit(cheap_lbl, (x + w - cheap_lbl.get_width(), y))
+
+        # The now-marker sits above the plot, so leave it clear headroom
+        # rather than letting it collide with the section label.
+        plot_y = y + lbl.get_height() + 15
+        plot_h = min(92, height - plot_y - 42)
+        if plot_h < 16:
+            return y
+        peak = max(max(s['value'] for s in slots), RATE_CHEAP * 1.2)
+        col_w = w / len(slots)
+        for i, slot in enumerate(slots):
+            frac = max(0.04, min(1.0, slot['value'] / peak))
+            bar_h = plot_h * frac
+            bx = x + i * col_w
+            color = self._rate_color(slot['value'])
+            alpha = 245 if slot is cheapest else 170
+            pygame.draw.rect(surf, (*color, alpha),
+                             (int(bx), int(plot_y + plot_h - bar_h),
+                              max(1, int(col_w - 1)), int(bar_h)))
+        pygame.draw.line(surf, (*accent, 70), (x, plot_y + plot_h),
+                         (x + w, plot_y + plot_h), 1)
+        pygame.draw.polygon(surf, (255, 255, 255, 230), [
+            (x + col_w / 2, plot_y - 3), (x + col_w / 2 - 4, plot_y - 9),
+            (x + col_w / 2 + 4, plot_y - 9)])
+
+        for i, slot in enumerate(slots):
+            if slot['start'].hour % 3 or slot['start'].minute:
+                continue
+            tx = x + i * col_w + col_w / 2
+            tl = self._text('f_nano', slot['start'].strftime("%H"), COLOR_TEXT_DIM)
+            surf.blit(tl, (tx - tl.get_width() / 2, plot_y + plot_h + 3))
+
+        values = [s['value'] for s in slots]
+        stats = (f"MIN {min(values):.1f}    AVG {sum(values) / len(values):.1f}"
+                 f"    MAX {max(values):.1f}")
+        sl = self._text('f_nano', stats, COLOR_TEXT_DIM, spacing=1)
+        surf.blit(sl, (x, plot_y + plot_h + 15))
+        return plot_y + plot_h + 15 + sl.get_height() + 5
+
+    def _draw_ev_strip(self, surf, x, y, w, accent, height):
+        """Intelligent Go charging window, if one is planned."""
+        lbl = self._text('f_nano', "VEHICLE CHARGE", accent, spacing=2)
+        surf.blit(lbl, (x, y))
+        cur = y + lbl.get_height() + 3
+        if not self.planned_dispatches:
+            none = self._text('f_nano', "NO DISPATCH PLANNED", COLOR_TEXT_DIM, spacing=1)
+            surf.blit(none, (x, cur))
+            return cur + none.get_height() + 2
+        slot = self.planned_dispatches[0]
+        try:
+            start = datetime.fromisoformat(
+                str(slot['startDt']).replace('Z', '+00:00')).astimezone()
+            end = datetime.fromisoformat(
+                str(slot['endDt']).replace('Z', '+00:00')).astimezone()
+            window = f"{start.strftime('%H:%M')}-{end.strftime('%H:%M')}"
+        except (KeyError, TypeError, ValueError):
+            window = "SCHEDULED"
+        wv = self._text('f_small', window, COLOR_ACCENT_GREEN)
+        surf.blit(wv, (x, cur))
+        kwh = slot.get('deltaKwh')
+        if kwh:
+            kv = self._text('f_nano', f"{abs(float(kwh)):.1f} KWH",
+                            COLOR_TEXT_DIM, spacing=1)
+            surf.blit(kv, (x + w - kv.get_width(), cur + 3))
+        return cur + wv.get_height() + 2
 
     def _rate_color(self, rate_pence):
         """Color-code the electricity rate."""

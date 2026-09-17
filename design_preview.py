@@ -48,17 +48,81 @@ from fitbit_module import FitbitModule
 from stocks_module import StocksModule
 from sysinfo_module import SysInfoModule
 from phone_module import PhoneModule
+from octopus_energy_module import OctopusEnergyModule
+
+
+def fake_energy(module):
+    module.api_key = "preview"
+    module._account_fetched = True
+    module._tariff_code = "E-1R-INTELLI-VAR-22-10-14-B"
+    module._is_intelligent = True
+    module.current_rate = 7.5
+    module.is_offpeak = True
+    module.standing_charge = 47.8
+    module.consumption_today_kwh = 8.4
+    module.cost_today_pence = 152.0
+    now = datetime.now().astimezone().replace(second=0, microsecond=0)
+    now = now.replace(minute=0 if now.minute < 30 else 30)
+    rates = []
+    for i in range(26):
+        start = now + timedelta(minutes=30 * i)
+        hour = start.hour
+        if hour >= 23 or hour < 6:
+            value = 7.5
+        elif 16 <= hour < 19:
+            value = 32.0
+        else:
+            value = 24.5
+        rates.append({
+            "valid_from": start.isoformat(),
+            "valid_to": (start + timedelta(minutes=30)).isoformat(),
+            "value_inc_vat": value,
+        })
+    module.rates_today = rates
+    module.planned_dispatches = [{
+        "startDt": (now + timedelta(hours=4)).isoformat(),
+        "endDt": (now + timedelta(hours=6)).isoformat(),
+        "deltaKwh": -12.4,
+    }]
 
 
 def fake_weather(module):
+    import math as _math
     main, desc, wind = CONDITION_DATA.get(CONDITION, CONDITION_DATA["partly"])
+    base = datetime.now().replace(minute=0, second=0, microsecond=0)
+    times, temps, rain, codes, is_day = [], [], [], [], []
+    for i in range(48):
+        point = base + timedelta(hours=i)
+        times.append(point.isoformat())
+        temps.append(round(13.5 + 5.0 * _math.sin((point.hour - 9) / 24 * 2 * _math.pi), 1))
+        rain.append(max(0, int(45 * _math.sin(i / 5.0) + 25)))
+        codes.append(3)
+        is_day.append(1 if 7 <= point.hour < 20 else 0)
+    today = datetime.now()
     module.weather_data = {
         "name": "Birmingham",
         "sys": {"country": "GB"},
         "main": {"temp": 14.2, "feels_like": 12.1, "humidity": 64, "pressure": 1018},
         "weather": [{"main": main, "description": desc}],
-        "wind": {"speed": wind},
+        "coords": {"lat": 52.29, "lon": -1.54},
+        "wind": {"speed": wind, "deg": 260},
         "clouds": {"all": 40},
+        "visibility_m": 10000,
+        "uv_index": 2.0,
+        "outlook": [
+            {"date": (today + timedelta(days=i)).strftime("%Y-%m-%d"),
+             "tmax": tmax, "tmin": tmin, "code": code}
+            for i, (tmax, tmin, code) in enumerate(
+                [(17, 9, 2), (18, 10, 0), (16, 11, 61), (15, 9, 2)])
+        ],
+        "hourly": {"time": times, "temperature_2m": temps,
+                   "precipitation_probability": rain, "weather_code": codes,
+                   "is_day": is_day},
+        "astronomy": {
+            "sunrise": today.replace(hour=6, minute=48, second=0, microsecond=0).isoformat(),
+            "sunset": today.replace(hour=19, minute=32, second=0, microsecond=0).isoformat(),
+            "timezone": "Europe/London",
+        },
     }
     module.weather_source = "Open-Meteo"
     module.update_animation()
@@ -92,15 +156,30 @@ def fake_news(module):
 def fake_smarthome(module):
     module._apply_states([
         {"entity_id": "light.hall", "state": "on",
-         "attributes": {"friendly_name": "Hall Light"}},
+         "attributes": {"friendly_name": "Hall Light", "brightness": 180}},
         {"entity_id": "light.kitchen", "state": "off",
          "attributes": {"friendly_name": "Kitchen"}},
-        {"entity_id": "climate.living", "state": "21.4",
-         "attributes": {"friendly_name": "Living Room", "unit_of_measurement": "C"}},
-        {"entity_id": "sensor.outside", "state": "12.1",
-         "attributes": {"friendly_name": "Outside", "unit_of_measurement": "C"}},
+        {"entity_id": "light.lounge", "state": "on",
+         "attributes": {"friendly_name": "Lounge", "brightness": 92}},
+        {"entity_id": "climate.living", "state": "heat",
+         "attributes": {"friendly_name": "Living Room", "current_temperature": 21.4,
+                        "temperature": 22.0, "unit_of_measurement": "C"}},
+        {"entity_id": "sensor.outside_temp", "state": "12.1",
+         "attributes": {"friendly_name": "Outside", "unit_of_measurement": "C",
+                        "device_class": "temperature"}},
+        {"entity_id": "sensor.hall_humidity", "state": "54",
+         "attributes": {"friendly_name": "Hall RH", "unit_of_measurement": "%",
+                        "device_class": "humidity"}},
         {"entity_id": "lock.front", "state": "locked",
          "attributes": {"friendly_name": "Front Door"}},
+        {"entity_id": "binary_sensor.back_door", "state": "off",
+         "attributes": {"friendly_name": "Back Door", "device_class": "door"}},
+        {"entity_id": "binary_sensor.lounge_window", "state": "on",
+         "attributes": {"friendly_name": "Lounge Window", "device_class": "window"}},
+        {"entity_id": "binary_sensor.hall_motion", "state": "on",
+         "attributes": {"friendly_name": "Hall Motion", "device_class": "motion"}},
+        {"entity_id": "binary_sensor.landing_motion", "state": "off",
+         "attributes": {"friendly_name": "Landing", "device_class": "motion"}},
         {"entity_id": "switch.heater", "state": "on",
          "attributes": {"friendly_name": "Heater"}},
     ])
@@ -196,10 +275,14 @@ def main():
     phone.battery_state = "Not Charging"
     phone._leave = phone._compute_leave()
 
+    energy = OctopusEnergyModule(api_key="preview", account_number="A-PREVIEW")
+    fake_energy(energy)
+
     modules = {
         "weather": weather, "calendar": cal, "countdown": countdown,
         "smarthome": smarthome, "greeting": greeting, "quote": quote,
         "news": news, "fitbit": fitbit, "sysinfo": sysinfo, "phone": phone,
+        "octopus_energy": energy,
     }
 
     # Let the banner ambience settle (cloud spread, drop distribution)

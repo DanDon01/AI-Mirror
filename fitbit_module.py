@@ -18,6 +18,7 @@ from fitbit.api import Fitbit
 from fitbit.exceptions import HTTPUnauthorized
 from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
 from background_fetcher import BackgroundFetcher
+from module_base import InstrumentPanel
 import base64
 
 _ECG_SAMPLES = None
@@ -57,7 +58,7 @@ def _ecg_beat(n=192):
     return out
 
 
-class FitbitModule:
+class FitbitModule(InstrumentPanel):
     # NOTE: The legacy Fitbit Web API this module uses is being retired by
     # Google in September 2026 in favour of the new Google Health API
     # (Google Cloud + Google OAuth, mandatory user re-consent). This module
@@ -424,42 +425,6 @@ class FitbitModule:
     # ------------------------------------------------------------------
     # BIOMETRIC MONITOR rendering
     # ------------------------------------------------------------------
-
-    def _ensure_fonts(self):
-        if getattr(self, '_fonts_ready', False):
-            return
-        self.f_title = load_font('light', 25)
-        self.f_hero = load_font('light', 40)
-        self.f_value = load_font('light', 21)
-        self.f_small = load_font('light', 14)
-        self.f_micro = load_font('regular', 10)
-        self.f_nano = load_font('regular', 8)
-        self._text_cache = {}
-        self._fonts_ready = True
-
-    def _text(self, font_key, text, color, spacing=0):
-        """Cached text render with optional letter-spacing. Tracked
-        uppercase is the house label style, and pygame has no native
-        tracking, so spaced glyphs are composited once and reused."""
-        key = (font_key, text, color, spacing)
-        cached = self._text_cache.get(key)
-        if cached is not None:
-            return cached
-        font = getattr(self, font_key)
-        if spacing <= 0:
-            surf = font.render(text, True, color)
-        else:
-            glyphs = [font.render(ch, True, color) for ch in text]
-            w = sum(g.get_width() for g in glyphs) + spacing * max(0, len(glyphs) - 1)
-            surf = pygame.Surface((max(1, w), font.get_height()), pygame.SRCALPHA)
-            gx = 0
-            for g in glyphs:
-                surf.blit(g, (gx, 0))
-                gx += g.get_width() + spacing
-        if len(self._text_cache) > 400:
-            self._text_cache.clear()
-        self._text_cache[key] = surf
-        return surf
 
     STAGE_COLORS = {
         'deep': (52, 92, 224),
@@ -915,42 +880,9 @@ class FitbitModule:
         arcs. Not a stack of cards (see AI-Mirror.py's NO_PANEL_FRAME);
         the chamfered console frames and the figure carry the structure.
         """
-        try:
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
-                width = position.get('width', 300)
-                height = position.get('height', 200)
-            else:
-                x, y = position
-                width, height = 300, 200
+        self.draw_instrument(screen, position)
 
-            self._ensure_fonts()
-
-            # Everything composites through one reusable alpha layer.
-            # pygame.draw.* ignores the alpha channel of its colour when it
-            # writes straight to the display surface, so drawn-on-screen
-            # "faint" elements (gauge tracks, ECG grid ruling, scale ticks)
-            # would otherwise all render at full brightness -- which flattens
-            # a segmented gauge into a solid ring showing no value at all.
-            # Drawing into an SRCALPHA layer and blitting it once makes every
-            # alpha meaningful, for one allocation per module size.
-            layer = self._get_layer(width, height)
-            layer.fill((0, 0, 0, 0))
-            self._render(layer, width, height)
-            screen.blit(layer, (x, y))
-
-        except Exception as e:
-            logging.error(f"Error drawing Fitbit data: {e}")
-            logging.error(traceback.format_exc())
-
-    def _get_layer(self, width, height):
-        layer = getattr(self, '_layer', None)
-        if layer is None or layer.get_size() != (width, height):
-            layer = pygame.Surface((max(1, width), max(1, height)), pygame.SRCALPHA)
-            self._layer = layer
-        return layer
-
-    def _render(self, surf, width, height):
+    def _render_panel(self, surf, width, height, position=None):
         """Draw the whole composition in layer-local coordinates."""
         import theme
         accent = theme.module_accent('fitbit')

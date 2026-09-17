@@ -261,6 +261,29 @@ def draw_segmented_ring(screen, cx, cy, radius, fraction, color, segments=36,
             prev = pt
 
 
+def draw_bar_meter(screen, x, y, w, h, fraction, color, segments=14, gap=2,
+                   track_alpha=45, lit_alpha=235):
+    """A horizontal bar built from discrete cells. Same reasoning as the
+    segmented ring: a cell-by-cell readout looks like a panel meter, a
+    smooth fill looks like a web progress bar."""
+    if w <= 0 or h <= 0 or segments <= 0:
+        return
+    fraction = max(0.0, min(1.0, fraction))
+    cell = (w - gap * (segments - 1)) / segments
+    if cell <= 0:
+        return
+    lit_edge = fraction * segments
+    for i in range(segments):
+        if i + 1 <= lit_edge:
+            alpha = lit_alpha
+        elif i < lit_edge:
+            alpha = int(track_alpha + (lit_alpha - track_alpha) * (lit_edge - i))
+        else:
+            alpha = track_alpha
+        cx = x + i * (cell + gap)
+        pygame.draw.rect(screen, (*color, alpha), (int(cx), int(y), max(1, int(cell)), int(h)))
+
+
 def draw_arc_segment(screen, cx, cy, radius, start_deg, end_deg, color,
                      thickness=2, alpha=200):
     """A plain bright arc -- the slow-rotating ambient accents flanking the

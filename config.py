@@ -293,7 +293,11 @@ LAYOUT_V2 = {
     # composition -- scan figure, ECG, gauges, sleep timeline, weekly
     # graph -- and needs several times the room a few lines of text do.
     'module_weights': {
-        'fitbit': 2.9,
+        # Graphical instrument panels need room; text modules do not.
+        'weather': 2.15, 'smarthome': 1.35, 'octopus_energy': 1.14,
+        'calendar': 1.08, 'countdown': 0.78,
+        'fitbit': 2.9, 'news': 1.15, 'sysinfo': 0.72, 'openclaw': 0.85,
+        'phone': 0.7, 'quote': 0.6, 'greeting': 0.55,
     },
 }
 

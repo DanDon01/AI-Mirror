@@ -66,6 +66,130 @@ class SurfaceCache:
             self._changed_at.clear()
 
 
+class InstrumentPanel:
+    """Shared plumbing for the habitat instrument modules.
+
+    Every redesigned module needs the same two things:
+
+    1. An SRCALPHA compositing layer. `pygame.draw.*` ignores the alpha
+       channel of its colour when it writes to the display surface, so a
+       dim "track" and a bright "value" drawn straight to screen come out
+       identically solid -- a segmented gauge ends up showing no value at
+       all. Drawing into a layer and blitting once makes alpha mean
+       something, and costs one allocation per module size.
+    2. A cached tracked-text renderer, since pygame has no letterspacing
+       and these panels are dense with small tracked labels.
+
+    Modules mix this in, implement `_render_panel(surf, width, height,
+    position)`, and call `draw_instrument()` from their own `draw()`.
+    """
+
+    INSTRUMENT_FONTS = {
+        'f_hero': ('light', 40),
+        'f_big': ('light', 28),
+        'f_title': ('light', 25),
+        'f_value': ('light', 21),
+        'f_small': ('light', 14),
+        'f_micro': ('regular', 10),
+        'f_nano': ('regular', 8),
+    }
+
+    def _panel_init(self):
+        if getattr(self, '_panel_ready', False):
+            return
+        for key, (weight, size) in self.INSTRUMENT_FONTS.items():
+            setattr(self, key, load_font(weight, size))
+        self._text_cache = {}
+        self._layer = None
+        self._panel_ready = True
+
+    def _text(self, font_key, text, color, spacing=0):
+        """Cached text render with optional letter-spacing."""
+        key = (font_key, text, color, spacing)
+        cached = self._text_cache.get(key)
+        if cached is not None:
+            return cached
+        font = getattr(self, font_key)
+        if spacing <= 0:
+            surf = font.render(text, True, color)
+        else:
+            glyphs = [font.render(ch, True, color) for ch in text]
+            width = sum(g.get_width() for g in glyphs) + spacing * max(0, len(glyphs) - 1)
+            surf = pygame.Surface((max(1, width), font.get_height()), pygame.SRCALPHA)
+            gx = 0
+            for g in glyphs:
+                surf.blit(g, (gx, 0))
+                gx += g.get_width() + spacing
+        if len(self._text_cache) > 600:
+            self._text_cache.clear()
+        self._text_cache[key] = surf
+        return surf
+
+    def _layer_for(self, width, height):
+        layer = getattr(self, '_layer', None)
+        if layer is None or layer.get_size() != (width, height):
+            layer = pygame.Surface((max(1, width), max(1, height)), pygame.SRCALPHA)
+            self._layer = layer
+        return layer
+
+    @staticmethod
+    def _panel_geometry(position, default=(300, 200)):
+        if isinstance(position, dict):
+            return (position['x'], position['y'],
+                    position.get('width', default[0]),
+                    position.get('height', default[1]))
+        x, y = position
+        return x, y, default[0], default[1]
+
+    def draw_instrument(self, screen, position, default=(300, 200)):
+        """Render `_render_panel` into the alpha layer and blit it once."""
+        import logging
+        import traceback
+        try:
+            x, y, width, height = self._panel_geometry(position, default)
+            self._panel_init()
+            layer = self._layer_for(width, height)
+            layer.fill((0, 0, 0, 0))
+            self._render_panel(layer, width, height, position)
+            screen.blit(layer, (x, y))
+        except Exception as exc:
+            logging.error(f"{type(self).__name__} draw failed: {exc}")
+            logging.error(traceback.format_exc())
+
+    def _panel_header(self, surf, x, y, w, title, accent, align='left',
+                      right_text=None, right_color=None, subtitle=None):
+        """Tracked uppercase title over a hairline rule with a bright lead
+        segment -- the common anchor that ties every instrument together.
+        Returns the y offset content should start at."""
+        label = self._text('f_micro', title.upper(), accent, spacing=2)
+        lx = x + w - label.get_width() if align == 'right' else x
+        surf.blit(label, (lx, y))
+        cur = y + label.get_height() + 2
+
+        if subtitle:
+            sub = self._text('f_nano', subtitle.upper(), COLOR_TEXT_DIM, spacing=2)
+            sx = x + w - sub.get_width() if align == 'right' else x
+            surf.blit(sub, (sx, cur))
+            cur += sub.get_height() + 2
+
+        if right_text:
+            # The status tag goes opposite the title, or it lands on top of
+            # it in a right-aligned column.
+            rt = self._text('f_nano', right_text.upper(),
+                            right_color or COLOR_TEXT_DIM, spacing=1)
+            surf.blit(rt, (x if align == 'right' else x + w - rt.get_width(), y + 1))
+
+        lead = int(w * 0.30)
+        if align == 'right':
+            pygame.draw.line(surf, (*accent, 45), (x, cur + 2), (x + w - lead, cur + 2), 1)
+            pygame.draw.line(surf, (*accent, 165),
+                             (x + w - lead, cur + 2), (x + w, cur + 2), 1)
+        else:
+            pygame.draw.line(surf, (*accent, 165), (x, cur + 2), (x + lead, cur + 2), 1)
+            pygame.draw.line(surf, (*accent, 45), (x + lead, cur + 2), (x + w, cur + 2), 1)
+        return cur + 9
+
+
 class ModuleDrawHelper:
     """Mixin providing standardized draw methods for mirror modules."""
 

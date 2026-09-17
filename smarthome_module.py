@@ -26,8 +26,8 @@ from config import (
     COLOR_ACCENT_GREEN, COLOR_ACCENT_RED, COLOR_ACCENT_AMBER,
     COLOR_ACCENT_BLUE, COLOR_ACCENT_TEAL, TRANSPARENCY,
 )
-from module_base import ModuleDrawHelper, SurfaceCache
-from effects_kit import draw_flare
+from module_base import ModuleDrawHelper, SurfaceCache, InstrumentPanel
+from effects_kit import draw_flare, glow_sprite
 from api_tracker import api_tracker
 from background_fetcher import BackgroundFetcher
 
@@ -185,7 +185,7 @@ def _friendly_state(entity_id, info, max_len=24):
     return value if len(value) <= max_len else value[:max_len - 2].rstrip() + '..'
 
 
-class SmartHomeModule:
+class SmartHomeModule(InstrumentPanel):
     def __init__(self, ha_url, ha_token, entities=None,
                  update_interval_minutes=2, timeout=10,
                  max_entities=20, mini_entities=8,
@@ -695,163 +695,291 @@ class SmartHomeModule:
     # Mini view (left column)
     # ------------------------------------------------------------------
 
-    def draw(self, screen, position):
-        """Draw the mini smart home view -- floating text, no background."""
-        try:
-            if isinstance(position, dict):
-                x, y = position['x'], position['y']
-                width = position.get('width', 300)
-                height = position.get('height', 300)
-                align = position.get('align', 'left')
+    def _habitat_groups(self):
+        """Sort the shown entities into the systems the panel reports on."""
+        groups = {'security': [], 'motion': [], 'climate': [],
+                  'lighting': [], 'other': []}
+        for eid in self.entities:
+            info = self.data.get(eid)
+            if not info:
+                continue
+            domain = _domain(eid)
+            dc = (info.get('attributes') or {}).get('device_class')
+            if domain in ('lock', 'alarm_control_panel'):
+                groups['security'].append(eid)
+            elif domain == 'binary_sensor' and dc in (
+                    'door', 'window', 'garage_door', 'opening',
+                    'moisture', 'smoke', 'gas', 'safety'):
+                groups['security'].append(eid)
+            elif domain == 'binary_sensor' and dc in ('motion', 'occupancy', 'presence'):
+                groups['motion'].append(eid)
+            elif domain == 'climate' or (
+                    domain == 'sensor' and dc in ('temperature', 'humidity')):
+                groups['climate'].append(eid)
+            elif domain in ('light', 'switch', 'fan'):
+                groups['lighting'].append(eid)
             else:
-                x, y = position
-                width, height = 300, 300
-                align = 'left'
+                groups['other'].append(eid)
+        return groups
 
-            self._ensure_fonts()
-            import theme
-            draw_y = ModuleDrawHelper.draw_module_title(
-                screen, "Smart Home", x, y, width, accent_color=theme.module_accent('smarthome')
-            )
+    @staticmethod
+    def _sensor_value(info):
+        attrs = info.get('attributes') or {}
+        for key in ('current_temperature', 'temperature'):
+            if isinstance(attrs.get(key), (int, float)):
+                return float(attrs[key])
+        try:
+            return float(info.get('state'))
+        except (TypeError, ValueError):
+            return None
 
-            if not self.ha_url or not self.ha_token:
-                err = self.body_font.render("HA not configured", True, COLOR_TEXT_SECONDARY)
-                err.set_alpha(TRANSPARENCY)
-                screen.blit(err, (x, draw_y))
-                return
+    def draw(self, screen, position):
+        """HABITAT: dwelling systems status."""
+        self.draw_instrument(screen, position, default=(300, 300))
 
-            if not self.data:
-                msg = "Connection error" if self._last_error else "Loading..."
-                surf = self.body_font.render(msg, True, COLOR_TEXT_SECONDARY)
-                surf.set_alpha(TRANSPARENCY)
-                screen.blit(surf, (x, draw_y))
-                return
+    def _render_panel(self, surf, width, height, position=None):
+        import theme
+        accent = theme.module_accent('smarthome')
+        pad = 6
+        ix, iw = pad, width - pad * 2
 
-            # Surface open doors/unlocked locks first, then honour the user's
-            # configured entity order for the rest of the compact view.
-            alerts = self._open_security_entities()
-            non_motion = [eid for eid in self.entities if eid not in alerts and not (
-                _domain(eid) == 'binary_sensor'
-                and self.data.get(eid, {}).get('attributes', {}).get('device_class') == 'motion'
-            )]
-            motion = [eid for eid in self.entities if eid not in alerts and eid not in non_motion]
-            # A wall of "Motion sensor.. Clear" repeated N times is the
-            # single worst offender for reading like a spreadsheet instead
-            # of a dashboard. Quiet motion sensors collapse into one line;
-            # only ones that actually triggered earn their own row.
-            motion_active = [eid for eid in motion
-                             if self.data.get(eid, {}).get('state') == 'on']
-            motion_clear = [eid for eid in motion if eid not in motion_active]
-            shown = (alerts + non_motion + motion_active)[:self.mini_entities]
-            # Some useful display values live in attributes rather than state
-            # (for example light brightness or a media title), so include
-            # those in the cached-surface key too.
-            display_attrs = ('brightness', 'current_temperature', 'temperature',
-                             'current_position', 'media_title', 'media_channel')
-            data_hash = "|".join(
-                f"{eid}={self.data.get(eid, {}).get('state', '?')};" + ",".join(
-                    str(self.data.get(eid, {}).get('attributes', {}).get(key, ''))
-                    for key in display_attrs
-                )
-                for eid in self.entities
-            )
+        groups = self._habitat_groups() if self.data else None
+        alerts = self._open_security_entities() if self.data else []
+        secure = not alerts
+        status_text = "SECURE" if secure else f"{len(alerts)} ALERT"
+        status_color = COLOR_ACCENT_GREEN if secure else COLOR_ACCENT_RED
 
-            # Summary rollup line
-            summary = self._summary_text()
-            if summary:
-                def _render_summary(s=summary):
-                    surf = self.small_font.render(s, True, COLOR_FONT_BODY)
-                    surf.set_alpha(TRANSPARENCY)
-                    return surf
-                surf = self._surface_cache.get_or_render(
-                    "ha_summary", _render_summary, data_hash
-                )
-                draw_flare(screen, x, draw_y, surf.get_width(), surf.get_height(),
-                          self._surface_cache.flare_alpha("ha_summary"))
-                screen.blit(surf, (x, draw_y))
-                draw_y += 24
+        zones = len(self.entities) if self.entities else 0
+        cur = self._panel_header(
+            surf, ix, 0, iw, "Habitat", accent,
+            subtitle=f"{zones} NODES LINKED" if zones else None,
+            right_text=status_text, right_color=status_color)
 
-            line_height = 24
-            for i, entity_id in enumerate(shown):
-                if draw_y > y + height - line_height:
-                    break
-                info = self.data.get(entity_id)
-                if not info:
-                    continue
+        if not self.ha_url or not self.ha_token:
+            msg = self._text('f_small', "HA NOT CONFIGURED", COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(msg, (ix, cur + 8))
+            return
+        if not self.data:
+            msg = self._text('f_small',
+                             "LINK ERROR" if self._last_error else "LINKING...",
+                             COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(msg, (ix, cur + 8))
+            return
 
-                state_val = info['state']
-                color = self._entity_color(entity_id)
-                domain = _domain(entity_id)
+        remaining = height - cur
+        peri_h = int(min(210, remaining * 0.44))
+        cur = self._draw_perimeter(surf, ix, cur, iw, peri_h, accent, groups, alerts)
 
-                if domain in TOGGLE_DOMAINS and state_val in ('on', 'off', 'locked', 'unlocked'):
-                    # A real toggle switch -- on/off reads without needing
-                    # a status word next to it.
-                    is_on = state_val in ('on', 'locked')
-                    toggle_x = x if align != 'right' else x + 2
-                    _draw_toggle(screen, toggle_x, draw_y + 3, is_on, color)
-                    label_x = x + 34
-                else:
-                    # Continuous/non-binary state (temperature, media, ...)
-                    # still needs the actual value as text.
-                    pygame.draw.circle(screen, color, (x + 4, draw_y + 9), 4)
-                    label_x = x + 14
+        cur = self._draw_climate(surf, ix, cur + 8, iw, accent, groups['climate'], height)
+        cur = self._draw_lighting(surf, ix, cur + 10, iw, accent, groups['lighting'], height)
+        cur = self._draw_systems(surf, ix, cur + 10, iw, accent, groups['other'], height)
 
-                def _render_line(name=self._entity_label(entity_id),
-                                 st=self._entity_state_text(entity_id),
-                                 c=color, is_toggle=(domain in TOGGLE_DOMAINS and state_val in ('on', 'off', 'locked', 'unlocked'))):
-                    name_surf = self.small_font.render(f"{name}  ", True, COLOR_TEXT_SECONDARY)
-                    if is_toggle:
-                        return name_surf
-                    state_surf = self.small_font.render(st, True, c)
-                    total_w = name_surf.get_width() + state_surf.get_width()
-                    h = max(name_surf.get_height(), state_surf.get_height())
-                    combined = pygame.Surface((total_w, h), pygame.SRCALPHA)
-                    combined.blit(name_surf, (0, 0))
-                    combined.blit(state_surf, (name_surf.get_width(), 0))
-                    combined.set_alpha(TRANSPARENCY)
-                    return combined
+        if self._last_error and cur < height - 12:
+            err = self._text('f_nano', "LINK DEGRADED", COLOR_ACCENT_RED, spacing=1)
+            surf.blit(err, (ix, height - 11))
 
-                surf = self._surface_cache.get_or_render(
-                    f"ha_line_{i}", _render_line, data_hash
-                )
-                screen.blit(surf, (label_x, draw_y))
-                draw_y += line_height
+    def _draw_perimeter(self, surf, x, y, w, h, accent, groups, alerts):
+        """A dwelling outline with live perimeter markers -- the security
+        picture as a diagram rather than a list of door names."""
+        t = pygame.time.get_ticks() / 1000.0
+        hw = min(w * 0.30, h * 0.52)
+        hh = h * 0.74
+        cx = x + w * 0.50
+        top = y + 8
 
-            # Quiet motion sensors collapse into one reassuring line
-            # instead of N identical "Clear" rows.
-            if motion_clear and draw_y <= y + height - line_height:
-                _draw_shield_check(screen, x + 1, draw_y + 9, COLOR_ACCENT_GREEN)
-                label = "All quiet" if not shown else f"+{len(motion_clear)} quiet"
+        roof_y = top + hh * 0.32
+        wall_hw = hw * 0.86
+        wall_bottom = top + hh
 
-                def _render_clear(lbl=label):
-                    surf = self.small_font.render(lbl, True, COLOR_TEXT_DIM)
-                    surf.set_alpha(TRANSPARENCY)
-                    return surf
+        pygame.draw.lines(surf, (*accent, 200), False, [
+            (cx - hw, roof_y), (cx, top), (cx + hw, roof_y)], 2)
+        pygame.draw.rect(surf, (*accent, 22),
+                         (int(cx - wall_hw), int(roof_y),
+                          int(wall_hw * 2), int(wall_bottom - roof_y)))
+        pygame.draw.rect(surf, (*accent, 200),
+                         (int(cx - wall_hw), int(roof_y),
+                          int(wall_hw * 2), int(wall_bottom - roof_y)), 2)
+        pygame.draw.line(surf, (*accent, 70),
+                         (cx - hw * 1.25, wall_bottom), (cx + hw * 1.25, wall_bottom), 1)
 
-                surf = self._surface_cache.get_or_render(
-                    "ha_motion_clear", _render_clear, data_hash
-                )
-                screen.blit(surf, (x + 14, draw_y))
-                draw_y += line_height
+        door_w, door_h = wall_hw * 0.30, (wall_bottom - roof_y) * 0.42
+        pygame.draw.rect(surf, (*accent, 150),
+                         (int(cx - door_w / 2), int(wall_bottom - door_h),
+                          int(door_w), int(door_h)), 1)
 
-            # More-entities hint when the dashboard has extra content
-            if len(self.entities) > len(shown):
-                hint = self.small_font.render(
-                    f"+{len(self.entities) - len(shown)} more on dashboard",
-                    True, COLOR_TEXT_DIM
-                )
-                hint.set_alpha(TRANSPARENCY // 2)
-                if draw_y < y + height - 16:
-                    screen.blit(hint, (x + 14, draw_y))
+        # Storey division and window openings give the shell some depth
+        floor_y = roof_y + (wall_bottom - roof_y) * 0.52
+        pygame.draw.line(surf, (*accent, 60),
+                         (cx - wall_hw, floor_y), (cx + wall_hw, floor_y), 1)
+        win_w = wall_hw * 0.26
+        win_h = (wall_bottom - roof_y) * 0.20
+        for fx in (-0.52, 0.52):
+            for fy in (0.16, 0.62):
+                wx = cx + wall_hw * fx - win_w / 2
+                wy = roof_y + (wall_bottom - roof_y) * fy
+                pygame.draw.rect(surf, (*accent, 95),
+                                 (int(wx), int(wy), int(win_w), int(win_h)), 1)
 
-            if self._last_error:
-                err_surf = self.small_font.render("HA: connection error", True, COLOR_ACCENT_RED)
-                err_surf.set_alpha(TRANSPARENCY // 2)
-                if draw_y < y + height - 16:
-                    screen.blit(err_surf, (x, y + height - 16))
+        # Interior occupancy dots pulse when a motion sensor is live
+        motion_active = [e for e in groups['motion']
+                         if self.data.get(e, {}).get('state') == 'on']
+        spots = [(-0.45, 0.30), (0.45, 0.30), (-0.45, 0.68), (0.45, 0.68)]
+        for i, (fx, fy) in enumerate(spots):
+            px = cx + wall_hw * fx
+            py = roof_y + (wall_bottom - roof_y) * fy
+            live = i < len(motion_active)
+            if live:
+                pulse = 0.5 + 0.5 * math.sin(t * 4.0 + i)
+                pygame.draw.circle(surf, (*COLOR_ACCENT_AMBER, int(90 + 150 * pulse)),
+                                   (int(px), int(py)), 4)
+            else:
+                pygame.draw.circle(surf, (*accent, 70), (int(px), int(py)), 3, 1)
 
-        except Exception as e:
-            logger.error(f"Error drawing smart home module: {e}")
+        # Perimeter markers: one per security entity, placed on the outline
+        anchors = [
+            (cx - wall_hw, roof_y + (wall_bottom - roof_y) * 0.35),
+            (cx + wall_hw, roof_y + (wall_bottom - roof_y) * 0.35),
+            (cx - wall_hw, roof_y + (wall_bottom - roof_y) * 0.72),
+            (cx + wall_hw, roof_y + (wall_bottom - roof_y) * 0.72),
+            (cx, wall_bottom),
+            (cx, roof_y),
+        ]
+        for i, eid in enumerate(groups['security'][:len(anchors)]):
+            ax, ay = anchors[i]
+            open_now = eid in alerts
+            color = COLOR_ACCENT_RED if open_now else COLOR_ACCENT_GREEN
+            if open_now:
+                pulse = 0.5 + 0.5 * math.sin(t * 5.0)
+                halo = glow_sprite(9, color, int(60 + 90 * pulse), core_frac=0.25)
+                surf.blit(halo, (ax - halo.get_width() / 2, ay - halo.get_height() / 2))
+            pygame.draw.rect(surf, (*color, 240), (int(ax - 3), int(ay - 3), 6, 6))
+
+        # Status block beside the house
+        sx = x
+        sy = y + 10
+        if alerts:
+            head = self._text('f_micro', "BREACH", COLOR_ACCENT_RED, spacing=2)
+            surf.blit(head, (sx, sy))
+            sy += head.get_height() + 3
+            for eid in alerts[:3]:
+                nm = self._text('f_nano', self._entity_label(eid, 14).upper(),
+                                COLOR_ACCENT_RED, spacing=1)
+                surf.blit(nm, (sx, sy))
+                sy += nm.get_height() + 2
+        else:
+            _draw_shield_check(surf, sx + 8, sy + 8, COLOR_ACCENT_GREEN, size=8)
+            head = self._text('f_nano', "PERIMETER", COLOR_TEXT_DIM, spacing=1)
+            surf.blit(head, (sx, sy + 20))
+            val = self._text('f_nano', "SEALED", COLOR_ACCENT_GREEN, spacing=1)
+            surf.blit(val, (sx, sy + 20 + head.get_height() + 1))
+
+        quiet = len(groups['motion']) - len(motion_active)
+        rx = x + w
+        ry = y + 10
+        occ_lbl = self._text('f_nano', "OCCUPANCY", COLOR_TEXT_DIM, spacing=1)
+        surf.blit(occ_lbl, (rx - occ_lbl.get_width(), ry))
+        occ_val = self._text(
+            'f_nano',
+            f"{len(motion_active)} ACTIVE" if motion_active else f"{quiet} QUIET",
+            COLOR_ACCENT_AMBER if motion_active else COLOR_ACCENT_GREEN, spacing=1)
+        surf.blit(occ_val, (rx - occ_val.get_width(), ry + occ_lbl.get_height() + 1))
+        return y + h
+
+    def _draw_climate(self, surf, x, y, w, accent, entities, height):
+        from effects_kit import draw_bar_meter
+        if not entities:
+            return y
+        lbl = self._text('f_nano', "CLIMATE", accent, spacing=2)
+        surf.blit(lbl, (x, y))
+        cur = y + lbl.get_height() + 4
+
+        for eid in entities[:3]:
+            if cur + 20 > height:
+                break
+            info = self.data.get(eid, {})
+            value = self._sensor_value(info)
+            attrs = info.get('attributes') or {}
+            unit = str(attrs.get('unit_of_measurement', '') or '')
+            name = self._text('f_nano', self._entity_label(eid, 13).upper(),
+                              COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(name, (x, cur))
+            if value is None:
+                cur += 18
+                continue
+            if '%' in unit:
+                frac = max(0.0, min(1.0, value / 100.0))
+                shown = f"{value:.0f}%"
+            else:
+                frac = max(0.0, min(1.0, (value - 5.0) / 25.0))
+                shown = f"{value:.1f}C"
+            val = self._text('f_small', shown, COLOR_FONT_BODY)
+            surf.blit(val, (x + w - val.get_width(), cur - 2))
+            bar_x = x + 86
+            bar_w = w - 86 - val.get_width() - 8
+            if bar_w > 20:
+                draw_bar_meter(surf, bar_x, cur + 2, bar_w, 6, frac, accent,
+                               segments=max(6, int(bar_w / 9)))
+            cur += 18
+        return cur
+
+    def _draw_systems(self, surf, x, y, w, accent, entities, height):
+        """Whatever else is linked -- media, presence, covers. Compact
+        rows, value-first, no repeated entity-name-colon-state sentences."""
+        if not entities or y + 24 > height:
+            return y
+        lbl = self._text('f_nano', "SYSTEMS", accent, spacing=2)
+        surf.blit(lbl, (x, y))
+        cur = y + lbl.get_height() + 4
+        for eid in entities[:4]:
+            if cur + 16 > height:
+                break
+            color = self._entity_color(eid)
+            pygame.draw.circle(surf, (*color, 230), (int(x + 3), int(cur + 6)), 3)
+            name = self._text('f_nano', self._entity_label(eid, 16).upper(),
+                              COLOR_TEXT_SECONDARY, spacing=1)
+            surf.blit(name, (x + 12, cur))
+            value = self._text('f_nano', self._entity_state_text(eid, 16).upper(),
+                               color, spacing=1)
+            surf.blit(value, (x + w - value.get_width(), cur))
+            cur += 15
+        return cur
+
+    def _draw_lighting(self, surf, x, y, w, accent, entities, height):
+        from effects_kit import draw_bar_meter
+        if not entities:
+            return y
+        on = [e for e in entities if self.data.get(e, {}).get('state') == 'on']
+        lbl = self._text('f_nano', "ILLUMINATION  POWER", accent, spacing=2)
+        surf.blit(lbl, (x, y))
+        count = self._text('f_nano', f"{len(on)}/{len(entities)} ACTIVE",
+                           COLOR_TEXT_DIM, spacing=1)
+        surf.blit(count, (x + w - count.get_width(), y))
+        cur = y + lbl.get_height() + 4
+
+        frac = len(on) / max(1, len(entities))
+        draw_bar_meter(surf, x, cur, w, 5, frac, COLOR_ACCENT_AMBER,
+                       segments=max(8, len(entities)))
+        cur += 12
+
+        for eid in entities[:5]:
+            if cur + 20 > height:
+                break
+            info = self.data.get(eid, {})
+            state_val = info.get('state')
+            is_on = state_val in ('on', 'locked')
+            color = self._entity_color(eid)
+            _draw_toggle(surf, x, cur + 2, is_on, color, w=24, h=12)
+            name = self._text('f_nano', self._entity_label(eid, 18).upper(),
+                              COLOR_TEXT_SECONDARY if is_on else COLOR_TEXT_DIM,
+                              spacing=1)
+            surf.blit(name, (x + 30, cur + 3))
+            brightness = (info.get('attributes') or {}).get('brightness')
+            if is_on and isinstance(brightness, (int, float)):
+                pct = self._text('f_nano', f"{round(brightness / 255 * 100)}%",
+                                 COLOR_ACCENT_AMBER, spacing=1)
+                surf.blit(pct, (x + w - pct.get_width(), cur + 3))
+            cur += 18
+        return cur
 
     # ------------------------------------------------------------------
     # Dashboard overlay (center zone, on demand)
