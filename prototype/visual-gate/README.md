@@ -25,18 +25,18 @@ absent, the answer is to draw nothing, not to substitute a number.
 
 ## Running it
 
-It has to be served, not opened as a file — it fetches its fixture and
-the point clouds, which `file://` blocks.
-
 ```bash
-python3 -m http.server 8000     # from this directory
+./run.sh            # full screen on the mirror
+./run.sh --fit      # scaled to the window, for a normal monitor
+./run.sh --windowed # windowed rather than kiosk
 ```
 
-Then, on the Pi's own display:
+`run.sh` picks a free port, waits until the server actually answers,
+opens Chromium on it with GPU rasterisation enabled, and shuts the server
+down on exit. There is no URL to mistype.
 
-```bash
-chromium-browser --kiosk http://localhost:8000/index.html
-```
+It has to be served, not opened as a file: the page fetches its fixture
+and the point clouds, which `file://` blocks.
 
 | Parameter | Effect |
 |---|---|
@@ -87,6 +87,8 @@ python tools/make_anatomy.py
 python tools/make_sky.py
 ```
 
-Typefaces are Instrument Serif and Instrument Sans, loaded from Google
-Fonts for convenience. They must be bundled locally before anything ships
-to the Pi, which cannot depend on the network to render.
+Typefaces are Instrument Serif and Instrument Sans (SIL OFL 1.1),
+bundled in `assets/fonts/`. Nothing is fetched at runtime: the mirror
+cannot depend on the network to render, and a Pi with a fontconfig
+problem would otherwise silently substitute a system serif for the face
+that was designed. Refresh them with `python tools/fetch_fonts.py`.
