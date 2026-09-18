@@ -22,6 +22,23 @@
   const FREEZE = Q.get('freeze') === '1';
   const MANUAL = Q.get('manual') === '1';
   const SHOW_HUD = Q.get('hud') === '1';
+  const FIT = Q.get('fit') === '1';
+
+  // The plate is authored at the mirror's real 1440x2560. On any other
+  // display that means you see the top-left corner and nothing else, so
+  // ?fit=1 scales the whole thing down to whatever window it is in.
+  if (FIT) {
+    const plate = document.querySelector('.mirror');
+    const fit = () => {
+      const s = Math.min(innerWidth / 1440, innerHeight / 2560);
+      plate.style.transformOrigin = 'top left';
+      plate.style.transform =
+        `translate(${((innerWidth - 1440 * s) / 2).toFixed(1)}px, ` +
+        `${((innerHeight - 2560 * s) / 2).toFixed(1)}px) scale(${s.toFixed(4)})`;
+    };
+    addEventListener('resize', fit);
+    fit();
+  }
 
   const LOOP = 48;
   const T = {

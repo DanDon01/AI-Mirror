@@ -20,10 +20,11 @@ html, body {
   margin: 0;
   padding: 0;
   background: #000;
-  width: 1440px;
-  height: 2560px;
   overflow: hidden;
 }
+
+/* The plate keeps its authored size; ?fit=1 scales it to the window. */
+html, body { width: 100%; height: 100%; }
 
 body { color: var(--ink); font-family: var(--ff-text); -webkit-font-smoothing: antialiased; }
 

@@ -25,13 +25,28 @@ absent, the answer is to draw nothing, not to substitute a number.
 
 ## Running it
 
+It has to be served, not opened as a file — it fetches its fixture and
+the point clouds, which `file://` blocks.
+
 ```bash
 python3 -m http.server 8000     # from this directory
-chromium --kiosk http://localhost:8000/index.html
 ```
 
-Add `?hud=1` for a frame-rate readout. `?seek=N` starts N seconds into the
-48-second timeline; `?freeze=1` holds it there.
+Then, on the Pi's own display:
+
+```bash
+chromium-browser --kiosk http://localhost:8000/index.html
+```
+
+| Parameter | Effect |
+|---|---|
+| `?fit=1` | Scale the 1440x2560 plate to the window. Needed on any screen that is not the mirror, or you see the top-left corner only. |
+| `?hud=1` | Frame rate and frame time, top left. |
+| `?seek=N` | Start N seconds into the 48-second timeline. |
+| `?freeze=1` | Hold there, for stills. |
+
+The timeline: heart to 12s, dissolve to 15.5s, brain to 26s, back by
+29.5s. The event banner runs 5-13s, the rain state 31-42s.
 
 ## Measuring on the Pi
 
