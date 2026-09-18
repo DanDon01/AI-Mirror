@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visual gate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="mirror">
+
+  <!-- ===================== WEATHER ===================== -->
+  <section class="weather" id="weather">
+    <div class="sky">
+      <div class="moon"></div>
+      <img class="layer haze"  src="assets/sky/haze.webp"       alt="">
+      <img class="layer far"   src="assets/sky/cloud-far.webp"  alt="">
+      <img class="layer main"  src="assets/sky/cloud-main.webp" alt="">
+      <img class="layer near"  src="assets/sky/cloud-near.webp" alt="">
+      <div class="rainfall" id="rainfall"></div>
+    </div>
+
+    <div class="temp" id="temp"><span class="temp-n">—</span><span class="temp-d">°</span></div>
+
+    <svg class="curve" id="curve" viewBox="0 0 1200 150" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="curveFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#AFC6E6" stop-opacity="0.30"/>
+          <stop offset="100%" stop-color="#AFC6E6" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="edgeFade" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"  stop-color="#000"/>
+          <stop offset="14%" stop-color="#fff"/>
+          <stop offset="86%" stop-color="#fff"/>
+          <stop offset="100%" stop-color="#000"/>
+        </linearGradient>
+        <mask id="fadeMask">
+          <rect x="0" y="0" width="1200" height="150" fill="url(#edgeFade)"/>
+        </mask>
+      </defs>
+      <g mask="url(#fadeMask)">
+        <path id="curveArea" fill="url(#curveFill)"></path>
+        <path id="curveGlow" fill="none" stroke="#C8DAF5" stroke-width="7"
+              stroke-opacity="0.16" stroke-linecap="round"></path>
+        <path id="curveLine" fill="none" stroke="#E2ECFA" stroke-width="2"
+              stroke-opacity="0.85" stroke-linecap="round"></path>
+      </g>
+    </svg>
+
+    <!-- Emerges only when the fixture carries an alert -->
+    <div class="walert" id="walert">
+      <span class="walert-k">RAIN</span>
+      <span class="walert-v" id="walertV">—</span>
+    </div>
+  </section>
+
+  <!-- ===================== EVENT BANNER ===================== -->
+  <div class="banner" id="banner">
+    <div class="banner-glass"></div>
+    <div class="banner-inner">
+      <span class="dot"></span>
+      <span class="src" id="bSrc">—</span>
+      <span class="head" id="bHead">—</span>
+      <span class="when" id="bWhen">—</span>
+    </div>
+  </div>
+
+  <!-- ===================== BIOMETRICS ===================== -->
+  <section class="bio">
+    <canvas id="bioCanvas"></canvas>
+    <div class="bio-halo"></div>
+    <div class="bio-value">
+      <div class="bio-state" id="bioHeart">
+        <span class="bio-n">—</span><span class="bio-u">BPM</span>
+      </div>
+      <div class="bio-state" id="bioSleep">
+        <span class="bio-n">—</span>
+      </div>
+    </div>
+  </section>
+
+  <p class="fixture-mark">development fixture &middot; not live data</p>
+  <div class="hud" id="hud"></div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/biometrics.js"></script>
+<script src="js/weather.js"></script>
+<script src="js/banner.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

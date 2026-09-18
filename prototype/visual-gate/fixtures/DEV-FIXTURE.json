@@ -1,0 +1,26 @@
+{
+  "_WARNING": "DEVELOPMENT FIXTURE. Invented values for the visual quality gate only. This file must never be loaded by the production interface. Production hides any visualisation whose data is unavailable rather than substituting numbers.",
+  "_fixture": true,
+
+  "biometrics": {
+    "resting_bpm": 58,
+    "sleep_total_minutes": 434,
+    "sleep_label": "7h 14m"
+  },
+
+  "weather": {
+    "temperature_c": 14,
+    "condition": "partly-cloudy-night",
+    "hourly_c": [14.2, 13.6, 12.9, 12.1, 11.4, 10.8, 10.3, 10.0,
+                 9.6, 9.2, 9.0, 9.1, 10.2, 11.6, 13.1, 14.4,
+                 15.6, 16.5, 17.0, 16.8, 16.1, 15.2, 14.1, 13.0],
+    "alert": null
+  },
+
+  "event": {
+    "kind": "news",
+    "source": "BBC",
+    "headline": "Orbital telescope returns first images of the inner system",
+    "time": "19:42"
+  }
+}

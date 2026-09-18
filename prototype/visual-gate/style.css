@@ -1,0 +1,327 @@
+/* Visual gate prototype.
+   Black is the physical mirror. Everything either emerges from it or is
+   not drawn at all. No panels, no frames, no gradients across the glass. */
+
+:root {
+  --ink:      #F2F0EC;
+  --ink-2:    #B9BEC9;
+  --ink-3:    #6E7482;
+  --ember:    #FF6A6A;
+  --violet:   #9E8CFF;
+  --cool:     #BBD1F0;
+
+  --ff-display: "Instrument Serif", Georgia, serif;
+  --ff-text: "Instrument Sans", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  width: 1440px;
+  height: 2560px;
+  overflow: hidden;
+}
+
+body { color: var(--ink); font-family: var(--ff-text); -webkit-font-smoothing: antialiased; }
+
+.mirror { position: relative; width: 1440px; height: 2560px; }
+
+/* ========================= WEATHER ========================= */
+
+.weather { position: absolute; inset: 0 0 auto 0; height: 980px; }
+
+.sky {
+  position: absolute;
+  top: -60px; left: 50%;
+  width: 1560px; height: 860px;
+  transform: translateX(-50%);
+}
+
+.sky .layer {
+  position: absolute;
+  will-change: transform;
+}
+
+.layer.haze {
+  top: 150px; left: -60px; width: 1600px;
+  opacity: 0.62;
+  animation: creep 260s linear infinite;
+}
+.layer.far {
+  top: 40px; left: 30px; width: 1420px;
+  opacity: 0.78;
+  animation: creep 180s linear infinite reverse;
+}
+.layer.main {
+  top: 96px; left: 110px; width: 1290px;
+  opacity: 1;
+  animation: creep 220s linear infinite;
+}
+.layer.near {
+  top: 128px; left: 596px; width: 880px;
+  opacity: 0.80;
+  animation: creep 140s linear infinite reverse;
+}
+
+@keyframes creep {
+  from { transform: translate3d(-70px, 0, 0); }
+  50%  { transform: translate3d(70px, -14px, 0); }
+  to   { transform: translate3d(-70px, 0, 0); }
+}
+
+/* The moon sits behind the cloud mass and lights it from within. */
+.moon {
+  position: absolute;
+  top: 168px; left: 742px;
+  width: 204px; height: 204px;
+  border-radius: 50%;
+  /* Dimmer than instinct suggests: a near-white disc on black reads as a
+     sticker. Most of the presence should come from the halo. */
+  background:
+    radial-gradient(circle at 38% 34%, #EFE9D9 0%, #DCD5C2 44%, #A8A192 70%, #6F6B5E 100%);
+  box-shadow:
+    0 0 70px 18px rgba(214, 224, 244, 0.16),
+    0 0 220px 70px rgba(170, 196, 240, 0.13),
+    0 0 480px 190px rgba(120, 152, 210, 0.07);
+  filter: blur(0.4px);
+  animation: lunar 40s ease-in-out infinite;
+}
+
+@keyframes lunar {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.08); }
+}
+
+.temp {
+  position: absolute;
+  left: 104px; top: 470px;
+  display: flex;
+  align-items: flex-start;
+  line-height: 0.8;
+  text-shadow: 0 0 80px rgba(0,0,0,0.9), 0 0 24px rgba(0,0,0,0.8);
+}
+
+.temp-n {
+  font-family: var(--ff-display);
+  font-size: 300px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.temp-d {
+  font-family: var(--ff-display);
+  font-size: 132px;
+  color: var(--ink-2);
+  margin-top: 26px;
+  margin-left: 6px;
+}
+
+.curve {
+  position: absolute;
+  left: 0; top: 792px;
+  width: 1440px; height: 176px;
+  display: block;
+  opacity: 0;
+  animation: settle 2.2s 0.9s ease-out forwards;
+}
+
+@keyframes settle { to { opacity: 1; } }
+
+/* Reactive weather: only present while an alert is live. */
+.walert {
+  position: absolute;
+  right: 118px; top: 486px;
+  text-align: right;
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+}
+
+.walert-k {
+  display: block;
+  font-family: var(--ff-text);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--cool);
+}
+.walert-v {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--ff-display);
+  font-size: 86px;
+  line-height: 0.9;
+  color: var(--ink);
+}
+
+.rainfall { position: absolute; inset: 120px 180px 0 180px; opacity: 0; }
+.rainfall i {
+  position: absolute;
+  top: -12%;
+  width: 1px;
+  height: 90px;
+  background: linear-gradient(to bottom, rgba(196,216,246,0) 0%, rgba(196,216,246,0.75) 70%, rgba(196,216,246,0) 100%);
+  animation: fall linear infinite;
+}
+@keyframes fall {
+  from { transform: translate3d(0, -140px, 0); }
+  to   { transform: translate3d(-60px, 760px, 0); }
+}
+
+/* ========================= EVENT BANNER ========================= */
+
+.banner {
+  position: absolute;
+  top: 1176px; right: 0;
+  width: 1280px; height: 108px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* The ribbon itself: a hairline that grows out of the mirror edge, then
+   opens into a pane of glass. */
+.banner-glass {
+  position: absolute;
+  inset: 0;
+  transform-origin: right center;
+  transform: scaleX(0.001) scaleY(0.02);
+  background:
+    linear-gradient(to right,
+      rgba(150,178,224,0) 0%,
+      rgba(96,124,170,0.10) 18%,
+      rgba(120,150,200,0.16) 60%,
+      rgba(186,212,255,0.26) 100%);
+  border-right: 2px solid rgba(206, 226, 255, 0.85);
+  box-shadow: 0 0 60px rgba(120, 160, 230, 0.20), inset 0 1px 0 rgba(255,255,255,0.10);
+}
+
+.banner-inner {
+  position: absolute;
+  inset: 0 56px 0 64px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  opacity: 0;
+  transform: translate3d(26px, 0, 0);
+}
+
+.banner .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #7FE0B0;
+  box-shadow: 0 0 16px rgba(127,224,176,0.9);
+  flex: none;
+}
+.banner .src {
+  font-size: 21px; font-weight: 500; letter-spacing: 0.10em;
+  color: var(--cool); flex: none;
+}
+.banner .head {
+  font-family: var(--ff-display);
+  font-size: 40px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.banner .when {
+  font-size: 21px; color: var(--ink-3); flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========================= BIOMETRICS ========================= */
+
+.bio {
+  position: absolute;
+  left: 0; top: 1330px;
+  width: 1440px; height: 1210px;
+}
+
+#bioCanvas {
+  position: absolute;
+  left: 50%; top: 0;
+  width: 1280px; height: 1210px;
+  transform: translateX(-50%);
+  display: block;
+}
+
+.bio-halo {
+  position: absolute;
+  left: 50%; top: 280px;
+  width: 1000px; height: 720px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%,
+    rgba(255, 96, 96, 0.07) 0%, rgba(255, 70, 70, 0.03) 42%, rgba(0,0,0,0) 72%);
+  transition: background 1.6s ease;
+}
+.bio-halo.sleep {
+  background: radial-gradient(ellipse at 50% 50%,
+    rgba(150, 128, 255, 0.08) 0%, rgba(120, 110, 240, 0.035) 42%, rgba(0,0,0,0) 72%);
+}
+
+.bio-value {
+  position: absolute;
+  left: 112px; top: 556px;
+  width: 520px; height: 200px;
+}
+
+.bio-state {
+  position: absolute;
+  left: 0; top: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition: opacity .8s ease, transform .9s cubic-bezier(.2,.8,.3,1);
+}
+.bio-state.on { opacity: 1; transform: none; }
+
+.bio-n {
+  font-family: var(--ff-display);
+  font-size: 176px;
+  line-height: 0.82;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.bio-u {
+  font-family: var(--ff-text);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+#bioSleep .bio-n { font-size: 132px; }
+
+/* ========================= UTILITY ========================= */
+
+.fixture-mark {
+  position: absolute;
+  left: 50%; bottom: 44px;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0.22em;
+  color: #2E323B;
+}
+
+.hud {
+  position: absolute;
+  top: 18px; left: 18px;
+  font-family: var(--ff-text);
+  font-size: 17px;
+  color: #6BFFB0;
+  white-space: pre;
+  display: none;
+}
+.hud.on { display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

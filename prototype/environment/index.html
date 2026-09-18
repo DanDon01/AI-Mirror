@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Environment — prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,200..800&family=Fraunces:ital,opsz,wght@0,9..144,200..700;1,9..144,200..600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main class="plate">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="hero-photo">
+      <img src="assets/img/hero-dusk.webp" alt="" class="sky">
+      <div class="clouds">
+        <img src="assets/clouds/puff-0.webp" alt="" class="puff p0">
+        <img src="assets/clouds/puff-2.webp" alt="" class="puff p1">
+        <img src="assets/clouds/puff-1.webp" alt="" class="puff p2">
+        <img src="assets/clouds/puff-3.webp" alt="" class="puff p3">
+      </div>
+      <div class="bloom"></div>
+      <div class="grain"></div>
+      <div class="vignette"></div>
+      <div class="falloff"></div>
+    </div>
+
+    <header class="rail">
+      <div class="rail-left">
+        <h1 class="place" id="place">—</h1>
+        <p class="coords" id="coords">—</p>
+      </div>
+      <p class="stamp" id="stamp">—</p>
+    </header>
+
+    <div class="reading">
+      <img class="hero-icon" id="heroIcon" src="" alt="">
+      <div class="temp-row">
+        <span class="temp" id="temp">—</span>
+        <span class="deg">°</span>
+      </div>
+      <p class="summary" id="summary">—</p>
+      <p class="narrative" id="narrative">—</p>
+    </div>
+
+    <div class="range">
+      <div class="range-item">
+        <span class="range-n" id="high">—</span>
+        <span class="range-l">High</span>
+      </div>
+      <div class="range-item low">
+        <span class="range-n" id="low">—</span>
+        <span class="range-l">Low</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RIDGE ============ -->
+  <section class="ridge">
+    <p class="eyebrow">Next twenty&#8209;four hours</p>
+    <div class="ridge-stage">
+      <svg id="ridgeSvg" viewBox="0 0 1320 300" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="warm" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stop-color="#F3B071" stop-opacity="0.92"/>
+            <stop offset="45%"  stop-color="#C97C55" stop-opacity="0.42"/>
+            <stop offset="100%" stop-color="#6B4A4A" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="wet" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stop-color="#7FA9D8" stop-opacity="0.50"/>
+            <stop offset="100%" stop-color="#30507A" stop-opacity="0"/>
+          </linearGradient>
+          <filter id="soften" x="-8%" y="-30%" width="116%" height="180%">
+            <feGaussianBlur stdDeviation="9"/>
+          </filter>
+        </defs>
+        <path id="rainPath" fill="url(#wet)"></path>
+        <path id="ridgeGlow" fill="url(#warm)" filter="url(#soften)" opacity="0.85"></path>
+        <path id="ridgePath" fill="url(#warm)"></path>
+      </svg>
+      <div class="nowshaft"></div>
+      <div class="ridge-marks" id="ridgeMarks"></div>
+      <div class="ridge-hours" id="ridgeHours"></div>
+    </div>
+  </section>
+
+  <!-- ============ READINGS ============ -->
+  <section class="readings" id="readings"></section>
+
+  <!-- ============ OUTLOOK ============ -->
+  <section class="outlook">
+    <p class="eyebrow">The next four days</p>
+    <div class="strip" id="strip"></div>
+  </section>
+
+  <footer class="foot">
+    <span id="sunline">—</span>
+    <span class="foot-src">Prototype · sample data</span>
+  </footer>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+Wikimedia Commons sources for the ENVIRONMENT prototype
+file | commons title | licence | author
+sky_cumulus_0.jpg | File:Fluffy Cloudy.jpg | CC BY-SA 4.0 | Kiruthika Mani
+sky_overcast_0.jpg | File:Sunset near Bishopstone, Swindon - geograph.org.uk - 601982.jpg | CC BY-SA 2.0 | Brian Robert Marshall
+sky_dusk_0.jpg | File:Dramatic Sunset of Bethel, Alaska.jpg | CC BY 2.0 | Andrea Pokrzywinski
+sky_dusk_1.jpg | File:Dramatic autumn sunset over a lake.jpg | CC BY 2.0 | Mark Freeth
+tex_rain_0.jpg | File:Mini puddles; Drops of water on the window pane after heavy rain.jpg | CC BY-SA 4.0 | Tarasna0922
+tex_rain_1.jpg | File:Rain on a window pane.jpg | CC BY-SA 4.0 | Theactivistuk
