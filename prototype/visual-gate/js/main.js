@@ -138,6 +138,7 @@
     await Biometrics.init(document.getElementById('bioCanvas'));
 
     window.__setTime = (t) => { renderAt(t); return true; };
+    window.__gpuInfo = () => Biometrics.stats();
 
     if (MANUAL) {
       renderAt(SEEK);

@@ -62,6 +62,35 @@ Frame rates measured on a desktop are meaningless here: the dev box has
 no GPU path for WebGL and falls back to SwiftShader, so it renders the
 same pixels several orders of magnitude slower than the Pi will.
 
+## Validating
+
+```bash
+python validate.py
+```
+
+Walks the whole 48-second loop at half-second steps, checking that no
+frame throws and that something is actually drawn at every point, then
+reports the draw budget per phase. Stills only prove the handful of
+moments they were taken at.
+
+The geometry check catches the things that are invisible until they are
+not: non-finite coordinates, heart and brain point counts drifting apart
+(the morph pairs by index, so they must match), and tract vertices
+escaping the shell they are supposed to run inside.
+
+Current budget, which is the one performance figure that means anything
+from a machine with no GPU path for WebGL:
+
+| phase | calls | triangles | points | lines |
+|---|---|---|---|---|
+| heart | 3 | 47,226 | 104,000 | 0 |
+| dissolve | 2 | 0 | 104,000 | 0 |
+| brain | 4 | 54,388 | 104,000 | 20,500 |
+
+The 104,000 points are constant: 52,000 particles drawn twice, once as a
+core and once as a halo. That is the dominant always-on cost and the
+first place to look if the Pi struggles.
+
 ## Capture
 
 ```bash

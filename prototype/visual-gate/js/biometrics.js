@@ -15,7 +15,7 @@
 
 window.Biometrics = (function () {
   let renderer, scene, camera, group, ready = false;
-  let heartMesh, brainMesh, uniforms, meshHeart, meshBrain, fibUniforms;
+  let heartMesh, brainMesh, uniforms, meshHeart, meshBrain, fibUniforms, fibres;
 
   // ---------------------------------------------------------------- io
 
@@ -410,7 +410,7 @@ window.Biometrics = (function () {
       uB2: { value: new THREE.Color(0xa88cff) },   // association
       uB3: { value: new THREE.Color(0x5fd4e8) },   // cerebellar
     };
-    const fibres = new THREE.LineSegments(fibGeo, new THREE.ShaderMaterial({
+    fibres = new THREE.LineSegments(fibGeo, new THREE.ShaderMaterial({
       uniforms: fibUniforms,
       vertexShader: FIB_VERT,
       fragmentShader: FIB_FRAG,
@@ -420,6 +420,7 @@ window.Biometrics = (function () {
       blending: THREE.AdditiveBlending,
     }));
     fibres.renderOrder = 1;
+    fibres.visible = false;
 
     group = new THREE.Group();
     group.add(heartMesh, brainMesh, fibres, haloPoints, corePoints);
@@ -482,13 +483,27 @@ window.Biometrics = (function () {
     brainMesh.visible = brainOpacity > 0.015;
 
     // Tracts thread themselves back together as the brain resolves.
+    // Skipped entirely while the heart is showing: drawing 20,500 line
+    // vertices at zero opacity for most of the loop is pure waste.
+    const tractOpacity = ramp(morph, 0.52, 0.92);
     fibUniforms.uTime.value = t;
-    fibUniforms.uOpacity.value = ramp(morph, 0.52, 0.92);
+    fibUniforms.uOpacity.value = tractOpacity;
+    fibres.visible = tractOpacity > 0.01;
 
     group.rotation.y = t * 0.16;
     group.rotation.x = Math.sin(t * 0.09) * 0.10;
     renderer.render(scene, camera);
   }
 
-  return { init, frame, isReady: () => ready };
+  // Draw-call and primitive counts are the one budget figure that is
+  // hardware independent: they say what the Pi is being asked to do,
+  // whatever speed it does it at.
+  function stats() {
+    if (!renderer) return null;
+    const r = renderer.info.render;
+    return { calls: r.calls, triangles: r.triangles,
+             points: r.points, lines: r.lines };
+  }
+
+  return { init, frame, stats, isReady: () => ready };
 })();
