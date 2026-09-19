@@ -62,7 +62,8 @@ def main():
             with open(os.path.join(OUT, fname), "wb") as fh:
                 fh.write(data)
             print(f"  {fname:44s} {len(data)//1024:4d} KB")
-            css_parts.append(block.replace(remote, f"assets/fonts/{fname}"))
+            # Relative to this stylesheet, which lives beside the files.
+            css_parts.append(block.replace(remote, fname))
 
     header = ("/* Bundled locally so the mirror never depends on the network,\n"
               "   and so a fontconfig failure cannot silently substitute a\n"

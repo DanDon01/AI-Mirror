@@ -15,7 +15,7 @@
 
 window.Biometrics = (function () {
   let renderer, scene, camera, group, ready = false;
-  let heartMesh, brainMesh, uniforms, meshHeart, meshBrain;
+  let heartMesh, brainMesh, uniforms, meshHeart, meshBrain, fibUniforms;
 
   // ---------------------------------------------------------------- io
 
@@ -47,6 +47,14 @@ window.Biometrics = (function () {
     const buf = await (await fetch(url)).arrayBuffer();
     const count = new DataView(buf).getUint32(0, true);
     return { count, data: new Float32Array(buf, 4, count * 8) };
+  }
+
+  async function loadFibres(url) {
+    const buf = await (await fetch(url)).arrayBuffer();
+    const head = new DataView(buf);
+    const count = head.getUint32(0, true);
+    const samples = head.getUint32(4, true);
+    return { count, samples, data: new Float32Array(buf, 8, count * samples * 5) };
   }
 
   // ------------------------------------------------------------ shaders
@@ -194,6 +202,51 @@ window.Biometrics = (function () {
       gl_FragColor = vec4(vCol, a * a * vA);
     }`;
 
+  /* White-matter tracts, drawn without depth testing so they read
+     through the translucent shell the way an imaged brain does. */
+  const FIB_VERT = `
+    attribute float aT;
+    attribute float aBundle;
+    attribute float aFSeed;
+
+    uniform float uTime, uOpacity;
+    uniform vec3  uB0, uB1, uB2, uB3;
+
+    varying vec3  vC;
+    varying float vA;
+
+    void main() {
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      float depth = -mv.z;
+
+      vec3 col = uB0;
+      if (aBundle > 2.5)      col = uB3;
+      else if (aBundle > 1.5) col = uB2;
+      else if (aBundle > 0.5) col = uB1;
+
+      // A signal running the length of the fibre. Sparse, so at any
+      // moment only a few tracts are lit rather than the whole volume.
+      float sig = sin(aT * 7.0 - uTime * 2.1 + aFSeed * 6.2831);
+      float pulse = smoothstep(0.90, 1.0, sig);
+      col += vec3(0.55, 0.88, 1.0) * pulse * 1.35;
+
+      // Taper each tract toward its ends. Without this every fibre in a
+      // bundle reaches full brightness at the point they all converge,
+      // and the origin blows out to white.
+      float ends = smoothstep(0.0, 0.16, aT) * smoothstep(1.0, 0.84, aT);
+
+      float fade = smoothstep(4.4, 2.0, depth);
+      vC = col;
+      vA = uOpacity * fade * ends * (0.13 + pulse * 0.70);
+      gl_Position = projectionMatrix * mv;
+    }`;
+
+  const FIB_FRAG = `
+    precision mediump float;
+    varying vec3  vC;
+    varying float vA;
+    void main() { gl_FragColor = vec4(vC, vA); }`;
+
   // --------------------------------------------------------------- init
 
   function meshMaterial(deep, mid, rim) {
@@ -221,11 +274,12 @@ window.Biometrics = (function () {
   }
 
   async function init(canvas) {
-    const [heartGeo, brainGeo, heartPts, brainPts] = await Promise.all([
+    const [heartGeo, brainGeo, heartPts, brainPts, fib] = await Promise.all([
       loadMesh('assets/anatomy/heart.mesh'),
       loadMesh('assets/anatomy/brain.mesh'),
       loadPoints('assets/anatomy/heart.pts'),
       loadPoints('assets/anatomy/brain.pts'),
+      loadFibres('assets/anatomy/brain.fib'),
     ]);
 
     const count = Math.min(heartPts.count, brainPts.count);
@@ -317,11 +371,58 @@ window.Biometrics = (function () {
     // is most of what makes the object feel like a volume.
     const haloPoints = new THREE.Points(geo, pointMaterial(halo, false));
     const corePoints = new THREE.Points(geo, pointMaterial(uniforms, true));
-    haloPoints.renderOrder = 1;
-    corePoints.renderOrder = 2;
+    haloPoints.renderOrder = 2;
+    corePoints.renderOrder = 3;
+
+    // Tracts as line segments: one draw call for the whole bundle set.
+    const segs = fib.count * (fib.samples - 1);
+    const fpos = new Float32Array(segs * 6);
+    const ft = new Float32Array(segs * 2);
+    const fb = new Float32Array(segs * 2);
+    const fsd = new Float32Array(segs * 2);
+    let vi = 0;
+    for (let f = 0; f < fib.count; f++) {
+      const fseed = ((Math.sin(f * 7.77) * 43758.5453) % 1 + 1) % 1;
+      for (let sIdx = 0; sIdx < fib.samples - 1; sIdx++) {
+        for (const k of [sIdx, sIdx + 1]) {
+          const o = (f * fib.samples + k) * 5;
+          fpos[vi * 3] = fib.data[o];
+          fpos[vi * 3 + 1] = fib.data[o + 1];
+          fpos[vi * 3 + 2] = fib.data[o + 2];
+          ft[vi] = fib.data[o + 3];
+          fb[vi] = fib.data[o + 4];
+          fsd[vi] = fseed;
+          vi++;
+        }
+      }
+    }
+    const fibGeo = new THREE.BufferGeometry();
+    fibGeo.setAttribute('position', new THREE.BufferAttribute(fpos, 3));
+    fibGeo.setAttribute('aT', new THREE.BufferAttribute(ft, 1));
+    fibGeo.setAttribute('aBundle', new THREE.BufferAttribute(fb, 1));
+    fibGeo.setAttribute('aFSeed', new THREE.BufferAttribute(fsd, 1));
+
+    fibUniforms = {
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uB0: { value: new THREE.Color(0x8f74ff) },   // corpus callosum
+      uB1: { value: new THREE.Color(0x6fb0ff) },   // corona radiata
+      uB2: { value: new THREE.Color(0xa88cff) },   // association
+      uB3: { value: new THREE.Color(0x5fd4e8) },   // cerebellar
+    };
+    const fibres = new THREE.LineSegments(fibGeo, new THREE.ShaderMaterial({
+      uniforms: fibUniforms,
+      vertexShader: FIB_VERT,
+      fragmentShader: FIB_FRAG,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+    }));
+    fibres.renderOrder = 1;
 
     group = new THREE.Group();
-    group.add(heartMesh, brainMesh, haloPoints, corePoints);
+    group.add(heartMesh, brainMesh, fibres, haloPoints, corePoints);
     scene = new THREE.Scene();
     scene.add(group);
 
@@ -379,6 +480,10 @@ window.Biometrics = (function () {
     meshHeart.uBeat.value = beat;
     heartMesh.visible = heartOpacity > 0.015;
     brainMesh.visible = brainOpacity > 0.015;
+
+    // Tracts thread themselves back together as the brain resolves.
+    fibUniforms.uTime.value = t;
+    fibUniforms.uOpacity.value = ramp(morph, 0.52, 0.92);
 
     group.rotation.y = t * 0.16;
     group.rotation.x = Math.sin(t * 0.09) * 0.10;

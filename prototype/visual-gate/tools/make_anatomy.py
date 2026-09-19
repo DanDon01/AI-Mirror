@@ -209,43 +209,139 @@ def sdf_brain(p):
     # Temporal lobes. Without them the brain is an ovoid; with them, and
     # with the lateral sulcus below, the side profile is unmistakable.
     for sx in (-1.0, 1.0):
-        temporal = sd_ellipsoid(p, (sx * 0.225, -0.135, 0.065),
-                                (0.135, 0.115, 0.215))
-        d = smin(d, temporal, 0.050)
+        d = smin(d, sd_ellipsoid(p, (sx * 0.225, -0.135, 0.065),
+                                 (0.135, 0.115, 0.215)), 0.050)
 
     # Frontal pole slightly narrower, occipital slightly broader.
     d = smax(d, sd_ellipsoid(p, (0.0, 0.03, 0.02), (0.44, 0.40, 0.44)) - 0.02, 0.06)
 
     # Lateral (Sylvian) sulcus: the deep cleft above each temporal lobe.
     for sx in (-1.0, 1.0):
-        sulcus = sd_chain(p, [
+        d = ssub(d, sd_chain(p, [
             ((sx * 0.300, -0.020, 0.185), 0.040),
             ((sx * 0.330, -0.045, 0.030), 0.045),
             ((sx * 0.290, -0.055, -0.135), 0.038),
-        ], k=0.02)
-        d = ssub(d, sulcus, 0.030)
+        ], k=0.02), 0.030)
+
+    # Central sulcus, running down and forward across each hemisphere.
+    # It is the landmark that separates frontal from parietal lobe and
+    # the one a viewer reads as "brain" fastest after the fissure.
+    for sx in (-1.0, 1.0):
+        d = ssub(d, sd_chain(p, [
+            ((sx * 0.050, 0.325, -0.020), 0.028),
+            ((sx * 0.155, 0.255, 0.030), 0.030),
+            ((sx * 0.245, 0.135, 0.080), 0.028),
+            ((sx * 0.285, 0.025, 0.105), 0.024),
+        ], k=0.018), 0.024)
+
+    # Parieto-occipital sulcus, at the back.
+    for sx in (-1.0, 1.0):
+        d = ssub(d, sd_chain(p, [
+            ((sx * 0.035, 0.295, -0.235), 0.025),
+            ((sx * 0.125, 0.195, -0.290), 0.025),
+            ((sx * 0.175, 0.080, -0.300), 0.023),
+        ], k=0.018), 0.022)
 
     # Longitudinal fissure between the hemispheres.
     fissure = np.maximum(np.abs(p[:, 0]) - 0.022, -(p[:, 1] - 0.02))
     d = ssub(d, fissure, 0.028)
 
-    # Cerebellum, tucked under the occipital lobes.
+    # Cerebellum. Its folia are fine parallel transverse ridges, not the
+    # branching convolution of cortex, and reproducing that difference is
+    # most of what distinguishes it at a glance.
     cb = sd_ellipsoid(p, (0.0, -0.235, -0.250), (0.235, 0.130, 0.145))
-    cb -= 0.020 * np.abs(gyroid(p, 30.0))   # finer foliation than cortex
+    cb -= 0.014 * np.abs(np.sin(p[:, 1] * 105.0))
     d = smin(d, cb, 0.045)
 
     # Brainstem.
-    stem = sd_chain(p, [
+    d = smin(d, sd_chain(p, [
         ((0.0, -0.140, -0.075), 0.072),
         ((0.0, -0.290, -0.055), 0.060),
         ((0.0, -0.430, -0.030), 0.048),
-    ], k=0.03)
-    d = smin(d, stem, 0.040)
+    ], k=0.03), 0.040)
 
-    # Cortical folding.
-    d -= 0.026 * np.abs(gyroid(p, 11.0))
-    d -= 0.009 * np.abs(gyroid(p, 23.0))
+    # Cortical folding. Stretched along the anterior-posterior axis so
+    # the gyri elongate into ridges rather than reading as isotropic
+    # lumps, and deeper than before so the occlusion term has something
+    # to bite on.
+    q = p * np.array([1.0, 1.30, 0.72])
+    d -= 0.033 * np.abs(gyroid(q, 10.5))
+    d -= 0.011 * np.abs(gyroid(p, 22.0))
     return d
+
+
+# White-matter bundles. Not a literal tractogram, but built from the
+# real routes: commissural fibres crossing the midline, projection
+# fibres fanning up from the brainstem, and association fibres running
+# front to back within a hemisphere.
+
+def _bezier(controls, n):
+    t = np.linspace(0.0, 1.0, n)[:, None]
+    p0, p1, p2, p3 = controls
+    return ((1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1
+            + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3)
+
+
+def brain_fibres(count=820, samples=26):
+    """Curved bundles, pulled inside the surface so they read as
+    interior structure seen through a translucent shell."""
+    rng = np.random.default_rng(77)
+    paths = np.empty((count, samples, 3))
+    bundle = np.empty(count)
+
+    for i in range(count):
+        kind = i % 4
+        j = rng.normal(0.0, 1.0, 3) * 0.035
+
+        if kind == 0:
+            # Corpus callosum: arches from one hemisphere to the other.
+            z = rng.uniform(-0.24, 0.26)
+            reach = rng.uniform(0.16, 0.27)
+            p0 = np.array([-reach, 0.075, z]) + j
+            p1 = np.array([-reach * 0.45, 0.235, z * 0.9])
+            p2 = np.array([reach * 0.45, 0.235, z * 0.9])
+            p3 = np.array([reach, 0.075, z]) + j
+        elif kind == 1:
+            # Corona radiata: fans up from the stem to the cortex.
+            sx = 1.0 if rng.random() > 0.5 else -1.0
+            tx = sx * rng.uniform(0.07, 0.30)
+            tz = rng.uniform(-0.26, 0.28)
+            p0 = np.array([0.0, -0.215, -0.045]) + j * 0.4
+            p1 = np.array([sx * 0.05, -0.090, -0.020])
+            p2 = np.array([tx * 0.7, 0.110, tz * 0.6])
+            p3 = np.array([tx, 0.265, tz]) + j
+        elif kind == 2:
+            # Association fibres: front to back within one hemisphere.
+            sx = 1.0 if rng.random() > 0.5 else -1.0
+            y = rng.uniform(-0.09, 0.19)
+            x = sx * rng.uniform(0.10, 0.27)
+            p0 = np.array([x, y, 0.285]) + j
+            p1 = np.array([x * 1.05, y + 0.07, 0.10])
+            p2 = np.array([x * 1.05, y + 0.05, -0.12])
+            p3 = np.array([x * 0.85, y - 0.02, -0.275]) + j
+        else:
+            # Cerebellar peduncles.
+            sx = 1.0 if rng.random() > 0.5 else -1.0
+            p0 = np.array([0.0, -0.250, -0.060]) + j * 0.3
+            p1 = np.array([sx * 0.055, -0.235, -0.130])
+            p2 = np.array([sx * 0.130, -0.225, -0.200])
+            p3 = np.array([sx * rng.uniform(0.06, 0.19), -0.245,
+                           -0.285 + rng.normal(0, 0.02)])
+
+        paths[i] = _bezier([p0, p1, p2, p3], samples)
+        bundle[i] = kind
+
+    # Pull anything that strayed outside back under the surface.
+    flat = paths.reshape(-1, 3)
+    for _ in range(3):
+        d = sdf_brain(flat)
+        outside = d > -0.030
+        if not outside.any():
+            break
+        n = sdf_normals(sdf_brain, flat[outside])
+        flat[outside] -= n * (d[outside] + 0.030)[:, None]
+    paths = flat.reshape(count, samples, 3)
+    return paths, bundle
 
 
 def brain_vessel_field(p):
@@ -387,6 +483,18 @@ def write_points(path, pos, nrm, ao, vessel):
           f"{os.path.getsize(path)//1024:5d} KB")
 
 
+def write_fibres(path, paths, bundle):
+    count, samples, _ = paths.shape
+    with open(path, "wb") as fh:
+        fh.write(struct.pack("<II", count, samples))
+        t = np.linspace(0.0, 1.0, samples)[None, :, None].repeat(count, 0)
+        b = bundle[:, None, None].repeat(samples, 1)
+        payload = np.concatenate([paths, t, b], axis=2).astype("<f4")
+        fh.write(payload.tobytes())
+    print(f"  {os.path.basename(path):12s} {count:6d} fibres x {samples} "
+          f"  {os.path.getsize(path)//1024:5d} KB")
+
+
 def preview(name, points, shade, size=430):
     from PIL import Image
     img = Image.new("L", (size * 2, size), 0)
@@ -402,7 +510,7 @@ def preview(name, points, shade, size=430):
     img.save(os.path.join(OUT, f"_preview_{name}.png"))
 
 
-def build(name, fn, vessel_fn, res, extent, cell):
+def build(name, fn, vessel_fn, res, extent, cell, fibre_fn=None):
     print(f"{name}: surfacing at {res}^3")
     verts, faces, normals = surface(fn, res, extent, cell)
     print(f"  marching cubes -> {len(verts)} verts, {len(faces)} tris")
@@ -420,6 +528,12 @@ def build(name, fn, vessel_fn, res, extent, cell):
 
     write_mesh(os.path.join(OUT, f"{name}.mesh"), verts, normals, faces)
     write_points(os.path.join(OUT, f"{name}.pts"), pts, nrm, ao, ves)
+    if fibre_fn is not None:
+        # Same centre and scale as the surface, or the tracts float free
+        # of the shell they are supposed to run inside.
+        paths, bundle = fibre_fn()
+        paths = (paths - centre) * scale
+        write_fibres(os.path.join(OUT, f"{name}.fib"), paths, bundle)
     preview(name, pts, ao)
     return pts.shape[0]
 
@@ -427,7 +541,8 @@ def build(name, fn, vessel_fn, res, extent, cell):
 def main():
     os.makedirs(OUT, exist_ok=True)
     build("heart", sdf_heart, heart_vessel_field, res=176, extent=0.86, cell=0.0105)
-    build("brain", sdf_brain, brain_vessel_field, res=176, extent=0.80, cell=0.0105)
+    build("brain", sdf_brain, brain_vessel_field, res=176, extent=0.80,
+          cell=0.0105, fibre_fn=brain_fibres)
     print(f"previews in {OUT}")
 
 
