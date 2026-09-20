@@ -16,6 +16,7 @@
 window.Biometrics = (function () {
   let renderer, scene, camera, group, ready = false;
   let heartMesh, brainMesh, uniforms, meshHeart, meshBrain, fibUniforms, fibres;
+  let corePoints, haloPoints, haloStride = 1;
 
   // ---------------------------------------------------------------- io
 
@@ -341,7 +342,7 @@ window.Biometrics = (function () {
     };
     const halo = Object.assign({}, uniforms, {
       uSize: { value: 27.0 },
-      uAlpha: { value: 0.062 },
+      uAlpha: { value: 0.115 },
     });
     uniforms._halo = halo;
 
@@ -369,8 +370,26 @@ window.Biometrics = (function () {
     // The halo ignores depth so its glow bleeds past the silhouette; the
     // core tests depth so particles behind the solid are hidden, which
     // is most of what makes the object feel like a volume.
-    const haloPoints = new THREE.Points(geo, pointMaterial(halo, false));
-    const corePoints = new THREE.Points(geo, pointMaterial(uniforms, true));
+    // The halo is a soft low-alpha glow covering 3.3 screen-fulls of
+    // additive pixels per frame, which on a tile GPU costs far more than
+    // the triangles or the draw calls. It does not need every particle:
+    // an indexed half of them, at the same size and roughly double the
+    // alpha, reads the same and halves the fill. The attributes are
+    // shared with the core pass, so this adds an index buffer and no
+    // vertex memory.
+    const haloGeo = new THREE.BufferGeometry();
+    for (const name of ['position', 'aBrainPos', 'normal', 'aNormal',
+                        'aBrainNormal', 'aAO', 'aVessel', 'aSeed']) {
+      haloGeo.setAttribute(name, geo.getAttribute(name));
+    }
+    const HALO_STRIDE = 2;
+    haloStride = HALO_STRIDE;
+    const haloIdx = new Uint32Array(Math.floor(count / HALO_STRIDE));
+    for (let i = 0; i < haloIdx.length; i++) haloIdx[i] = i * HALO_STRIDE;
+    haloGeo.setIndex(new THREE.BufferAttribute(haloIdx, 1));
+
+    haloPoints = new THREE.Points(haloGeo, pointMaterial(halo, false));
+    corePoints = new THREE.Points(geo, pointMaterial(uniforms, true));
     haloPoints.renderOrder = 2;
     corePoints.renderOrder = 3;
 
@@ -505,5 +524,51 @@ window.Biometrics = (function () {
              points: r.points, lines: r.lines };
   }
 
-  return { init, frame, stats, isReady: () => ready };
+  /* Fill, not draw calls, is what limits a tile GPU. Each particle is a
+     sprite whose radius grows as it nears the camera, so the honest cost
+     figure is total covered pixels per pass relative to the screen. */
+  function fillEstimate() {
+    if (!ready) return null;
+    const pos = corePoints.geometry.getAttribute('position');
+    const bpos = corePoints.geometry.getAttribute('aBrainPos');
+    const seedAttr = corePoints.geometry.getAttribute('aSeed');
+    const m = uniforms.uMorph.value;
+    group.updateMatrixWorld(true);
+    camera.updateMatrixWorld(true);
+    const mv = new THREE.Matrix4().multiplyMatrices(
+      camera.matrixWorldInverse, group.matrixWorld);
+    const v = new THREE.Vector3();
+    const coreSize = uniforms.uSize.value;
+    const haloSize = uniforms._halo.uSize.value;
+    let core = 0, halo = 0, counted = 0;
+    for (let i = 0; i < pos.count; i++) {
+      v.set(
+        pos.getX(i) + (bpos.getX(i) - pos.getX(i)) * m,
+        pos.getY(i) + (bpos.getY(i) - pos.getY(i)) * m,
+        pos.getZ(i) + (bpos.getZ(i) - pos.getZ(i)) * m
+      ).applyMatrix4(mv);
+      const depth = -v.z;
+      if (depth <= 0.01) continue;
+      const jitter = 0.72 + 0.56 * ((seedAttr.getX(i) * 13.1) % 1);
+      const cs = (coreSize * jitter) / depth;
+      core += Math.PI * cs * cs * 0.25;
+      if (i % haloStride === 0) {
+        const hs = (haloSize * jitter) / depth;
+        halo += Math.PI * hs * hs * 0.25;
+      }
+      counted++;
+    }
+    const screen = renderer.domElement.width * renderer.domElement.height;
+    return {
+      counted,
+      haloDrawn: Math.floor(counted / haloStride),
+      screenPx: screen,
+      corePx: Math.round(core),
+      haloPx: Math.round(halo),
+      coreOverdraw: +(core / screen).toFixed(2),
+      haloOverdraw: +(halo / screen).toFixed(2),
+    };
+  }
+
+  return { init, frame, stats, fillEstimate, isReady: () => ready };
 })();

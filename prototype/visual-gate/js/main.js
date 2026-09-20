@@ -139,6 +139,7 @@
 
     window.__setTime = (t) => { renderAt(t); return true; };
     window.__gpuInfo = () => Biometrics.stats();
+    window.__fillInfo = () => Biometrics.fillEstimate();
 
     if (MANUAL) {
       renderAt(SEEK);

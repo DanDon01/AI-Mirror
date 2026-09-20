@@ -83,13 +83,23 @@ from a machine with no GPU path for WebGL:
 
 | phase | calls | triangles | points | lines |
 |---|---|---|---|---|
-| heart | 3 | 47,226 | 104,000 | 0 |
-| dissolve | 2 | 0 | 104,000 | 0 |
-| brain | 4 | 54,388 | 104,000 | 20,500 |
+| heart | 3 | 47,226 | 78,000 | 0 |
+| dissolve | 2 | 0 | 78,000 | 0 |
+| brain | 4 | 54,388 | 78,000 | 20,500 |
 
-The 104,000 points are constant: 52,000 particles drawn twice, once as a
-core and once as a halo. That is the dominant always-on cost and the
-first place to look if the Pi struggles.
+Draw calls are not what limits a tile GPU though; fill is. `__fillInfo()`
+in the page reports covered pixels per pass, which is the figure that
+actually predicts Pi behaviour:
+
+| pass | covered pixels | vs canvas |
+|---|---|---|
+| core | 387,000 | 0.26x |
+| halo | 2,447,000 | 1.67x |
+
+The halo is the cost centre and the first lever if the Pi struggles: it
+draws every second particle (`HALO_STRIDE`) at `uAlpha` 0.115. Drawing
+all of them was 3.26x canvas on its own, and halving it was visually
+indistinguishable at 2.6% mean luminance difference.
 
 ## Capture
 
