@@ -12,12 +12,18 @@ from capture_lib import Session
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "shots")
 
+# Chosen to catch each arrangement the timeline actually produces, not
+# just the pretty ones: the quiet plate with nothing raised, one panel,
+# two panels, the morph mid-flight, and the brain paired with weather.
 SHOTS = [
-    ("01-heart.png", 4.0),
-    ("02-event.png", 8.6),
-    ("03-transition.png", 13.7),
-    ("04-brain.png", 20.0),
-    ("05-rain.png", 36.0),
+    ("01-quiet.png", 1.5),
+    ("02-heart-energy.png", 5.5),
+    ("03-heart-pair.png", 10.0),
+    ("04-transition.png", 13.8),
+    ("05-brain-news.png", 20.0),
+    ("06-brain-pair.png", 25.0),
+    ("07-heart-weather.png", 31.0),
+    ("08-heart-alone.png", 34.0),
 ]
 
 

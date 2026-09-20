@@ -1,9 +1,10 @@
 /* Orchestration.
 
-   One area of glass communicates several things over time, which is the
-   point of the direction: the biometric object transforms rather than
-   sitting beside three sibling widgets, and the event banner exists only
-   while it has something to say.
+   The interface is a timeline, not a layout. Three layers run on it:
+
+     persistent   the corner stamp and the markets rail, always on
+     biometric    one object over the reflection, changing what it is
+     panels       two slots below the reflection, mostly empty
 
    Every visual state is a pure function of timeline position, so any
    frame can be reproduced exactly. That is what makes deterministic
@@ -14,6 +15,7 @@
      ?freeze=1  hold there (for stills)
      ?manual=1  no timeline; capture.py drives window.__setTime(t)
      ?hud=1     show frame timing
+     ?fit=1     scale the plate to the window
 */
 
 (function () {
@@ -44,11 +46,11 @@
   const T = {
     morphOut: [12.0, 15.5],    // heart -> brain
     morphBack: [26.0, 29.5],   // brain -> heart
-    bannerIn: [5.0, 6.6],
-    bannerOut: [12.2, 13.8],
-    rainIn: [31.0, 32.8],
-    rainOut: [40.5, 42.2],
   };
+
+  // How far the biometric section drops to put the heart over the chest
+  // rather than the head. See the vertical budget in style.css.
+  const CHEST_DROP = 650;
 
   const ramp = (t, a, b) => {
     const x = Math.max(0, Math.min(1, (t - a) / (b - a)));
@@ -94,9 +96,15 @@
 
   // ---- state ---------------------------------------------------------
   let data, bpm = 0, started = 0;
-  let heartEl, sleepEl, haloEl;
+  let bioEl, heartEl, sleepEl, haloEl;
 
-  function setBioValue(morph) {
+  function setBio(morph) {
+    // The object travels with the body part it describes, so the whole
+    // section moves rather than the canvas being repositioned: the
+    // readouts have to arrive with it.
+    bioEl.style.transform =
+      `translate3d(0,${((1 - morph) * CHEST_DROP).toFixed(1)}px,0)`;
+
     // One value leaves before the other arrives. Crossfading them left
     // both legible at once mid-morph, reading as two overlapping labels.
     const out = 1 - ramp(morph, 0.22, 0.40);
@@ -111,13 +119,9 @@
   function renderAt(t) {
     const morph = morphAt(t);
     Biometrics.frame(t, morph, beatAt(t, bpm));
-    setBioValue(morph);
-    Banner.setProgress(
-      ramp(t, T.bannerIn[0], T.bannerIn[1]) -
-      ramp(t, T.bannerOut[0], T.bannerOut[1]));
-    Weather.setAlert(
-      ramp(t, T.rainIn[0], T.rainIn[1]) -
-      ramp(t, T.rainOut[0], T.rainOut[1]), '18 min');
+    setBio(morph);
+    Panels.frame(t);
+    Markets.frame(t);
   }
 
   // ---- boot ----------------------------------------------------------
@@ -126,16 +130,18 @@
     if (!data._fixture) throw new Error('refusing to render unlabelled data');
 
     bpm = data.biometrics.resting_bpm;
-    Weather.mount(data.weather);
-    Banner.mount(data.event);
+    Frame.mount(data);
+    Markets.mount(data.markets);
+    Panels.mount(data);
 
+    bioEl = document.getElementById('bio');
     heartEl = document.getElementById('bioHeart');
     sleepEl = document.getElementById('bioSleep');
     haloEl = document.querySelector('.bio-halo');
     heartEl.querySelector('.bio-n').textContent = bpm;
     sleepEl.querySelector('.bio-n').textContent = data.biometrics.sleep_label;
 
-    await Biometrics.init(document.getElementById('bioCanvas'));
+    await Biometrics.init(document.getElementById('bioCanvas'), { loop: LOOP });
 
     window.__setTime = (t) => { renderAt(t); return true; };
     window.__gpuInfo = () => Biometrics.stats();

@@ -1,14 +1,33 @@
 /* Visual gate prototype.
-   Black is the physical mirror. Everything either emerges from it or is
-   not drawn at all. No panels, no frames, no gradients across the glass. */
+
+   Black is the physical mirror. Two rules follow from that and explain
+   most of what is below:
+
+   1. Nothing paints a background over a large area. The panels are lit
+      edges and a faint wash, never a filled card, because a filled card
+      on a two-way mirror is a grey rectangle hanging in the room.
+   2. The middle band of the glass belongs to the reflection. The
+      persistent layer lives at the top corners, the panels sit in a band
+      below the face, and the markets rail sits on the floor of the
+      screen. Only the biometric object is allowed over the reflection,
+      because it is meant to be read as part of it.
+
+   There is no backdrop-filter anywhere: behind the interface is real
+   black, so a blur would cost fill rate and show nothing. */
 
 :root {
   --ink:      #F2F0EC;
   --ink-2:    #B9BEC9;
   --ink-3:    #6E7482;
+  --ink-4:    #454B57;
+
   --ember:    #FF6A6A;
   --violet:   #9E8CFF;
   --cool:     #BBD1F0;
+  --glass:    #A8C4EC;
+  --rise:     #6FE3A8;
+  --fall:     #FF6B72;
+  --warm:     #FFB25E;
 
   --ff-display: "Instrument Serif", Georgia, serif;
   --ff-text: "Instrument Sans", system-ui, -apple-system, sans-serif;
@@ -19,74 +38,101 @@
 html, body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  height: 100%;
   background: #000;
   overflow: hidden;
 }
 
+body {
+  color: var(--ink);
+  font-family: var(--ff-text);
+  -webkit-font-smoothing: antialiased;
+}
+
 /* The plate keeps its authored size; ?fit=1 scales it to the window. */
-html, body { width: 100%; height: 100%; }
-
-body { color: var(--ink); font-family: var(--ff-text); -webkit-font-smoothing: antialiased; }
-
 .mirror { position: relative; width: 1440px; height: 2560px; }
 
-/* ========================= WEATHER ========================= */
+/* =================== PERSISTENT FRAME =====================
+   The only things on screen unconditionally. Both sit in the top
+   corners so the whole centre of the glass stays clear. */
 
-.weather { position: absolute; inset: 0 0 auto 0; height: 980px; }
+.stamp {
+  position: absolute;
+  left: 96px; top: 78px;
+  line-height: 1;
+}
 
+.stamp p { margin: 0; }
+
+.stamp .date {
+  font-size: 30px;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+  opacity: 0.78;
+}
+
+.stamp .time {
+  margin-top: 16px;
+  font-family: var(--ff-display);
+  font-size: 152px;
+  line-height: 0.86;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.stamp .temp {
+  margin-top: 10px;
+  font-family: var(--ff-display);
+  font-size: 96px;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.stamp .cond {
+  margin-top: 14px;
+  font-size: 27px;
+  color: var(--ink-3);
+}
+
+/* The weather glyph is a photographic composite, not an icon: the moon
+   is lit from within the cloud mass rather than sitting on top of it. */
 .sky {
   position: absolute;
-  top: -60px; left: 50%;
-  width: 1560px; height: 860px;
-  transform: translateX(-50%);
+  right: 66px; top: 40px;
+  width: 520px; height: 310px;
 }
 
-.sky .layer {
-  position: absolute;
-  will-change: transform;
-}
+.sky .layer { position: absolute; will-change: transform; }
 
-.layer.haze {
-  top: 150px; left: -60px; width: 1600px;
-  opacity: 0.62;
-  animation: creep 260s linear infinite;
-}
-.layer.far {
-  top: 40px; left: 30px; width: 1420px;
-  opacity: 0.78;
-  animation: creep 180s linear infinite reverse;
-}
-.layer.main {
-  top: 96px; left: 110px; width: 1290px;
-  opacity: 1;
-  animation: creep 220s linear infinite;
-}
-.layer.near {
-  top: 128px; left: 596px; width: 880px;
-  opacity: 0.80;
-  animation: creep 140s linear infinite reverse;
-}
+.layer.far  { top: 58px;  left: -46px; width: 440px; opacity: 0.50;
+              animation: creep 180s linear infinite reverse; }
+.layer.main { top: 96px;  left: 34px;  width: 400px; opacity: 0.82;
+              animation: creep 220s linear infinite; }
+.layer.near { top: 122px; left: 200px; width: 320px; opacity: 0.68;
+              animation: creep 140s linear infinite reverse; }
 
 @keyframes creep {
-  from { transform: translate3d(-70px, 0, 0); }
-  50%  { transform: translate3d(70px, -14px, 0); }
-  to   { transform: translate3d(-70px, 0, 0); }
+  from { transform: translate3d(-18px, 0, 0); }
+  50%  { transform: translate3d(18px, -5px, 0); }
+  to   { transform: translate3d(-18px, 0, 0); }
 }
 
-/* The moon sits behind the cloud mass and lights it from within. */
 .moon {
   position: absolute;
-  top: 168px; left: 742px;
-  width: 204px; height: 204px;
+  top: 46px; left: 316px;
+  width: 138px; height: 138px;
   border-radius: 50%;
   /* Dimmer than instinct suggests: a near-white disc on black reads as a
      sticker. Most of the presence should come from the halo. */
   background:
     radial-gradient(circle at 38% 34%, #EFE9D9 0%, #DCD5C2 44%, #A8A192 70%, #6F6B5E 100%);
   box-shadow:
-    0 0 70px 18px rgba(214, 224, 244, 0.16),
-    0 0 220px 70px rgba(170, 196, 240, 0.13),
-    0 0 480px 190px rgba(120, 152, 210, 0.07);
+    0 0 50px 12px rgba(214, 224, 244, 0.16),
+    0 0 150px 46px rgba(170, 196, 240, 0.12),
+    0 0 320px 120px rgba(120, 152, 210, 0.06);
   filter: blur(0.4px);
   animation: lunar 40s ease-in-out infinite;
 }
@@ -96,163 +142,44 @@ body { color: var(--ink); font-family: var(--ff-text); -webkit-font-smoothing: a
   50%      { filter: brightness(1.08); }
 }
 
-.temp {
-  position: absolute;
-  left: 104px; top: 470px;
-  display: flex;
-  align-items: flex-start;
-  line-height: 0.8;
-  text-shadow: 0 0 80px rgba(0,0,0,0.9), 0 0 24px rgba(0,0,0,0.8);
-}
+/* ===================== BIOMETRICS =========================
+   The one element allowed over the reflection. The whole section is
+   translated by main.js so the object tracks the body it is describing:
+   brain at head height, heart at chest height. The readouts sit inside
+   the section so they travel with it. */
 
-.temp-n {
-  font-family: var(--ff-display);
-  font-size: 300px;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-}
+/* Vertical budget for the whole plate, since every block below depends
+   on it and the numbers are otherwise unexplainable:
 
-.temp-d {
-  font-family: var(--ff-display);
-  font-size: 132px;
-  color: var(--ink-2);
-  margin-top: 26px;
-  margin-left: 6px;
-}
+     0    - 260   persistent stamp and weather glyph
+     260  - 1150  the reflection: face and shoulders, never covered
+     310  - 1090  brain, centred at 700, over the head
+     1019 - 1681  heart, centred at 1350, over the chest
+     1720 - 2232  panel band, two slots
+     2264 - 2482  markets rail
 
-.curve {
-  position: absolute;
-  left: 0; top: 792px;
-  width: 1440px; height: 176px;
-  display: block;
-  opacity: 0;
-  animation: settle 2.2s 0.9s ease-out forwards;
-}
-
-@keyframes settle { to { opacity: 1; } }
-
-/* Reactive weather: only present while an alert is live. */
-.walert {
-  position: absolute;
-  right: 118px; top: 486px;
-  text-align: right;
-  opacity: 0;
-  transform: translate3d(0, 18px, 0);
-}
-
-.walert-k {
-  display: block;
-  font-family: var(--ff-text);
-  font-size: 26px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  color: var(--cool);
-}
-.walert-v {
-  display: block;
-  margin-top: 10px;
-  font-family: var(--ff-display);
-  font-size: 86px;
-  line-height: 0.9;
-  color: var(--ink);
-}
-
-.rainfall { position: absolute; inset: 120px 180px 0 180px; opacity: 0; }
-.rainfall i {
-  position: absolute;
-  top: -12%;
-  width: 1px;
-  height: 90px;
-  background: linear-gradient(to bottom, rgba(196,216,246,0) 0%, rgba(196,216,246,0.75) 70%, rgba(196,216,246,0) 100%);
-  animation: fall linear infinite;
-}
-@keyframes fall {
-  from { transform: translate3d(0, -140px, 0); }
-  to   { transform: translate3d(-60px, 760px, 0); }
-}
-
-/* ========================= EVENT BANNER ========================= */
-
-.banner {
-  position: absolute;
-  top: 1176px; right: 0;
-  width: 1280px; height: 108px;
-  pointer-events: none;
-  opacity: 0;
-}
-
-/* The ribbon itself: a hairline that grows out of the mirror edge, then
-   opens into a pane of glass. */
-.banner-glass {
-  position: absolute;
-  inset: 0;
-  transform-origin: right center;
-  transform: scaleX(0.001) scaleY(0.02);
-  background:
-    linear-gradient(to right,
-      rgba(150,178,224,0) 0%,
-      rgba(96,124,170,0.10) 18%,
-      rgba(120,150,200,0.16) 60%,
-      rgba(186,212,255,0.26) 100%);
-  border-right: 2px solid rgba(206, 226, 255, 0.85);
-  box-shadow: 0 0 60px rgba(120, 160, 230, 0.20), inset 0 1px 0 rgba(255,255,255,0.10);
-}
-
-.banner-inner {
-  position: absolute;
-  inset: 0 56px 0 64px;
-  display: flex;
-  align-items: center;
-  gap: 26px;
-  opacity: 0;
-  transform: translate3d(26px, 0, 0);
-}
-
-.banner .dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: #7FE0B0;
-  box-shadow: 0 0 16px rgba(127,224,176,0.9);
-  flex: none;
-}
-.banner .src {
-  font-size: 21px; font-weight: 500; letter-spacing: 0.10em;
-  color: var(--cool); flex: none;
-}
-.banner .head {
-  font-family: var(--ff-display);
-  font-size: 40px;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-}
-.banner .when {
-  font-size: 21px; color: var(--ink-3); flex: none;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ========================= BIOMETRICS ========================= */
+   The heart is the binding constraint: it is the lowest the biometric
+   object ever sits, and the panel band starts below it. */
 
 .bio {
   position: absolute;
-  left: 0; top: 1330px;
-  width: 1440px; height: 1210px;
+  left: 170px; top: 150px;
+  width: 1100px; height: 1100px;
+  will-change: transform;
 }
 
 #bioCanvas {
   position: absolute;
-  left: 210px; top: 0;
-  width: 1210px; height: 1210px;
+  left: 0; top: 0;
+  width: 1100px; height: 1100px;
   display: block;
 }
 
 .bio-halo {
   position: absolute;
-  left: 815px; top: 300px;
-  width: 940px; height: 700px;
-  transform: translateX(-50%);
-  transform: translateX(-50%);
+  left: 550px; top: 550px;
+  width: 1000px; height: 760px;
+  transform: translate(-50%, -50%);
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 50%,
     rgba(255, 96, 96, 0.07) 0%, rgba(255, 70, 70, 0.03) 42%, rgba(0,0,0,0) 72%);
@@ -263,24 +190,19 @@ body { color: var(--ink); font-family: var(--ff-text); -webkit-font-smoothing: a
     rgba(150, 128, 255, 0.08) 0%, rgba(120, 110, 240, 0.035) 42%, rgba(0,0,0,0) 72%);
 }
 
-.bio-value {
-  position: absolute;
-  left: 84px; top: 470px;
-  width: 460px; height: 200px;
-}
-
 .bio-state {
   position: absolute;
-  left: 0; top: 0;
   display: flex;
   align-items: baseline;
   gap: 16px;
   white-space: nowrap;
   opacity: 0;
-  transform: translate3d(0, 14px, 0);
-  transition: opacity .8s ease, transform .9s cubic-bezier(.2,.8,.3,1);
 }
-.bio-state.on { opacity: 1; transform: none; }
+
+/* Opposite sides, as in the mockup: the readout never sits under the
+   form it belongs to, and the two states never share an edge. */
+#bioHeart { left: -66px; top: 452px; }
+#bioSleep { left: 792px; top: 438px; }
 
 .bio-n {
   font-family: var(--ff-display);
@@ -298,13 +220,360 @@ body { color: var(--ink); font-family: var(--ff-text); -webkit-font-smoothing: a
   color: var(--ink-3);
 }
 
-#bioSleep .bio-n { font-size: 132px; }
+#bioSleep .bio-n { font-size: 120px; }
 
-/* ========================= UTILITY ========================= */
+/* ======================= PANELS ===========================
+   Two slots in a band between the reflection and the markets rail.
+   Nothing here is ever on permanently: panels.js raises one when its
+   data changes and on a slow rotation, then puts it away again. */
+
+.panels {
+  position: absolute;
+  left: 0; top: 1720px;
+  width: 1440px; height: 512px;
+  perspective: 2400px;
+}
+
+.slot {
+  position: absolute;
+  top: 0;
+  width: 630px; height: 512px;
+  transform-style: preserve-3d;
+}
+.slot[data-slot="0"] { left: 80px; }
+.slot[data-slot="1"] { left: 730px; }
+
+.panel {
+  position: absolute;
+  inset: 0;
+  padding: 30px 38px 28px;
+  opacity: 0;
+  overflow: hidden;
+  transform-origin: 50% 100%;
+  /* A lit top edge with side rails that dissolve downward, over a wash
+     that fades to nothing. A real border on all four sides turned these
+     into cards, which is the one thing a two-way mirror cannot carry. */
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(to right,
+      rgba(206, 228, 255, 0.04), rgba(206, 228, 255, 0.46) 16%,
+      rgba(206, 228, 255, 0.18) 68%, rgba(206, 228, 255, 0)),
+    linear-gradient(to bottom, rgba(168, 198, 244, 0.26), rgba(168, 198, 244, 0)),
+    linear-gradient(to bottom, rgba(168, 198, 244, 0.26), rgba(168, 198, 244, 0)),
+    linear-gradient(158deg,
+      rgba(152, 184, 232, 0.058) 0%,
+      rgba(96, 126, 178, 0.022) 52%,
+      rgba(0, 0, 0, 0) 100%);
+  background-size: 100% 1px, 1px 76%, 1px 76%, 100% 100%;
+  background-position: left top, left top, right top, left top;
+  box-shadow: 0 0 90px rgba(62, 104, 176, 0.09);
+}
+
+.slot[data-slot="0"] .panel { transform: rotateY(2.4deg); }
+.slot[data-slot="1"] .panel { transform: rotateY(-2.4deg); }
+
+/* The glass arrives, then what is written on it. panels.js drives
+   --content a little behind the panel's own opacity. */
+.panel > * { opacity: var(--content, 1); }
+
+.p-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--glass);
+  opacity: 0.66;
+}
+.p-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, rgba(168,196,236,0.34), rgba(168,196,236,0));
+}
+
+/* The hero figure for a panel: serif, large, with a small tracked unit
+   underneath rather than a KEY: VALUE pair beside it. */
+.p-hero { font-family: var(--ff-display); font-size: 92px; line-height: 0.9;
+          letter-spacing: -0.02em; color: var(--ink); }
+.p-sub  { margin-top: 10px; font-size: 21px; font-weight: 500;
+          letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-3); }
+
+/* ---- 5. Home energy ---- */
+
+.p-energy .house { position: absolute; left: 24px; top: 68px; width: 582px; height: 292px; }
+.p-energy .house svg { display: block; width: 582px; height: 292px; }
+
+/* Structure reads as drawn line, lit rooms as warm glass. The hierarchy
+   is carried by weight and temperature, not by colour-coding a legend. */
+.p-energy .edge   { stroke: rgba(168, 206, 250, 0.68); stroke-width: 1.5; }
+.p-energy .soft   { stroke: rgba(150, 188, 238, 0.26); stroke-width: 1.1; }
+.p-energy .plinth { stroke: rgba(130, 166, 214, 0.16); stroke-width: 1; }
+.p-energy .roof   { fill: rgba(126, 168, 224, 0.075); stroke: none; }
+.p-energy .win.lit {
+  fill: url(#lit);
+  filter: drop-shadow(0 0 16px rgba(255, 168, 78, 0.45));
+}
+.p-energy .flow {
+  fill: none;
+  stroke: rgba(255, 186, 108, 0.85);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 26 300;
+  filter: drop-shadow(0 0 10px rgba(255, 170, 80, 0.7));
+  animation: conduit 4.6s linear infinite;
+}
+@keyframes conduit { from { stroke-dashoffset: 326; } to { stroke-dashoffset: 0; } }
+
+.p-energy .foot  { position: absolute; left: 38px; bottom: 30px;
+                   display: flex; align-items: flex-end; gap: 30px; }
+.p-energy .bars  { display: flex; align-items: flex-end; gap: 7px; height: 54px; }
+.p-energy .bars i {
+  display: block; width: 9px;
+  background: linear-gradient(to top, rgba(150,190,240,0.30), rgba(196,222,255,0.92));
+}
+
+/* ---- 6. Calendar ---- */
+
+.p-cal .rows { margin-top: 22px; }
+.p-cal .row {
+  display: flex; align-items: center; gap: 28px;
+  height: 94px;
+  border-top: 1px solid rgba(154, 184, 232, 0.13);
+}
+.p-cal .row:last-child { border-bottom: 1px solid rgba(154, 184, 232, 0.13); }
+.p-cal .at {
+  font-size: 30px; color: var(--ink-2); opacity: 0.72;
+  font-variant-numeric: tabular-nums; flex: none; width: 104px;
+}
+.p-cal .what { font-family: var(--ff-display); font-size: 40px; color: var(--ink); flex: 1; }
+.p-cal .pip {
+  width: 11px; height: 11px; border-radius: 50%; flex: none;
+  background: var(--glass); box-shadow: 0 0 14px rgba(168,196,236,0.7);
+}
+.p-cal .row.warm .pip { background: var(--warm); box-shadow: 0 0 14px rgba(255,178,94,0.75); }
+
+/* ---- 7. News ---- */
+
+/* A limb, not a planet: the sphere's centre is off the panel, so only
+   the lit edge is on screen. Drawn by Art.limb. */
+.p-news .limb {
+  position: absolute;
+  left: -130px; bottom: -408px;
+  width: 620px; height: 620px;
+}
+.p-news .src {
+  display: inline-block;
+  margin-top: 4px; padding: 8px 14px;
+  font-size: 22px; font-weight: 700; letter-spacing: 0.08em;
+  color: #0B0D12; background: var(--ink);
+}
+.p-news .head {
+  position: relative;
+  margin-top: 32px;
+  font-family: var(--ff-display);
+  font-size: 52px; line-height: 1.16;
+  color: var(--ink);
+}
+.p-news .rule {
+  position: absolute; left: 38px; bottom: 84px;
+  width: 104px; height: 2px;
+  background: linear-gradient(to right, rgba(226,236,255,0.85), rgba(226,236,255,0.10));
+}
+.p-news .when {
+  position: absolute; left: 38px; bottom: 40px;
+  font-size: 22px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+
+/* ---- 8. Weather detail ---- */
+
+/* Enough of the night sky to place the reading, not a second weather
+   scene competing with the one in the corner. */
+.p-wx .glow {
+  position: absolute;
+  right: -120px; top: -160px;
+  width: 520px; height: 460px;
+  /* closest-side, so the falloff is guaranteed to finish inside the box.
+     A farthest-corner gradient was still faintly lit at the left edge
+     and the panel showed a vertical seam where it was clipped. */
+  background: radial-gradient(closest-side ellipse at 50% 50%,
+    rgba(206, 220, 244, 0.13) 0%,
+    rgba(140, 172, 220, 0.055) 42%,
+    rgba(0, 0, 0, 0) 100%);
+  pointer-events: none;
+}
+
+.p-wx .alert { position: absolute; right: 38px; top: 78px; text-align: right; }
+.p-wx .alert-k { font-size: 24px; letter-spacing: 0.04em; color: var(--cool); opacity: 0.8; }
+.p-wx .alert-v { margin-top: 8px; font-family: var(--ff-display);
+                 font-size: 86px; line-height: 0.9; color: var(--ink); }
+
+.p-wx .wave { position: absolute; left: 0; bottom: 172px; width: 630px; height: 108px; }
+
+.p-wx .hours {
+  position: absolute; left: 38px; right: 38px; bottom: 34px;
+  display: flex; justify-content: space-between;
+}
+.p-wx .hour { text-align: center; }
+.p-wx .hour .h  { font-size: 22px; color: var(--ink-2); opacity: 0.68;
+                  font-variant-numeric: tabular-nums; }
+.p-wx .hour svg { display: block; margin: 16px auto 14px; width: 46px; height: 46px; }
+.p-wx .hour .c  { font-family: var(--ff-display); font-size: 34px; color: var(--ink); }
+
+/* ======================= MARKETS ==========================
+   Persistent, on the floor of the screen. The rail is defined by its
+   bottom edge: a hairline brightest at the centre, which is what makes
+   it read as a lit surface rather than a bordered box. */
+
+.markets {
+  position: absolute;
+  left: 0; bottom: 78px;
+  width: 1440px; height: 218px;
+}
+
+.markets-head {
+  position: relative;
+  height: 64px;
+  padding-left: 96px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.markets-label {
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  opacity: 0.66;
+}
+
+.markets-wave { width: 330px; height: 46px; margin-left: 10px; }
+
+.markets-live {
+  display: flex; align-items: center; gap: 12px;
+  margin-left: -186px;
+  font-size: 20px; font-weight: 500; letter-spacing: 0.26em;
+  text-transform: uppercase; color: var(--ink-2); opacity: 0.72;
+}
+.markets-live i {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #DCE8FA;
+  box-shadow: 0 0 12px rgba(220, 232, 250, 0.9);
+  animation: pip 3.4s ease-in-out infinite;
+}
+@keyframes pip { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+.markets-rail {
+  position: relative;
+  height: 150px;
+  overflow: hidden;
+  background: linear-gradient(to bottom,
+    rgba(122, 156, 206, 0.050) 0%,
+    rgba(78, 104, 148, 0.022) 60%,
+    rgba(0, 0, 0, 0) 100%);
+  border-top: 1px solid rgba(160, 190, 234, 0.13);
+}
+
+/* The run always shows a part-cell at the left edge; the mockup hides
+   that behind the planet, so the rail is masked there and the planet is
+   painted over the mask. */
+.markets-rail::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  left: 0; top: 0; bottom: 0;
+  width: 300px;
+  background: linear-gradient(to right, #000 0%, #000 58%, rgba(0, 0, 0, 0) 100%);
+}
+
+/* The lit floor edge. Last, so it runs unbroken across both masks. */
+.markets-rail::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(to right,
+    rgba(198, 222, 255, 0) 0%,
+    rgba(198, 222, 255, 0.72) 22%,
+    rgba(226, 240, 255, 0.95) 50%,
+    rgba(198, 222, 255, 0.72) 78%,
+    rgba(198, 222, 255, 0) 100%);
+  box-shadow: 0 0 22px rgba(170, 206, 255, 0.45);
+}
+
+/* The planet sits behind the left end of the rail, cropped by it. */
+/* Painted over the rail's left mask, so it covers the part-cell the
+   scroll always leaves at that edge. Drawn by Art.limb. */
+.markets .limb {
+  position: absolute;
+  z-index: 3;
+  left: -196px; bottom: -150px;
+  width: 330px; height: 330px;
+  pointer-events: none;
+}
+
+.limb svg { display: block; width: 100%; height: 100%; }
+
+.markets-run {
+  position: absolute;
+  z-index: 1;
+  left: 0; top: 0;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  will-change: transform;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  height: 150px;
+  padding: 0 40px;
+  border-left: 1px solid rgba(154, 184, 232, 0.16);
+}
+
+.cell .fig { line-height: 1.18; }
+.cell .sym   { font-family: var(--ff-display); font-size: 40px; color: var(--ink); }
+.cell .price { font-family: var(--ff-display); font-size: 36px; color: var(--ink);
+               font-variant-numeric: tabular-nums; }
+.cell .pct   { font-size: 30px; font-variant-numeric: tabular-nums; }
+.cell.up   .pct { color: var(--rise); }
+.cell.down .pct { color: var(--fall); }
+.cell svg { width: 132px; height: 96px; display: block; }
+
+/* A run of cells scrolls under this, so it has to be wide enough to fade
+   one out completely before the label. A narrow plate with a hard edge
+   leaves half a price sitting under the word. */
+.markets-more {
+  position: absolute;
+  z-index: 2;
+  right: 0; top: 0;
+  width: 420px; height: 150px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+  padding-right: 44px;
+  font-size: 21px; font-weight: 500; letter-spacing: 0.22em;
+  text-transform: uppercase; color: #6E7482;
+  background: linear-gradient(to right, rgba(0,0,0,0) 0%, #000 34%, #000 100%);
+}
+.markets-more::before {
+  content: "";
+  position: absolute;
+  left: 230px; top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(154, 184, 232, 0.16);
+}
+
+/* ======================= UTILITY ========================== */
 
 .fixture-mark {
   position: absolute;
-  left: 50%; bottom: 44px;
+  left: 50%; bottom: 26px;
   transform: translateX(-50%);
   margin: 0;
   font-size: 15px;

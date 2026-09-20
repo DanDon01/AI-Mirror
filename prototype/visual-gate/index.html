@@ -10,75 +10,64 @@
 
 <div class="mirror">
 
-  <!-- ===================== WEATHER ===================== -->
-  <section class="weather" id="weather">
+  <!-- ============ PERSISTENT: always on, edges only ============ -->
+  <header class="frame">
+    <div class="stamp">
+      <p class="date" id="fDate">—</p>
+      <p class="time" id="fTime">—</p>
+      <p class="temp" id="fTemp">—</p>
+      <p class="cond" id="fCond">—</p>
+    </div>
+
     <div class="sky">
       <div class="moon"></div>
-      <img class="layer haze"  src="assets/sky/haze.webp"       alt="">
-      <img class="layer far"   src="assets/sky/cloud-far.webp"  alt="">
-      <img class="layer main"  src="assets/sky/cloud-main.webp" alt="">
-      <img class="layer near"  src="assets/sky/cloud-near.webp" alt="">
-      <div class="rainfall" id="rainfall"></div>
+      <img class="layer far"  src="assets/sky/cloud-far.webp"  alt="">
+      <img class="layer main" src="assets/sky/cloud-main.webp" alt="">
+      <img class="layer near" src="assets/sky/cloud-near.webp" alt="">
     </div>
+  </header>
 
-    <div class="temp" id="temp"><span class="temp-n">—</span><span class="temp-d">°</span></div>
-
-    <svg class="curve" id="curve" viewBox="0 0 1200 150" preserveAspectRatio="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="curveFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stop-color="#AFC6E6" stop-opacity="0.30"/>
-          <stop offset="100%" stop-color="#AFC6E6" stop-opacity="0"/>
-        </linearGradient>
-        <linearGradient id="edgeFade" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"  stop-color="#000"/>
-          <stop offset="14%" stop-color="#fff"/>
-          <stop offset="86%" stop-color="#fff"/>
-          <stop offset="100%" stop-color="#000"/>
-        </linearGradient>
-        <mask id="fadeMask">
-          <rect x="0" y="0" width="1200" height="150" fill="url(#edgeFade)"/>
-        </mask>
-      </defs>
-      <g mask="url(#fadeMask)">
-        <path id="curveArea" fill="url(#curveFill)"></path>
-        <path id="curveGlow" fill="none" stroke="#C8DAF5" stroke-width="7"
-              stroke-opacity="0.16" stroke-linecap="round"></path>
-        <path id="curveLine" fill="none" stroke="#E2ECFA" stroke-width="2"
-              stroke-opacity="0.85" stroke-linecap="round"></path>
-      </g>
-    </svg>
-
-    <!-- Emerges only when the fixture carries an alert -->
-    <div class="walert" id="walert">
-      <span class="walert-k">RAIN</span>
-      <span class="walert-v" id="walertV">—</span>
-    </div>
-  </section>
-
-  <!-- ===================== EVENT BANNER ===================== -->
-  <div class="banner" id="banner">
-    <div class="banner-glass"></div>
-    <div class="banner-inner">
-      <span class="dot"></span>
-      <span class="src" id="bSrc">—</span>
-      <span class="head" id="bHead">—</span>
-      <span class="when" id="bWhen">—</span>
-    </div>
-  </div>
-
-  <!-- ===================== BIOMETRICS ===================== -->
-  <section class="bio">
+  <!-- ============ BIOMETRICS: over the reflection ============ -->
+  <section class="bio" id="bio">
     <canvas id="bioCanvas"></canvas>
-    <div class="bio-halo"></div>
-    <div class="bio-value">
+    <div class="bio-halo" id="bioHalo"></div>
+    <div class="bio-value" id="bioValue">
       <div class="bio-state" id="bioHeart">
         <span class="bio-n">—</span><span class="bio-u">BPM</span>
       </div>
       <div class="bio-state" id="bioSleep">
-        <span class="bio-n">—</span>
+        <span class="bio-n">—</span><span class="bio-u">SLEEP</span>
       </div>
     </div>
   </section>
+
+  <!-- ============ PANELS: two at a time, clear of the face ============ -->
+  <div class="panels" id="panels">
+    <div class="slot" data-slot="0"></div>
+    <div class="slot" data-slot="1"></div>
+  </div>
+
+  <!-- ============ MARKETS: persistent, along the base ============ -->
+  <footer class="markets" id="markets">
+    <div class="limb"></div>
+    <div class="markets-head">
+      <span class="markets-label">Markets</span>
+      <svg class="markets-wave" viewBox="0 0 420 44" aria-hidden="true">
+        <path d="M0 34 C 90 34, 96 8, 168 8 C 240 8, 248 34, 420 34"
+              fill="none" stroke="#9fb4cd" stroke-opacity="0.55" stroke-width="1.4"/>
+      </svg>
+      <span class="markets-live"><i></i>Live</span>
+    </div>
+    <div class="markets-rail" id="marketsRail">
+      <div class="markets-run" id="marketsRun"></div>
+      <div class="markets-more">More
+        <svg viewBox="0 0 12 18" width="9" height="14" aria-hidden="true">
+          <path d="M2 2 L10 9 L2 16" fill="none" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+  </footer>
 
   <p class="fixture-mark">development fixture &middot; not live data</p>
   <div class="hud" id="hud"></div>
@@ -87,8 +76,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="js/biometrics.js"></script>
-<script src="js/weather.js"></script>
-<script src="js/banner.js"></script>
+<script src="js/frame.js"></script>
+<script src="js/panels.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

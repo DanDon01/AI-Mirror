@@ -2,6 +2,11 @@
   "_WARNING": "DEVELOPMENT FIXTURE. Invented values for the visual quality gate only. This file must never be loaded by the production interface. Production hides any visualisation whose data is unavailable rather than substituting numbers.",
   "_fixture": true,
 
+  "now": {
+    "date_label": "Mon 21 Sep",
+    "time_label": "07:24"
+  },
+
   "biometrics": {
     "resting_bpm": 58,
     "sleep_total_minutes": 434,
@@ -11,16 +16,51 @@
   "weather": {
     "temperature_c": 14,
     "condition": "partly-cloudy-night",
-    "hourly_c": [14.2, 13.6, 12.9, 12.1, 11.4, 10.8, 10.3, 10.0,
-                 9.6, 9.2, 9.0, 9.1, 10.2, 11.6, 13.1, 14.4,
-                 15.6, 16.5, 17.0, 16.8, 16.1, 15.2, 14.1, 13.0],
-    "alert": null
+    "condition_label": "Partly cloudy",
+    "alert_lead": "18 min",
+    "alert_label": "Rain in",
+    "hourly": [
+      { "at": "08:00", "glyph": "cloud",  "c": 14 },
+      { "at": "11:00", "glyph": "sun",    "c": 16 },
+      { "at": "14:00", "glyph": "sun",    "c": 17 },
+      { "at": "17:00", "glyph": "partly", "c": 15 },
+      { "at": "20:00", "glyph": "cloud",  "c": 12 }
+    ]
   },
+
+  "energy": {
+    "watts_now": 481,
+    "label": "Home usage",
+    "recent_watts": [310, 355, 402, 388, 441, 470, 481],
+    "rooms_lit": 4
+  },
+
+  "calendar": [
+    { "at": "09:00", "title": "Team stand-up",  "tone": "cool" },
+    { "at": "11:30", "title": "Gym",            "tone": "warm" },
+    { "at": "14:00", "title": "Project review", "tone": "cool" },
+    { "at": "18:00", "title": "Dinner",         "tone": "cool" }
+  ],
 
   "event": {
     "kind": "news",
     "source": "BBC",
     "headline": "Orbital telescope returns first images of the inner system",
     "time": "19:42"
-  }
+  },
+
+  "markets": [
+    { "sym": "SPCX", "price": 143.26, "pct":  6.1,
+      "spark": [0.18, 0.24, 0.20, 0.33, 0.41, 0.36, 0.52, 0.61, 0.58, 0.74, 0.83, 0.92] },
+    { "sym": "RKLB", "price": 4.18, "pct":  2.3,
+      "spark": [0.22, 0.19, 0.28, 0.31, 0.27, 0.38, 0.44, 0.40, 0.55, 0.63, 0.71, 0.86] },
+    { "sym": "PL", "price": 2.11, "pct": -1.4,
+      "spark": [0.88, 0.80, 0.84, 0.69, 0.61, 0.66, 0.52, 0.44, 0.48, 0.33, 0.26, 0.30] },
+    { "sym": "OKLO", "price": 6.73, "pct":  3.8,
+      "spark": [0.26, 0.33, 0.29, 0.42, 0.38, 0.51, 0.47, 0.60, 0.68, 0.64, 0.79, 0.90] },
+    { "sym": "TSLA", "price": 182.40, "pct": -0.6,
+      "spark": [0.79, 0.86, 0.74, 0.68, 0.72, 0.58, 0.63, 0.49, 0.41, 0.46, 0.34, 0.28] },
+    { "sym": "NVDA", "price": 875.12, "pct":  1.9,
+      "spark": [0.31, 0.27, 0.36, 0.44, 0.39, 0.50, 0.58, 0.54, 0.66, 0.73, 0.81, 0.88] }
+  ]
 }

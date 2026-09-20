@@ -90,6 +90,14 @@ class Session:
         self.ws = connect(ws_url, open_timeout=30, close_timeout=5,
                           max_size=96 * 1024 * 1024).__enter__()
 
+        # --window-size sets the OUTER window, so the viewport came out at
+        # 1424x2409 and every still was a silent crop of the plate: the
+        # markets rail ran off the bottom of shots that looked fine.
+        # Override the metrics so the viewport is exactly the mirror.
+        self.call("Emulation.setDeviceMetricsOverride", {
+            "width": self.width, "height": self.height,
+            "deviceScaleFactor": 1, "mobile": False})
+
         # The scene loads 96k points and compiles shaders under a software
         # rasteriser; give it real time before expecting frames.
         for _ in range(240):

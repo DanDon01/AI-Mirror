@@ -1,0 +1,668 @@
+# AI MIRROR — REVISED VISUAL DIRECTION
+
+The Chromium technical prototype proved that the new rendering architecture can produce much richer visuals than the existing Pygame renderer.
+
+However, the current visual direction is still wrong.
+
+Do NOT continue iterating the current dashboard aesthetic.
+
+The target is now:
+
+# MINIMAL × CINEMATIC × 3D × REACTIVE × FUTURISTIC
+
+This is NOT a dashboard with a sci-fi skin.
+
+It should feel like a very high-end intelligent interface embedded into the glass of a futuristic home.
+
+The screen should normally be sparse.
+
+What IS visible should be visually exceptional.
+
+Think:
+
+- expensive cinematic motion graphics
+- beautiful 3D objects
+- depth
+- glass
+- light
+- transparency
+- particles where appropriate
+- physical-looking materials
+- sophisticated animation
+- transformations between states
+- information represented visually rather than described with text
+
+Do NOT achieve "sci-fi" by returning to:
+- tiny technical text
+- monospaced fonts
+- excessive letter spacing
+- cyan wireframes
+- thin rectangles
+- generic circles
+- HUD corner decorations
+- dozens of labels
+- fake technical terminology
+- `KEY: VALUE` layouts
+
+Those were the failure mode of the Pygame design.
+
+---
+
+# 1. THE MIRROR ITSELF IS THE CANVAS
+
+Pure black represents the physical mirror.
+
+Large areas of the display MUST remain completely black.
+
+Do not cover the screen with:
+- photographs
+- backgrounds
+- panels
+- dashboards
+- gradients
+- textures
+
+especially not through the centre.
+
+The user needs to see their actual reflection.
+
+Persistent information should generally live around the perimeter.
+
+The centre may be temporarily occupied for important animated experiences such as:
+
+- Princess appearing
+- presence detection
+- alerts
+- major transitions
+- temporary visualisations
+
+These should then disappear and return the centre to mirror.
+
+---
+
+# 2. INFORMATION MUST EARN SCREEN SPACE
+
+Do not display information merely because an API provides it.
+
+The previous interfaces tried to show everything simultaneously.
+
+Reverse this philosophy.
+
+Most secondary information should normally be INVISIBLE.
+
+It should animate into existence when:
+
+- something changes materially
+- an alert occurs
+- an event approaches
+- a threshold is crossed
+- the user interacts
+- presence is detected
+- the information becomes contextually useful
+
+Then it should gracefully disappear again.
+
+The result should feel intelligent rather than crowded.
+
+---
+
+# 3. VISUALS >> TEXT
+
+Before displaying any text value, ask:
+
+> Can this information be communicated more impressively through an object, animation, transformation, material, movement, colour, spatial relationship or graphical state?
+
+Text should support the visualisation rather than BE the visualisation.
+
+A number beside an icon is not enough.
+
+A number inside a circle is not a graphical visualisation.
+
+A line graph surrounded by sci-fi decoration is not enough.
+
+---
+
+# 4. BIOMETRICS — ORGANIC 3D VISUALISATION
+
+Completely rethink Biometrics.
+
+The central concept should be a beautiful, high-quality THREE-DIMENSIONAL biological visualisation.
+
+For example:
+
+## Heart
+
+A realistic/stylised anatomical 3D heart slowly beats.
+
+Its animation should feel physical and organic.
+
+Average/resting BPM can appear elegantly beside or within the composition:
+
+    58 BPM
+
+Very little additional text.
+
+The heart itself communicates:
+
+    CARDIOVASCULAR
+
+without needing a heading saying CARDIOVASCULAR.
+
+Subtle lighting/pulse behaviour can correspond to the real heart-rate data where appropriate.
+
+## Transition to sleep
+
+Rather than displaying another separate "Sleep panel":
+
+THE HEART TRANSFORMS.
+
+The heart could:
+
+- dissolve into particles
+- break into luminous fragments
+- morph
+- rotate and transition
+- fade through volumetric material
+
+and reform as a beautiful 3D brain.
+
+The brain then becomes the representation of sleep/recovery.
+
+Regions could softly illuminate.
+
+A subtle orbital/timeline treatment could represent:
+
+- total sleep
+- deep sleep
+- REM
+- recovery
+
+Again: visual first.
+
+Perhaps:
+
+    7h 14m
+
+is the only significant text.
+
+## Activity
+
+The biological object could later transition into another representation:
+
+- muscular/body form
+- skeletal legs
+- kinetic human figure
+- illuminated lower-body anatomy
+- another sophisticated representation
+
+for steps/activity.
+
+The important concept is:
+
+BIOMETRICS IS ONE EVOLVING VISUAL OBJECT.
+
+It should NOT be four permanent widgets for heart / steps / sleep / recovery.
+
+Use transitions to allow one physical area of the mirror to communicate many things.
+
+Investigate whether Three.js/WebGL is appropriate for this.
+
+Also investigate high-quality pre-rendered transparent animation/video if it produces better visuals or substantially lower Pi load.
+
+Do NOT insist on real-time 3D if a pre-rendered transparent loop looks considerably better.
+
+---
+
+# 5. WEATHER — ATMOSPHERIC, NOT A WEATHER APP
+
+The previous Chromium prototype looked much better technically but became a conventional premium weather website.
+
+Strip it back.
+
+Normal weather display should primarily consist of:
+
+    14°
+
+plus:
+
+- a sophisticated visual representation of current conditions
+- the useful 24-hour temperature curve
+
+That's approximately it.
+
+Do NOT permanently display:
+
+- coordinates
+- prose forecast
+- "feels like"
+- humidity
+- pressure
+- UV
+- wind
+- visibility
+- high/low panels
+- four-day cards
+- descriptive paragraphs
+
+unless one becomes contextually important.
+
+The weather visualisation might be:
+
+- volumetric-looking cloud
+- illuminated rain cloud
+- moon partially obscured by cloud
+- fog volume
+- sun
+- atmospheric particles
+
+It must emerge from BLACK.
+
+There must be no visible rectangular photograph boundary.
+
+Use transparent assets, CSS masking, WebGL, video transparency or other appropriate techniques.
+
+The temperature curve from the Chromium prototype is a good idea and may remain, but refine it so it feels like part of the world rather than a web chart.
+
+### Reactive weather
+
+If significant rain approaches:
+
+The normal visualisation can TRANSFORM.
+
+Cloud darkens.
+Rain appears.
+A minimal alert emerges:
+
+    RAIN
+    18 MIN
+
+When the event is no longer relevant, that additional information disappears.
+
+Weather should feel alive.
+
+---
+
+# 6. CALENDAR — FUTURISTIC INFORMATION OBJECT
+
+Do NOT make Calendar a conventional list.
+
+Do NOT create another rectangular panel saying:
+
+    CALENDAR
+    14:00 Dentist
+    18:00 Dinner
+
+Create something more like a sophisticated futuristic data object.
+
+Think of the general visual qualities of premium cinematic sci-fi interfaces:
+- dimensional translucent segments
+- layered glass-like planes
+- depth
+- perspective
+- floating information surfaces
+- moving timeline elements
+- elegant spatial organisation
+
+Do not directly copy any existing film/TV interface.
+
+Create an original visual language.
+
+Calendar could appear as a set of transparent glass-like timeline segments extending in depth.
+
+Events could exist as physical-looking markers along that timeline.
+
+As an event approaches, its segment could:
+
+- move forward
+- illuminate
+- expand
+- reveal its information
+
+For example:
+
+    14:00
+    DENTIST
+
+could emerge from the glass structure shortly before the appointment.
+
+If there are no events:
+
+DISPLAY NOTHING.
+
+Never display:
+
+    NO EVENTS SCHEDULED
+
+Empty data should create empty mirror space.
+
+---
+
+# 7. NEWS — THE INTERFACE COMES TO LIFE
+
+News should not permanently occupy a rectangular box.
+
+Normally it may be almost completely hidden.
+
+When a new/relevant headline is presented:
+
+Something should animate INTO the display from the physical edge of the mirror.
+
+Possibilities:
+
+- illuminated strip travels around edge
+- thin object slides inward
+- object unfolds into a translucent banner
+- data stream expands into headline
+- glass ribbon emerges from edge
+- ticker materialises and then retreats
+
+A scrolling/marquee treatment could work extremely well if executed elegantly.
+
+For example:
+
+    ◉ BBC  ·  HEADLINE MOVING ACROSS GLASS  ·  12:42
+
+Potentially accompanied briefly by a small real article image.
+
+After a suitable period:
+
+the banner retracts back into the edge and the mirror becomes clean again.
+
+This should feel like the house has RECEIVED information rather than like a news widget has always been sitting there.
+
+---
+
+# 8. ENERGY — MAKE THIS DRAMATIC
+
+Energy has huge visual potential.
+
+Do NOT use another circular gauge.
+
+Represent electricity as ENERGY.
+
+Potential visual vocabulary:
+
+- glowing flowing particles
+- electrical arcs
+- luminous conduits
+- animated paths
+- energy moving into/out of the house
+- 3D house model
+- grid connection
+- solar/battery if those sources exist
+- changing intensity corresponding to actual load
+
+For example, a small beautiful 3D representation of the home could briefly reveal an energy network.
+
+Particles flow:
+
+    GRID → HOME
+
+with:
+
+    481 W
+
+integrated into the composition.
+
+A sudden large increase in consumption could cause the energy visualisation to wake up and briefly show what changed.
+
+The normal state may show almost nothing.
+
+Again:
+
+EVENT → VISUALISATION APPEARS → COMMUNICATES → DISAPPEARS.
+
+Energy should be one of the most visually dramatic elements of the interface.
+
+---
+
+# 9. HOME / HABITAT
+
+Do not use a wireframe house icon.
+
+Eventually create a beautiful graphical/3D representation of the ACTUAL home.
+
+Possibilities:
+
+- miniature architectural model
+- isometric cutaway
+- simplified digital twin
+- transparent building model
+
+Real Home Assistant state should affect the model.
+
+Examples:
+
+A real room light turns on:
+→ corresponding room illuminates.
+
+Front door unlocks:
+→ door area changes state.
+
+Presence detected:
+→ corresponding region subtly indicates occupancy.
+
+Temperature:
+→ represented spatially if useful.
+
+Security issue:
+→ relevant physical part of house becomes visually prominent.
+
+Do not show ten HA entity names.
+
+Show the HOME.
+
+---
+
+# 10. PRINCESS + PRESENCE
+
+The central mirror should normally remain clear.
+
+Presence creates an opportunity for theatre.
+
+PIR detects somebody.
+
+A transient visual effect can wake:
+
+    dormant
+       ↓
+    subtle activation
+       ↓
+    presence visualisation/scanner
+       ↓
+    Princess materialises
+       ↓
+    greeting/interactions
+       ↓
+    Princess disappears
+       ↓
+    interface returns to quiet state
+
+Do not leave the giant scanner permanently occupying the mirror.
+
+It is an EVENT.
+
+Likewise Princess is an event-driven presence rather than permanent screen furniture.
+
+---
+
+# 11. ANIMATION IS PART OF THE INFORMATION ARCHITECTURE
+
+Animation is not decoration.
+
+Use motion to:
+
+- reveal information
+- hide information
+- transform between datasets
+- indicate importance
+- show physical relationships
+- communicate changes
+- reuse the same screen area
+
+This allows the mirror to remain extremely minimal while still containing enormous amounts of information.
+
+Instead of displaying 10 modules simultaneously:
+
+ONE area can transform through several states over time.
+
+Heart → brain → activity.
+
+Quiet edge → news banner → quiet edge.
+
+House → energy network → house → disappear.
+
+Cloud → rain alert → cloud.
+
+This transformation-based philosophy is central to the new design.
+
+---
+
+# 12. NO FAKE DATA
+
+This requirement is absolute.
+
+Never populate the production interface with invented information merely to improve the screenshot.
+
+If data is unavailable:
+
+hide that visualisation.
+
+If Fitbit has not synchronised:
+
+do not invent heart rate.
+
+If Calendar is empty:
+
+show nothing.
+
+If HA does not expose a value:
+
+do not invent one.
+
+If weather provides only certain fields:
+
+visualise only those fields.
+
+Mock data may only exist inside explicitly isolated development/test fixtures and must never leak into production presentation.
+
+---
+
+# 13. PERFORMANCE PHILOSOPHY
+
+Do not interpret this visual ambition as requiring everything to be calculated in real time.
+
+Choose the cheapest technology that achieves the visual result.
+
+Use:
+
+- Three.js/WebGL where genuine real-time 3D adds value
+- CSS GPU transforms
+- Lottie where appropriate
+- SVG where vector graphics are actually appropriate
+- transparent WebP/PNG
+- pre-rendered animation
+- video loops
+- masks
+- compositing
+
+A gorgeous pre-rendered 3D heart loop is preferable to an ugly real-time heart simply because it is technically 3D.
+
+The Raspberry Pi should primarily COMPOSE excellent visual material rather than generate complex artwork procedurally.
+
+Do not recreate the Pygame mistake in WebGL.
+
+---
+
+# 14. TYPOGRAPHY
+
+Typography should be elegant, modern and extremely restrained.
+
+Avoid the previous:
+- tiny uppercase headings everywhere
+- fake letter spacing
+- terminal aesthetic
+- walls of microtext
+
+Numbers can be large and beautiful.
+
+Examples:
+
+    14°
+
+    58
+    BPM
+
+    7h 14m
+
+    481 W
+
+Those values should coexist with the graphical object rather than sit inside a dashboard card.
+
+---
+
+# 15. THE QUALITY BAR
+
+The target reaction is NOT:
+
+"That's a cool Raspberry Pi dashboard."
+
+It is:
+
+"What the hell is that?"
+
+It should feel like an expensive piece of technology that does not currently exist.
+
+Clean when idle.
+Spectacular when active.
+
+Minimal information.
+Maximum visual quality.
+
+Real data.
+No clutter.
+
+3D objects and imagery rather than diagrams whenever appropriate.
+
+Motion rather than permanent panels.
+
+BLACK remains the physical mirror.
+
+---
+
+# NEXT STEP — DO NOT PORT THE APPLICATION YET
+
+Do not begin converting every existing module.
+
+Create a VISUAL TECHNOLOGY PROTOTYPE containing only THREE concepts:
+
+1. BIOMETRICS
+   A beautiful beating anatomical heart that transitions into a brain/sleep state.
+
+2. WEATHER
+   Minimal current temperature + atmospheric weather object + daily temperature curve.
+
+3. ONE EVENT
+   A futuristic news/banner notification that emerges from the edge, presents information, then retracts.
+
+These can initially use clearly labelled development fixture data.
+
+The purpose is NOT data integration yet.
+
+The purpose is to prove that Chromium/WebGL/assets can achieve the required visual quality on the Pi 5.
+
+Run the prototype at the mirror's actual 1440×2560 resolution.
+
+Measure:
+- FPS
+- CPU
+- GPU behaviour
+- memory
+- temperature
+- animation smoothness
+
+Provide screenshots and, preferably, a short screen recording demonstrating the transitions.
+
+Then STOP for human review.
+
+Do not port Calendar, HA, Energy, Fitbit integration, Moments or Princess until this visual quality gate has been approved.
