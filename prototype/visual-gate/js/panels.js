@@ -73,9 +73,21 @@ const Panels = (function () {
       return [W + (W / 2 - W) * u, H + (RIDGE - H) * u, v * D];
     }
 
-    function ring(y) {
-      return [[[0, y, 0], [W, y, 0]], [[W, y, 0], [W, y, D]],
-              [[W, y, D], [0, y, D]], [[0, y, D], [0, y, 0]]];
+    /** The four edges of a horizontal rectangle at height y. */
+    function rect(y, x0, x1, z0, z1) {
+      return [[[x0, y, z0], [x1, y, z0]], [[x1, y, z0], [x1, y, z1]],
+              [[x1, y, z1], [x0, y, z1]], [[x0, y, z1], [x0, y, z0]]];
+    }
+    function ring(y) { return rect(y, 0, W, 0, D); }
+
+    /** The three faces of a box that this projection actually shows:
+        the top, the +x end and the +z side. Everything else is behind. */
+    function boxFaces(x0, x1, y0, y1, z0, z1) {
+      return {
+        top:   [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]],
+        end:   [[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]],
+        side:  [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]],
+      };
     }
 
     const structure = [].concat(
@@ -90,8 +102,66 @@ const Panels = (function () {
 
     // The plinth the model stands on, pulled out beyond the footprint.
     const O = 0.26;
-    const plinth = [[[-O, 0, -O], [W + O, 0, -O]], [[W + O, 0, -O], [W + O, 0, D + O]],
-                    [[W + O, 0, D + O], [-O, 0, D + O]], [[-O, 0, D + O], [-O, 0, -O]]];
+    const plinth = rect(0, -O, W + O, -O, D + O);
+
+    // ---- the car ----------------------------------------------------
+    //
+    // On its own pad off the front of the plot. Placed in +z rather than
+    // -x because in this projection +z moves an object down and to the
+    // left, into the one corner of the box the house does not use, and
+    // the box is bound by its height rather than its width there - so
+    // the car costs the house nothing in size.
+    // Long and low, with the greenhouse set back over the rear axle. A
+    // body and cabin of similar footprint read as a stacked crate.
+    const CAR = {
+      x0: 0.10, x1: 1.20, z0: 2.12, z1: 2.50,
+      yFloor: 0.05, yWaist: 0.205, yRoof: 0.305,
+    };
+    const pad = rect(0, -0.04, 1.34, 1.98, 2.64);
+
+    const body = boxFaces(CAR.x0, CAR.x1, CAR.yFloor, CAR.yWaist, CAR.z0, CAR.z1);
+
+    // The cabin is built by hand rather than as another box, because the
+    // rake is what makes this read as a car: a box on a box is a massing
+    // model of one. +x is the front, so the windscreen leans more than
+    // the rear glass.
+    const cx0 = CAR.x0 + 0.30, cx1 = CAR.x1 - 0.26;
+    const cz0 = CAR.z0 + 0.035, cz1 = CAR.z1 - 0.035;
+    const RAKE_F = 0.15, RAKE_R = 0.08;
+    const cabin = {
+      side: [[cx0, CAR.yWaist, cz1], [cx1, CAR.yWaist, cz1],
+             [cx1 - RAKE_F, CAR.yRoof, cz1], [cx0 + RAKE_R, CAR.yRoof, cz1]],
+      top:  [[cx0 + RAKE_R, CAR.yRoof, cz0], [cx1 - RAKE_F, CAR.yRoof, cz0],
+             [cx1 - RAKE_F, CAR.yRoof, cz1], [cx0 + RAKE_R, CAR.yRoof, cz1]],
+      end:  [[cx1, CAR.yWaist, cz0], [cx1, CAR.yWaist, cz1],
+             [cx1 - RAKE_F, CAR.yRoof, cz1], [cx1 - RAKE_F, CAR.yRoof, cz0]],
+    };
+
+    /** A patch on the car's long side, which is the face this projection
+        turns toward the viewer. */
+    function onFlank(a, b, y0, y1) {
+      return [[a, y0, CAR.z1], [b, y0, CAR.z1], [b, y1, CAR.z1], [a, y1, CAR.z1]];
+    }
+
+    // Wheels as dark blocks: at this size a circle would be four pixels
+    // across and read as a speck.
+    const wheels = [[CAR.x0 + 0.13, CAR.x0 + 0.31], [CAR.x1 - 0.31, CAR.x1 - 0.13]]
+      .map(function (w) { return onFlank(w[0], w[1], 0, 0.078); });
+
+    // Charge as a strip along the flank, filling end to end. Filling the
+    // car's silhouette upward instead was ambiguous: the body came out
+    // solid and the cabin dark, which reads as two-tone paint rather
+    // than as a level.
+    const pct = Math.max(0, Math.min(100, e.car.charge_pct));
+    const sA = CAR.x0 + 0.10, sB = CAR.x1 - 0.10;
+    const chargeTrack = onFlank(sA, sB, 0.112, 0.146);
+    const chargeFill = onFlank(sA, sA + (sB - sA) * pct / 100, 0.112, 0.146);
+
+    // The charge cable, from the house wall to the car's near end. Run
+    // to the far end instead and it crosses the roof of the car on the
+    // way, which reads as a line drawn over the model rather than a
+    // cable plugged into it.
+    const carPts = [[0.90, 0, D], [1.05, 0, 2.00], [CAR.x1 + 0.02, 0.11, CAR.z1 - 0.12]];
 
     // Windows on the two faces that are actually turned toward the
     // viewer. A window on a hidden face is just a stray quadrilateral.
@@ -131,11 +201,18 @@ const Panels = (function () {
                      [W + O * 0.55, 0, D + O * 0.55], [W, 0, D]];
 
     // Fit whatever was just built to the box, rather than hand-tuning a
-    // scale that breaks the moment a dimension changes.
-    const BW = 582, BH = 360, PAD = 14;
+    // scale that breaks the moment a dimension changes. The viewBox is
+    // the element's own size: at 582x360 into a 582x292 box the whole
+    // drawing was being letterboxed to 81% and centred.
+    const BW = 582, BH = 292, PAD = 12;
     const all = [];
-    structure.concat(floor, plinth).forEach(function (e) { all.push(e[0], e[1]); });
+    structure.concat(floor, plinth, pad).forEach(function (g) { all.push(g[0], g[1]); });
     windows.forEach(function (w) { w.forEach(function (p) { all.push(p); }); });
+    [body, cabin].forEach(function (b) {
+      [b.top, b.end, b.side].forEach(function (f) {
+        f.forEach(function (p) { all.push(p); });
+      });
+    });
     solarPts.forEach(function (p) { all.push(p); });
     const flat = all.map(project);
     const xs = flat.map(function (p) { return p[0]; });
@@ -166,6 +243,31 @@ const Panels = (function () {
 
     const solarRun = path(solarPts);
     const gridRun = path(gridPts);
+    const carRun = path(carPts);
+    // Anchored to a world point above the car's roof, so the figure
+    // tracks the model instead of being a CSS offset that drifts the
+    // moment any dimension here changes.
+    const chargeAt = to([0.06, 0.34, 2.60]);
+
+    /** The car. Charging is carried by the cable and by the strip going
+        warm and lit; idle is the same car with a cool strip and no cable
+        at all. The level reads in both states, which is the point - you
+        want to know it most when it is NOT charging. */
+    function carSVG(charging) {
+      const state = charging ? ' on' : '';
+      return '<g class="car' + state + '">' +
+        pad.map(function (p) { return line(p, 'plinth'); }).join('') +
+        poly(body.top, 'car-shell') +
+        poly(body.end, 'car-shell') +
+        poly(body.side, 'car-shell') +
+        poly(cabin.top, 'car-glass') +
+        poly(cabin.end, 'car-glass') +
+        poly(cabin.side, 'car-glass') +
+        wheels.map(function (w) { return poly(w, 'car-wheel'); }).join('') +
+        poly(chargeTrack, 'car-track') +
+        (pct > 0 ? poly(chargeFill, 'car-cell' + state) : '') +
+        '</g>';
+    }
 
     /** A conduit: a dim track that says where the route is, and a pulse
         that travels it. The pulse alone occupies a seventh of the path,
@@ -231,11 +333,15 @@ const Panels = (function () {
       array.map(function (a) {
         return poly(a, generating ? 'pv live' : 'pv');
       }).join('') +
+      carSVG(e.car.charging) +
       // pathLength normalises each run to 100 units, so one dash pattern
       // works on both however long they actually are. In user units the
       // pattern was longer than the paths and the pulse never appeared.
       (generating ? conduit('solar', solarRun, false) : '') +
       conduit('grid', gridRun, exporting) +
+      (e.car.charging ? conduit('car', carRun, false) : '') +
+      '<text class="car-pct" x="' + chargeAt[0] + '" y="' + chargeAt[1] + '">' +
+      e.car.charge_pct + '%</text>' +
       '</svg>'
     );
   }

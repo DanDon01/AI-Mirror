@@ -43,7 +43,8 @@
       [470, 279],
       [481, 312]
     ],
-    "rooms_lit": 4
+    "rooms_lit": 4,
+    "car": { "charging": true, "charge_pct": 62 }
   },
 
   "calendar": [

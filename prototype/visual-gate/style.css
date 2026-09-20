@@ -339,6 +339,7 @@ body {
 }
 .p-energy .track.solar { stroke: rgba(255, 186, 108, 0.34); }
 .p-energy .track.grid  { stroke: rgba(168, 206, 250, 0.30); }
+.p-energy .track.car   { stroke: rgba(255, 186, 108, 0.30); }
 
 .p-energy .flow {
   fill: none;
@@ -355,6 +356,11 @@ body {
   stroke: rgba(180, 214, 252, 0.88);
   filter: drop-shadow(0 0 10px rgba(140, 186, 244, 0.6));
 }
+.p-energy .flow.car {
+  stroke: rgba(255, 200, 128, 0.95);
+  filter: drop-shadow(0 0 11px rgba(255, 176, 88, 0.8));
+  animation-duration: 2.6s;
+}
 /* Surplus leaving the house runs the other way, and changes colour with
    it - the direction alone is too subtle to carry a state this useful. */
 .p-energy .flow.grid.out {
@@ -363,6 +369,49 @@ body {
   animation-direction: reverse;
 }
 @keyframes conduit { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+
+/* ---- the car ----
+   Two states, and the difference has to survive a two-metre glance:
+   charging is a lit cell, a warm shell edge and a live cable; idle is
+   the same car in cool grey with no cable at all. The level reads in
+   both, because that is what you want to know when it is NOT charging. */
+
+/* Darker and more solid than the house, which is a wireframe: the car
+   has to read as an object sitting on the plot, not another diagram. */
+.p-energy .car-shell {
+  fill: rgba(16, 25, 38, 0.96);
+  stroke: rgba(150, 186, 232, 0.52);
+  stroke-width: 1;
+}
+.p-energy .car-glass {
+  fill: rgba(52, 78, 112, 0.86);
+  stroke: rgba(180, 212, 248, 0.46);
+  stroke-width: 0.9;
+}
+.p-energy .car-track {
+  fill: rgba(10, 16, 26, 0.90);
+  stroke: rgba(150, 186, 232, 0.26);
+  stroke-width: 0.7;
+}
+.p-energy .car-cell {
+  fill: rgba(158, 194, 238, 0.52);
+  stroke: none;
+}
+.p-energy .car-cell.on {
+  fill: url(#lit);
+  stroke: rgba(255, 210, 150, 0.72);
+  filter: drop-shadow(0 0 12px rgba(255, 168, 78, 0.55));
+}
+.p-energy .car-wheel { fill: rgba(8, 12, 20, 0.95); stroke: none; }
+
+.p-energy .car.on .car-shell { stroke: rgba(255, 206, 150, 0.52); }
+
+.p-energy .car-pct {
+  font-family: var(--ff-display);
+  font-size: 27px;
+  fill: var(--ink-2);
+}
+.p-energy .car.on ~ .car-pct { fill: #FFD6A2; }
 
 /* Warm light behind the generation figure, on the roof's side. */
 .p-energy .sun {
