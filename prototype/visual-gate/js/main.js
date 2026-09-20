@@ -50,7 +50,7 @@
 
   // How far the biometric section drops to put the heart over the chest
   // rather than the head. See the vertical budget in style.css.
-  const CHEST_DROP = 640;
+  const CHEST_DROP = 550;
 
   const ramp = (t, a, b) => {
     const x = Math.max(0, Math.min(1, (t - a) / (b - a)));
@@ -116,12 +116,21 @@
     haloEl.classList.toggle('sleep', morph > 0.5);
   }
 
-  function renderAt(t) {
+  /** `t` is the position in the 48s loop. `railT` is elapsed time, which
+      does not wrap.
+
+      The rail is the one element with no loop: on the mirror it scrolls
+      continuously and always has. Driven by the wrapped value it jumped
+      backwards every time the timeline came round, because a loop's
+      travel is not a whole number of cell runs - 2784px against a run
+      of 1732. Same class of fault as the rotation snap, and it was
+      there at the old speed too. */
+  function renderAt(t, railT) {
     const morph = morphAt(t);
     Biometrics.frame(t, morph, beatAt(t, bpm));
     setBio(morph);
     Panels.frame(t);
-    Markets.frame(t);
+    Markets.frame(railT === undefined ? t : railT);
   }
 
   // ---- boot ----------------------------------------------------------
@@ -143,7 +152,7 @@
 
     await Biometrics.init(document.getElementById('bioCanvas'), { loop: LOOP });
 
-    window.__setTime = (t) => { renderAt(t); return true; };
+    window.__setTime = (t) => { renderAt(t, t); return true; };
     window.__gpuInfo = () => Biometrics.stats();
     window.__fillInfo = () => Biometrics.fillEstimate();
 
@@ -158,7 +167,8 @@
 
   function loop(wall) {
     tickPerf(wall);
-    renderAt(FREEZE ? SEEK : (SEEK + (wall - started) / 1000) % LOOP);
+    const elapsed = SEEK + (wall - started) / 1000;
+    renderAt(FREEZE ? SEEK : elapsed % LOOP, FREEZE ? SEEK : elapsed);
 
     if (!document.body.dataset.ready && perf.frames > 3) {
       document.body.dataset.ready = '1';

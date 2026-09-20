@@ -72,7 +72,7 @@ const Frame = (function () {
 const Markets = (function () {
   'use strict';
 
-  const PX_PER_SECOND = 44;
+  const PX_PER_SECOND = 58;
 
   let run = null;
   let runWidth = 0;

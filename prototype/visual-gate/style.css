@@ -59,23 +59,23 @@ body {
 
 .stamp {
   position: absolute;
-  left: 96px; top: 78px;
+  left: 96px; top: 59px;
   line-height: 1;
 }
 
 .stamp p { margin: 0; }
 
 .stamp .date {
-  font-size: 30px;
+  font-size: 22px;
   letter-spacing: 0.02em;
   color: var(--ink-2);
   opacity: 0.78;
 }
 
 .stamp .time {
-  margin-top: 16px;
+  margin-top: 12px;
   font-family: var(--ff-display);
-  font-size: 152px;
+  font-size: 114px;
   line-height: 0.86;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -83,17 +83,17 @@ body {
 }
 
 .stamp .temp {
-  margin-top: 10px;
+  margin-top: 8px;
   font-family: var(--ff-display);
-  font-size: 96px;
+  font-size: 72px;
   line-height: 0.9;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 
 .stamp .cond {
-  margin-top: 14px;
-  font-size: 27px;
+  margin-top: 11px;
+  font-size: 20px;
   color: var(--ink-3);
 }
 
@@ -101,17 +101,17 @@ body {
    is lit from within the cloud mass rather than sitting on top of it. */
 .sky {
   position: absolute;
-  right: 66px; top: 40px;
-  width: 520px; height: 310px;
+  right: 50px; top: 30px;
+  width: 390px; height: 233px;
 }
 
 .sky .layer { position: absolute; will-change: transform; }
 
-.layer.far  { top: 58px;  left: -46px; width: 440px; opacity: 0.50;
+.layer.far  { top: 44px; left: -35px; width: 330px; opacity: 0.50;
               animation: creep 180s linear infinite reverse; }
-.layer.main { top: 96px;  left: 34px;  width: 400px; opacity: 0.82;
+.layer.main { top: 72px; left: 26px;  width: 300px; opacity: 0.82;
               animation: creep 220s linear infinite; }
-.layer.near { top: 122px; left: 200px; width: 320px; opacity: 0.68;
+.layer.near { top: 92px; left: 150px; width: 240px; opacity: 0.68;
               animation: creep 140s linear infinite reverse; }
 
 @keyframes creep {
@@ -122,17 +122,17 @@ body {
 
 .moon {
   position: absolute;
-  top: 46px; left: 316px;
-  width: 138px; height: 138px;
+  top: 35px; left: 237px;
+  width: 104px; height: 104px;
   border-radius: 50%;
   /* Dimmer than instinct suggests: a near-white disc on black reads as a
      sticker. Most of the presence should come from the halo. */
   background:
     radial-gradient(circle at 38% 34%, #EFE9D9 0%, #DCD5C2 44%, #A8A192 70%, #6F6B5E 100%);
   box-shadow:
-    0 0 50px 12px rgba(214, 224, 244, 0.16),
-    0 0 150px 46px rgba(170, 196, 240, 0.12),
-    0 0 320px 120px rgba(120, 152, 210, 0.06);
+    0 0 38px 9px rgba(214, 224, 244, 0.16),
+    0 0 113px 35px rgba(170, 196, 240, 0.12),
+    0 0 240px 90px rgba(120, 152, 210, 0.06);
   filter: blur(0.4px);
   animation: lunar 40s ease-in-out infinite;
 }
@@ -151,23 +151,22 @@ body {
 /* Vertical budget for the whole plate, since every block depends on it
    and the numbers are otherwise unexplainable:
 
-     0    - 400   persistent stamp and weather glyph
-     440  - 901   panel band, two slots, directly under the stamp
-     930  - 1550  brain, centred at 1240
-     1582 - 2178  heart, centred at 1880
-     2352 - 2540  markets rail
+     0    - 295   persistent stamp; weather glyph 30 to 263
+     340  - 801   panel band, two slots, hard against both edges
+     887  - 1393  brain, centred at 1140
+     1451 - 1929  heart, centred at 1690
+     2408 - 2540  markets rail
 
-   The panels sit in the top third now and the biometric object has the
-   whole lower half. Worth knowing: this puts the panel band across the
-   upper part of the glass, which on a wall-mounted portrait mirror is
-   usually where a standing viewer's head lands - so the clear centre
-   the earlier layouts protected is now the band from 901 to 1550, not
-   the one under the clock. */
+   Worth knowing: the panel band sits across the upper part of the
+   glass, which on a wall-mounted portrait mirror is usually where a
+   standing viewer's head lands - so the clear centre the earlier
+   layouts protected is now the band from 801 to 887 and everything
+   below the heart, not the one under the clock. */
 
 .bio {
   position: absolute;
-  left: 225px; top: 745px;
-  width: 990px; height: 990px;
+  left: 324px; top: 744px;
+  width: 792px; height: 792px;
   will-change: transform;
 }
 
@@ -179,14 +178,14 @@ body {
 #bioCanvas {
   position: absolute;
   left: 0; top: 0;
-  width: 990px; height: 990px;
+  width: 792px; height: 792px;
   display: block;
 }
 
 .bio-halo {
   position: absolute;
-  left: 495px; top: 495px;
-  width: 900px; height: 684px;
+  left: 396px; top: 396px;
+  width: 720px; height: 547px;
   transform: translate(-50%, -50%);
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 50%,
@@ -212,8 +211,8 @@ body {
    against the edge of their own form rather than out at the margin -
    at half size the heart's figure was stranded 300px away from it and
    read as an unrelated number. */
-#bioHeart { left: 140px; top: 428px; }
-#bioSleep { left: 770px; top: 452px; }
+#bioHeart { left: 36px; top: 330px; }
+#bioSleep { left: 631px; top: 356px; }
 
 .bio-n {
   font-family: var(--ff-display);
@@ -240,21 +239,22 @@ body {
 
 .panels {
   position: absolute;
-  left: 0; top: 440px;
+  left: 0; top: 340px;
   width: 1440px; height: 461px;
   perspective: 2400px;
 }
 
-/* The pair is scaled about its own centre rather than pinned to the
-   edges, so the 10% comes off the band symmetrically. */
+/* Hard against both edges, with the gap in the middle rather than
+   split between the margins - the mirror's own frame is the left and
+   right boundary, so the content should meet it. */
 .slot {
   position: absolute;
   top: 0;
   width: 567px; height: 461px;
   transform-style: preserve-3d;
 }
-.slot[data-slot="0"] { left: 144px; }
-.slot[data-slot="1"] { left: 729px; }
+.slot[data-slot="0"] { left: 80px; }
+.slot[data-slot="1"] { left: 793px; }
 
 /* No card. The panel is a positioning frame and nothing else: no fill,
    no edges, no clipping. Everything inside floats on the mirror, which
@@ -585,42 +585,9 @@ body {
 .markets {
   position: absolute;
   left: 0; bottom: 20px;
-  width: 1440px; height: 188px;
+  width: 1440px; height: 132px;
 }
 
-.markets-head {
-  position: relative;
-  height: 56px;
-  padding-left: 88px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.markets-label {
-  font-size: 21px;
-  font-weight: 500;
-  letter-spacing: 0.34em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-  opacity: 0.66;
-}
-
-.markets-wave { width: 290px; height: 40px; margin-left: 9px; }
-
-.markets-live {
-  display: flex; align-items: center; gap: 12px;
-  margin-left: -164px;
-  font-size: 18px; font-weight: 500; letter-spacing: 0.26em;
-  text-transform: uppercase; color: var(--ink-2); opacity: 0.72;
-}
-.markets-live i {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #DCE8FA;
-  box-shadow: 0 0 12px rgba(220, 232, 250, 0.9);
-  animation: pip 3.4s ease-in-out infinite;
-}
-@keyframes pip { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
 .markets-rail {
   position: relative;
