@@ -70,22 +70,53 @@ const Panels = (function () {
       absolute positions, so changing the size of the house does not
       move every window with it. The front is the +z face and the flank
       the +x end - the only two this projection shows. */
+  /** The form of the house, modelled on the real one.
+
+      An end-of-terrace two-storey with a hipped end, the ridge running
+      parallel to the front, the array on the front slope with a
+      rooflight set into it, a projecting brick porch at the hipped end
+      with the garage beside it, and the chimney up on the party wall.
+
+      The model is mirrored against the photograph: this projection only
+      ever shows the +z and +x faces, so to see the front and the hipped
+      end together the hip has to be the +x end. It is the same house
+      viewed from the other front corner. x = 0 is the party wall.
+
+      Units are arbitrary and self-consistent - the model is fitted to
+      its box afterwards, so only the ratios matter. Openings are
+      fractions of the face they sit on, so resizing the house does not
+      move every window independently of it. */
   const HOUSE = {
-    width: 2.0,    // x, gable to gable
-    depth: 1.5,    // z, front to back
-    wall: 1.1,     // eaves height
-    ridge: 0.62,   // how far the ridge stands above the eaves
-    floor: 0.55,   // first-floor slab
+    // The ridge has to stay longer than the house is deep or the roof
+    // reads as a pyramid rather than as a hipped end on a long ridge -
+    // which is what happened when the frontage was set narrower than
+    // the depth. In the real house the ridge carries on into the
+    // neighbour; here it is cut square at the party wall instead.
+    width: 2.00,    // x: party wall at 0, hipped end at W
+    depth: 1.50,    // z: back to front
+    wall: 1.12,     // eaves height
+    ridge: 0.58,    // ridge above the eaves - about 38 degrees over D/2
+    floor: 0.50,    // first-floor slab, of wall height
+    hip: 0.30,      // ridge stops this far short of the +x end
+    plinth: 0.17,   // the dark painted band around the base
 
-    rows: [[0.11, 0.40], [0.62, 0.91]],            // of wall height
-    frontBays: [[0.11, 0.30], [0.40, 0.59], [0.69, 0.88]],
-    flankBays: [[0.16, 0.42], [0.56, 0.82]],
+    rows: { lower: [0.16, 0.44], upper: [0.60, 0.88] },
+    frontUpper: [[0.10, 0.40], [0.54, 0.78]],
+    frontLower: [[0.10, 0.46]],
+    flankUpper: [[0.28, 0.62]],
 
-    // Array on the roof slope that faces the viewer. u runs eaves to
-    // ridge, v along the ridge; both are fractions of the slope.
-    pv: { rows: 2, cols: 4, gap: 0.03,
-          uStart: 0.12, uSpan: 0.74, uMargin: 0.06,
-          vStart: 0.07, vSpan: 0.90 },
+    porch:   { x0: 0.56, x1: 0.94, out: 0.17, height: 0.46, fall: 0.06 },
+    garage:  { x0: 1.00, x1: 1.30, z0: 0.34, z1: 1.04, height: 0.42, ridge: 0.09 },
+    chimney: { x0: 0.02, x1: 0.17, halfDepth: 0.075, above: 0.19, sink: 0.30 },
+
+    // The array on the front slope. u runs eaves to ridge, v along the
+    // ridge from the party wall toward the hip; both fractions.
+    pv: { rows: 2, cols: 5, gap: 0.022,
+          uStart: 0.13, uSpan: 0.72, uMargin: 0.055,
+          vStart: 0.18, vSpan: 0.72 },
+    // The rooflight takes one panel's place in the array rather than
+    // sitting beside it, which is how it reads on the roof.
+    rooflight: { row: 1, col: 1 },
   };
 
   function houseSVG(e) {
@@ -94,22 +125,25 @@ const Panels = (function () {
     const exporting = e.grid_watts < 0;
 
     const W = HOUSE.width, D = HOUSE.depth, H = HOUSE.wall;
-    const RIDGE = H + HOUSE.ridge, MID = HOUSE.floor;
-    const APEX_A = [W / 2, RIDGE, 0], APEX_B = [W / 2, RIDGE, D];
-
-    /** A point on the roof slope that faces the viewer.
-        u runs 0 at the eaves to 1 at the ridge, v runs along the ridge. */
-    function roofPoint(u, v) {
-      return [W + (W / 2 - W) * u, H + (RIDGE - H) * u, v * D];
-    }
+    const RIDGE = H + HOUSE.ridge;
+    const MID = HOUSE.floor * H;
+    const HIP = HOUSE.hip * W;
+    const RIDGE_END = W - HIP;      // where the ridge stops and the hip starts
+    const RZ = D / 2;               // the ridge sits over the middle of the plan
+    const PL = HOUSE.plinth * H;
 
     /** The four edges of a horizontal rectangle at height y. */
     function rect(y, x0, x1, z0, z1) {
       return [[[x0, y, z0], [x1, y, z0]], [[x1, y, z0], [x1, y, z1]],
               [[x1, y, z1], [x0, y, z1]], [[x0, y, z1], [x0, y, z0]]];
     }
-    function ring(y) { return rect(y, 0, W, 0, D); }
-
+    /** An upright patch on a +z face, and on a +x face. */
+    function onZ(z, x0, x1, y0, y1) {
+      return [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]];
+    }
+    function onX(x, z0, z1, y0, y1) {
+      return [[x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0]];
+    }
     /** The three faces of a box that this projection actually shows:
         the top, the +x end and the +z side. Everything else is behind. */
     function boxFaces(x0, x1, y0, y1, z0, z1) {
@@ -120,34 +154,119 @@ const Panels = (function () {
       };
     }
 
-    const structure = [].concat(
-      ring(0), ring(H),
-      [[[0, 0, 0], [0, H, 0]], [[W, 0, 0], [W, H, 0]],
-       [[0, 0, D], [0, H, D]], [[W, 0, D], [W, H, D]]],
-      [[APEX_A, APEX_B],
-       [APEX_A, [0, H, 0]], [APEX_A, [W, H, 0]],
-       [APEX_B, [0, H, D]], [APEX_B, [W, H, D]]]);
+    /** A point on the front roof slope. u: 0 at the eaves, 1 at the
+        ridge. v: 0 at the party wall, 1 where the hip begins. */
+    function roofPoint(u, v) {
+      return [v * RIDGE_END, H + (RIDGE - H) * u, D - RZ * u];
+    }
 
-    const floor = ring(MID);
+    // ---- shell -------------------------------------------------------
 
-    // The plinth the model stands on, pulled out beyond the footprint.
+    const RIDGE_A = [0, RIDGE, RZ];              // party-wall end
+    const RIDGE_B = [RIDGE_END, RIDGE, RZ];      // where the hip begins
+
+    // Split by whether the edge is on a face this projection shows.
+    // Drawn at one weight the far side reads as strongly as the near
+    // one and the model comes out as a glass box rather than a house;
+    // the x-ray is worth keeping, but it should sit behind.
+    const structure = [
+      [[W, 0, 0], [W, 0, D]], [[W, 0, D], [0, 0, D]],
+      [[W, H, 0], [W, H, D]], [[W, H, D], [0, H, D]],
+      [[W, 0, 0], [W, H, 0]], [[0, 0, D], [0, H, D]], [[W, 0, D], [W, H, D]],
+      // Ridge along the front, cut square at the party wall and hipped
+      // back at the far end.
+      [RIDGE_A, RIDGE_B],
+      [RIDGE_B, [W, H, 0]], [RIDGE_B, [W, H, D]],
+      [RIDGE_A, [0, H, D]],
+    ];
+    const behind = [
+      [[0, 0, 0], [W, 0, 0]], [[0, 0, D], [0, 0, 0]],
+      [[0, H, 0], [W, H, 0]], [[0, H, D], [0, H, 0]],
+      [[0, 0, 0], [0, H, 0]],
+      [RIDGE_A, [0, H, 0]],
+    ];
+
+    const floor = rect(MID, 0, W, 0, D);
+
     const O = 0.26;
-    const plinth = rect(0, -O, W + O, -O, D + O);
+    const plot = rect(0, -O, HOUSE.garage.x1 * W + 0.06, -O, D + O);
 
-    // ---- the car ----------------------------------------------------
+    // The painted band around the base of the walls, which is most of
+    // what makes this house this house rather than a generic one.
+    const bands = [onZ(D, 0, W, 0, PL), onX(W, 0, D, 0, PL)];
+    const walls = [onZ(D, 0, W, PL, H), onX(W, 0, D, PL, H)];
+
+    // Three planes cover the roof this projection can see: the main
+    // front slope, the triangle of it that runs out over the hip, and
+    // the hipped end itself.
+    const roofPlanes = [
+      [[0, H, D], [RIDGE_END, H, D], RIDGE_B, RIDGE_A],
+      [[RIDGE_END, H, D], [W, H, D], RIDGE_B],
+      [[W, H, 0], [W, H, D], RIDGE_B],
+    ];
+
+    const CH = HOUSE.chimney;
+    // Sunk well below the ridge line: the stack's base is a horizontal
+    // plane and the roof falls away from the ridge on both sides, so a
+    // shallow base leaves the chimney hovering over its own slope.
+    const chimney = boxFaces(CH.x0 * W, CH.x1 * W, RIDGE - CH.sink * H,
+                             RIDGE + CH.above * H,
+                             RZ - CH.halfDepth * D, RZ + CH.halfDepth * D);
+
+    // ---- openings ----------------------------------------------------
+
+    const windows = [];
+    HOUSE.frontUpper.forEach(function (b) {
+      windows.push(onZ(D, b[0] * W, b[1] * W,
+                       HOUSE.rows.upper[0] * H, HOUSE.rows.upper[1] * H));
+    });
+    HOUSE.frontLower.forEach(function (b) {
+      windows.push(onZ(D, b[0] * W, b[1] * W,
+                       HOUSE.rows.lower[0] * H, HOUSE.rows.lower[1] * H));
+    });
+    HOUSE.flankUpper.forEach(function (b) {
+      windows.push(onX(W, b[0] * D, b[1] * D,
+                       HOUSE.rows.upper[0] * H, HOUSE.rows.upper[1] * H));
+    });
+    const lit = windows.slice(0, Math.max(0, Math.min(roomsLit, windows.length)));
+
+    // ---- porch and garage --------------------------------------------
+
+    const P = HOUSE.porch;
+    const px0 = P.x0 * W, px1 = P.x1 * W;
+    const pz1 = D + P.out * D;
+    const pTop = P.height * H, pEave = pTop - P.fall * H;
+    const porch = {
+      front: onZ(pz1, px0, px1, 0, pEave),
+      // The end wall is a trapezoid, because the lean-to falls toward
+      // the front: square it off and the roof floats above it.
+      end: [[px1, 0, D], [px1, 0, pz1], [px1, pEave, pz1], [px1, pTop, D]],
+      roof: [[px0, pTop, D], [px1, pTop, D], [px1, pEave, pz1], [px0, pEave, pz1]],
+      door: onZ(pz1 + 0.005, px0 + 0.10, px1 - 0.11, 0.03, pEave - 0.12),
+    };
+
+    const G = HOUSE.garage;
+    const gx0 = G.x0 * W, gx1 = G.x1 * W;
+    const gz0 = G.z0 * D, gz1 = G.z1 * D;
+    const gh = G.height * H, gApex = gh + G.ridge * H, gMid = (gx0 + gx1) / 2;
+    const garage = {
+      front: onZ(gz1, gx0, gx1, 0, gh),
+      gable: [[gx0, gh, gz1], [gx1, gh, gz1], [gMid, gApex, gz1]],
+      end: onX(gx1, gz0, gz1, 0, gh),
+      roof: [[gMid, gApex, gz0], [gMid, gApex, gz1], [gx1, gh, gz1], [gx1, gh, gz0]],
+      door: onZ(gz1 + 0.005, gx0 + 0.06, gx1 - 0.06, 0.02, gh - 0.10),
+    };
+
+    // ---- the car -----------------------------------------------------
     //
-    // On its own pad off the front of the plot. Placed in +z rather than
-    // -x because in this projection +z moves an object down and to the
-    // left, into the one corner of the box the house does not use, and
-    // the box is bound by its height rather than its width there - so
-    // the car costs the house nothing in size.
-    // Long and low, with the greenhouse set back over the rear axle. A
-    // body and cabin of similar footprint read as a stacked crate.
+    // On the block paving in front, which in this projection is +z: that
+    // direction moves an object down and to the left, into the one
+    // corner of the box the house does not use.
     const CAR = {
-      x0: 0.10, x1: 1.20, z0: 2.12, z1: 2.50,
+      x0: 0.10, x1: 1.20, z0: 1.90, z1: 2.28,
       yFloor: 0.05, yWaist: 0.205, yRoof: 0.305,
     };
-    const pad = rect(0, -0.04, 1.34, 1.98, 2.64);
+    const pad = rect(0, -0.04, 1.34, 1.76, 2.42);
 
     const body = boxFaces(CAR.x0, CAR.x1, CAR.yFloor, CAR.yWaist, CAR.z0, CAR.z1);
 
@@ -167,8 +286,6 @@ const Panels = (function () {
              [cx1 - RAKE_F, CAR.yRoof, cz1], [cx1 - RAKE_F, CAR.yRoof, cz0]],
     };
 
-    /** A patch on the car's long side, which is the face this projection
-        turns toward the viewer. */
     function onFlank(a, b, y0, y1) {
       return [[a, y0, CAR.z1], [b, y0, CAR.z1], [b, y1, CAR.z1], [a, y1, CAR.z1]];
     }
@@ -187,68 +304,47 @@ const Panels = (function () {
     const chargeTrack = onFlank(sA, sB, 0.112, 0.146);
     const chargeFill = onFlank(sA, sA + (sB - sA) * pct / 100, 0.112, 0.146);
 
-    // The charge cable, from the house wall to the car's near end. Run
-    // to the far end instead and it crosses the roof of the car on the
-    // way, which reads as a line drawn over the model rather than a
-    // cable plugged into it.
-    const carPts = [[0.90, 0, D], [1.05, 0, 2.00], [CAR.x1 + 0.02, 0.11, CAR.z1 - 0.12]];
+    // ---- runs --------------------------------------------------------
 
-    // Windows on the two faces that are actually turned toward the
-    // viewer. A window on a hidden face is just a stray quadrilateral.
-    const windows = [];
-    function faceZ(x0, x1, y0, y1) {
-      windows.push([[x0, y0, D], [x1, y0, D], [x1, y1, D], [x0, y1, D]]);
-    }
-    function faceX(z0, z1, y0, y1) {
-      windows.push([[W, y0, z0], [W, y0, z1], [W, y1, z1], [W, y1, z0]]);
-    }
-    HOUSE.frontBays.forEach(function (b) {
-      HOUSE.rows.forEach(function (r) {
-        faceZ(b[0] * W, b[1] * W, r[0] * H, r[1] * H);
-      });
-    });
-    HOUSE.flankBays.forEach(function (b) {
-      HOUSE.rows.forEach(function (r) {
-        faceX(b[0] * D, b[1] * D, r[0] * H, r[1] * H);
-      });
-    });
+    // Generation down the party-wall end of the front, just outboard of
+    // the wall. Anywhere else on this elevation it crosses a window.
+    const solarPts = [roofPoint(0.12, 0.09),
+                      [0.06 * W, H, D + 0.05], [0.06 * W, 0.15, D + 0.05]];
 
-    // Generation comes off the array and down the right-hand silhouette
-    // corner - the one edge of the model with black behind it. Routed
-    // down the near corner instead, the pulse ran straight over the lit
-    // windows and disappeared into them.
-    // Just outboard of the wall, not on it: run down x = W exactly and
-    // the amber conduit lands on top of the cool structure edge and
-    // reads as part of it.
-    const solarPts = [roofPoint(0.34, 0.26), roofPoint(0.05, 0.06),
-                      [W + 0.07, H, 0], [W + 0.07, 0.12, 0]];
-
-    // The grid comes in along the front edge of the plinth. Two earlier
-    // routes failed for the same reason: in this projection a point
+    // The grid, along the front of the plot. In this projection a point
     // offset equally in x and z lands directly below where it started,
-    // so a run "outward from the house" collapsed to a vertical stub.
-    // Following an edge the model already has avoids the problem, and
-    // gives the run enough length to read.
+    // so a run "outward from the house" collapses to a vertical stub;
+    // following an edge the model already has avoids that.
     const gridPts = [[-O * 0.4, 0, D + O * 0.55],
                      [W + O * 0.55, 0, D + O * 0.55], [W, 0, D]];
 
+    // The charge cable, from the front wall to the car's near end. Run
+    // to the far end instead and it crosses the roof of the car on the
+    // way, which reads as a line drawn over the model rather than a
+    // cable plugged into it.
+    const carPts = [[0.86, 0, D], [1.00, 0, 1.62],
+                    [CAR.x1 + 0.02, 0.11, CAR.z1 - 0.12]];
+
+    // ---- fit ---------------------------------------------------------
+    //
     // Fit whatever was just built to the box, rather than hand-tuning a
     // scale that breaks the moment a dimension changes. The viewBox is
-    // the element's own size: at 582x360 into a 582x292 box the whole
-    // drawing was being letterboxed to 81% and centred.
+    // the element's own size: at 582x360 inside a 582x292 box the whole
+    // drawing was letterboxed to 81% and centred.
     const BW = 523, BH = 263, PAD = 11;
     const all = [];
-    structure.concat(floor, plinth, pad).forEach(function (g) { all.push(g[0], g[1]); });
-    windows.forEach(function (w) { w.forEach(function (p) { all.push(p); }); });
-    [body, cabin].forEach(function (b) {
-      [b.top, b.end, b.side].forEach(function (f) {
-        f.forEach(function (p) { all.push(p); });
-      });
+    structure.concat(behind, floor, plot, pad).forEach(function (g) { all.push(g[0], g[1]); });
+    windows.forEach(function (w) { w.forEach(function (q) { all.push(q); }); });
+    [porch.roof, porch.front, garage.roof, garage.gable,
+     chimney.top, body.top, body.end, body.side,
+     cabin.top, cabin.end, cabin.side].forEach(function (f) {
+      f.forEach(function (q) { all.push(q); });
     });
-    solarPts.forEach(function (p) { all.push(p); });
+    solarPts.forEach(function (q) { all.push(q); });
+
     const flat = all.map(project);
-    const xs = flat.map(function (p) { return p[0]; });
-    const ys = flat.map(function (p) { return p[1]; });
+    const xs = flat.map(function (q) { return q[0]; });
+    const ys = flat.map(function (q) { return q[1]; });
     const minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
     const minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
     const s = Math.min((BW - PAD * 2) / (maxX - minX), (BH - PAD * 2) / (maxY - minY));
@@ -259,27 +355,45 @@ const Panels = (function () {
       const q = project(p);
       return [(q[0] * s + ox).toFixed(1), (q[1] * s + oy).toFixed(1)];
     }
-    function line(e, cls) {
-      const a = to(e[0]), b = to(e[1]);
+    function line(edge, cls) {
+      const a = to(edge[0]), b = to(edge[1]);
       return '<line class="' + cls + '" x1="' + a[0] + '" y1="' + a[1] +
              '" x2="' + b[0] + '" y2="' + b[1] + '"/>';
     }
     function poly(pts, cls) {
       return '<polygon class="' + cls + '" points="' +
-             pts.map(function (p) { return to(p).join(','); }).join(' ') + '"/>';
+             pts.map(function (q) { return to(q).join(','); }).join(' ') + '"/>';
     }
-
     function path(pts) {
-      return pts.map(function (p) { return to(p).join(','); }).join(' ');
+      return pts.map(function (q) { return to(q).join(','); }).join(' ');
     }
 
-    const solarRun = path(solarPts);
-    const gridRun = path(gridPts);
-    const carRun = path(carPts);
-    // Anchored to a world point above the car's roof, so the figure
-    // tracks the model instead of being a CSS offset that drifts the
-    // moment any dimension here changes.
-    const chargeAt = to([0.06, 0.34, 2.60]);
+    /** A conduit: a dim track that says where the route is, and a pulse
+        that travels it. The pulse alone occupies a seventh of the path,
+        so on a still it reads as a broken line rather than a flow. */
+    function conduit(kind, pts, reverse) {
+      return '<polyline class="track ' + kind + '" points="' + pts + '"/>' +
+             '<polyline class="flow ' + kind + (reverse ? ' out' : '') +
+             '" pathLength="100" points="' + pts + '"/>';
+    }
+
+    // ---- the array ---------------------------------------------------
+
+    const PV = HOUSE.pv;
+    const course = PV.uSpan / PV.rows;
+    const panelV = (PV.vSpan - PV.gap * (PV.cols - 1)) / PV.cols;
+    const array = [];
+    let rooflight = null;
+    for (let r = 0; r < PV.rows; r++) {
+      const u0 = PV.uStart + r * course, u1 = u0 + course - PV.uMargin;
+      for (let c = 0; c < PV.cols; c++) {
+        const v0 = PV.vStart + c * (panelV + PV.gap), v1 = v0 + panelV;
+        const quad = [roofPoint(u0, v0), roofPoint(u0, v1),
+                      roofPoint(u1, v1), roofPoint(u1, v0)];
+        if (r === HOUSE.rooflight.row && c === HOUSE.rooflight.col) rooflight = quad;
+        else array.push(quad);
+      }
+    }
 
     /** The car. Charging is carried by the cable and by the strip going
         warm and lit; idle is the same car with a cool strip and no cable
@@ -288,7 +402,7 @@ const Panels = (function () {
     function carSVG(charging) {
       const state = charging ? ' on' : '';
       return '<g class="car' + state + '">' +
-        pad.map(function (p) { return line(p, 'plinth'); }).join('') +
+        pad.map(function (q) { return line(q, 'plinth'); }).join('') +
         poly(body.top, 'car-shell') +
         poly(body.end, 'car-shell') +
         poly(body.side, 'car-shell') +
@@ -301,41 +415,7 @@ const Panels = (function () {
         '</g>';
     }
 
-    /** A conduit: a dim track that says where the route is, and a pulse
-        that travels it. The pulse alone occupies a seventh of the path,
-        so on a still it reads as a broken line rather than a flow. */
-    function conduit(kind, pts, reverse) {
-      return '<polyline class="track ' + kind + '" points="' + pts + '"/>' +
-             '<polyline class="flow ' + kind + (reverse ? ' out' : '') +
-             '" pathLength="100" points="' + pts + '"/>';
-    }
-
-    // Only lit rooms are drawn. Filling the dark ones too turned the two
-    // near faces into a checkerboard of grey holes, which read as a
-    // pattern rather than as a house with some lights on.
-    const lit = [];
-    for (let i = 0; i < windows.length; i++) {
-      if (i % 5 < roomsLit % 5 || i % 3 === 1) lit.push(windows[i]);
-    }
-
-    // The roof needs a surface or the gable is just two more hairlines
-    // among twenty. Only the face turned toward the viewer is filled.
-    const roofPlane = [[W, H, 0], [W, H, D], APEX_B, APEX_A];
-
-    // The array, laid out on that slope. Two courses of four, inset
-    // from the ridge and the eaves so the roof still reads as a roof.
-    const PV = HOUSE.pv;
-    const course = PV.uSpan / PV.rows;
-    const panelV = (PV.vSpan - PV.gap * (PV.cols - 1)) / PV.cols;
-    const array = [];
-    for (let r = 0; r < PV.rows; r++) {
-      const u0 = PV.uStart + r * course, u1 = u0 + course - PV.uMargin;
-      for (let c = 0; c < PV.cols; c++) {
-        const v0 = PV.vStart + c * (panelV + PV.gap), v1 = v0 + panelV;
-        array.push([roofPoint(u0, v0), roofPoint(u0, v1),
-                    roofPoint(u1, v1), roofPoint(u1, v0)]);
-      }
-    }
+    const chargeAt = to([0.06, 0.34, 2.52]);
 
     return (
       '<svg viewBox="0 0 ' + BW + ' ' + BH + '" aria-hidden="true">' +
@@ -352,26 +432,39 @@ const Panels = (function () {
       '<stop offset="100%" stop-color="#3E6E9C" stop-opacity="0.80"/>' +
       '</linearGradient>' +
       '</defs>' +
-      plinth.map(function (p) { return line(p, 'plinth'); }).join('') +
-      poly(roofPlane, 'roof') +
+      plot.map(function (q) { return line(q, 'plinth'); }).join('') +
+      // Garage first: it sits behind the house and to the side.
+      poly(garage.end, 'out-shell') + poly(garage.front, 'out-shell') +
+      poly(garage.gable, 'out-shell') + poly(garage.roof, 'out-roof') +
+      poly(garage.door, 'out-door') +
+      // Shell: faint render, the painted band, then the openings.
+      walls.map(function (w) { return poly(w, 'render'); }).join('') +
+      bands.map(function (b) { return poly(b, 'band'); }).join('') +
       lit.map(function (w) { return poly(w, 'win lit'); }).join('') +
+      behind.map(function (b) { return line(b, 'behind'); }).join('') +
       floor.map(function (f) { return line(f, 'soft'); }).join('') +
       structure.map(function (st) { return line(st, 'edge'); }).join('') +
-      // After the structure, not before it. The model is a wireframe, so
-      // the far wall's vertical edge was showing straight through the
-      // array; panels are the one opaque surface here and should hide
-      // what is behind them. Nothing else crosses them - the ridge,
-      // eaves and hips all bound the array rather than pass over it.
+      // Roof after the structure, not before it. The model is a
+      // wireframe, so the far wall's edges were showing straight
+      // through the slope and the array.
+      roofPlanes.map(function (r) { return poly(r, 'roof'); }).join('') +
       array.map(function (a) {
         return poly(a, generating ? 'pv live' : 'pv');
       }).join('') +
+      (rooflight ? poly(rooflight, 'rooflight') : '') +
+      poly(chimney.side, 'stack') + poly(chimney.end, 'stack') +
+      poly(chimney.top, 'stack-top') +
+      // Porch last of the building: it stands in front of the wall.
+      poly(porch.end, 'out-shell') + poly(porch.front, 'out-shell') +
+      poly(porch.roof, 'out-roof') + poly(porch.door, 'win lit') +
       carSVG(e.car.charging) +
       // pathLength normalises each run to 100 units, so one dash pattern
-      // works on both however long they actually are. In user units the
-      // pattern was longer than the paths and the pulse never appeared.
-      (generating ? conduit('solar', solarRun, false) : '') +
-      conduit('grid', gridRun, exporting) +
-      (e.car.charging ? conduit('car', carRun, false) : '') +
+      // works on all of them however long they actually are. In user
+      // units the pattern was longer than the paths and the pulse never
+      // appeared.
+      (generating ? conduit('solar', path(solarPts), false) : '') +
+      conduit('grid', path(gridPts), exporting) +
+      (e.car.charging ? conduit('car', path(carPts), false) : '') +
       '<text class="car-pct" x="' + chargeAt[0] + '" y="' + chargeAt[1] + '">' +
       e.car.charge_pct + '%</text>' +
       '</svg>'

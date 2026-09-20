@@ -310,8 +310,38 @@ body {
    is carried by weight and temperature, not by colour-coding a legend. */
 .p-energy .edge   { stroke: rgba(168, 206, 250, 0.68); stroke-width: 1.5; }
 .p-energy .soft   { stroke: rgba(150, 188, 238, 0.26); stroke-width: 1.1; }
+.p-energy .behind { stroke: rgba(140, 176, 224, 0.20); stroke-width: 0.9; }
 .p-energy .plinth { stroke: rgba(130, 166, 214, 0.16); stroke-width: 1; }
-.p-energy .roof   { fill: rgba(126, 168, 224, 0.075); stroke: none; }
+/* The roof has to carry the hip, which is the most identifying thing
+   about this house, so it is a surface rather than a tint. */
+.p-energy .roof   { fill: rgba(128, 156, 196, 0.22); stroke: none; }
+
+/* Render, and the painted band around the base of it. The band is a
+   large part of what makes this house recognisable, so it is the one
+   place the model carries a colour of its own. */
+.p-energy .render { fill: rgba(196, 214, 240, 0.10); stroke: none; }
+.p-energy .band   { fill: rgba(58, 104, 108, 0.52); stroke: none; }
+
+/* The rooflight sits in the array in place of a panel, so it needs to
+   read as glass catching the sky rather than as a missing panel. */
+.p-energy .rooflight {
+  fill: rgba(178, 208, 240, 0.30);
+  stroke: rgba(206, 228, 255, 0.55);
+  stroke-width: 0.9;
+}
+
+/* Chimney and outbuildings: brick, so warmer and more solid than the
+   rendered shell, and darker than the roof they stand against. */
+.p-energy .stack      { fill: rgba(44, 38, 40, 0.92);
+                        stroke: rgba(186, 156, 140, 0.40); stroke-width: 0.9; }
+.p-energy .stack-top  { fill: rgba(70, 60, 58, 0.95);
+                        stroke: rgba(186, 156, 140, 0.34); stroke-width: 0.8; }
+.p-energy .out-shell  { fill: rgba(40, 32, 32, 0.88);
+                        stroke: rgba(196, 150, 124, 0.44); stroke-width: 1; }
+.p-energy .out-roof   { fill: rgba(26, 30, 38, 0.92);
+                        stroke: rgba(160, 190, 230, 0.40); stroke-width: 1; }
+.p-energy .out-door   { fill: rgba(10, 9, 9, 0.94);
+                        stroke: rgba(150, 118, 96, 0.40); stroke-width: 0.8; }
 .p-energy .win.lit {
   fill: url(#lit);
   filter: drop-shadow(0 0 16px rgba(255, 168, 78, 0.45));
