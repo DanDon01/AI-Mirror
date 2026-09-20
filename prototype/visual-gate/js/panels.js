@@ -59,12 +59,42 @@ const Panels = (function () {
     return [(p[0] - p[2]) * 0.94, (p[0] + p[2]) * 0.342 - p[1]];
   }
 
+  /** The form of the house, in one place.
+
+      Everything in houseSVG reads from this, so remodelling it to match
+      a real building is a change to these numbers rather than a rewrite
+      of the geometry. Units are arbitrary and self-consistent: the model
+      is fitted to its box afterwards, so only the ratios matter.
+
+      Openings are fractions of the face they sit on rather than
+      absolute positions, so changing the size of the house does not
+      move every window with it. The front is the +z face and the flank
+      the +x end - the only two this projection shows. */
+  const HOUSE = {
+    width: 2.0,    // x, gable to gable
+    depth: 1.5,    // z, front to back
+    wall: 1.1,     // eaves height
+    ridge: 0.62,   // how far the ridge stands above the eaves
+    floor: 0.55,   // first-floor slab
+
+    rows: [[0.11, 0.40], [0.62, 0.91]],            // of wall height
+    frontBays: [[0.11, 0.30], [0.40, 0.59], [0.69, 0.88]],
+    flankBays: [[0.16, 0.42], [0.56, 0.82]],
+
+    // Array on the roof slope that faces the viewer. u runs eaves to
+    // ridge, v along the ridge; both are fractions of the slope.
+    pv: { rows: 2, cols: 4, gap: 0.03,
+          uStart: 0.12, uSpan: 0.74, uMargin: 0.06,
+          vStart: 0.07, vSpan: 0.90 },
+  };
+
   function houseSVG(e) {
     const roomsLit = e.rooms_lit;
     const generating = e.solar_watts > 0;
     const exporting = e.grid_watts < 0;
 
-    const W = 2.0, D = 1.5, H = 1.1, RIDGE = H + 0.62, MID = 0.55;
+    const W = HOUSE.width, D = HOUSE.depth, H = HOUSE.wall;
+    const RIDGE = H + HOUSE.ridge, MID = HOUSE.floor;
     const APEX_A = [W / 2, RIDGE, 0], APEX_B = [W / 2, RIDGE, D];
 
     /** A point on the roof slope that faces the viewer.
@@ -172,13 +202,15 @@ const Panels = (function () {
     function faceX(z0, z1, y0, y1) {
       windows.push([[W, y0, z0], [W, y0, z1], [W, y1, z1], [W, y1, z0]]);
     }
-    [[0.22, 0.60], [0.80, 1.18], [1.38, 1.76]].forEach(function (s) {
-      faceZ(s[0], s[1], 0.12, 0.44);
-      faceZ(s[0], s[1], 0.68, 1.00);
+    HOUSE.frontBays.forEach(function (b) {
+      HOUSE.rows.forEach(function (r) {
+        faceZ(b[0] * W, b[1] * W, r[0] * H, r[1] * H);
+      });
     });
-    [[0.24, 0.62], [0.86, 1.24]].forEach(function (s) {
-      faceX(s[0], s[1], 0.12, 0.44);
-      faceX(s[0], s[1], 0.68, 1.00);
+    HOUSE.flankBays.forEach(function (b) {
+      HOUSE.rows.forEach(function (r) {
+        faceX(b[0] * D, b[1] * D, r[0] * H, r[1] * H);
+      });
     });
 
     // Generation comes off the array and down the right-hand silhouette
@@ -292,14 +324,14 @@ const Panels = (function () {
 
     // The array, laid out on that slope. Two courses of four, inset
     // from the ridge and the eaves so the roof still reads as a roof.
-    const ROWS = 2, COLS = 4, GAP = 0.03;
-    const course = 0.74 / ROWS;
-    const panelV = (0.90 - GAP * (COLS - 1)) / COLS;
+    const PV = HOUSE.pv;
+    const course = PV.uSpan / PV.rows;
+    const panelV = (PV.vSpan - PV.gap * (PV.cols - 1)) / PV.cols;
     const array = [];
-    for (let r = 0; r < ROWS; r++) {
-      const u0 = 0.12 + r * course, u1 = u0 + course - 0.06;
-      for (let c = 0; c < COLS; c++) {
-        const v0 = 0.07 + c * (panelV + GAP), v1 = v0 + panelV;
+    for (let r = 0; r < PV.rows; r++) {
+      const u0 = PV.uStart + r * course, u1 = u0 + course - PV.uMargin;
+      for (let c = 0; c < PV.cols; c++) {
+        const v0 = PV.vStart + c * (panelV + PV.gap), v1 = v0 + panelV;
         array.push([roofPoint(u0, v0), roofPoint(u0, v1),
                     roofPoint(u1, v1), roofPoint(u1, v0)]);
       }
