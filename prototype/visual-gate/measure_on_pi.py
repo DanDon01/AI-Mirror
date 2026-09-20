@@ -132,7 +132,9 @@ def main():
     args = ap.parse_args()
 
     if not CHROMIUM:
-        raise SystemExit("Chromium not found")
+        raise SystemExit(
+            "Chromium not found. This script is meant to run on the Pi. "
+            "Install it with: sudo apt install chromium-browser")
 
     server = ThreadingHTTPServer(("127.0.0.1", PORT), partial(Quiet, directory=HERE))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -159,6 +161,11 @@ def main():
     ws_url = cdp_target()
     if not ws_url:
         print("warning: could not reach DevTools; FPS will be unavailable")
+
+    # Prime psutil. The first cpu_percent() reading for any process is
+    # always 0.0, so without a discarded pass the first sample lies.
+    chromium_usage()
+    time.sleep(1.0)
 
     rows = []
     print(f"sampling for {args.seconds}s\n")
