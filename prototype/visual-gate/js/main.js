@@ -50,7 +50,7 @@
 
   // How far the biometric section drops to put the heart over the chest
   // rather than the head. See the vertical budget in style.css.
-  const CHEST_DROP = 650;
+  const CHEST_DROP = 700;
 
   const ramp = (t, a, b) => {
     const x = Math.max(0, Math.min(1, (t - a) / (b - a)));

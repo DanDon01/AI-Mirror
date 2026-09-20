@@ -74,7 +74,7 @@ const Markets = (function () {
   /** A sparkline, drawn to the same scale as its own extremes so a quiet
       stock still shows shape rather than a flat line. */
   function spark(values, rising) {
-    const W = 132, H = 96, PAD = 6;
+    const W = 116, H = 84, PAD = 5;
     const lo = Math.min.apply(null, values);
     const hi = Math.max.apply(null, values);
     const span = (hi - lo) || 1;

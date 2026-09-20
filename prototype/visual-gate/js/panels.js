@@ -204,7 +204,7 @@ const Panels = (function () {
     // scale that breaks the moment a dimension changes. The viewBox is
     // the element's own size: at 582x360 into a 582x292 box the whole
     // drawing was being letterboxed to 81% and centred.
-    const BW = 582, BH = 292, PAD = 12;
+    const BW = 523, BH = 263, PAD = 11;
     const all = [];
     structure.concat(floor, plinth, pad).forEach(function (g) { all.push(g[0], g[1]); });
     windows.forEach(function (w) { w.forEach(function (p) { all.push(p); }); });
@@ -347,7 +347,7 @@ const Panels = (function () {
   }
 
   function buildEnergy(d) {
-    const TALL = 54;
+    const TALL = 49;
     const peak = d.recent.reduce(function (m, r) { return Math.max(m, r[0]); }, 1);
 
     // Each bar is the whole load, with the part the roof covered filled

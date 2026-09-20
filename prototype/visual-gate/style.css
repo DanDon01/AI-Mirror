@@ -151,34 +151,39 @@ body {
 /* Vertical budget for the whole plate, since every block below depends
    on it and the numbers are otherwise unexplainable:
 
-     0    - 260   persistent stamp and weather glyph
-     260  - 1150  the reflection: face and shoulders, never covered
-     310  - 1090  brain, centred at 700, over the head
-     1019 - 1681  heart, centred at 1350, over the chest
-     1720 - 2232  panel band, two slots
-     2264 - 2482  markets rail
+     0    - 400   persistent stamp and weather glyph
+     400  - 1150  the reflection: face and shoulders, never covered
+     419  - 1121  brain, centred at 770, over the head
+     1172 - 1768  heart, centred at 1470, over the chest
+     1857 - 2318  panel band, two slots
+     2352 - 2540  markets rail
 
-   The heart is the binding constraint: it is the lowest the biometric
-   object ever sits, and the panel band starts below it. */
+   The heart is still the binding constraint: it is the lowest the
+   biometric object ever sits, and the panel band starts below it.
+   Everything below the reflection moved down together, so the strip of
+   dead glass under the rail is now about a finger's width. */
 
 .bio {
   position: absolute;
-  left: 170px; top: 150px;
-  width: 1100px; height: 1100px;
+  left: 225px; top: 275px;
+  width: 990px; height: 990px;
   will-change: transform;
 }
 
+/* Both forms are fitted to the canvas by the camera, so the element's
+   own size is the size of the object: 1100 to 990 takes 10% off the
+   heart and the brain together without touching a shader. */
 #bioCanvas {
   position: absolute;
   left: 0; top: 0;
-  width: 1100px; height: 1100px;
+  width: 990px; height: 990px;
   display: block;
 }
 
 .bio-halo {
   position: absolute;
-  left: 550px; top: 550px;
-  width: 1000px; height: 760px;
+  left: 495px; top: 495px;
+  width: 900px; height: 684px;
   transform: translate(-50%, -50%);
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 50%,
@@ -200,13 +205,16 @@ body {
 }
 
 /* Opposite sides, as in the mockup: the readout never sits under the
-   form it belongs to, and the two states never share an edge. */
-#bioHeart { left: -66px; top: 452px; }
-#bioSleep { left: 792px; top: 438px; }
+   form it belongs to, and the two states never share an edge. Both sit
+   against the edge of their own form rather than out at the margin -
+   at half size the heart's figure was stranded 300px away from it and
+   read as an unrelated number. */
+#bioHeart { left: 140px; top: 428px; }
+#bioSleep { left: 800px; top: 452px; }
 
 .bio-n {
   font-family: var(--ff-display);
-  font-size: 176px;
+  font-size: 88px;
   line-height: 0.82;
   letter-spacing: -0.03em;
   color: var(--ink);
@@ -214,13 +222,13 @@ body {
 
 .bio-u {
   font-family: var(--ff-text);
-  font-size: 30px;
+  font-size: 15px;
   font-weight: 500;
   letter-spacing: 0.12em;
   color: var(--ink-3);
 }
 
-#bioSleep .bio-n { font-size: 120px; }
+#bioSleep .bio-n { font-size: 60px; }
 
 /* ======================= PANELS ===========================
    Two slots in a band between the reflection and the markets rail.
@@ -229,24 +237,26 @@ body {
 
 .panels {
   position: absolute;
-  left: 0; top: 1720px;
-  width: 1440px; height: 512px;
+  left: 0; top: 1857px;
+  width: 1440px; height: 461px;
   perspective: 2400px;
 }
 
+/* The pair is scaled about its own centre rather than pinned to the
+   edges, so the 10% comes off the band symmetrically. */
 .slot {
   position: absolute;
   top: 0;
-  width: 630px; height: 512px;
+  width: 567px; height: 461px;
   transform-style: preserve-3d;
 }
-.slot[data-slot="0"] { left: 80px; }
-.slot[data-slot="1"] { left: 730px; }
+.slot[data-slot="0"] { left: 144px; }
+.slot[data-slot="1"] { left: 729px; }
 
 .panel {
   position: absolute;
   inset: 0;
-  padding: 30px 38px 28px;
+  padding: 27px 34px 25px;
   opacity: 0;
   overflow: hidden;
   transform-origin: 50% 100%;
@@ -280,7 +290,7 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  font-size: 21px;
+  font-size: 19px;
   font-weight: 500;
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -296,15 +306,15 @@ body {
 
 /* The hero figure for a panel: serif, large, with a small tracked unit
    underneath rather than a KEY: VALUE pair beside it. */
-.p-hero { font-family: var(--ff-display); font-size: 92px; line-height: 0.9;
+.p-hero { font-family: var(--ff-display); font-size: 83px; line-height: 0.9;
           letter-spacing: -0.02em; color: var(--ink); }
-.p-sub  { margin-top: 10px; font-size: 21px; font-weight: 500;
+.p-sub  { margin-top: 9px; font-size: 19px; font-weight: 500;
           letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-3); }
 
 /* ---- 5. Home energy ---- */
 
-.p-energy .house { position: absolute; left: 24px; top: 68px; width: 582px; height: 292px; }
-.p-energy .house svg { display: block; width: 582px; height: 292px; }
+.p-energy .house { position: absolute; left: 22px; top: 61px; width: 523px; height: 263px; }
+.p-energy .house svg { display: block; width: 523px; height: 263px; }
 
 /* Structure reads as drawn line, lit rooms as warm glass. The hierarchy
    is carried by weight and temperature, not by colour-coding a legend. */
@@ -408,7 +418,7 @@ body {
 
 .p-energy .car-pct {
   font-family: var(--ff-display);
-  font-size: 27px;
+  font-size: 24px;
   fill: var(--ink-2);
 }
 .p-energy .car.on ~ .car-pct { fill: #FFD6A2; }
@@ -416,8 +426,8 @@ body {
 /* Warm light behind the generation figure, on the roof's side. */
 .p-energy .sun {
   position: absolute;
-  right: -30px; top: 6px;
-  width: 300px; height: 300px;
+  right: -27px; top: 5px;
+  width: 270px; height: 270px;
   background: radial-gradient(closest-side circle at 50% 50%,
     rgba(255, 206, 140, 0.16) 0%,
     rgba(255, 170, 90, 0.055) 44%,
@@ -425,23 +435,23 @@ body {
   pointer-events: none;
 }
 
-.p-energy .solar { position: absolute; right: 38px; top: 74px; text-align: right; }
+.p-energy .solar { position: absolute; right: 34px; top: 67px; text-align: right; }
 .p-energy .solar .n {
   font-family: var(--ff-display);
-  font-size: 46px; line-height: 0.95;
+  font-size: 41px; line-height: 0.95;
   letter-spacing: -0.01em;
   color: #FFD6A2;
 }
-.p-energy .solar .p-sub { margin-top: 6px; font-size: 18px; color: #8C7A63; }
+.p-energy .solar .p-sub { margin-top: 5px; font-size: 16px; color: #8C7A63; }
 
-.p-energy .foot  { position: absolute; left: 38px; bottom: 30px;
-                   display: flex; align-items: flex-end; gap: 30px; }
-.p-energy .bars  { display: flex; align-items: flex-end; gap: 7px; height: 54px; }
+.p-energy .foot  { position: absolute; left: 34px; bottom: 27px;
+                   display: flex; align-items: flex-end; gap: 27px; }
+.p-energy .bars  { display: flex; align-items: flex-end; gap: 6px; height: 49px; }
 
 /* Whole load cool, the share the roof covered warm from the bottom. */
 .p-energy .bars i {
   position: relative;
-  display: block; width: 9px;
+  display: block; width: 8px;
   background: linear-gradient(to top, rgba(150,190,240,0.26), rgba(196,222,255,0.80));
 }
 .p-energy .bars b {
@@ -453,20 +463,20 @@ body {
 
 /* ---- 6. Calendar ---- */
 
-.p-cal .rows { margin-top: 22px; }
+.p-cal .rows { margin-top: 20px; }
 .p-cal .row {
-  display: flex; align-items: center; gap: 28px;
-  height: 94px;
+  display: flex; align-items: center; gap: 25px;
+  height: 85px;
   border-top: 1px solid rgba(154, 184, 232, 0.13);
 }
 .p-cal .row:last-child { border-bottom: 1px solid rgba(154, 184, 232, 0.13); }
 .p-cal .at {
-  font-size: 30px; color: var(--ink-2); opacity: 0.72;
-  font-variant-numeric: tabular-nums; flex: none; width: 104px;
+  font-size: 27px; color: var(--ink-2); opacity: 0.72;
+  font-variant-numeric: tabular-nums; flex: none; width: 94px;
 }
-.p-cal .what { font-family: var(--ff-display); font-size: 40px; color: var(--ink); flex: 1; }
+.p-cal .what { font-family: var(--ff-display); font-size: 36px; color: var(--ink); flex: 1; }
 .p-cal .pip {
-  width: 11px; height: 11px; border-radius: 50%; flex: none;
+  width: 10px; height: 10px; border-radius: 50%; flex: none;
   background: var(--glass); box-shadow: 0 0 14px rgba(168,196,236,0.7);
 }
 .p-cal .row.warm .pip { background: var(--warm); box-shadow: 0 0 14px rgba(255,178,94,0.75); }
@@ -477,30 +487,30 @@ body {
    the lit edge is on screen. Drawn by Art.limb. */
 .p-news .limb {
   position: absolute;
-  left: -130px; bottom: -408px;
-  width: 620px; height: 620px;
+  left: -117px; bottom: -367px;
+  width: 558px; height: 558px;
 }
 .p-news .src {
   display: inline-block;
-  margin-top: 4px; padding: 8px 14px;
-  font-size: 22px; font-weight: 700; letter-spacing: 0.08em;
+  margin-top: 4px; padding: 7px 13px;
+  font-size: 20px; font-weight: 700; letter-spacing: 0.08em;
   color: #0B0D12; background: var(--ink);
 }
 .p-news .head {
   position: relative;
-  margin-top: 32px;
+  margin-top: 29px;
   font-family: var(--ff-display);
-  font-size: 52px; line-height: 1.16;
+  font-size: 47px; line-height: 1.16;
   color: var(--ink);
 }
 .p-news .rule {
-  position: absolute; left: 38px; bottom: 84px;
-  width: 104px; height: 2px;
+  position: absolute; left: 34px; bottom: 76px;
+  width: 94px; height: 2px;
   background: linear-gradient(to right, rgba(226,236,255,0.85), rgba(226,236,255,0.10));
 }
 .p-news .when {
-  position: absolute; left: 38px; bottom: 40px;
-  font-size: 22px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+  position: absolute; left: 34px; bottom: 36px;
+  font-size: 20px; color: var(--ink-3); font-variant-numeric: tabular-nums;
 }
 
 /* ---- 8. Weather detail ---- */
@@ -509,8 +519,8 @@ body {
    scene competing with the one in the corner. */
 .p-wx .glow {
   position: absolute;
-  right: -120px; top: -160px;
-  width: 520px; height: 460px;
+  right: -108px; top: -144px;
+  width: 468px; height: 414px;
   /* closest-side, so the falloff is guaranteed to finish inside the box.
      A farthest-corner gradient was still faintly lit at the left edge
      and the panel showed a vertical seam where it was clipped. */
@@ -521,45 +531,47 @@ body {
   pointer-events: none;
 }
 
-.p-wx .alert { position: absolute; right: 38px; top: 78px; text-align: right; }
-.p-wx .alert-k { font-size: 24px; letter-spacing: 0.04em; color: var(--cool); opacity: 0.8; }
+.p-wx .alert { position: absolute; right: 34px; top: 70px; text-align: right; }
+.p-wx .alert-k { font-size: 22px; letter-spacing: 0.04em; color: var(--cool); opacity: 0.8; }
 .p-wx .alert-v { margin-top: 8px; font-family: var(--ff-display);
-                 font-size: 86px; line-height: 0.9; color: var(--ink); }
+                 font-size: 77px; line-height: 0.9; color: var(--ink); }
 
-.p-wx .wave { position: absolute; left: 0; bottom: 172px; width: 630px; height: 108px; }
+.p-wx .wave { position: absolute; left: 0; bottom: 155px; width: 567px; height: 97px; }
 
 .p-wx .hours {
-  position: absolute; left: 38px; right: 38px; bottom: 34px;
+  position: absolute; left: 34px; right: 34px; bottom: 31px;
   display: flex; justify-content: space-between;
 }
 .p-wx .hour { text-align: center; }
-.p-wx .hour .h  { font-size: 22px; color: var(--ink-2); opacity: 0.68;
+.p-wx .hour .h  { font-size: 20px; color: var(--ink-2); opacity: 0.68;
                   font-variant-numeric: tabular-nums; }
-.p-wx .hour svg { display: block; margin: 16px auto 14px; width: 46px; height: 46px; }
-.p-wx .hour .c  { font-family: var(--ff-display); font-size: 34px; color: var(--ink); }
+.p-wx .hour svg { display: block; margin: 14px auto 13px; width: 41px; height: 41px; }
+.p-wx .hour .c  { font-family: var(--ff-display); font-size: 31px; color: var(--ink); }
 
 /* ======================= MARKETS ==========================
    Persistent, on the floor of the screen. The rail is defined by its
    bottom edge: a hairline brightest at the centre, which is what makes
    it read as a lit surface rather than a bordered box. */
 
+/* Dropped close to the bottom edge: at 78px up there was a band of dead
+   glass under the rail doing nothing. */
 .markets {
   position: absolute;
-  left: 0; bottom: 78px;
-  width: 1440px; height: 218px;
+  left: 0; bottom: 20px;
+  width: 1440px; height: 188px;
 }
 
 .markets-head {
   position: relative;
-  height: 64px;
-  padding-left: 96px;
+  height: 56px;
+  padding-left: 88px;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
 .markets-label {
-  font-size: 23px;
+  font-size: 21px;
   font-weight: 500;
   letter-spacing: 0.34em;
   text-transform: uppercase;
@@ -567,12 +579,12 @@ body {
   opacity: 0.66;
 }
 
-.markets-wave { width: 330px; height: 46px; margin-left: 10px; }
+.markets-wave { width: 290px; height: 40px; margin-left: 9px; }
 
 .markets-live {
   display: flex; align-items: center; gap: 12px;
-  margin-left: -186px;
-  font-size: 20px; font-weight: 500; letter-spacing: 0.26em;
+  margin-left: -164px;
+  font-size: 18px; font-weight: 500; letter-spacing: 0.26em;
   text-transform: uppercase; color: var(--ink-2); opacity: 0.72;
 }
 .markets-live i {
@@ -585,7 +597,7 @@ body {
 
 .markets-rail {
   position: relative;
-  height: 150px;
+  height: 132px;
   overflow: hidden;
   background: linear-gradient(to bottom,
     rgba(122, 156, 206, 0.050) 0%,
@@ -602,7 +614,7 @@ body {
   position: absolute;
   z-index: 2;
   left: 0; top: 0; bottom: 0;
-  width: 300px;
+  width: 264px;
   background: linear-gradient(to right, #000 0%, #000 58%, rgba(0, 0, 0, 0) 100%);
 }
 
@@ -628,8 +640,8 @@ body {
 .markets .limb {
   position: absolute;
   z-index: 3;
-  left: -196px; bottom: -150px;
-  width: 330px; height: 330px;
+  left: -172px; bottom: -132px;
+  width: 290px; height: 290px;
   pointer-events: none;
 }
 
@@ -639,7 +651,7 @@ body {
   position: absolute;
   z-index: 1;
   left: 0; top: 0;
-  height: 150px;
+  height: 132px;
   display: flex;
   align-items: center;
   will-change: transform;
@@ -648,20 +660,20 @@ body {
 .cell {
   display: flex;
   align-items: center;
-  gap: 30px;
-  height: 150px;
-  padding: 0 40px;
+  gap: 26px;
+  height: 132px;
+  padding: 0 35px;
   border-left: 1px solid rgba(154, 184, 232, 0.16);
 }
 
 .cell .fig { line-height: 1.18; }
-.cell .sym   { font-family: var(--ff-display); font-size: 40px; color: var(--ink); }
-.cell .price { font-family: var(--ff-display); font-size: 36px; color: var(--ink);
+.cell .sym   { font-family: var(--ff-display); font-size: 35px; color: var(--ink); }
+.cell .price { font-family: var(--ff-display); font-size: 32px; color: var(--ink);
                font-variant-numeric: tabular-nums; }
-.cell .pct   { font-size: 30px; font-variant-numeric: tabular-nums; }
+.cell .pct   { font-size: 26px; font-variant-numeric: tabular-nums; }
 .cell.up   .pct { color: var(--rise); }
 .cell.down .pct { color: var(--fall); }
-.cell svg { width: 132px; height: 96px; display: block; }
+.cell svg { width: 116px; height: 84px; display: block; }
 
 /* A run of cells scrolls under this, so it has to be wide enough to fade
    one out completely before the label. A narrow plate with a hard edge
@@ -670,26 +682,27 @@ body {
   position: absolute;
   z-index: 2;
   right: 0; top: 0;
-  width: 420px; height: 150px;
-  display: flex; align-items: center; justify-content: flex-end; gap: 14px;
-  padding-right: 44px;
-  font-size: 21px; font-weight: 500; letter-spacing: 0.22em;
+  width: 370px; height: 132px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+  padding-right: 39px;
+  font-size: 19px; font-weight: 500; letter-spacing: 0.22em;
   text-transform: uppercase; color: #6E7482;
   background: linear-gradient(to right, rgba(0,0,0,0) 0%, #000 34%, #000 100%);
 }
 .markets-more::before {
   content: "";
   position: absolute;
-  left: 230px; top: 0; bottom: 0;
+  left: 202px; top: 0; bottom: 0;
   width: 1px;
   background: rgba(154, 184, 232, 0.16);
 }
 
 /* ======================= UTILITY ========================== */
 
+/* Moved to the top: the rail now sits where this used to. */
 .fixture-mark {
   position: absolute;
-  left: 50%; bottom: 26px;
+  left: 50%; top: 22px;
   transform: translateX(-50%);
   margin: 0;
   font-size: 15px;
