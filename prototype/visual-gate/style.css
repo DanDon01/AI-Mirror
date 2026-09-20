@@ -256,37 +256,24 @@ body {
 .slot[data-slot="0"] { left: 144px; }
 .slot[data-slot="1"] { left: 729px; }
 
+/* No card. The panel is a positioning frame and nothing else: no fill,
+   no edges, no clipping. Everything inside floats on the mirror, which
+   is what black glass is for. Two consequences worth knowing - nothing
+   is cropped to the panel any more, so anything that used to rely on
+   being cut off by an edge has to be a whole shape; and the element
+   carries no opacity of its own, because opacity is a grouping property
+   and would flatten the calendar's blades back into the plane. */
 .panel {
   position: absolute;
   inset: 0;
   padding: 27px 34px 25px;
-  opacity: 0;
-  overflow: hidden;
   transform-origin: 50% 100%;
-  /* A lit top edge with side rails that dissolve downward, over a wash
-     that fades to nothing. A real border on all four sides turned these
-     into cards, which is the one thing a two-way mirror cannot carry. */
-  background-repeat: no-repeat;
-  background-image:
-    linear-gradient(to right,
-      rgba(206, 228, 255, 0.04), rgba(206, 228, 255, 0.46) 16%,
-      rgba(206, 228, 255, 0.18) 68%, rgba(206, 228, 255, 0)),
-    linear-gradient(to bottom, rgba(168, 198, 244, 0.26), rgba(168, 198, 244, 0)),
-    linear-gradient(to bottom, rgba(168, 198, 244, 0.26), rgba(168, 198, 244, 0)),
-    linear-gradient(158deg,
-      rgba(152, 184, 232, 0.058) 0%,
-      rgba(96, 126, 178, 0.022) 52%,
-      rgba(0, 0, 0, 0) 100%);
-  background-size: 100% 1px, 1px 76%, 1px 76%, 100% 100%;
-  background-position: left top, left top, right top, left top;
-  box-shadow: 0 0 90px rgba(62, 104, 176, 0.09);
+  transform-style: preserve-3d;
 }
 
-.slot[data-slot="0"] .panel { transform: rotateY(2.4deg); }
-.slot[data-slot="1"] .panel { transform: rotateY(-2.4deg); }
+.slot[data-slot="0"] .panel { transform: rotateY(2deg); }
+.slot[data-slot="1"] .panel { transform: rotateY(-2deg); }
 
-/* The glass arrives, then what is written on it. panels.js drives
-   --content a little behind the panel's own opacity. */
 .panel > * { opacity: var(--content, 1); }
 
 .p-head {
@@ -466,32 +453,69 @@ body {
 
 /* ---- 6. Calendar ---- */
 
-.p-cal .rows { margin-top: 20px; }
-.p-cal .row {
-  display: flex; align-items: center; gap: 25px;
-  height: 85px;
-  border-top: 1px solid rgba(154, 184, 232, 0.13);
+/* The appointments stand in depth rather than sitting in a list. The
+   container keeps opacity 1 on purpose: the blades carry their own, and
+   a fading wrapper would collapse the 3D it exists to hold. */
+.p-cal .blades {
+  margin: 18px -34px 0 0;
+  transform-style: preserve-3d;
+  opacity: 1;
 }
-.p-cal .row:last-child { border-bottom: 1px solid rgba(154, 184, 232, 0.13); }
+
+.p-cal .blade {
+  display: flex; align-items: center; gap: 25px;
+  height: 84px;
+  margin-bottom: 12px;
+  padding: 0 30px 0 22px;
+  transform-origin: 100% 50%;
+  will-change: transform, opacity;
+  /* A slab caught edge on: a lit leading edge, a wash across the face,
+     nothing at all on the trailing side. */
+  background: linear-gradient(100deg,
+    rgba(150, 186, 232, 0.10) 0%,
+    rgba(110, 150, 205, 0.042) 44%,
+    rgba(0, 0, 0, 0) 100%);
+  border-left: 2px solid rgba(198, 222, 255, 0.50);
+  box-shadow: -12px 0 30px rgba(70, 116, 190, 0.13);
+}
+
+/* The next appointment: nearest the viewer, and --lift rises with it as
+   its start time closes in. */
+.p-cal .blade.lead {
+  border-left-color: rgba(230, 242, 255, calc(0.62 + 0.38 * var(--lift, 0)));
+  background: linear-gradient(100deg,
+    rgba(180, 210, 250, calc(0.11 + 0.11 * var(--lift, 0))) 0%,
+    rgba(120, 160, 215, 0.055) 44%,
+    rgba(0, 0, 0, 0) 100%);
+  box-shadow: -16px 0 46px rgba(112, 162, 236, calc(0.15 + 0.25 * var(--lift, 0)));
+}
+
 .p-cal .at {
   font-size: 27px; color: var(--ink-2); opacity: 0.72;
   font-variant-numeric: tabular-nums; flex: none; width: 94px;
 }
 .p-cal .what { font-family: var(--ff-display); font-size: 36px; color: var(--ink); flex: 1; }
+.p-cal .blade.lead .at   { opacity: calc(0.78 + 0.22 * var(--lift, 0)); }
+.p-cal .blade.lead .what { font-size: 39px; }
 .p-cal .pip {
   width: 10px; height: 10px; border-radius: 50%; flex: none;
   background: var(--glass); box-shadow: 0 0 14px rgba(168,196,236,0.7);
 }
-.p-cal .row.warm .pip { background: var(--warm); box-shadow: 0 0 14px rgba(255,178,94,0.75); }
+.p-cal .blade.warm .pip { background: var(--warm); box-shadow: 0 0 14px rgba(255,178,94,0.75); }
+.p-cal .blade.lead .pip {
+  box-shadow: 0 0 calc(14px + 16px * var(--lift, 0)) rgba(198, 222, 255, 0.95);
+}
 
 /* ---- 7. News ---- */
 
-/* A limb, not a planet: the sphere's centre is off the panel, so only
-   the lit edge is on screen. Drawn by Art.limb. */
+/* A whole sphere now, not a limb. It used to be a much larger circle
+   with its centre off the panel, cropped to an arc by the card's edge -
+   with no card there is nothing to crop it, and an arc that stops in
+   mid-air reads as a stray line. */
 .p-news .limb {
   position: absolute;
-  left: -117px; bottom: -367px;
-  width: 558px; height: 558px;
+  left: 300px; bottom: 18px;
+  width: 232px; height: 232px;
 }
 .p-news .src {
   display: inline-block;

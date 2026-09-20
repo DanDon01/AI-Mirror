@@ -24,22 +24,28 @@ const Art = (function () {
     return (
       '<svg viewBox="0 0 660 660" aria-hidden="true">' +
       '<defs>' +
-      '<radialGradient id="' + body + '" cx="74%" cy="24%" r="66%">' +
-      '<stop offset="0%"   stop-color="#A8CCF6" stop-opacity="0.34"/>' +
-      '<stop offset="22%"  stop-color="#4A74A8" stop-opacity="0.13"/>' +
-      '<stop offset="52%"  stop-color="#132538" stop-opacity="0.05"/>' +
+      '<radialGradient id="' + body + '" cx="76%" cy="22%" r="70%">' +
+      '<stop offset="0%"   stop-color="#BBD8FF" stop-opacity="0.46"/>' +
+      '<stop offset="15%"  stop-color="#6E9AD0" stop-opacity="0.23"/>' +
+      '<stop offset="37%"  stop-color="#24405F" stop-opacity="0.11"/>' +
+      '<stop offset="63%"  stop-color="#0A1320" stop-opacity="0.05"/>' +
       '<stop offset="100%" stop-color="#000000" stop-opacity="0"/>' +
       '</radialGradient>' +
       '<linearGradient id="' + rim + '" x1="0" y1="1" x2="1" y2="0">' +
       '<stop offset="0%"   stop-color="#BFDCFF" stop-opacity="0"/>' +
-      '<stop offset="58%"  stop-color="#BFDCFF" stop-opacity="0.12"/>' +
-      '<stop offset="88%"  stop-color="#D8E6FF" stop-opacity="0.58"/>' +
-      '<stop offset="100%" stop-color="#EAF2FF" stop-opacity="0.95"/>' +
+      '<stop offset="55%"  stop-color="#BFDCFF" stop-opacity="0.14"/>' +
+      '<stop offset="86%"  stop-color="#D8E6FF" stop-opacity="0.62"/>' +
+      '<stop offset="100%" stop-color="#EAF2FF" stop-opacity="0.96"/>' +
       '</linearGradient>' +
       '</defs>' +
       '<circle cx="330" cy="330" r="327" fill="url(#' + body + ')"/>' +
-      '<circle cx="330" cy="330" r="327" fill="none" ' +
-      'stroke="url(#' + rim + ')" stroke-width="2.4"/>' +
+      // non-scaling-stroke, because the same 660-unit drawing is used at
+      // 232px and at 290px: without it the rim is scaled down with the
+      // viewBox to well under a pixel and the sphere reads as a flat
+      // grey disc with no lit edge at all.
+      '<circle cx="330" cy="330" r="326" fill="none" ' +
+      'vector-effect="non-scaling-stroke" ' +
+      'stroke="url(#' + rim + ')" stroke-width="1.8"/>' +
       '</svg>'
     );
   }

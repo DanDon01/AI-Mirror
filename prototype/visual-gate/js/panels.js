@@ -381,14 +381,57 @@ const Panels = (function () {
 
   // ---- 6. Calendar ---------------------------------------------------
 
+  // Not a list in a card: a stack of glass blades standing in depth,
+  // the next appointment nearest the viewer and the rest receding. They
+  // arrive from the right edge, furthest last.
   function buildCalendar(events) {
-    const rows = events.slice(0, 4).map(function (e) {
-      return '<div class="row ' + (e.tone === 'warm' ? 'warm' : '') + '">' +
+    const rows = events.slice(0, 4).map(function (e, i) {
+      return '<div class="blade' + (i === 0 ? ' lead' : '') +
+             (e.tone === 'warm' ? ' warm' : '') + '">' +
              '<span class="at">' + e.at + '</span>' +
              '<span class="what">' + e.title + '</span>' +
              '<span class="pip"></span></div>';
     }).join('');
-    return '<div class="p-head">Next up</div><div class="rows">' + rows + '</div>';
+    return '<div class="p-head">Next up</div><div class="blades">' + rows + '</div>';
+  }
+
+  /** Drives the blade stack.
+
+      Depth, arrival and brightness are all functions of the panel's own
+      progress, so a still at t is the same stack every time.
+
+      The lead blade advances and brightens as its start time nears.
+      Urgency comes from the data - minutes until the appointment - so
+      the mapping is the real one; the prototype's fixture just holds a
+      value close enough to the hour for the effect to be visible. */
+  function bladeTicker(root, events) {
+    const blades = Array.prototype.slice.call(root.querySelectorAll('.blade'));
+    const mins = (events[0] && events[0].minutes_until);
+    const urgency = typeof mins === 'number'
+      ? Math.max(0, Math.min(1, 1 - mins / 120)) : 0;
+
+    return function (p) {
+      for (let i = 0; i < blades.length; i++) {
+        const lead = i === 0;
+        // Staggered arrival: the nearest blade lands first and the ones
+        // behind it follow, so the stack assembles front to back.
+        const a = Math.max(0, Math.min(1, (p - i * 0.11) / 0.60));
+        const ease = a * a * (3 - 2 * a);
+
+        // The imminent appointment keeps creeping toward the viewer for
+        // as long as it is on screen, rather than snapping to a pose.
+        const creep = lead ? urgency * (0.30 + 0.70 * ramp(p, 0.25, 1)) : 0;
+
+        const z = 54 + creep * 104 - i * 98;
+        const x = (1 - ease) * 320 + i * 22;
+        blades[i].style.transform =
+          'translate3d(' + x.toFixed(1) + 'px,0,' + z.toFixed(1) + 'px) ' +
+          'rotateY(' + (-10 + i * 1.6).toFixed(1) + 'deg)';
+        blades[i].style.opacity =
+          (ease * (lead ? 1 : 0.88 - i * 0.13)).toFixed(3);
+        if (lead) blades[i].style.setProperty('--lift', creep.toFixed(3));
+      }
+    };
   }
 
   // ---- 7. News -------------------------------------------------------
@@ -464,7 +507,11 @@ const Panels = (function () {
       el.className = 'panel ' + made[0];
       el.innerHTML = made[1];
       slots[s.slot].appendChild(el);
-      return { el: el, from: s.from, to: s.to, tilt: s.slot === 0 ? 2.4 : -2.4 };
+      return {
+        el: el, from: s.from, to: s.to,
+        tilt: s.slot === 0 ? 2.0 : -2.0,
+        tick: s.kind === 'cal' ? bladeTicker(el, data.calendar) : null,
+      };
     });
   }
 
@@ -480,12 +527,14 @@ const Panels = (function () {
         continue;
       }
       if (el.style.visibility === 'hidden') el.style.visibility = '';
-      el.style.opacity = p.toFixed(3);
+      // Opacity lives on the children, not here: an opacity below 1 is a
+      // grouping property, and it would flatten the calendar's blades
+      // back into the plane they are supposed to be standing out of.
       el.style.transform =
-        'rotateY(' + e.tilt + 'deg) translate3d(0,' + ((1 - p) * 44).toFixed(1) +
-        'px,0) scale(' + (0.968 + 0.032 * p).toFixed(4) + ')';
-      // The glass arrives before what is written on it.
-      el.style.setProperty('--content', ramp(p, 0.38, 1).toFixed(3));
+        'rotateY(' + e.tilt + 'deg) translate3d(0,' +
+        ((1 - p) * 40).toFixed(1) + 'px,0)';
+      el.style.setProperty('--content', p.toFixed(3));
+      if (e.tick) e.tick(p);
     }
   }
 

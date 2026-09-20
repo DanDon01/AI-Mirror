@@ -48,7 +48,7 @@
   },
 
   "calendar": [
-    { "at": "09:00", "title": "Team stand-up",  "tone": "cool" },
+    { "at": "09:00", "title": "Team stand-up",  "tone": "cool", "minutes_until": 24 },
     { "at": "11:30", "title": "Gym",            "tone": "warm" },
     { "at": "14:00", "title": "Project review", "tone": "cool" },
     { "at": "18:00", "title": "Dinner",         "tone": "cool" }
