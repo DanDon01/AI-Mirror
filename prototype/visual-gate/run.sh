@@ -13,17 +13,21 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 HUD=1
-FIT=0
+# Fit by default: the plate is authored at 1440x2560 and the display may
+# not be. At native size this is a no-op; anywhere else it removes the
+# need to reach for the browser zoom.
+FIT=1
 KIOSK="--kiosk"
 for arg in "$@"; do
   case "$arg" in
     --fit)      FIT=1 ;;
+    --native)   FIT=0 ;;
     # A window is never 1440x2560, so windowed implies fit; without it
     # you get the top-left corner of the plate and nothing else.
     --windowed) KIOSK="--window-size=760,1350"; FIT=1 ;;
     --plain)    HUD=0 ;;
     -h|--help)
-      echo "usage: ./run.sh [--fit] [--windowed] [--plain]"; exit 0 ;;
+      echo "usage: ./run.sh [--native] [--windowed] [--plain]"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done

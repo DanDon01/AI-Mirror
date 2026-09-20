@@ -75,6 +75,7 @@ window.Biometrics = (function () {
       float sq = uBeat * vent * uBeatEnabled;
       p -= normal * sq * 0.050;
       p.y -= position.y * sq * 0.12;
+      // the mesh is scaled on the object, so displacement stays local
       float tw = sq * 0.19 * position.y;
       float c = cos(tw), s = sin(tw);
       p.xz = mat2(c, -s, s, c) * p.xz;
@@ -123,6 +124,7 @@ window.Biometrics = (function () {
     attribute float aSeed;
 
     uniform float uMorph, uBeat, uTime, uSize, uAlpha, uScatter;
+    uniform float uHeartScale;
     uniform vec3  uDeepA, uBaseA, uHotA, uVeinA;
     uniform vec3  uDeepB, uBaseB, uHotB, uVeinB;
 
@@ -134,7 +136,7 @@ window.Biometrics = (function () {
       float m = clamp((uMorph - delay) / 0.55, 0.0, 1.0);
       m = m * m * (3.0 - 2.0 * m);
 
-      vec3 pos = mix(position, aBrainPos, m);
+      vec3 pos = mix(position * uHeartScale, aBrainPos, m);
       vec3 nrm = normalize(mix(aNormal, aBrainNormal, m));
       float ao = mix(aAO.x, aAO.y, m);
       float ves = mix(aVessel.x, aVessel.y, m);
@@ -142,8 +144,8 @@ window.Biometrics = (function () {
       // Contraction, matched to the mesh so the two stay registered.
       float vent = smoothstep(0.18, -0.12, position.y);
       float sq = uBeat * vent * (1.0 - m);
-      pos -= nrm * sq * 0.050;
-      pos.y -= position.y * sq * 0.12;
+      pos -= nrm * sq * 0.050 * uHeartScale;
+      pos.y -= position.y * uHeartScale * sq * 0.12;
       float tw = sq * 0.19 * position.y;
       float c = cos(tw), s = sin(tw);
       pos.xz = mat2(c, -s, s, c) * pos.xz;
@@ -274,7 +276,10 @@ window.Biometrics = (function () {
     };
   }
 
-  async function init(canvas) {
+  let loopSeconds = 48;
+
+  async function init(canvas, opts) {
+    loopSeconds = (opts && opts.loop) || 48;
     const [heartGeo, brainGeo, heartPts, brainPts, fib] = await Promise.all([
       loadMesh('assets/anatomy/heart.mesh'),
       loadMesh('assets/anatomy/brain.mesh'),
@@ -329,6 +334,7 @@ window.Biometrics = (function () {
       uBeat: { value: 0 },
       uTime: { value: 0 },
       uScatter: { value: 0.085 },
+      uHeartScale: { value: 0.85 },
       uSize: { value: 7.6 },
       uAlpha: { value: 0.80 },
       uDeepA: { value: new THREE.Color(0x2a0407) },
@@ -363,6 +369,7 @@ window.Biometrics = (function () {
     meshHeart.uBeatEnabled.value = 1.0;
 
     heartMesh = new THREE.Mesh(heartGeo, hm.mat);
+    heartMesh.scale.setScalar(uniforms.uHeartScale.value);
     brainMesh = new THREE.Mesh(brainGeo, bm.mat);
     heartMesh.renderOrder = 0;
     brainMesh.renderOrder = 0;
@@ -509,8 +516,12 @@ window.Biometrics = (function () {
     fibUniforms.uOpacity.value = tractOpacity;
     fibres.visible = tractOpacity > 0.01;
 
-    group.rotation.y = t * 0.16;
-    group.rotation.x = Math.sin(t * 0.09) * 0.10;
+    // Exactly one turn per loop, and a whole number of tilt cycles.
+    // Any other rate leaves the object part-way round when the timeline
+    // wraps, and it visibly snaps back to its start position.
+    const cycle = t / loopSeconds;
+    group.rotation.y = cycle * Math.PI * 2.0;
+    group.rotation.x = Math.sin(cycle * Math.PI * 4.0) * 0.10;
     renderer.render(scene, camera);
   }
 
