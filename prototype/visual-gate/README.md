@@ -101,6 +101,23 @@ draws every second particle (`HALO_STRIDE`) at `uAlpha` 0.115. Drawing
 all of them was 3.26x canvas on its own, and halving it was visually
 indistinguishable at 2.6% mean luminance difference.
 
+## The beat
+
+Measured between peak systole and full relaxation, one beat apart at the
+fixture's 58 bpm:
+
+| | change |
+|---|---|
+| silhouette area | -16.3% |
+| height | -10.8% |
+| width | -3.0% |
+| apex | rises 86px toward the base |
+
+Height contracts roughly 3.6x more than width, which is the point: a
+uniform scale would move both equally and read as a pulsing balloon. The
+atria and great vessels barely move, because the contraction is masked
+to the ventricles.
+
 ## Capture
 
 ```bash
