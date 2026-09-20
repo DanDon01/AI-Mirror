@@ -12,16 +12,39 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PARAMS="hud=1"
+HUD=1
+FIT=0
 KIOSK="--kiosk"
 for arg in "$@"; do
   case "$arg" in
-    --fit)      PARAMS="$PARAMS&fit=1" ;;
-    --windowed) KIOSK="--window-size=720,1280" ;;
-    --plain)    PARAMS="${PARAMS/hud=1/}" ;;
+    --fit)      FIT=1 ;;
+    # A window is never 1440x2560, so windowed implies fit; without it
+    # you get the top-left corner of the plate and nothing else.
+    --windowed) KIOSK="--window-size=760,1350"; FIT=1 ;;
+    --plain)    HUD=0 ;;
+    -h|--help)
+      echo "usage: ./run.sh [--fit] [--windowed] [--plain]"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+
+# Assembled from parts so --plain cannot leave a bare "?" or a stray "&".
+QUERY=""
+[ "$HUD" = "1" ] && QUERY="hud=1"
+[ "$FIT" = "1" ] && QUERY="${QUERY:+$QUERY&}fit=1"
+
+# Check the browser first: it is the likelier thing to be missing, and
+# failing here saves starting a server nothing will connect to.
+BROWSER=""
+for candidate in chromium-browser chromium google-chrome; do
+  if command -v "$candidate" >/dev/null 2>&1; then BROWSER="$candidate"; break; fi
+done
+if [ -z "$BROWSER" ]; then
+  echo "No Chromium found. sudo apt install chromium-browser" >&2
+  exit 1
+fi
+command -v python3 >/dev/null 2>&1 || {
+  echo "python3 not found; it serves the prototype" >&2; exit 1; }
 
 # An ephemeral port, so a server left running from an earlier attempt
 # cannot shadow this one and hand the browser a dead connection.
@@ -31,25 +54,27 @@ s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.clos
 PY
 )"
 
-BROWSER=""
-for candidate in chromium-browser chromium google-chrome; do
-  if command -v "$candidate" >/dev/null 2>&1; then BROWSER="$candidate"; break; fi
-done
-if [ -z "$BROWSER" ]; then
-  echo "No Chromium found. sudo apt install chromium-browser" >&2
-  exit 1
-fi
-
 python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
 SERVER_PID=$!
 cleanup() { kill "$SERVER_PID" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
-URL="http://127.0.0.1:$PORT/index.html?$PARAMS"
-for _ in $(seq 1 40); do
-  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/index.html" 2>/dev/null; then break; fi
-  sleep 0.25
-done
+URL="http://127.0.0.1:$PORT/index.html${QUERY:+?$QUERY}"
+# Wait on the server with python3 rather than curl: python3 is already a
+# hard requirement here, and if curl were missing this loop would fail
+# silently forty times and then open the browser on nothing anyway.
+python3 - "$PORT" <<'PY' || { echo "server did not come up" >&2; exit 1; }
+import sys, time, urllib.request
+url = f"http://127.0.0.1:{sys.argv[1]}/index.html"
+for _ in range(40):
+    try:
+        with urllib.request.urlopen(url, timeout=2) as r:
+            if r.status == 200:
+                sys.exit(0)
+    except Exception:
+        time.sleep(0.25)
+sys.exit(1)
+PY
 
 echo "serving on $PORT"
 echo "opening  $URL"
