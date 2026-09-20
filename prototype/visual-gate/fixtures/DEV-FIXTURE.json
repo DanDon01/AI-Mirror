@@ -31,7 +31,18 @@
   "energy": {
     "watts_now": 481,
     "label": "Home usage",
-    "recent_watts": [310, 355, 402, 388, 441, 470, 481],
+    "solar_watts": 312,
+    "solar_label": "Solar",
+    "grid_watts": 169,
+    "recent": [
+      [310,  38],
+      [355,  94],
+      [402, 151],
+      [388, 187],
+      [441, 234],
+      [470, 279],
+      [481, 312]
+    ],
     "rooms_lit": 4
   },
 

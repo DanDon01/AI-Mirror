@@ -43,7 +43,15 @@ const Panels = (function () {
   // ---- 5. Home energy ------------------------------------------------
   //
   // A model of the house, not a chart of the house. Structure in cool
-  // hairlines, lit rooms in warm glass, and the figure underneath.
+  // hairlines, lit rooms in warm glass, an array on the roof, and the
+  // figure underneath.
+  //
+  // Solar is what makes this a picture rather than a number: with
+  // generation on the roof and a load in the house, the conduits have a
+  // direction and a source, so the panel can say where the power is
+  // coming from without writing any of it down. Generation runs down
+  // the roof into the house; the ground conduit runs inward when the
+  // grid is making up a shortfall and outward when there is a surplus.
 
   /** Flattened isometric: a true 30 degree projection makes a portrait
       house in a landscape box, so the vertical is compressed. */
@@ -51,9 +59,19 @@ const Panels = (function () {
     return [(p[0] - p[2]) * 0.94, (p[0] + p[2]) * 0.342 - p[1]];
   }
 
-  function houseSVG(roomsLit) {
+  function houseSVG(e) {
+    const roomsLit = e.rooms_lit;
+    const generating = e.solar_watts > 0;
+    const exporting = e.grid_watts < 0;
+
     const W = 2.0, D = 1.5, H = 1.1, RIDGE = H + 0.62, MID = 0.55;
     const APEX_A = [W / 2, RIDGE, 0], APEX_B = [W / 2, RIDGE, D];
+
+    /** A point on the roof slope that faces the viewer.
+        u runs 0 at the eaves to 1 at the ridge, v runs along the ridge. */
+    function roofPoint(u, v) {
+      return [W + (W / 2 - W) * u, H + (RIDGE - H) * u, v * D];
+    }
 
     function ring(y) {
       return [[[0, y, 0], [W, y, 0]], [[W, y, 0], [W, y, D]],
@@ -93,12 +111,32 @@ const Panels = (function () {
       faceX(s[0], s[1], 0.68, 1.00);
     });
 
+    // Generation comes off the array and down the right-hand silhouette
+    // corner - the one edge of the model with black behind it. Routed
+    // down the near corner instead, the pulse ran straight over the lit
+    // windows and disappeared into them.
+    // Just outboard of the wall, not on it: run down x = W exactly and
+    // the amber conduit lands on top of the cool structure edge and
+    // reads as part of it.
+    const solarPts = [roofPoint(0.34, 0.26), roofPoint(0.05, 0.06),
+                      [W + 0.07, H, 0], [W + 0.07, 0.12, 0]];
+
+    // The grid comes in along the front edge of the plinth. Two earlier
+    // routes failed for the same reason: in this projection a point
+    // offset equally in x and z lands directly below where it started,
+    // so a run "outward from the house" collapsed to a vertical stub.
+    // Following an edge the model already has avoids the problem, and
+    // gives the run enough length to read.
+    const gridPts = [[-O * 0.4, 0, D + O * 0.55],
+                     [W + O * 0.55, 0, D + O * 0.55], [W, 0, D]];
+
     // Fit whatever was just built to the box, rather than hand-tuning a
     // scale that breaks the moment a dimension changes.
     const BW = 582, BH = 360, PAD = 14;
     const all = [];
     structure.concat(floor, plinth).forEach(function (e) { all.push(e[0], e[1]); });
     windows.forEach(function (w) { w.forEach(function (p) { all.push(p); }); });
+    solarPts.forEach(function (p) { all.push(p); });
     const flat = all.map(project);
     const xs = flat.map(function (p) { return p[0]; });
     const ys = flat.map(function (p) { return p[1]; });
@@ -122,10 +160,21 @@ const Panels = (function () {
              pts.map(function (p) { return to(p).join(','); }).join(' ') + '"/>';
     }
 
-    // The conduit the live figure refers to: up the nearest corner, over
-    // the eaves, down the far one.
-    const conduit = [[W, 0, D], [W, H, D], [W, H, 0], [0, H, 0]]
-      .map(function (p) { return to(p).join(','); }).join(' ');
+    function path(pts) {
+      return pts.map(function (p) { return to(p).join(','); }).join(' ');
+    }
+
+    const solarRun = path(solarPts);
+    const gridRun = path(gridPts);
+
+    /** A conduit: a dim track that says where the route is, and a pulse
+        that travels it. The pulse alone occupies a seventh of the path,
+        so on a still it reads as a broken line rather than a flow. */
+    function conduit(kind, pts, reverse) {
+      return '<polyline class="track ' + kind + '" points="' + pts + '"/>' +
+             '<polyline class="flow ' + kind + (reverse ? ' out' : '') +
+             '" pathLength="100" points="' + pts + '"/>';
+    }
 
     // Only lit rooms are drawn. Filling the dark ones too turned the two
     // near faces into a checkerboard of grey holes, which read as a
@@ -139,30 +188,83 @@ const Panels = (function () {
     // among twenty. Only the face turned toward the viewer is filled.
     const roofPlane = [[W, H, 0], [W, H, D], APEX_B, APEX_A];
 
+    // The array, laid out on that slope. Two courses of four, inset
+    // from the ridge and the eaves so the roof still reads as a roof.
+    const ROWS = 2, COLS = 4, GAP = 0.03;
+    const course = 0.74 / ROWS;
+    const panelV = (0.90 - GAP * (COLS - 1)) / COLS;
+    const array = [];
+    for (let r = 0; r < ROWS; r++) {
+      const u0 = 0.12 + r * course, u1 = u0 + course - 0.06;
+      for (let c = 0; c < COLS; c++) {
+        const v0 = 0.07 + c * (panelV + GAP), v1 = v0 + panelV;
+        array.push([roofPoint(u0, v0), roofPoint(u0, v1),
+                    roofPoint(u1, v1), roofPoint(u1, v0)]);
+      }
+    }
+
     return (
       '<svg viewBox="0 0 ' + BW + ' ' + BH + '" aria-hidden="true">' +
-      '<defs><linearGradient id="lit" x1="0" y1="0" x2="0" y2="1">' +
+      '<defs>' +
+      '<linearGradient id="lit" x1="0" y1="0" x2="0" y2="1">' +
       '<stop offset="0%" stop-color="#FFD9A0" stop-opacity="0.85"/>' +
       '<stop offset="100%" stop-color="#FF9A3C" stop-opacity="0.38"/>' +
-      '</linearGradient></defs>' +
-      plinth.map(function (e) { return line(e, 'plinth'); }).join('') +
+      '</linearGradient>' +
+      // Glass, not a blue rectangle: dark at the head, catching the sky
+      // at the foot, so the array reads as a surface at an angle.
+      '<linearGradient id="pv" x1="0.1" y1="0" x2="0.9" y2="1">' +
+      '<stop offset="0%"   stop-color="#0B1A2E" stop-opacity="0.94"/>' +
+      '<stop offset="62%"  stop-color="#15304E" stop-opacity="0.90"/>' +
+      '<stop offset="100%" stop-color="#3E6E9C" stop-opacity="0.80"/>' +
+      '</linearGradient>' +
+      '</defs>' +
+      plinth.map(function (p) { return line(p, 'plinth'); }).join('') +
       poly(roofPlane, 'roof') +
       lit.map(function (w) { return poly(w, 'win lit'); }).join('') +
-      floor.map(function (e) { return line(e, 'soft'); }).join('') +
-      structure.map(function (e) { return line(e, 'edge'); }).join('') +
-      '<polyline class="flow" points="' + conduit + '"/>' +
+      floor.map(function (f) { return line(f, 'soft'); }).join('') +
+      structure.map(function (st) { return line(st, 'edge'); }).join('') +
+      // After the structure, not before it. The model is a wireframe, so
+      // the far wall's vertical edge was showing straight through the
+      // array; panels are the one opaque surface here and should hide
+      // what is behind them. Nothing else crosses them - the ridge,
+      // eaves and hips all bound the array rather than pass over it.
+      array.map(function (a) {
+        return poly(a, generating ? 'pv live' : 'pv');
+      }).join('') +
+      // pathLength normalises each run to 100 units, so one dash pattern
+      // works on both however long they actually are. In user units the
+      // pattern was longer than the paths and the pulse never appeared.
+      (generating ? conduit('solar', solarRun, false) : '') +
+      conduit('grid', gridRun, exporting) +
       '</svg>'
     );
   }
 
   function buildEnergy(d) {
-    const peak = Math.max.apply(null, d.recent_watts) || 1;
-    const bars = d.recent_watts.map(function (w) {
-      return '<i style="height:' + Math.max(8, (w / peak) * 62).toFixed(0) + 'px"></i>';
+    const TALL = 54;
+    const peak = d.recent.reduce(function (m, r) { return Math.max(m, r[0]); }, 1);
+
+    // Each bar is the whole load, with the part the roof covered filled
+    // warm from the bottom. That carries the import/export story over
+    // time without a second figure or a legend to read.
+    const bars = d.recent.map(function (r) {
+      const h = Math.max(8, (r[0] / peak) * TALL);
+      const solar = Math.min(h, (r[1] / peak) * TALL);
+      return '<i style="height:' + h.toFixed(0) + 'px">' +
+             '<b style="height:' + solar.toFixed(0) + 'px"></b></i>';
     }).join('');
+
+    // The solar figure is annotation on the array, at half the hero's
+    // size and beside the roof it belongs to, not a second stat block.
+    const solar = d.solar_watts > 0
+      ? '<div class="sun"></div>' +
+        '<div class="solar"><div class="n">' + d.solar_watts + ' W</div>' +
+        '<div class="p-sub">' + d.solar_label + '</div></div>'
+      : '';
+
     return (
-      '<div class="p-head">Home energy</div>' +
-      '<div class="house">' + houseSVG(d.rooms_lit) + '</div>' +
+      '<div class="p-head">Home energy</div>' + solar +
+      '<div class="house">' + houseSVG(d) + '</div>' +
       '<div class="foot">' +
       '<div><div class="p-hero">' + d.watts_now + ' W</div>' +
       '<div class="p-sub">' + d.label + '</div></div>' +

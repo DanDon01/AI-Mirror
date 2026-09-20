@@ -316,23 +316,90 @@ body {
   fill: url(#lit);
   filter: drop-shadow(0 0 16px rgba(255, 168, 78, 0.45));
 }
+
+/* The array. A hairline head edge is what makes eight quadrilaterals
+   read as panels lying on a slope rather than as blue patches. */
+.p-energy .pv {
+  fill: url(#pv);
+  stroke: rgba(150, 194, 246, 0.34);
+  stroke-width: 0.9;
+}
+.p-energy .pv.live {
+  stroke: rgba(186, 220, 255, 0.55);
+  filter: drop-shadow(0 0 12px rgba(120, 176, 240, 0.30));
+}
+
+/* A conduit is a track plus a pulse. One definition, three meanings:
+   generation down the roof, grid inward, grid outward - direction is
+   carried by the animation, so the same path serves import and export. */
+.p-energy .track {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.p-energy .track.solar { stroke: rgba(255, 186, 108, 0.34); }
+.p-energy .track.grid  { stroke: rgba(168, 206, 250, 0.30); }
+
 .p-energy .flow {
   fill: none;
-  stroke: rgba(255, 186, 108, 0.85);
-  stroke-width: 2;
+  stroke-width: 2.4;
   stroke-linecap: round;
-  stroke-dasharray: 26 300;
-  filter: drop-shadow(0 0 10px rgba(255, 170, 80, 0.7));
-  animation: conduit 4.6s linear infinite;
+  stroke-dasharray: 15 85;
+  animation: conduit 3.9s linear infinite;
 }
-@keyframes conduit { from { stroke-dashoffset: 326; } to { stroke-dashoffset: 0; } }
+.p-energy .flow.solar {
+  stroke: rgba(255, 200, 128, 0.95);
+  filter: drop-shadow(0 0 11px rgba(255, 176, 88, 0.8));
+}
+.p-energy .flow.grid {
+  stroke: rgba(180, 214, 252, 0.88);
+  filter: drop-shadow(0 0 10px rgba(140, 186, 244, 0.6));
+}
+/* Surplus leaving the house runs the other way, and changes colour with
+   it - the direction alone is too subtle to carry a state this useful. */
+.p-energy .flow.grid.out {
+  stroke: rgba(111, 227, 168, 0.92);
+  filter: drop-shadow(0 0 10px rgba(111, 227, 168, 0.65));
+  animation-direction: reverse;
+}
+@keyframes conduit { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+
+/* Warm light behind the generation figure, on the roof's side. */
+.p-energy .sun {
+  position: absolute;
+  right: -30px; top: 6px;
+  width: 300px; height: 300px;
+  background: radial-gradient(closest-side circle at 50% 50%,
+    rgba(255, 206, 140, 0.16) 0%,
+    rgba(255, 170, 90, 0.055) 44%,
+    rgba(0, 0, 0, 0) 100%);
+  pointer-events: none;
+}
+
+.p-energy .solar { position: absolute; right: 38px; top: 74px; text-align: right; }
+.p-energy .solar .n {
+  font-family: var(--ff-display);
+  font-size: 46px; line-height: 0.95;
+  letter-spacing: -0.01em;
+  color: #FFD6A2;
+}
+.p-energy .solar .p-sub { margin-top: 6px; font-size: 18px; color: #8C7A63; }
 
 .p-energy .foot  { position: absolute; left: 38px; bottom: 30px;
                    display: flex; align-items: flex-end; gap: 30px; }
 .p-energy .bars  { display: flex; align-items: flex-end; gap: 7px; height: 54px; }
+
+/* Whole load cool, the share the roof covered warm from the bottom. */
 .p-energy .bars i {
+  position: relative;
   display: block; width: 9px;
-  background: linear-gradient(to top, rgba(150,190,240,0.30), rgba(196,222,255,0.92));
+  background: linear-gradient(to top, rgba(150,190,240,0.26), rgba(196,222,255,0.80));
+}
+.p-energy .bars b {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: block;
+  background: linear-gradient(to top, rgba(255,154,60,0.70), rgba(255,214,162,0.95));
 }
 
 /* ---- 6. Calendar ---- */
