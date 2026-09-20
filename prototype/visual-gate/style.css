@@ -148,31 +148,34 @@ body {
    brain at head height, heart at chest height. The readouts sit inside
    the section so they travel with it. */
 
-/* Vertical budget for the whole plate, since every block below depends
-   on it and the numbers are otherwise unexplainable:
+/* Vertical budget for the whole plate, since every block depends on it
+   and the numbers are otherwise unexplainable:
 
      0    - 400   persistent stamp and weather glyph
-     400  - 1150  the reflection: face and shoulders, never covered
-     419  - 1121  brain, centred at 770, over the head
-     1172 - 1768  heart, centred at 1470, over the chest
-     1857 - 2318  panel band, two slots
+     440  - 901   panel band, two slots, directly under the stamp
+     930  - 1550  brain, centred at 1240
+     1582 - 2178  heart, centred at 1880
      2352 - 2540  markets rail
 
-   The heart is still the binding constraint: it is the lowest the
-   biometric object ever sits, and the panel band starts below it.
-   Everything below the reflection moved down together, so the strip of
-   dead glass under the rail is now about a finger's width. */
+   The panels sit in the top third now and the biometric object has the
+   whole lower half. Worth knowing: this puts the panel band across the
+   upper part of the glass, which on a wall-mounted portrait mirror is
+   usually where a standing viewer's head lands - so the clear centre
+   the earlier layouts protected is now the band from 901 to 1550, not
+   the one under the clock. */
 
 .bio {
   position: absolute;
-  left: 225px; top: 275px;
+  left: 225px; top: 745px;
   width: 990px; height: 990px;
   will-change: transform;
 }
 
 /* Both forms are fitted to the canvas by the camera, so the element's
-   own size is the size of the object: 1100 to 990 takes 10% off the
-   heart and the brain together without touching a shader. */
+   own size is the size of the object, for both of them at once. Where
+   the two need to differ - the brain is carried 10% smaller again -
+   that lives in biometrics.js as a group scale interpolated by the
+   morph, because doing it here would take it off the heart too. */
 #bioCanvas {
   position: absolute;
   left: 0; top: 0;
@@ -210,7 +213,7 @@ body {
    at half size the heart's figure was stranded 300px away from it and
    read as an unrelated number. */
 #bioHeart { left: 140px; top: 428px; }
-#bioSleep { left: 800px; top: 452px; }
+#bioSleep { left: 770px; top: 452px; }
 
 .bio-n {
   font-family: var(--ff-display);
@@ -237,7 +240,7 @@ body {
 
 .panels {
   position: absolute;
-  left: 0; top: 1857px;
+  left: 0; top: 440px;
   width: 1440px; height: 461px;
   perspective: 2400px;
 }

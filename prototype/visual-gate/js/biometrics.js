@@ -278,6 +278,9 @@ window.Biometrics = (function () {
 
   let loopSeconds = 48;
 
+  // How much smaller the brain is carried than the heart, at morph = 1.
+  const BRAIN_TRIM = 0.10;
+
   async function init(canvas, opts) {
     loopSeconds = (opts && opts.loop) || 48;
     const [heartGeo, brainGeo, heartPts, brainPts, fib] = await Promise.all([
@@ -522,6 +525,13 @@ window.Biometrics = (function () {
     const cycle = t / loopSeconds;
     group.rotation.y = cycle * Math.PI * 2.0;
     group.rotation.x = Math.sin(cycle * Math.PI * 4.0) * 0.10;
+
+    // The brain is carried a little smaller than the heart. Sizing the
+    // canvas would take it off both forms, and uHeartScale only moves
+    // the heart, so the difference between the two endpoints has to
+    // live here - interpolated, so the morph stays continuous.
+    group.scale.setScalar(1 - BRAIN_TRIM * morph);
+
     renderer.render(scene, camera);
   }
 
