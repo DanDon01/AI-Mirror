@@ -57,12 +57,13 @@ for candidate in "../../venv/bin/python" "../../.venv/bin/python" python3; do
 done
 [ -n "$PYTHON" ] || { echo "Python not found; it serves the prototype" >&2; exit 1; }
 
-# Keep the visual gate on the same stable LAN port as the old web panel,
-# so phones and other browsers can reach it without an SSH tunnel.
-PORT=8780
+# Keep separate stable LAN ports: the mirror display and its controls can
+# be open together on a phone or PC without either one replacing the other.
+PORT=8795
+CONTROL_PORT=8780
 BIND=0.0.0.0
 
-SERVER_ARGS=(serve.py --port "$PORT" --bind "$BIND")
+SERVER_ARGS=(serve.py --port "$PORT" --control-port "$CONTROL_PORT" --bind "$BIND")
 [ "$FIXTURE" = "1" ] && SERVER_ARGS+=(--fixture)
 "$PYTHON" "${SERVER_ARGS[@]}" &
 SERVER_PID=$!

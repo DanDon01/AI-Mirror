@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-Mirror controls</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 18px; background: #080a0f; color: #d9e4f5;
+      font: 15px system-ui, sans-serif; max-width: 760px; margin-inline: auto; }
+    h1 { color: #9ed3ff; font-weight: 400; margin: 0 0 4px; }
+    h2 { color: #8fb8dc; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+      margin: 24px 0 8px; }
+    .meta { color: #77879a; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+    .card { background: #101722; border: 1px solid #243447; border-radius: 8px; padding: 12px; }
+    .label { color: #8295aa; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { margin-top: 5px; font-size: 21px; color: #edf5ff; }
+    button { background: #142235; border: 1px solid #41678e; color: #d9edff; border-radius: 7px;
+      padding: 10px 14px; font-size: 15px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #0e141d; border: 1px solid #202e3e;
+      border-radius: 8px; padding: 12px; max-height: 420px; overflow: auto; font-size: 12px; }
+    a { color: #9ed3ff; }
+  </style>
+</head>
+<body>
+  <h1>AI-Mirror controls</h1>
+  <div class="meta">Live diagnostics for the visual gate. Mirror display: <a href="http://" id="display">visual port</a></div>
+  <p><button onclick="refresh()">Refresh data</button> <button onclick="pump()">Request feed update</button></p>
+  <h2>Feeds</h2><div class="grid" id="feeds"></div>
+  <h2>Visual data</h2><pre id="payload">Loading...</pre>
+  <script>
+    const display = document.getElementById('display');
+    display.href = location.protocol + '//' + location.hostname + ':8795/';
+    async function refresh() {
+      const r = await fetch('/api/state.json', {cache: 'no-store'});
+      const data = await r.json();
+      const feeds = document.getElementById('feeds'); feeds.innerHTML = '';
+      for (const [key, value] of Object.entries(data)) {
+        if (key.startsWith('_') || key === 'generated') continue;
+        const card = document.createElement('div'); card.className = 'card';
+        card.innerHTML = '<div class="label">' + key + '</div><div class="value">available</div>';
+        feeds.appendChild(card);
+      }
+      if (!feeds.children.length) feeds.innerHTML = '<div class="meta">No live feeds have returned data yet.</div>';
+      document.getElementById('payload').textContent = JSON.stringify(data, null, 2);
+    }
+    async function pump() { await fetch('/api/control/pump', {method: 'POST'}); refresh(); }
+    refresh().catch(e => document.getElementById('payload').textContent = String(e));
+    setInterval(() => refresh().catch(() => {}), 10000);
+  </script>
+</body>
+</html>
