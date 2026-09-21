@@ -146,10 +146,18 @@ class Bridge:
             return None
 
         block = (data.get("weather") or [{}])[0]
+        main_condition = (block.get("main") or "").lower()
+        if "rain" in main_condition or "drizzle" in main_condition or "thunder" in main_condition:
+            current_glyph = "cloud"
+        elif "cloud" in main_condition:
+            current_glyph = "partly"
+        else:
+            current_glyph = "sun"
         out = {
             "temperature_c": int(round(temp)),
             "condition_label": (block.get("description") or "").capitalize(),
-            "condition": (block.get("main") or "").lower(),
+            "condition": main_condition,
+            "glyph": current_glyph,
         }
 
         hourly = data.get("hourly") or {}
@@ -260,7 +268,8 @@ class Bridge:
         heads = getattr(mod, "headlines", None) if mod else None
         if not heads:
             return None
-        top = heads[0]
+        index = getattr(mod, "current_index", 0) % len(heads)
+        top = heads[index]
         title = top.get("title")
         if not title:
             return None

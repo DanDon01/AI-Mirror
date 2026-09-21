@@ -662,6 +662,10 @@ const Panels = (function () {
     return (
       '<div class="glow"></div>' +
       '<div class="p-head">Outlook</div>' +
+      '<div class="current-weather"><svg viewBox="0 0 46 46" aria-hidden="true">' +
+      (GLYPH[w.glyph] || GLYPH.cloud) + '</svg><div><div class="current-temp">' +
+      (typeof w.temperature_c === 'number' ? w.temperature_c + '°' : '--') +
+      '</div><div class="current-condition">' + (w.condition_label || 'Weather') + '</div></div></div>' +
       (w.alert_label ? '<div class="alert"><div class="alert-k">' + w.alert_label + '</div>' +
       '<div class="alert-v">' + (w.alert_lead || '') + '</div></div>' : '') +
       '<svg class="wave" viewBox="0 0 630 120" preserveAspectRatio="none" aria-hidden="true">' +
