@@ -10,6 +10,11 @@
    frame can be reproduced exactly. That is what makes deterministic
    stills and stepped video capture possible.
 
+   Data comes from /api/state.json and is re-read on a slow poll. The
+   payload carries only what the mirror actually knows: anything absent
+   from it is not drawn at all, so a feed that is down takes its own
+   panel away rather than showing a number nobody measured.
+
    Query parameters:
      ?seek=N    start N seconds into the timeline
      ?freeze=1  hold there (for stills)
@@ -43,6 +48,7 @@
   }
 
   const LOOP = 48;
+  const POLL_MS = 20000;
   const T = {
     morphOut: [12.0, 15.5],    // heart -> brain
     morphBack: [26.0, 29.5],   // brain -> heart
@@ -95,10 +101,24 @@
   window.__perf = perf;
 
   // ---- state ---------------------------------------------------------
-  let data, bpm = 0, started = 0;
+  let data = null, bpm = 0, started = 0;
   let bioEl, heartEl, sleepEl, haloEl;
 
-  function setBio(morph) {
+  /** Which biometric forms have a reading behind them.
+
+      The object is a readout, not an ornament: a beating heart with no
+      pulse to beat at, or a brain with no night's sleep to report, is
+      exactly the invented number this interface must not show. Without
+      either, the whole section stays away. */
+  function bioState() {
+    const b = (data && data.biometrics) || {};
+    return {
+      heart: typeof b.resting_bpm === 'number',
+      sleep: typeof b.sleep_label === 'string' && b.sleep_label.length > 0,
+    };
+  }
+
+  function setBio(morph, have) {
     // The object travels with the body part it describes, so the whole
     // section moves rather than the canvas being repositioned: the
     // readouts have to arrive with it.
@@ -107,8 +127,8 @@
 
     // One value leaves before the other arrives. Crossfading them left
     // both legible at once mid-morph, reading as two overlapping labels.
-    const out = 1 - ramp(morph, 0.22, 0.40);
-    const inn = ramp(morph, 0.60, 0.80);
+    const out = have.heart ? 1 - ramp(morph, 0.22, 0.40) : 0;
+    const inn = have.sleep ? ramp(morph, 0.60, 0.80) : 0;
     heartEl.style.opacity = out.toFixed(3);
     heartEl.style.transform = `translate3d(0,${((1 - out) * 16).toFixed(1)}px,0)`;
     sleepEl.style.opacity = inn.toFixed(3);
@@ -116,40 +136,71 @@
     haloEl.classList.toggle('sleep', morph > 0.5);
   }
 
-  /** `t` is the position in the 48s loop. `railT` is elapsed time, which
-      does not wrap.
-
-      The rail is the one element with no loop: on the mirror it scrolls
-      continuously and always has. Driven by the wrapped value it jumped
-      backwards every time the timeline came round, because a loop's
-      travel is not a whole number of cell runs - 2784px against a run
-      of 1732. Same class of fault as the rotation snap, and it was
-      there at the old speed too. */
   function renderAt(t, railT) {
-    const morph = morphAt(t);
-    Biometrics.frame(t, morph, beatAt(t, bpm));
-    setBio(morph);
+    const have = bioState();
+    const showBio = have.heart || have.sleep;
+    bioEl.hidden = !showBio;
+
+    if (showBio) {
+      // Hold at whichever end has a reading behind it rather than
+      // morphing into a form with nothing to say.
+      let morph = morphAt(t);
+      if (!have.sleep) morph = 0;
+      else if (!have.heart) morph = 1;
+      Biometrics.frame(t, morph, beatAt(t, bpm || 60));
+      setBio(morph, have);
+    }
+
     Panels.frame(t);
     Markets.frame(railT === undefined ? t : railT);
+    Frame.tick();
+  }
+
+  // ---- data ----------------------------------------------------------
+
+  async function readState() {
+    const res = await fetch('api/state.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`state ${res.status}`);
+    return res.json();
+  }
+
+  /** Production refuses to render the development fixture.
+
+      This guard used to run the other way round, because the page only
+      ever had a fixture to draw. Now that it can have real data the
+      dangerous case is the opposite one: invented biometrics and share
+      prices on a wall, looking like measurements. The fixture is still
+      allowed, but only when it is asked for explicitly, and it says so
+      on screen for as long as it is up. */
+  function adopt(next) {
+    const isFixture = next && next._fixture === true;
+    if (!next || (!next._live && !isFixture)) {
+      throw new Error('refusing to render unlabelled data');
+    }
+    data = next;
+    bpm = (next.biometrics && next.biometrics.resting_bpm) || 0;
+
+    const b = next.biometrics || {};
+    heartEl.querySelector('.bio-n').textContent =
+      typeof b.resting_bpm === 'number' ? b.resting_bpm : '--';
+    sleepEl.querySelector('.bio-n').textContent = b.sleep_label || '--';
+
+    document.querySelector('.fixture-mark').hidden = !isFixture;
+    document.body.dataset.source = isFixture ? 'fixture' : 'live';
+
+    Frame.apply(next);
+    Markets.apply(next.markets);
+    Panels.apply(next);
   }
 
   // ---- boot ----------------------------------------------------------
   async function boot() {
-    data = await (await fetch('fixtures/DEV-FIXTURE.json')).json();
-    if (!data._fixture) throw new Error('refusing to render unlabelled data');
-
-    bpm = data.biometrics.resting_bpm;
-    Frame.mount(data);
-    Markets.mount(data.markets);
-    Panels.mount(data);
-
     bioEl = document.getElementById('bio');
     heartEl = document.getElementById('bioHeart');
     sleepEl = document.getElementById('bioSleep');
     haloEl = document.querySelector('.bio-halo');
-    heartEl.querySelector('.bio-n').textContent = bpm;
-    sleepEl.querySelector('.bio-n').textContent = data.biometrics.sleep_label;
 
+    adopt(await readState());
     await Biometrics.init(document.getElementById('bioCanvas'), { loop: LOOP });
 
     window.__setTime = (t) => { renderAt(t, t); return true; };
@@ -157,10 +208,22 @@
     window.__fillInfo = () => Biometrics.fillEstimate();
 
     if (MANUAL) {
-      renderAt(SEEK);
+      renderAt(SEEK, SEEK);
       document.body.dataset.ready = '1';
       return;
     }
+
+    // A failed poll leaves the last good payload on screen rather than
+    // blanking the mirror: data a few minutes stale is worth far more
+    // than an empty wall.
+    setInterval(async () => {
+      try {
+        adopt(await readState());
+      } catch (err) {
+        console.warn('state poll failed, keeping last good data', err);
+      }
+    }, POLL_MS);
+
     started = performance.now();
     requestAnimationFrame(loop);
   }

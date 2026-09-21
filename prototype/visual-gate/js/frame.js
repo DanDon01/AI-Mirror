@@ -57,15 +57,49 @@ const Art = (function () {
 const Frame = (function () {
   'use strict';
 
-  function mount(data) {
-    document.querySelector('.markets .limb').innerHTML = Art.limb('mk');
-    document.getElementById('fDate').textContent = data.now.date_label;
-    document.getElementById('fTime').textContent = data.now.time_label;
-    document.getElementById('fTemp').textContent = data.weather.temperature_c + '°';
-    document.getElementById('fCond').textContent = data.weather.condition_label;
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  let mounted = false;
+  let shown = '';
+
+  /** The clock is the browser's, not the payload's.
+
+      Taking it from the state endpoint would step once per poll, so the
+      minute would change up to twenty seconds late on the one element
+      of this interface anybody actually checks. */
+  function tick() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const time = hh + ':' + mm;
+    if (time === shown) return;
+    shown = time;
+    document.getElementById('fTime').textContent = time;
+    document.getElementById('fDate').textContent =
+      DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()];
   }
 
-  return { mount };
+  function apply(data) {
+    if (!mounted) {
+      document.querySelector('.markets .limb').innerHTML = Art.limb('mk');
+      mounted = true;
+    }
+    tick();
+
+    // No reading, no figure. The glyph stays either way: it is the only
+    // thing on this plate that is decorative rather than a measurement.
+    const w = data.weather || {};
+    const temp = document.getElementById('fTemp');
+    const cond = document.getElementById('fCond');
+    temp.hidden = typeof w.temperature_c !== 'number';
+    if (!temp.hidden) temp.textContent = w.temperature_c + '°';
+    cond.hidden = !w.condition_label;
+    if (!cond.hidden) cond.textContent = w.condition_label;
+  }
+
+  return { apply, tick };
 })();
 
 
@@ -105,18 +139,41 @@ const Markets = (function () {
     const up = q.pct >= 0;
     const price = q.price.toFixed(2);
     const pct = (up ? '+' : '−') + Math.abs(q.pct).toFixed(1) + '%';
+    // A sparkline is drawn only when there is a real series behind it.
+    // A flat invented line would read as a quiet stock.
+    const trace = (q.spark && q.spark.length >= 4) ? spark(q.spark, up) : '';
     return (
       '<div class="cell ' + (up ? 'up' : 'down') + '">' +
       '<div class="fig">' +
       '<div class="sym">' + q.sym + '</div>' +
-      '<div class="price">£' + price + '</div>' +
+      '<div class="price">' + (q.currency || '£') + price + '</div>' +
       '<div class="pct">' + pct + '</div>' +
-      '</div>' + spark(q.spark, up) + '</div>'
+      '</div>' + trace + '</div>'
     );
   }
 
-  function mount(quotes) {
-    run = document.getElementById('marketsRun');
+  let signature = '';
+
+  /** Rebuild only when the quotes actually changed.
+
+      Re-rendering on every poll would restart the scroll from zero
+      every twenty seconds, which reads as the rail stuttering. */
+  function apply(quotes) {
+    run = run || document.getElementById('marketsRun');
+    const rail = document.getElementById('markets');
+
+    if (!quotes || !quotes.length) {
+      rail.hidden = true;
+      runWidth = 0;
+      signature = '';
+      return;
+    }
+    rail.hidden = false;
+
+    const next = JSON.stringify(quotes);
+    if (next === signature) return;
+    signature = next;
+
     const once = quotes.map(cell).join('');
     // Two copies, so the scroll can wrap by a whole run width and no gap
     // ever crosses the rail. Measured after layout, not assumed.
@@ -130,5 +187,5 @@ const Markets = (function () {
     run.style.transform = 'translate3d(' + x.toFixed(1) + 'px,0,0)';
   }
 
-  return { mount, frame };
+  return { apply, frame };
 })();

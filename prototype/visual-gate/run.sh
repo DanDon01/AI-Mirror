@@ -5,7 +5,7 @@
 # on it, and tears everything down on exit. No URL to mistype, and no
 # ambiguity about whether the server came up.
 #
-#   ./run.sh              full screen on the mirror
+#   ./run.sh              full screen on the mirror, backed by live data
 #   ./run.sh --fit        scaled to the window, for a normal monitor
 #   ./run.sh --windowed   windowed rather than kiosk
 #
@@ -13,6 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 HUD=1
+FIXTURE=0
 # Fit by default: the plate is authored at 1440x2560 and the display may
 # not be. At native size this is a no-op; anywhere else it removes the
 # need to reach for the browser zoom.
@@ -26,8 +27,9 @@ for arg in "$@"; do
     # you get the top-left corner of the plate and nothing else.
     --windowed) KIOSK="--window-size=760,1350"; FIT=1 ;;
     --plain)    HUD=0 ;;
+    --fixture)  FIXTURE=1 ;;
     -h|--help)
-      echo "usage: ./run.sh [--native] [--windowed] [--plain]"; exit 0 ;;
+      echo "usage: ./run.sh [--native] [--windowed] [--plain] [--fixture]"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -47,18 +49,25 @@ if [ -z "$BROWSER" ]; then
   echo "No Chromium found. sudo apt install chromium-browser" >&2
   exit 1
 fi
-command -v python3 >/dev/null 2>&1 || {
-  echo "python3 not found; it serves the prototype" >&2; exit 1; }
+PYTHON=""
+for candidate in "../../venv/bin/python" "../../.venv/bin/python" python3; do
+  if [ -x "$candidate" ] || command -v "$candidate" >/dev/null 2>&1; then
+    PYTHON="$candidate"; break
+  fi
+done
+[ -n "$PYTHON" ] || { echo "Python not found; it serves the prototype" >&2; exit 1; }
 
 # An ephemeral port, so a server left running from an earlier attempt
 # cannot shadow this one and hand the browser a dead connection.
-PORT="$(python3 - <<'PY'
+PORT="$("$PYTHON" - <<'PY'
 import socket
 s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()
 PY
 )"
 
-python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
+SERVER_ARGS=(serve.py --port "$PORT" --bind 127.0.0.1)
+[ "$FIXTURE" = "1" ] && SERVER_ARGS+=(--fixture)
+"$PYTHON" "${SERVER_ARGS[@]}" &
 SERVER_PID=$!
 cleanup() { kill "$SERVER_PID" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
@@ -67,7 +76,7 @@ URL="http://127.0.0.1:$PORT/index.html${QUERY:+?$QUERY}"
 # Wait on the server with python3 rather than curl: python3 is already a
 # hard requirement here, and if curl were missing this loop would fail
 # silently forty times and then open the browser on nothing anyway.
-python3 - "$PORT" <<'PY' || { echo "server did not come up" >&2; exit 1; }
+"$PYTHON" - "$PORT" <<'PY' || { echo "server did not come up" >&2; exit 1; }
 import sys, time, urllib.request
 url = f"http://127.0.0.1:{sys.argv[1]}/index.html"
 for _ in range(40):

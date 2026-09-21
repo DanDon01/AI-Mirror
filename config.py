@@ -658,6 +658,19 @@ CONFIG = {
         # Pi installations. If unavailable, the app still renders pure black.
         'power_off_display': os.getenv('AUTO_SLEEP_POWER_OFF_DISPLAY', '1').lower() in ('1', 'true', 'yes', 'on'),
     },
+
+    # Optional Home Assistant sensors used by the browser visual gate.
+    # Keep these environment-driven so the visual prototype can be shared
+    # without embedding a household's entity ids in source control.
+    'visual_gate': {
+        'power_entity': os.getenv('VISUAL_GATE_POWER_ENTITY', os.getenv('HA_POWER_ENTITY', '')),
+        'solar_entity': os.getenv('VISUAL_GATE_SOLAR_ENTITY', os.getenv('HA_SOLAR_ENTITY', '')),
+        'car_soc_entity': os.getenv('VISUAL_GATE_CAR_SOC_ENTITY', os.getenv('HA_CAR_SOC_ENTITY', '')),
+        'light_entities': [e.strip() for e in os.getenv(
+            'VISUAL_GATE_LIGHT_ENTITIES', os.getenv('HA_LIGHT_ENTITIES', '')
+        ).split(',') if e.strip()],
+        'rain_probability_pct': int(os.getenv('VISUAL_GATE_RAIN_THRESHOLD', '55')),
+    },
     
     # Debug settings
     'debug': {

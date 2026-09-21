@@ -120,9 +120,14 @@ const Panels = (function () {
   };
 
   function houseSVG(e) {
-    const roomsLit = e.rooms_lit;
-    const generating = e.solar_watts > 0;
-    const exporting = e.grid_watts < 0;
+    // Every part of this is optional: the live payload carries only
+    // what is actually reporting, so the model draws the house it has
+    // readings for and leaves out the rest.
+    const roomsLit = e.rooms_lit || 0;
+    const generating = (e.solar_watts || 0) > 0;
+    const exporting = (e.grid_watts || 0) < 0;
+    const car = e.car || null;
+    const hasGrid = typeof e.grid_watts === 'number';
 
     const W = HOUSE.width, D = HOUSE.depth, H = HOUSE.wall;
     const RIDGE = H + HOUSE.ridge;
@@ -299,7 +304,8 @@ const Panels = (function () {
     // car's silhouette upward instead was ambiguous: the body came out
     // solid and the cabin dark, which reads as two-tone paint rather
     // than as a level.
-    const pct = Math.max(0, Math.min(100, e.car.charge_pct));
+    const pct = car && typeof car.charge_pct === 'number'
+      ? Math.max(0, Math.min(100, car.charge_pct)) : -1;
     const sA = CAR.x0 + 0.10, sB = CAR.x1 - 0.10;
     const chargeTrack = onFlank(sA, sB, 0.112, 0.146);
     const chargeFill = onFlank(sA, sA + (sB - sA) * pct / 100, 0.112, 0.146);
@@ -333,7 +339,8 @@ const Panels = (function () {
     // drawing was letterboxed to 81% and centred.
     const BW = 523, BH = 263, PAD = 11;
     const all = [];
-    structure.concat(behind, floor, plot, pad).forEach(function (g) { all.push(g[0], g[1]); });
+    structure.concat(behind, floor, plot).forEach(function (g) { all.push(g[0], g[1]); });
+    if (car) pad.forEach(function (g) { all.push(g[0], g[1]); });
     windows.forEach(function (w) { w.forEach(function (q) { all.push(q); }); });
     [porch.roof, porch.front, garage.roof, garage.gable,
      chimney.top, body.top, body.end, body.side,
@@ -410,7 +417,7 @@ const Panels = (function () {
         poly(cabin.end, 'car-glass') +
         poly(cabin.side, 'car-glass') +
         wheels.map(function (w) { return poly(w, 'car-wheel'); }).join('') +
-        poly(chargeTrack, 'car-track') +
+        (pct >= 0 ? poly(chargeTrack, 'car-track') : '') +
         (pct > 0 ? poly(chargeFill, 'car-cell' + state) : '') +
         '</g>';
     }
@@ -457,49 +464,67 @@ const Panels = (function () {
       // Porch last of the building: it stands in front of the wall.
       poly(porch.end, 'out-shell') + poly(porch.front, 'out-shell') +
       poly(porch.roof, 'out-roof') + poly(porch.door, 'win lit') +
-      carSVG(e.car.charging) +
+      (car ? carSVG(car.charging) : '') +
       // pathLength normalises each run to 100 units, so one dash pattern
       // works on all of them however long they actually are. In user
       // units the pattern was longer than the paths and the pulse never
       // appeared.
       (generating ? conduit('solar', path(solarPts), false) : '') +
-      conduit('grid', path(gridPts), exporting) +
-      (e.car.charging ? conduit('car', path(carPts), false) : '') +
-      '<text class="car-pct" x="' + chargeAt[0] + '" y="' + chargeAt[1] + '">' +
-      e.car.charge_pct + '%</text>' +
+      (hasGrid ? conduit('grid', path(gridPts), exporting) : '') +
+      (car && car.charging ? conduit('car', path(carPts), false) : '') +
+      (pct >= 0
+        ? '<text class="car-pct" x="' + chargeAt[0] + '" y="' + chargeAt[1] +
+          '">' + pct + '%</text>'
+        : '') +
       '</svg>'
     );
   }
 
   function buildEnergy(d) {
     const TALL = 49;
-    const peak = d.recent.reduce(function (m, r) { return Math.max(m, r[0]); }, 1);
 
     // Each bar is the whole load, with the part the roof covered filled
     // warm from the bottom. That carries the import/export story over
-    // time without a second figure or a legend to read.
-    const bars = d.recent.map(function (r) {
-      const h = Math.max(8, (r[0] / peak) * TALL);
-      const solar = Math.min(h, (r[1] / peak) * TALL);
-      return '<i style="height:' + h.toFixed(0) + 'px">' +
-             '<b style="height:' + solar.toFixed(0) + 'px"></b></i>';
-    }).join('');
+    // time without a second figure or a legend to read. No history, no
+    // bars - a single repeated value would be a chart of nothing.
+    let bars = '';
+    if (d.recent && d.recent.length > 1) {
+      const peak = d.recent.reduce(function (m, r) { return Math.max(m, r[0]); }, 1);
+      bars = '<div class="bars">' + d.recent.map(function (r) {
+        const h = Math.max(8, (r[0] / peak) * TALL);
+        const covered = Math.min(h, ((r[1] || 0) / peak) * TALL);
+        return '<i style="height:' + h.toFixed(0) + 'px">' +
+               '<b style="height:' + covered.toFixed(0) + 'px"></b></i>';
+      }).join('') + '</div>';
+    }
 
     // The solar figure is annotation on the array, at half the hero's
     // size and beside the roof it belongs to, not a second stat block.
-    const solar = d.solar_watts > 0
+    const solar = (d.solar_watts > 0)
       ? '<div class="sun"></div>' +
         '<div class="solar"><div class="n">' + d.solar_watts + ' W</div>' +
-        '<div class="p-sub">' + d.solar_label + '</div></div>'
+        '<div class="p-sub">' + (d.solar_label || 'Solar') + '</div></div>'
       : '';
+
+    // Live power if the house reports it, otherwise what it has used so
+    // far today. Both are measurements; which one is available depends
+    // on whether there is a meter reading watts as well as a tariff.
+    let hero = '', sub = '';
+    if (typeof d.watts_now === 'number') {
+      hero = d.watts_now + ' W';
+      sub = d.label || 'Home usage';
+    } else if (typeof d.today_kwh === 'number') {
+      hero = d.today_kwh.toFixed(1) + ' kWh';
+      sub = 'Used today';
+    }
 
     return (
       '<div class="p-head">Home energy</div>' + solar +
       '<div class="house">' + houseSVG(d) + '</div>' +
       '<div class="foot">' +
-      '<div><div class="p-hero">' + d.watts_now + ' W</div>' +
-      '<div class="p-sub">' + d.label + '</div></div>' +
-      '<div class="bars">' + bars + '</div>' +
+      (hero ? '<div><div class="p-hero">' + hero + '</div>' +
+              '<div class="p-sub">' + sub + '</div></div>' : '') +
+      bars +
       '</div>'
     );
   }
@@ -595,7 +620,8 @@ const Panels = (function () {
   };
 
   function buildWeather(w) {
-    const hours = w.hourly.map(function (h) {
+    const forecast = Array.isArray(w.hourly) ? w.hourly : [];
+    const hours = forecast.map(function (h) {
       return '<div class="hour"><div class="h">' + h.at + '</div>' +
              '<svg viewBox="0 0 46 46" aria-hidden="true">' + (GLYPH[h.glyph] || GLYPH.cloud) +
              '</svg><div class="c">' + h.c + '°</div></div>';
@@ -603,8 +629,8 @@ const Panels = (function () {
     return (
       '<div class="glow"></div>' +
       '<div class="p-head">Outlook</div>' +
-      '<div class="alert"><div class="alert-k">' + w.alert_label + '</div>' +
-      '<div class="alert-v">' + w.alert_lead + '</div></div>' +
+      (w.alert_label ? '<div class="alert"><div class="alert-k">' + w.alert_label + '</div>' +
+      '<div class="alert-v">' + (w.alert_lead || '') + '</div></div>' : '') +
       '<svg class="wave" viewBox="0 0 630 120" preserveAspectRatio="none" aria-hidden="true">' +
       '<path d="M0 86 C 118 86, 150 34, 268 40 C 386 46, 446 96, 630 62" ' +
       'fill="none" stroke="rgba(178,206,244,0.40)" stroke-width="1.6"/></svg>' +
@@ -621,12 +647,19 @@ const Panels = (function () {
     wx:     function (d) { return ['p-wx', buildWeather(d.weather)]; },
   };
 
-  function mount(data) {
+  function apply(data) {
     const slots = [
       document.querySelector('.slot[data-slot="0"]'),
       document.querySelector('.slot[data-slot="1"]'),
     ];
-    entries = SCHEDULE.map(function (s) {
+    slots.forEach(function (slot) { slot.innerHTML = ''; });
+    const available = {
+      energy: !!data.energy,
+      cal: Array.isArray(data.calendar) && data.calendar.length > 0,
+      news: !!data.event,
+      wx: !!data.weather,
+    };
+    entries = SCHEDULE.filter(function (s) { return available[s.kind]; }).map(function (s) {
       const made = BUILD[s.kind](data);
       const el = document.createElement('div');
       el.className = 'panel ' + made[0];
@@ -663,5 +696,5 @@ const Panels = (function () {
     }
   }
 
-  return { mount, frame };
+  return { apply, frame };
 })();
