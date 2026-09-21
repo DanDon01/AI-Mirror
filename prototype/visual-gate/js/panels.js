@@ -96,9 +96,9 @@ const Panels = (function () {
     // neighbour; here it is cut square at the party wall instead.
     width: 2.00,    // x: party wall at 0, hipped end at W
     depth: 1.50,    // z: back to front
-    wall: 1.12,     // eaves height
-    ridge: 0.58,    // ridge above the eaves - about 38 degrees over D/2
-    floor: 0.50,    // first-floor slab, of wall height
+    wall: 1.24,     // eaves height
+    ridge: 0.62,    // ridge above the eaves
+    floor: 0.54,    // first-floor slab, of wall height
     hip: 0.30,      // ridge stops this far short of the +x end
     plinth: 0.17,   // the dark painted band around the base
 
@@ -107,7 +107,7 @@ const Panels = (function () {
     frontLower: [[0.10, 0.46]],
     flankUpper: [[0.28, 0.62]],
 
-    porch:   { x0: 0.56, x1: 0.94, out: 0.17, height: 0.46, fall: 0.06 },
+    porch:   { x0: 0.64, x1: 0.86, out: 0.17, height: 0.46, fall: 0.06 },
     garage:  { x0: 1.00, x1: 1.30, z0: 0.34, z1: 1.04, height: 0.42, ridge: 0.09 },
     chimney: { x0: 0.02, x1: 0.17, halfDepth: 0.075, above: 0.19, sink: 0.30 },
 
@@ -479,10 +479,6 @@ const Panels = (function () {
       '</linearGradient>' +
       '</defs>' +
       plot.map(function (q) { return line(q, 'plinth'); }).join('') +
-      // Garage first: it sits behind the house and to the side.
-      poly(garage.end, 'out-shell') + poly(garage.front, 'out-shell') +
-      poly(garage.gable, 'out-shell') + poly(garage.roof, 'out-roof') +
-      poly(garage.door, 'out-door') +
       // Shell: faint render, the painted band, then the openings.
       walls.map(function (w) { return poly(w, 'render'); }).join('') +
       bands.map(function (b) { return poly(b, 'band'); }).join('') +
@@ -518,6 +514,11 @@ const Panels = (function () {
       (rooflight ? poly(rooflight, 'rooflight') : '') +
       poly(chimney.side, 'stack') + poly(chimney.end, 'stack') +
       poly(chimney.top, 'stack-top') +
+      // The garage is foreground architecture: it deliberately covers
+      // the house edge instead of reading as a rear annex.
+      poly(garage.end, 'out-shell') + poly(garage.front, 'out-shell') +
+      poly(garage.gable, 'out-shell') + poly(garage.roof, 'out-roof') +
+      poly(garage.door, 'out-door') +
       // Porch last of the building: it stands in front of the wall.
       poly(porch.end, 'out-shell') + poly(porch.front, 'out-shell') +
       poly(porch.roof, 'out-roof') + poly(porch.door, 'porch-door') +
@@ -528,9 +529,11 @@ const Panels = (function () {
       // appeared.
       (generating ? conduit('solar', path(solarPts), false) : '') +
       (hasGrid ? conduit('grid', path(gridPts), exporting) : '') +
-      (car && car.charging ? conduit('car', path(carPts), false) : '') +
       (pct >= 0
-        ? '<text class="car-pct" x="' + chargeAt[0] + '" y="' + chargeAt[1] +
+        ? '<g class="car-battery" transform="translate(' + chargeAt[0] + ',' + (chargeAt[1] - 14) + ')">' +
+          '<rect x="0" y="0" width="11" height="7" rx="1"/><rect x="11" y="2" width="2" height="3"/>' +
+          '<rect class="level" x="1.5" y="1.5" width="' + (Math.max(0, Math.min(100, pct)) * 0.08).toFixed(1) + '" height="4"/>' +
+          '</g><text class="car-pct" x="' + (Number(chargeAt[0]) + 18) + '" y="' + chargeAt[1] +
           '">' + pct + '%</text>'
         : '') +
       '</svg>'

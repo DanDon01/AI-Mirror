@@ -403,8 +403,8 @@ body {
 /* Surplus leaving the house runs the other way, and changes colour with
    it - the direction alone is too subtle to carry a state this useful. */
 .p-energy .flow.grid.out {
-  stroke: rgba(111, 227, 168, 0.92);
-  filter: drop-shadow(0 0 10px rgba(111, 227, 168, 0.65));
+  stroke: rgba(164, 214, 255, 0.92);
+  filter: drop-shadow(0 0 10px rgba(128, 190, 255, 0.65));
   animation-direction: reverse;
 }
 @keyframes conduit { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
@@ -449,7 +449,20 @@ body {
 }
 .p-energy .car-wheel { fill: rgba(8, 12, 20, 0.95); stroke: none; }
 
-.p-energy .car.on .car-shell { stroke: rgba(255, 206, 150, 0.52); }
+.p-energy .car.on {
+  filter: drop-shadow(0 0 13px rgba(255, 194, 92, 0.72))
+          drop-shadow(0 0 28px rgba(255, 160, 54, 0.38));
+}
+.p-energy .car.on .car-shell { stroke: rgba(255, 220, 150, 0.80); }
+.p-energy .car-battery rect {
+  fill: rgba(12, 22, 34, 0.92);
+  stroke: rgba(180, 216, 250, 0.72);
+  stroke-width: 0.7;
+}
+.p-energy .car-battery .level {
+  fill: rgba(111, 227, 168, 0.90);
+  stroke: none;
+}
 
 .p-energy .car-pct {
   font-family: var(--ff-display);
