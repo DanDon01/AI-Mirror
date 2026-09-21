@@ -437,6 +437,16 @@ class Bridge:
                     out[key] = value
             return out
 
+    def control_status(self):
+        """Safe diagnostics for the LAN control page; never expose secrets."""
+        return {
+            "modules": {name: True for name in sorted(self.modules)},
+            "configured_entities": {
+                key: bool(value) for key, value in self.gate.items()
+                if key.endswith("_entity") or key == "light_entities"
+            },
+        }
+
 
 def _parse_iso(text):
     if not text:

@@ -44,6 +44,12 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/api/state.json":
             self._serve_state()
             return
+        if self.path.split("?")[0] == "/api/control/status":
+            if self.bridge is None:
+                self._json({"live": False, "modules": {}, "configured_entities": {}})
+            else:
+                self._json({"live": True, **self.bridge.control_status()})
+            return
         super().do_GET()
 
     def do_POST(self):

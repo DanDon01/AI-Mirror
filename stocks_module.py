@@ -509,6 +509,7 @@ class StocksModule:
             price = prev = None
             volume = 0
             day_low = day_high = None
+            series = []
 
             # Primary: recent daily candles (chart endpoint, robust)
             try:
@@ -516,6 +517,7 @@ class StocksModule:
                 if hist is not None and not hist.empty:
                     closes = hist['Close'].dropna()
                     if len(closes):
+                        series = [float(value) for value in closes.tolist()]
                         price = float(closes.iloc[-1])
                         prev = float(closes.iloc[-2]) if len(closes) >= 2 else price
                         vol = hist['Volume'].iloc[-1]
@@ -549,6 +551,7 @@ class StocksModule:
                 'day_range': f"{(day_low or price):.2f} - {(day_high or price):.2f}",
                 'source': 'yfinance',
                 'currency': meta.get('currency', '$'),
+                'series': series,
             }
             logger.info(f"yfinance: {ticker} = {price:.2f} ({pct:+.2f}%)")
             api_tracker.record("stocks", "yahoo-finance")

@@ -28,6 +28,7 @@
   <div class="meta">Live diagnostics for the visual gate. Mirror display: <a href="http://" id="display">visual port</a></div>
   <p><button onclick="refresh()">Refresh data</button> <button onclick="pump()">Request feed update</button></p>
   <h2>Feeds</h2><div class="grid" id="feeds"></div>
+  <h2>Configuration</h2><div class="grid" id="config"></div>
   <h2>Visual data</h2><pre id="payload">Loading...</pre>
   <script>
     const display = document.getElementById('display');
@@ -43,6 +44,14 @@
         feeds.appendChild(card);
       }
       if (!feeds.children.length) feeds.innerHTML = '<div class="meta">No live feeds have returned data yet.</div>';
+      const status = await (await fetch('/api/control/status', {cache: 'no-store'})).json();
+      const config = document.getElementById('config'); config.innerHTML = '';
+      for (const [key, set] of Object.entries(status.configured_entities || {})) {
+        const card = document.createElement('div'); card.className = 'card';
+        card.innerHTML = '<div class="label">' + key.replaceAll('_', ' ') + '</div>' +
+          '<div class="value">' + (set ? 'configured' : 'not set') + '</div>';
+        config.appendChild(card);
+      }
       document.getElementById('payload').textContent = JSON.stringify(data, null, 2);
     }
     async function pump() { await fetch('/api/control/pump', {method: 'POST'}); refresh(); }
