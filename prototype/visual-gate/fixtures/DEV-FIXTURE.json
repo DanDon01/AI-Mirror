@@ -44,6 +44,12 @@
       [481, 312]
     ],
     "rooms_lit": 4,
+    "rooms": {
+      "upstairs": { "temperature_c": 19.4, "humidity_pct": 54 },
+      "downstairs": { "temperature_c": 21.1, "humidity_pct": 48 },
+      "bedroom": { "occupied": false },
+      "livingroom": { "curtain": "closed" }
+    },
     "car": { "charging": true, "charge_pct": 62 }
   },
 

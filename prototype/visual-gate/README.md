@@ -3,8 +3,9 @@
 An isolated prototype built to answer one question: can Chromium on a
 Raspberry Pi 5 hold the visual quality the revised direction asks for?
 
-It contains three concepts and nothing else. It is not connected to the
-mirror application, shares no code with it, and integrates no live data.
+It contains the visual-gate concepts and a small live-data bridge. The
+browser renderer stays separate from the Pygame app, but the bridge reuses
+the app's configured data modules and exposes only readings that are present.
 
 1. **Biometrics** — one particle object that is an anatomical heart,
    dissolves, and reforms as a brain. The beat is paced by the resting
@@ -20,8 +21,9 @@ Everything else stays black, because black is the mirror.
 ## Data
 
 `fixtures/DEV-FIXTURE.json` is invented and labelled as such, in the file
-and on screen. The production interface must never load it. Where data is
-absent, the answer is to draw nothing, not to substitute a number.
+and on screen. Production uses `/api/state.json` from `serve.py`; it must
+never load the fixture. Where live data is absent, the answer is to draw
+nothing, not to substitute a number.
 
 ## Running it
 
