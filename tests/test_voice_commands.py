@@ -15,7 +15,7 @@ TEST_CASES = [
     ("display stocks", "show", "stocks"),
     ("turn off calendar", "hide", "calendar"),
     ("enable fitbit", "show", "fitbit"),
-    ("disable retro characters", "hide", "retro"),
+    ("disable retro characters", "hide", "retro_characters"),
     ("show me the temperature", "show", "weather"),
     ("turn on the schedule", "show", "calendar"),
     ("remove health data", "hide", "fitbit"),

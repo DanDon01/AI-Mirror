@@ -63,7 +63,8 @@ AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
        smarthome_module.py   - Home Assistant mini view (left column: summary + state dots)
                                plus on-demand center dashboard overlay (voice "show the
                                dashboard" or 'h' key; auto-closes after 60s)
-       avatar_module.py      - Procedural talking-head avatar with audio-driven lipsync
+       avatar_module.py      - Selectable Vosk -> OpenAI -> Fal talking-video avatar
+       avatar_profiles.py    - Character catalogue, reference images, prompts, persistence
        phone_module.py       - iPhone battery (HA Companion app) + leave-by countdown
                                computed from the calendar module's events
        sysinfo_module.py     - Pi system stats (CPU temp, memory, disk, uptime via psutil + /proc fallback)
@@ -188,19 +189,16 @@ HA_TOKEN=
 - yfinance was bumped 0.2.x -> 1.x in requirements.txt; verify the stock ticker on
   the Pi after upgrading.
 
-## Avatar (talking head, "Holly" style)
-- `avatar_module.py` composites pre-rendered realistic face frames from
-  `assets/avatar/` (neutral/blink/smile + mouth visemes; see README.txt there)
-  semi-transparent on black with optional CRT scanlines. Centered in the
-  mirror's clear zone, visible only during voice interaction, smiles when the
-  conversation ends, fades out after 5 s idle.
-- Lipsync: the voice playback thread calls `avatar.feed_audio(pcm)`; RMS picks
-  mouth openness, zero-crossing rate separates fricatives from vowels, and the
-  nearest available viseme frame is shown. Blinks are random (2-6 s).
-- Frames are produced OFFLINE (photos of a real face, or LivePortrait on the
-  dev PC from a single photo). Neural talking heads are not real-time on a
-  Pi 5; frame compositing at 30 FPS is the intended approach.
-- Falls back to a simple procedural face when assets/avatar/ has no frames.
+## Avatar (selectable generated-video characters)
+- `avatar_module.py` preserves the low-latency Princess proof mechanics: a
+  warmed Vosk microphone, minimal-reasoning short text response, warmed Fal
+  reference upload, immediate URL playback, and deferred cache download.
+- `avatar_profiles.py` defines Mechanic, Officer, Master Control, Commander,
+  and Bert. Reference PNGs are in `assets/test-avatars/`; editable persona
+  prompts are in `assets/test-avatars/prompts/`.
+- The LAN web panel changes character only while idle and persists the choice
+  in `data/avatar/selection.json`. Each turn snapshots one profile so its image,
+  prompt, and reference-keyed video cache cannot be mixed with another.
 
 ## Known Gotchas
 - `pygame.draw.*` IGNORES the alpha channel of its colour. Passing `(r,g,b,40)` to `draw.line/rect/circle/polygon` renders at full brightness, on plain *and* SRCALPHA surfaces. Anything relying on a dim "track" vs a bright "value" (gauge tracks, grid ruling, scale ticks) silently renders as one flat solid shape. Fix: draw into an SRCALPHA layer and blit that once (`fitbit_module._render`), which makes alpha meaningful and composites correctly. Alpha *does* apply when a surface is blitted, which is why `draw_panel_frame`/`draw_chamfer_frame` (draw-to-temp-surface-then-blit) look correct.

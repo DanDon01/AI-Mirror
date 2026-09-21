@@ -86,6 +86,10 @@ PAGE = """<!DOCTYPE html>
 <div class="meta" id="momentMeta">Fires something now for guests, ignoring the usual rarity cooldowns.</div>
 <div class="meta" id="guestModeMeta">Guest mode: moments fire much more often while it's on -- for a party, not a normal day.</div>
 
+<h2>Avatar character</h2>
+<div class="row" id="avatars"></div>
+<div class="meta" id="avatarMeta">Loading avatar choices...</div>
+
 <h2>Modules</h2>
 <div class="row" id="modules"></div>
 
@@ -151,6 +155,47 @@ async function postTheme(key) {
 async function postRing() {
   await fetch("/api/portal_ring", { method: "POST" });
   refresh();
+}
+
+async function loadAvatars() {
+  const box = document.getElementById("avatars");
+  const meta = document.getElementById("avatarMeta");
+  try {
+    const r = await fetch("/api/avatars");
+    const j = await r.json();
+    box.innerHTML = "";
+    if (!j.enabled) {
+      meta.textContent = "Avatar mode is disabled. Set ENABLE_AVATAR=1 and restart the mirror.";
+      return;
+    }
+    for (const avatar of (j.avatars || [])) {
+      const b = document.createElement("button");
+      b.textContent = avatar.name;
+      b.title = avatar.description;
+      b.disabled = !!j.busy || !avatar.reference_available;
+      b.className = avatar.selected ? "state-active" : (avatar.reference_available ? "" : "off");
+      b.onclick = () => selectAvatar(avatar.key);
+      box.appendChild(b);
+    }
+    const selected = (j.avatars || []).find(a => a.selected);
+    meta.textContent = j.busy
+      ? "Current response is finishing; character switching is temporarily locked."
+      : (selected ? selected.name + " - " + selected.description : "Choose a character.");
+  } catch (e) {
+    meta.textContent = "Avatar choices unavailable.";
+  }
+}
+
+async function selectAvatar(key) {
+  const meta = document.getElementById("avatarMeta");
+  meta.textContent = "Switching character...";
+  const r = await fetch("/api/avatar?value=" + encodeURIComponent(key), { method: "POST" });
+  if (!r.ok) {
+    const j = await r.json();
+    meta.textContent = j.error || "Character switch failed.";
+    return;
+  }
+  setTimeout(loadAvatars, 300);
 }
 
 function render(s) {
@@ -271,9 +316,11 @@ refreshLog();
 loadTickers();
 loadEntities();
 loadThemes();
+loadAvatars();
 setInterval(refresh, 5000);
 setInterval(refreshLog, 10000);
 setInterval(loadThemes, 10000);
+setInterval(loadAvatars, 5000);
 </script>
 </body>
 </html>
@@ -323,6 +370,15 @@ class WebPanel:
                     sh = self.mirror.modules.get("smarthome")
                     if sh and hasattr(sh, "set_entities"):
                         sh.set_entities(value)
+                elif cmd == "set_avatar":
+                    avatar = self.mirror.modules.get("avatar")
+                    if avatar and hasattr(avatar, "select_avatar"):
+                        profile = avatar.select_avatar(value)
+                        logger.info("Panel selected avatar: %s", profile.name)
+                        if hasattr(self.mirror, "animation_manager"):
+                            self.mirror.animation_manager.push_notification(
+                                f"Avatar: {profile.name}", duration_ms=2500,
+                            )
                 elif cmd == "trigger_moment":
                     director = getattr(self.mirror, "director", None)
                     if director:
@@ -390,6 +446,15 @@ class WebPanel:
                     self._send(200, json.dumps({
                         "themes": theme.names(), "current": theme.current(),
                     }))
+                elif url.path == "/api/avatars":
+                    avatar = panel.mirror.modules.get("avatar")
+                    payload = (
+                        avatar.get_avatar_options()
+                        if avatar and hasattr(avatar, "get_avatar_options")
+                        else {"enabled": False, "avatars": [], "current": None, "busy": False}
+                    )
+                    payload.setdefault("enabled", True)
+                    self._send(200, json.dumps(payload))
                 else:
                     self._send(404, json.dumps({"error": "not found"}))
 
@@ -409,6 +474,24 @@ class WebPanel:
                 elif url.path == "/api/portal_ring":
                     panel.commands.put(("portal_ring", None))
                     self._send(200, json.dumps({"ok": True}))
+                elif url.path == "/api/avatar":
+                    value = qs.get("value", [""])[0]
+                    avatar = panel.mirror.modules.get("avatar")
+                    if not avatar or not hasattr(avatar, "get_avatar_options"):
+                        self._send(409, json.dumps({"error": "avatar mode is disabled"}))
+                    else:
+                        options = avatar.get_avatar_options()
+                        valid = {
+                            item["key"] for item in options.get("avatars", [])
+                            if item.get("reference_available")
+                        }
+                        if options.get("busy"):
+                            self._send(409, json.dumps({"error": "wait for the current avatar turn to finish"}))
+                        elif value not in valid:
+                            self._send(400, json.dumps({"error": "unknown avatar"}))
+                        else:
+                            panel.commands.put(("set_avatar", value))
+                            self._send(200, json.dumps({"ok": True, "avatar": value}))
                 elif url.path == "/api/toggle":
                     module = qs.get("module", [""])[0]
                     if module in panel.mirror.modules:

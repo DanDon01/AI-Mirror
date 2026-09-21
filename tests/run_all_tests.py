@@ -47,9 +47,13 @@ DISPLAY_TESTS = [
 
 LOGIC_TESTS = [
     "test_voice_commands.py",
-    "test_princess_services.py",
-    "test_princess_cache.py",
-    "test_princess_player.py",
+    "test_avatar_profiles.py",
+    "test_avatar_module.py",
+    "test_avatar_services.py",
+    "test_avatar_cache.py",
+    "test_avatar_context.py",
+    "test_avatar_player.py",
+    "test_web_panel_avatar.py",
 ]
 
 INTEGRATION_TESTS = [
@@ -65,9 +69,13 @@ def run_test_script(script_name):
 
     start = time.time()
     try:
+        env = os.environ.copy()
+        existing_path = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = _PROJECT_ROOT + (os.pathsep + existing_path if existing_path else "")
         result = subprocess.run(
             [sys.executable, script_path],
             cwd=_PROJECT_ROOT,
+            env=env,
             timeout=120,
         )
         duration = time.time() - start

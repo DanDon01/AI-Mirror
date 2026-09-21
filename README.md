@@ -158,30 +158,32 @@ Modules auto-hide when their credentials aren't configured, so you can start wit
 python AI-Mirror.py
 ```
 
-### Princess video proof (standalone)
+### Selectable talking avatars
 
-The approved Princess reference and two dormant visual candidates live under
-`assets/princess/`. In Princess mode, install the local Vosk model separately,
-set `VOSK_MODEL_PATH`, and set `ENABLE_PRINCESS=1`; this replaces the legacy
-Realtime/drawn-avatar path with local STT -> OpenAI text -> fal video/audio.
+Avatar mode replaces the earlier Princess-only proof with five selectable
+characters: Mechanic, Officer, Master Control, Commander, and Bert. Their
+reference images live in [`assets/test-avatars/`](assets/test-avatars/) and
+their editable persona prompts live in
+[`assets/test-avatars/prompts/`](assets/test-avatars/prompts/). The LAN web
+panel provides the character selector and remembers the choice across restarts.
 
-Princess's editable persona is in
-[`assets/princess/princess_prompt.default.txt`](assets/princess/princess_prompt.default.txt).
-Edit only its non-comment text; its comments give brief prompt-writing tips.
-Set `PRINCESS_PROMPT_FILE` to use a separate local prompt file, or
-`PRINCESS_SYSTEM_PROMPT` for a one-line environment override.
+Install the local Vosk model separately, set `VOSK_MODEL_PATH`, and set
+`ENABLE_AVATAR=1`; this uses local STT -> OpenAI text -> Fal video/audio.
+Set `AVATAR_PROMPT_FILE` to temporarily use one local prompt for every
+character, `AVATAR_SYSTEM_PROMPT` for a one-line override, or
+`AVATAR_CHARACTER=mechanic` to override the persisted selection at startup.
 
-On Pi, Princess warms the configured Vosk model and keeps a raw microphone
+On Pi, the avatar pipeline warms the configured Vosk model and keeps a raw microphone
 stream open by default. It discards PCM until the first Space press, then
 transcribes only the audio between the two presses while writing the diagnostic
 WAV. The second press finalises that already-running recognizer and immediately
-submits the text response. Set `PRINCESS_WARM_MIC=0` to restore per-turn WAV
-capture if necessary. Optional five-second apparition clips in
-[`assets/princess/apparitions/`](assets/princess/apparitions/) begin on the
-first press in parallel with the turn; they never delay the response video.
+submits the text response. Set `AVATAR_WARM_MIC=0` to restore per-turn WAV
+capture if necessary. Optional five-second apparition clips can be placed in
+`assets/test-avatars/apparitions/<character-key>/`; they begin on the first
+press in parallel with the turn and never delay the response video.
 
 Add `FAL_KEY` to the parent `Variables.env` and install `requirements.txt`.
-The live Princess flow sends the approved image and short text directly to
+The live avatar flow sends the selected image and short text directly to
 `minimax/h3-max-turbo/image-to-video`; Fal generates the talking video and its
 embedded audio, so no WAV is uploaded. A completed response is downloaded and
 cached after playback for reuse when its intent and time-of-day tags make that
@@ -209,7 +211,7 @@ Set `UI_DISPLAY_MODE=day` or `night` to force a mode, or set
 
 ### Future option: Fal Director realtime avatar
 
-The active Princess path deliberately uses short, cached-or-generated MP4
+The active avatar path deliberately uses short, cached-or-generated MP4
 responses. A possible future upgrade is
 [Fal Director](https://fal.ai/models/minimax/h3-max/director/api), which can
 maintain a continuous WebRTC video/audio stream from the approved reference

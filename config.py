@@ -14,7 +14,10 @@ env_path = os.path.join(current_dir, '..', 'Variables.env')
 
 # Load the .env file
 load_dotenv(env_path)
-PRINCESS_ENABLED = os.getenv('ENABLE_PRINCESS', '').lower() in ('1', 'true', 'yes', 'on')
+# ENABLE_PRINCESS remains a one-release migration fallback for existing Pi setups.
+AVATAR_ENABLED = os.getenv(
+    'ENABLE_AVATAR', os.getenv('ENABLE_PRINCESS', '')
+).lower() in ('1', 'true', 'yes', 'on')
 
 #########################################
 # GLOBAL CONSTANTS
@@ -284,7 +287,7 @@ LAYOUT_V2 = {
     'right_modules': ['greeting', 'phone', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
     'top_bar_modules': ['clock'],
     'bottom_bar_modules': ['stocks'],
-    'center_overlay_modules': ['princess', 'avatar', 'ai_interaction', 'ai_voice', 'eleven_voice'],
+    'center_overlay_modules': ['avatar', 'ai_interaction', 'ai_voice', 'eleven_voice'],
     'fullscreen_overlay_modules': ['retro_characters'],
     'module_gap': 15,
     'edge_padding': 15,
@@ -476,15 +479,9 @@ CONFIG = {
     'avatar': {
         'class': 'AvatarModule',
         'params': {
-            'size': 420,
-            'transparency': 205,  # semi-transparent ghost-on-glass look
-            'scanlines': True,    # faint CRT lines, Red Dwarf style
-            # Face frames live in assets/avatar/ (see README.txt there)
+            'size': 620,
+            'alsa_device': os.getenv('VOICE_MIC', 'plughw:3,0'),
         }
-    },
-    'princess': {
-        'class': 'PrincessModule',
-        'params': {'size': 620, 'alsa_device': os.getenv('VOICE_MIC', 'plughw:3,0')}
     },
     'ai_interaction': {
         'class': 'AIInteractionModule',
@@ -625,9 +622,9 @@ CONFIG = {
         # Voice is opt-in via Variables.env (no code edit, survives git pull):
         #   ENABLE_VOICE=1           -> Realtime voice (gpt-realtime-mini)
         #   ENABLE_VOICE_FALLBACK=1  -> older chat+TTS voice (no Realtime access needed)
-        'ai_voice': (not PRINCESS_ENABLED) and os.getenv('ENABLE_VOICE', '').lower() in ('1', 'true', 'yes', 'on'),
-        'ai_interaction': (not PRINCESS_ENABLED) and os.getenv('ENABLE_VOICE_FALLBACK', '').lower() in ('1', 'true', 'yes', 'on'),
-        'avatar': not PRINCESS_ENABLED,
+        'ai_voice': (not AVATAR_ENABLED) and os.getenv('ENABLE_VOICE', '').lower() in ('1', 'true', 'yes', 'on'),
+        'ai_interaction': (not AVATAR_ENABLED) and os.getenv('ENABLE_VOICE_FALLBACK', '').lower() in ('1', 'true', 'yes', 'on'),
+        'avatar': AVATAR_ENABLED,
         'countdown': True,
         'quote': True,
         'news': True,
@@ -637,7 +634,6 @@ CONFIG = {
         'greeting': True,
         'octopus_energy': True,
         'phone': True,
-        'princess': PRINCESS_ENABLED
     },
     
     # Keyboard toggles: keys 1-9, 0 map to these modules (in order)

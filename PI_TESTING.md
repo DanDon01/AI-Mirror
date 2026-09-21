@@ -125,58 +125,62 @@ Enable voice first: in config.py set `module_visibility` -> `'ai_voice': True`.
 - [ ] Check `api_usage.log` after a few conversations - realtime costs
       should be fractions of a penny per exchange, $1/day hard ceiling
 
-## Princess video mode
+## Selectable avatar video mode
 
-Princess is a replacement for the legacy Realtime/drawn-avatar path, not an
-addition to it.  In the parent `Variables.env`, configure:
+The generated-video avatar is a replacement for the Realtime voice path, not
+an addition to it. In the parent `Variables.env`, configure:
 
 ```text
-ENABLE_PRINCESS=1
+ENABLE_AVATAR=1
 FAL_KEY=<your Fal key>
 VOSK_MODEL_PATH=/absolute/path/to/vosk-model-small-en-us-0.15
-PRINCESS_LLM_MODEL=gpt-5-nano-2025-08-07
-PRINCESS_MAX_REPLY_WORDS=12
-PRINCESS_WARM_MIC=1
-PRINCESS_APPARITIONS=1
+AVATAR_LLM_MODEL=gpt-5-nano-2025-08-07
+AVATAR_MAX_REPLY_WORDS=12
+AVATAR_WARM_MIC=1
+AVATAR_APPARITIONS=1
 ```
 
-`OPENAI_API_KEY` is also required. `PRINCESS_LLM_MODEL` may be omitted because
+`OPENAI_API_KEY` is also required. `AVATAR_LLM_MODEL` may be omitted because
 the pinned Nano snapshot is now the code default, but setting it makes the Pi
-configuration explicit. Do not set `ENABLE_VOICE` for Princess mode: local
+configuration explicit. Do not set `ENABLE_VOICE` for avatar mode: local
 Vosk handles speech-to-text, Nano produces text, and Fal provides the video
 with its embedded audio.
 
-After `./deploy/deploy.sh`, test each turn with Space once to start recording
-and once to stop it. Confirm these log stages in order: local STT, `Princess
-text reply ready`, Fal submission, `Princess fal video ready`, then playback.
+Open `http://<pi-ip>:8780` and choose Mechanic, Officer, Master Control,
+Commander, or Bert under **Avatar character**. Confirm the choice survives a
+restart. The selector is locked while a turn is running so an image and persona
+cannot be mixed mid-response.
 
-For the fastest path, after boot confirm `Princess warm microphone opened` in
-the log. The first Space press should log `Princess streaming recording
-started`; the second should log `Princess streaming STT finalised instantly`
-and move directly to `Princess streaming STT ready at response submit`. This
+After `./deploy/deploy.sh`, test each turn with Space once to start recording
+and once to stop it. Confirm these log stages in order: local STT, `Avatar
+text reply ready`, Fal submission, `Avatar fal video ready`, then playback.
+
+For the fastest path, after boot confirm `Avatar warm microphone opened` in
+the log. The first Space press should log `Avatar streaming recording
+started`; the second should log `Avatar streaming STT finalised instantly`
+and move directly to `Avatar streaming STT ready at response submit`. This
 means Vosk processed PCM during the utterance and does not need a second WAV
 pass after Space is pressed to stop. If ALSA keeps the microphone busy or this
-path is unsuitable for a device, set `PRINCESS_WARM_MIC=0` to use the earlier
+path is unsuitable for a device, set `AVATAR_WARM_MIC=0` to use the earlier
 per-turn recorder fallback.
 
 Add approved five-second theatre clips under
-`assets/princess/apparitions/`. The first Space press starts a random clip in
+`assets/test-avatars/apparitions/<character-key>/`. The first Space press starts a random clip in
 parallel with recording; it is interrupted as soon as the response video is
-ready and therefore cannot add response latency. See that directory's README
-for framing requirements. Set `PRINCESS_APPARITIONS=0` to disable clips while
+ready and therefore cannot add response latency. Set `AVATAR_APPARITIONS=0` to disable clips while
 testing.
 
 - Ask for the headlines, then ask an implied weather question such as “Will I
   need an umbrella later?”, then an ambiguous home question such as “Did I
   leave anything on?”.
 - Check that the reply uses only current module data and that a live-data turn
-  is never saved to the reusable Princess video pool.
+  is never saved to the reusable avatar video pool.
 - Repeat a generic greeting at the relevant time of day; after a cache has
-  naturally accumulated, it should log `Princess intent cache hit` and make
+  naturally accumulated, it should log `Avatar intent cache hit` and make
   no OpenAI/Fal request.
 - On a failure, the still portrait/status remains visible and the normal
-  mirror keeps running. Set `ENABLE_PRINCESS=0` and restart to return to the
-  legacy voice/avatar path.
+  mirror keeps running. Set `ENABLE_AVATAR=0` and restart to return to the
+  Realtime voice path.
 
 The retained Windows diagnostic `tests/_princess_nano_request_probe.py` uses
 mocked fixture data in the exact compact request shape and makes three paid

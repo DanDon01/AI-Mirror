@@ -1,4 +1,4 @@
-"""Offline tests for the Princess Phase 2 provider boundaries."""
+"""Offline tests for the Avatar Phase 2 provider boundaries."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from princess_services import (  # noqa: E402
+from avatar_services import (  # noqa: E402
     FlashTalkService,
     OpenAITTSService,
     atomic_write_json,
@@ -119,7 +119,7 @@ class FakeSession:
         return FakeDownloadResponse()
 
 
-class PrincessServiceTests(unittest.TestCase):
+class AvatarServiceTests(unittest.TestCase):
     def test_atomic_json_and_hash(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "nested" / "proof.json"
@@ -229,3 +229,4 @@ class PrincessServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

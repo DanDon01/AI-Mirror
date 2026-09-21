@@ -100,7 +100,6 @@ from greeting_module import GreetingModule
 from octopus_energy_module import OctopusEnergyModule
 from avatar_module import AvatarModule
 from phone_module import PhoneModule
-from princess_module import PrincessModule
 from api_tracker import api_tracker
 
 
@@ -172,10 +171,10 @@ class MagicMirror:
 
         # Initialize modules first
         self.modules = self.initialize_modules()
-        princess = self.modules.get('princess')
-        if princess is not None and hasattr(princess, 'set_context_sources'):
-            princess.set_context_sources(self.modules)
-            logging.info("Princess wired to read-only news, weather, and calendar context")
+        avatar = self.modules.get('avatar')
+        if avatar is not None and hasattr(avatar, 'set_context_sources'):
+            avatar.set_context_sources(self.modules)
+            logging.info("Avatar wired to read-only news, weather, calendar, and smart-home context")
 
         self.frame_rate = CONFIG.get('frame_rate', 30)
         self.running = True
@@ -244,29 +243,15 @@ class MagicMirror:
         boot_order += [n for n in layout_v2.get('right_modules', []) if n in self.modules]
         self.animation_manager.stagger_in([n for n in boot_order if n in self.modules])
 
-        # Wire the avatar to the voice module: lipsync audio + state changes
-        if 'avatar' in self.modules and 'ai_voice' in self.modules:
-            voice = self.modules['ai_voice']
-            avatar = self.modules['avatar']
-            if hasattr(voice, 'set_audio_sink'):
-                voice.set_audio_sink(avatar.feed_audio)
-            if hasattr(voice, 'set_state_listener'):
-                voice.set_state_listener(avatar.set_voice_state)
-            logging.info("Avatar wired to AI voice module (lipsync + state)")
-
         # Spoken commands: transcripts arrive on the WebSocket thread, so
         # they queue here and are parsed on the main loop
         from queue import Queue as _Queue
         self.voice_command_queue = _Queue()
-        self.voice_response_queue = _Queue()
         from voice_commands import ModuleCommand
         self.voice_command_parser = ModuleCommand()
         if 'ai_voice' in self.modules and hasattr(self.modules['ai_voice'], 'set_command_listener'):
             self.modules['ai_voice'].set_command_listener(self.voice_command_queue.put)
             logging.info("Voice command listener wired to AI voice module")
-        if 'ai_voice' in self.modules and hasattr(self.modules['ai_voice'], 'set_response_listener'):
-            self.modules['ai_voice'].set_response_listener(self.voice_response_queue.put)
-            logging.info("Voice response listener wired to Princess cache")
 
         # Phone control panel (LAN only, no auth - see web_panel.py)
         self.web_panel = None
@@ -372,7 +357,6 @@ class MagicMirror:
             'octopus_energy': OctopusEnergyModule,
             'avatar': AvatarModule,
             'phone': PhoneModule,
-            'princess': PrincessModule
         }
 
         config_copy = CONFIG.copy()
@@ -423,7 +407,7 @@ class MagicMirror:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
                 # Any real interaction wakes the scheduled blackout. Apart
-                # from Space (which should immediately begin a Princess turn),
+                # from Space (which should immediately begin an Avatar turn),
                 # consume the key so a wake-up key cannot accidentally toggle
                 # another UI state.
                 woke_from_auto_sleep = self._wake_auto_sleep_for_input()
@@ -466,9 +450,9 @@ class MagicMirror:
                 elif event.key == pygame.K_SPACE:
                     if self.state != "active":
                         self.change_state("active")
-                    if 'princess' in self.modules:
-                        logging.info("Space bar pressed - triggering PrincessModule")
-                        self.modules['princess'].on_button_press()
+                    if 'avatar' in self.modules:
+                        logging.info("Space bar pressed - triggering AvatarModule")
+                        self.modules['avatar'].on_button_press()
                     elif 'ai_voice' in self.modules:
                         try:
                             logging.info("Space bar pressed - triggering AIVoiceModule")
@@ -812,27 +796,6 @@ class MagicMirror:
                     duration_ms=2000,
                 )
 
-    def _play_cached_princess(self, response_text):
-        """Play an already-approved reusable response; never generate here."""
-        if not self.princess_cache or 'princess' not in self.modules:
-            return False
-        try:
-            import os
-            reference_hash = os.getenv('PRINCESS_REFERENCE_SHA256', '4372362f69934d09af6b156ff5e71183d4b2c3c36155c6361d0f566a09ec7def')
-            model = os.getenv('PRINCESS_FAL_MODEL', 'minimax/h3-max-turbo/image-to-video')
-            if not reference_hash:
-                return False
-            clip = self.princess_cache.select(response_text, reference_hash, model, intent='general')
-            if not clip:
-                return False
-            position = self.module_positions.get('princess', {'width': 420, 'height': 420})
-            self.modules['princess'].play_cached(self.princess_cache.root / clip['media_path'], position)
-            self.princess_cache.mark_used(clip['id'])
-            return True
-        except Exception as exc:
-            logging.debug(f"Princess cache playback skipped: {exc}")
-            return False
-
     def update_modules(self):
         # Apply commands queued by the web control panel
         if self.web_panel:
@@ -844,12 +807,6 @@ class MagicMirror:
                 self._handle_voice_transcript(self.voice_command_queue.get_nowait())
             except Exception as e:
                 logging.error(f"Voice transcript handling failed: {e}")
-
-        while not self.voice_response_queue.empty():
-            try:
-                self._play_cached_princess(self.voice_response_queue.get_nowait())
-            except Exception as e:
-                logging.error(f"Princess cached response handling failed: {e}")
 
         # Check for commands from the fallback AI module
         if 'ai_interaction' in self.modules:
@@ -863,7 +820,6 @@ class MagicMirror:
                     self.speech_logger.log_user_speech(content['user_text'])
                     if content['ai_response']:
                         self.speech_logger.log_ai_response(content['ai_response'])
-                        self._play_cached_princess(content['ai_response'])
 
         # Update visible modules (state-aware)
         screensaver_names = CONFIG.get('screensaver_modules', ['retro_characters'])

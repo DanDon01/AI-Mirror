@@ -86,12 +86,12 @@ class LayoutManager:
             # one-line voice status overlays
             height = (
                 min(int(center_w * 2.25), h - 160)
-                if name in ('avatar', 'princess') else 200
+                if name == 'avatar' else 200
             )
             overlay_y = 80 + ((h - 160 - height) // 2)
             self.module_positions[name] = {
                 'x': center_x,
-                'y': overlay_y if name in ('avatar', 'princess') else center_y,
+                'y': overlay_y if name == 'avatar' else center_y,
                 'width': center_w, 'height': height,
             }
 

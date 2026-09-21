@@ -60,12 +60,11 @@ PROJECT_MODULES = [
     "ai_voice_module",
     "AI_Module",
     "elevenvoice_module",
-    "princess_services",
-    "princess_context",
-    "princess_module",
-    "princess_apparitions",
-    "princess_cache",
-    "princess_player",
+    "avatar_profiles",
+    "avatar_services",
+    "avatar_context",
+    "avatar_cache",
+    "avatar_player",
 ]
 
 

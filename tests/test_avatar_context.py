@@ -2,10 +2,10 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 import unittest
 
-from princess_context import PrincessContext
+from avatar_context import AvatarContext
 
 
-class PrincessContextTests(unittest.TestCase):
+class AvatarContextTests(unittest.TestCase):
     def test_copies_fresh_data_without_fetching(self):
         now = datetime(2026, 9, 4, 12, 0, 0)
         sources = {
@@ -13,7 +13,7 @@ class PrincessContextTests(unittest.TestCase):
             "weather": SimpleNamespace(weather_data={"name": "Birmingham", "main": {"temp": 18, "feels_like": 17}, "weather": [{"description": "light rain"}], "wind": {"speed": 3}}, last_update=now - timedelta(minutes=5)),
             "calendar": SimpleNamespace(events=[{"summary": "Lunch", "start": {"dateTime": "2026-09-04T13:00:00+01:00"}}], last_update=now - timedelta(minutes=5)),
         }
-        snapshot = PrincessContext(sources).snapshot(now)
+        snapshot = AvatarContext(sources).snapshot(now)
         self.assertTrue(snapshot["news"]["available"])
         self.assertEqual(snapshot["weather"]["data"]["temperature_c"], 18)
         self.assertEqual(snapshot["calendar"]["data"]["events"][0]["title"], "Lunch")
@@ -27,14 +27,14 @@ class PrincessContextTests(unittest.TestCase):
             data={"light.lounge": {"state": "on", "attributes": {"friendly_name": "Lounge light"}}},
             last_update=now - timedelta(seconds=30),
         )
-        snapshot = PrincessContext({"smarthome": home}).snapshot(now)
+        snapshot = AvatarContext({"smarthome": home}).snapshot(now)
         self.assertTrue(snapshot["smarthome"]["available"])
         self.assertEqual(snapshot["smarthome"]["data"]["entities"], [{"name": "Lounge light", "state": "on", "unit": ""}])
 
     def test_stale_or_missing_context_is_unavailable(self):
         now = datetime(2026, 9, 4, 12, 0, 0)
         sources = {"news": SimpleNamespace(headlines=[{"title": "Old", "source": "BBC"}], last_fetch=now - timedelta(hours=1))}
-        snapshot = PrincessContext(sources).snapshot(now)
+        snapshot = AvatarContext(sources).snapshot(now)
         self.assertFalse(snapshot["news"]["available"])
         self.assertFalse(snapshot["weather"]["available"])
         self.assertFalse(snapshot["calendar"]["available"])
@@ -42,3 +42,4 @@ class PrincessContextTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

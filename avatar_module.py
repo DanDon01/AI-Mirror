@@ -1,425 +1,536 @@
-"""Avatar talking-head module for AI-Mirror - "Holly" style.
+"""Avatar-only Pi pipeline: local STT -> OpenAI text -> fal video/audio."""
+from __future__ import annotations
+import json, logging, os, random, re, shutil, subprocess, threading, time, wave
+from pathlib import Path
+from queue import Queue
 
-Renders a realistic human face floating on black (semi-transparent, like
-the Red Dwarf ship computer) from a set of pre-rendered face frames in
-assets/avatar/. Real-time neural rendering is not feasible on a Pi 5, but
-Holly never needed it: the look is a mostly-static face that blinks,
-smiles, and moves its mouth while speaking. Frame compositing at 30 FPS
-does that perfectly.
-
-Face frames (PNG, same size, head centered identically, on transparent
-or pure black background):
-    neutral.png      REQUIRED  eyes open, mouth closed
-    blink.png        optional  same face, eyes closed
-    smile.png        optional  same face, smiling
-    mouth_small.png  optional  mouth slightly open
-    mouth_open.png   optional  mouth open (ah)
-    mouth_wide.png   optional  mouth wide open
-    mouth_round.png  optional  rounded mouth (oo/oh)
-
-Generate them by photographing a real face pulling each shape, or from a
-single AI-generated/real photo using LivePortrait (open source, runs
-offline on the dev PC) which has explicit eye-close and lip-open
-retargeting. More frames = smoother mouth; even just neutral + open
-reads as talking.
-
-Lipsync: the voice playback thread calls feed_audio(pcm); loudness (RMS)
-picks how open the mouth is, zero-crossing rate separates hissy
-consonants from open vowels. Blinks are random (2-6 s), a smile plays
-when the conversation ends.
-
-Falls back to a simple procedural face if no frames are found, so the
-module still works before assets exist.
-
-Wiring (done in AI-Mirror.py):
-    voice.set_audio_sink(avatar.feed_audio)
-    voice.set_state_listener(avatar.set_voice_state)
-"""
-
-import logging
-import math
-import os
-import random
-import time
-from collections import deque
-
+from avatar_cache import AvatarCache, TIME_SENSITIVE_INTENTS, time_of_day_tags
+from avatar_player import AvatarPlayer
+from avatar_services import FlashTalkService
+from avatar_context import AvatarContext
+from avatar_profiles import AvatarProfile, AvatarProfiles
+from background_fetcher import background_network
 import pygame
 
-logger = logging.getLogger("Avatar")
+ROOT = Path(__file__).resolve().parent
+DEFAULT_SYSTEM_PROMPT = "You are a character appearing in an interactive smart mirror. Stay in character and answer directly."
 
-try:
-    import numpy as np
-except ImportError:
-    np = None
 
-_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_ASSETS_PATH = os.path.join(_PROJECT_DIR, "assets", "avatar")
+def _load_system_prompt(profile: AvatarProfile | None = None) -> str:
+    """Load the editable tracked prompt, ignoring its human guidance comments."""
+    override = os.getenv("AVATAR_SYSTEM_PROMPT", "").strip()
+    if override:
+        return override
+    profile = profile or AvatarProfiles().current()
+    prompt_override = os.getenv("AVATAR_PROMPT_FILE", "").strip()
+    prompt_file = Path(prompt_override) if prompt_override else profile.prompt_file
+    try:
+        prompt = " ".join(
+            line.strip() for line in prompt_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        )
+        return prompt or DEFAULT_SYSTEM_PROMPT
+    except OSError:
+        return DEFAULT_SYSTEM_PROMPT
 
-# Envelope analysis window (seconds of audio per mouth sample)
-WINDOW_SEC = 0.025
-SAMPLE_RATE = 24000
+def _intent_for(text: str) -> str:
+    words = text.casefold()
+    if any(term in words for term in ("news", "headlines", "what's happening", "whats happening")): return "news"
+    if any(term in words for term in ("weather", "temperature", "forecast", "rain", "wind")): return "weather"
+    if any(term in words for term in ("calendar", "schedule", "appointments", "what have i got", "what do i have")): return "calendar"
+    if any(term in words for term in ("smart home", "lights", "light", "heating", "thermostat", "front door", "house status")): return "smarthome"
+    if "good morning" in words or words.strip(" .!?") == "morning": return "greeting_morning"
+    if "good afternoon" in words or words.strip(" .!?") == "afternoon": return "greeting_afternoon"
+    if "good evening" in words or words.strip(" .!?") == "evening": return "greeting_evening"
+    if any(term in words for term in ("hello", "hi avatar", "hey avatar", "hiya")): return "greeting"
+    if "how are you" in words or "i'm fine" in words or "im fine" in words: return "wellbeing"
+    if "thank" in words: return "thanks"
+    if "good night" in words or "sleep well" in words: return "night"
+    if "goodbye" in words or "have a good day" in words: return "farewell"
+    if "plans" in words or "what are you doing" in words: return "plans"
+    return "general"
 
-# How long the face stays visible after the conversation ends
-LINGER_SEC = 5.0
 
-# Fallback procedural palette (matches the mirror's clock cyan)
-COLOR_FACE = (90, 195, 255)
-COLOR_FACE_DIM = (45, 95, 125)
-COLOR_MOUTH_FILL = (15, 40, 55)
+def _response_text(response) -> str:
+    """Read a visible reply from both current and older Responses SDK shapes."""
+    text = getattr(response, "output_text", "") or ""
+    if text.strip():
+        return text.strip()
+    for message in getattr(response, "output", []) or []:
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content", [])
+        for part in content or []:
+            value = getattr(part, "text", None)
+            if value is None and isinstance(part, dict):
+                value = part.get("text", "")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
 
-FRAME_FILES = {
-    "neutral": "neutral.png",
-    "blink": "blink.png",
-    "smile": "smile.png",
-    "small": "mouth_small.png",
-    "open": "mouth_open.png",
-    "wide": "mouth_wide.png",
-    "round": "mouth_round.png",
-}
 
+def _response_intent_and_text(raw: str, fallback_intent: str) -> tuple[str, str]:
+    """Parse the one-call Nano routing envelope without exposing it to Fal."""
+    intent = fallback_intent
+    reply_lines = []
+    for line in raw.splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.strip().casefold() == "intent":
+            candidate = value.strip().casefold()
+            if candidate in {"general", "news", "weather", "calendar", "smarthome"}:
+                intent = candidate
+        elif separator and key.strip().casefold() == "reply":
+            reply_lines.append(value.strip())
+        elif reply_lines:
+            reply_lines.append(line.strip())
+    reply = " ".join(part for part in reply_lines if part).strip()
+    return intent, reply or raw.strip()
+
+
+def _effective_intent(local_intent: str, model_intent: str) -> str:
+    """Keep a known local live-data route authoritative over model formatting."""
+    return local_intent if local_intent != "general" else model_intent
+
+
+def _spoken_reply(text: str, max_words: int = 12) -> str:
+    """Make model output safe, concise, and literal before it reaches Fal."""
+    clean = re.sub(r"[`*_#]+", "", str(text or ""))
+    clean = clean.replace('"', "").replace("\\", "")
+    clean = " ".join(clean.split())
+    return " ".join(clean.split()[:max(1, max_words)]).strip()
 
 class AvatarModule:
-    def __init__(self, size=420, assets_path=None, transparency=205,
-                 scanlines=True, **kwargs):
-        """
-        Args:
-            size: max face height/width in pixels.
-            assets_path: folder of face frame PNGs (default assets/avatar).
-            transparency: 0-255 alpha while speaking (semi-transparent
-                          ghost look; idle is drawn slightly fainter).
-            scanlines: subtle CRT scanline overlay for the retro look.
-        """
-        self.size = size
-        self.assets_path = assets_path or DEFAULT_ASSETS_PATH
-        self.transparency = transparency
-        self.scanlines = scanlines
+    def __init__(self, size=420, alsa_device=None, **kwargs):
+        self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
+        self.cache = AvatarCache(); self.player = AvatarPlayer(); self.recording = False
+        self.profiles = AvatarProfiles()
+        self.profile = self.profiles.current()
+        self._turn_profile = None; self._turn_active = False
+        self.context = AvatarContext()
+        self.fal = FlashTalkService(); self.openai_client = None; self._vosk_model = None
+        self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
+        self._mic_proc = None; self._mic_thread = None; self._mic_stop = threading.Event()
+        self._stream_lock = threading.RLock(); self._stream_recognizer = None; self._capture = None
+        self._streaming_capture = False; self._last_apparition = None; self._apparition_pending = False
+        self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
+        self._playback_label = "none"
+        self._bounds = (self.size, self.size)
+        self.logger = logging.getLogger("Avatar")
+        self._portrait = None; self._alpha = 0.0; self._last_update = time.monotonic()
+        self._load_portrait(self.profile)
+        self.logger.info(
+            "Avatar ready as %s: local STT -> OpenAI text -> fal video",
+            self.profile.name,
+        )
+        threading.Thread(target=self._warm_dependencies, daemon=True, name="avatar-warmup").start()
 
-        self.state = "hidden"
-        self.alpha = 0.0          # fade 0..1
-        self._last_active = 0.0
-        self._last_frame = time.monotonic()
-
-        # Lipsync envelope: deque of (rms, zcr) samples, one per WINDOW_SEC
-        self._envelope = deque(maxlen=2000)
-        self._env_clock = 0.0
-        self._level_max = 1500.0  # running loudness ceiling for normalisation
-        self._openness = 0.0      # smoothed mouth openness 0..1
-        self._narrow = 0.0        # smoothed narrowing 0..1 (fricatives)
-
-        # Idle behaviours
-        self._blink_until = 0.0
-        self._next_blink = time.monotonic() + random.uniform(2.0, 5.0)
-        self._think_phase = 0.0
-        self._smile_until = 0.0
-
-        # Face frames (raw and scaled-to-zone caches)
-        self._frames = {}
-        self._scaled = {}
-        self._scaled_size = None
-        self._scanline_surf = None
-        self._load_frames()
-
-        self._surface = None  # procedural fallback canvas
-
-    # ------------------------------------------------------------------
-    # Frame loading
-    # ------------------------------------------------------------------
-
-    def _load_frames(self):
-        if not os.path.isdir(self.assets_path):
-            logger.warning(
-                f"No avatar frames at {self.assets_path} - using procedural "
-                f"fallback face. Drop PNGs there for the realistic look "
-                f"(see assets/avatar/README.txt)."
-            )
-            return
-        for key, fname in FRAME_FILES.items():
-            path = os.path.join(self.assets_path, fname)
-            if os.path.exists(path):
-                try:
-                    self._frames[key] = pygame.image.load(path)
-                except Exception as e:
-                    logger.error(f"Failed to load avatar frame {fname}: {e}")
-        if "neutral" not in self._frames:
-            if self._frames:
-                logger.error(
-                    "avatar frames found but neutral.png is missing - "
-                    "procedural fallback in use"
-                )
-            self._frames = {}
-        else:
-            logger.info(
-                f"Avatar frames loaded: {sorted(self._frames.keys())}"
-            )
-
-    @property
-    def has_face(self):
-        return bool(self._frames)
-
-    def _get_scaled(self, key, target_h):
-        """Return the frame scaled to fit the zone, cached per size."""
-        if self._scaled_size != target_h:
-            self._scaled = {}
-            self._scaled_size = target_h
-        surf = self._scaled.get(key)
-        if surf is None:
-            raw = self._frames[key]
-            scale = target_h / raw.get_height()
-            w = max(1, int(raw.get_width() * scale))
-            surf = pygame.transform.smoothscale(raw, (w, target_h))
-            # convert_alpha needs a display; tolerate headless test runs
-            try:
-                surf = surf.convert_alpha()
-            except pygame.error:
-                pass
-            self._scaled[key] = surf
-        return surf
-
-    # ------------------------------------------------------------------
-    # Inputs from the voice module
-    # ------------------------------------------------------------------
-
-    def set_voice_state(self, status):
-        """Map voice module status strings onto avatar states."""
-        status = (status or "").lower()
-        prev = self.state
-        if status == "listening":
-            self.state = "listening"
-        elif status in ("processing", "sending", "responding"):
-            self.state = "thinking"
-        elif status == "speaking":
-            self.state = "speaking"
-        elif status in ("ready", "idle"):
-            if self.state != "hidden":
-                self.state = "idle"
-                self._last_active = time.monotonic()
-                if prev == "speaking":
-                    # Holly signs off with a smile
-                    self._smile_until = time.monotonic() + 2.5
-        elif status == "error":
-            self.state = "idle"
-            self._last_active = time.monotonic()
-
-        if self.state in ("listening", "thinking", "speaking"):
-            self._last_active = time.monotonic()
-
-    def feed_audio(self, pcm_bytes, sample_rate=SAMPLE_RATE):
-        """Analyse a 16-bit mono PCM chunk into mouth envelope samples.
-
-        Called from the voice playback thread as each chunk is scheduled,
-        so the envelope leads the heard audio by at most one chunk.
-        """
+    def _load_portrait(self, profile: AvatarProfile):
         try:
-            if np is None or len(pcm_bytes) < 4:
-                return
-            samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
-            window = max(1, int(sample_rate * WINDOW_SEC))
-            for i in range(0, len(samples) - window + 1, window):
-                seg = samples[i:i + window]
-                rms = float(np.sqrt(np.mean(seg * seg)))
-                zcr = float(np.mean(np.abs(np.diff(np.sign(seg))) > 0))
-                self._envelope.append((rms, zcr))
-        except Exception as e:
-            logger.debug(f"feed_audio error: {e}")
+            self._portrait = pygame.image.load(str(profile.reference_image))
+        except Exception as exc:
+            self._portrait = None
+            self.logger.error("%s reference image unavailable: %s", profile.name, exc)
 
-    # ------------------------------------------------------------------
-    # Module interface
-    # ------------------------------------------------------------------
+    def get_avatar_options(self):
+        """Return the selector payload used by the LAN web panel."""
+        return {
+            "avatars": self.profiles.options(),
+            "current": self.profile.key,
+            "busy": bool(self._turn_active or self.recording or self.player.playing),
+        }
+
+    def select_avatar(self, key):
+        """Switch character while idle; the next turn uses its image and prompt."""
+        if self._turn_active or self.recording or self.player.playing:
+            raise RuntimeError("Wait for the current avatar turn to finish")
+        profile = self.profiles.select(key)
+        self.player.stop()
+        self.profile = profile
+        self._load_portrait(profile)
+        self.status = "Ready: SPACE to talk"
+        threading.Thread(
+            target=self._warm_reference,
+            args=(profile,),
+            daemon=True,
+            name=f"avatar-warm-{profile.key}",
+        ).start()
+        self.logger.info("Avatar changed to %s", profile.name)
+        return profile
+
+    def _warm_reference(self, profile):
+        try:
+            self.fal.warm_reference(profile.reference_image)
+            self.logger.info("%s reference image warmed", profile.name)
+        except Exception as exc:
+            self.logger.warning("%s reference warm-up deferred: %s", profile.name, exc)
+
+    def set_context_sources(self, sources):
+        """Called by the mirror after all data modules are initialized."""
+        self.context.set_sources(sources)
+
+    def _warm_dependencies(self):
+        """Hide one-off client/model/microphone startup work before the first turn."""
+        try:
+            from openai import OpenAI
+            self.openai_client = OpenAI()
+            from vosk import Model
+            model_path = os.getenv("VOSK_MODEL_PATH", "")
+            if model_path:
+                self._vosk_model = Model(model_path)
+                self._start_warmed_microphone()
+            self.fal.warm_reference(self.profile.reference_image)
+            self.logger.info("Avatar local STT and text client warmed; streaming_mic=%s", self._streaming_capture)
+        except Exception as exc:
+            self.logger.warning("Avatar warm-up deferred: %s", exc)
+
+    def _start_warmed_microphone(self):
+        """Keep one raw ALSA stream open; discard PCM until a Avatar turn starts."""
+        if os.getenv("AVATAR_WARM_MIC", "1").lower() not in ("1", "true", "yes", "on"):
+            return
+        if self._mic_proc or self._vosk_model is None or not shutil.which("arecord"):
+            return
+        try:
+            self._mic_stop.clear()
+            self._mic_proc = subprocess.Popen(
+                ["arecord", "-q", "-t", "raw", "-f", "S16_LE", "-r", "16000", "-c", "1", "-D", self.device],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0,
+            )
+            self._mic_thread = threading.Thread(target=self._drain_warmed_microphone, daemon=True, name="avatar-vosk-stream")
+            self._mic_thread.start()
+            self._streaming_capture = True
+            self.logger.info("Avatar warm microphone opened: device=%s", self.device)
+        except Exception as exc:
+            self._mic_proc = None; self._streaming_capture = False
+            self.logger.warning("Avatar warm microphone unavailable; using per-turn recorder: %s", exc)
+
+    def _drain_warmed_microphone(self):
+        process = self._mic_proc
+        try:
+            while process and process.stdout and not self._mic_stop.is_set():
+                pcm = process.stdout.read(4000)
+                if not pcm:
+                    break
+                with self._stream_lock:
+                    if not self.recording or self._stream_recognizer is None:
+                        continue
+                    if self._capture is not None:
+                        self._capture.writeframesraw(pcm)
+                    self._stream_recognizer.AcceptWaveform(pcm)
+        except Exception:
+            if not self._mic_stop.is_set():
+                self.logger.exception("Avatar warm microphone stream failed")
+        finally:
+            if not self._mic_stop.is_set():
+                self._streaming_capture = False
+                self.logger.warning("Avatar warm microphone ended; using per-turn recorder")
+
+    def _stop_warmed_microphone(self):
+        self._mic_stop.set()
+        with self._stream_lock:
+            if self._capture is not None:
+                self._capture.close(); self._capture = None
+            self._stream_recognizer = None
+        process = self._mic_proc; self._mic_proc = None; self._streaming_capture = False
+        if process and process.poll() is None:
+            process.terminate()
+            try: process.wait(timeout=2)
+            except subprocess.TimeoutExpired: process.kill()
+
+    def _play_apparition(self):
+        """Begin optional theatre immediately; response generation continues in parallel."""
+        if os.getenv("AVATAR_APPARITIONS", "1").lower() not in ("1", "true", "yes", "on"):
+            return
+        clips = sorted(self.profile.apparition_dir.glob("*.mp4"))
+        if not clips:
+            return
+        choices = [clip for clip in clips if clip != self._last_apparition] or clips
+        clip = random.choice(choices)
+        try:
+            # Do not show the static portrait while ffmpeg decodes the clip's
+            # deliberately black opening frame.
+            self._apparition_pending = True
+            self._playback_label = f"apparition: {clip.name}"
+            self.player.play(clip, self._bounds)
+            self._last_apparition = clip
+            self.logger.info("Avatar apparition started: %s", clip.name)
+        except Exception:
+            self._apparition_pending = False
+            self.logger.exception("Avatar apparition playback failed")
+
+    def on_button_press(self):
+        self.logger.info("Avatar Space pressed; recording=%s", self.recording)
+        if self.recording: self._stop_recording()
+        elif self._turn_active:
+            self.logger.info("Avatar input ignored while the current turn is finishing")
+        else: self._start_recording()
+
+    def _start_recording(self):
+        self._turn_profile = self.profile
+        self._turn_active = True
+        path = self.cache.root / "capture.wav"; path.parent.mkdir(parents=True, exist_ok=True)
+        self.player.stop()
+        self._play_apparition()
+        if self._streaming_capture and self._vosk_model is not None and self._mic_proc and self._mic_proc.poll() is None:
+            try:
+                from vosk import KaldiRecognizer
+                with self._stream_lock:
+                    self._capture = wave.open(str(path), "wb")
+                    self._capture.setnchannels(1); self._capture.setsampwidth(2); self._capture.setframerate(16000)
+                    self._stream_recognizer = KaldiRecognizer(self._vosk_model, 16000)
+                    self.recording = True
+                self.status = "Listening - press SPACE when finished"
+                self.logger.info("Avatar streaming recording started: device=%s", self.device)
+                return
+            except Exception:
+                with self._stream_lock:
+                    if self._capture is not None: self._capture.close()
+                    self._capture = None; self._stream_recognizer = None
+                self.logger.exception("Avatar streaming capture setup failed; using per-turn recorder")
+        try:
+            self.proc = subprocess.Popen(["arecord", "-q", "-f", "S16_LE", "-r", "16000", "-c", "1", "-D", self.device, str(path)])
+            self.recording = True; self.status = "Listening - press SPACE when finished"
+            self.logger.info("Avatar recording started: device=%s", self.device)
+        except Exception as exc:
+            self._turn_active = False
+            self.status = f"Mic error: {exc}"; self.logger.exception("Avatar recording failed")
+
+    def _stop_recording(self):
+        if self._stream_recognizer is not None:
+            try:
+                with self._stream_lock:
+                    self.recording = False
+                    recognizer = self._stream_recognizer; self._stream_recognizer = None
+                    if self._capture is not None:
+                        self._capture.close(); self._capture = None
+                    transcript = json.loads(recognizer.FinalResult()).get("text", "").strip()
+                self.status = "Conjuring your answer..."
+                background_network.set_paused(True, "Avatar turn")
+                snapshot = self.context.snapshot()
+                self.logger.info("Avatar streaming STT finalised instantly: %s", transcript)
+                threading.Thread(target=self._make_video, args=(snapshot, transcript, self._turn_profile), daemon=True, name="avatar-turn").start()
+                return
+            except Exception as exc:
+                self.recording = False
+                self.logger.exception("Avatar streaming transcription failed; falling back")
+                self.status = f"STT error: {exc}"
+                self._turn_active = False
+                background_network.set_paused(False)
+                return
+        self.recording = False
+        if self.proc:
+            try:
+                self.proc.terminate(); self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.logger.warning("Avatar recorder did not stop cleanly; killing it")
+                self.proc.kill(); self.proc.wait(timeout=3)
+            except Exception:
+                self.logger.exception("Avatar recorder shutdown failed")
+            finally:
+                self.proc = None
+        self.status = "Cold start - transcribing locally..."
+        background_network.set_paused(True, "Avatar turn")
+        self.logger.info("Avatar recording stopped; processing local transcription")
+        snapshot = self.context.snapshot()
+        threading.Thread(target=self._make_video, args=(snapshot, None, self._turn_profile), daemon=True, name="avatar-turn").start()
+
+    def _transcribe_local(self, path):
+        try:
+            from vosk import KaldiRecognizer, Model
+        except ImportError as exc:
+            raise RuntimeError("Install vosk and set VOSK_MODEL_PATH for local Pi transcription") from exc
+        model_path = os.getenv("VOSK_MODEL_PATH", "")
+        if not model_path: raise RuntimeError("VOSK_MODEL_PATH is required for local transcription")
+        with wave.open(str(path), "rb") as audio:
+            if self._vosk_model is None:
+                self._vosk_model = Model(model_path)
+            recognizer = KaldiRecognizer(self._vosk_model, audio.getframerate())
+            while chunk := audio.readframes(4000): recognizer.AcceptWaveform(chunk)
+            return json.loads(recognizer.FinalResult()).get("text", "").strip()
+
+    def _make_video(self, context_snapshot=None, transcript=None, profile=None):
+        started = time.monotonic()
+        try:
+            profile = profile or self._turn_profile or self.profile
+            reference_hash = profile.reference_hash()
+            if transcript is None:
+                transcript = self._transcribe_local(self.cache.root / "capture.wav")
+                self.logger.info("Avatar local STT complete in %.2fs: %s", time.monotonic() - started, transcript)
+            else:
+                self.logger.info("Avatar streaming STT ready at response submit: %s", transcript)
+            if not transcript: raise RuntimeError("No speech recognised")
+            model = os.getenv("AVATAR_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
+            # Keep legacy clips on disk for review, but do not select clips
+            # created before the apparition/audio and stricter no-mirror path.
+            cache_model = f"{model}::portrait-v4-avatar::{profile.key}"
+            local_intent = _intent_for(transcript)
+            intent = local_intent
+            if local_intent != "general":
+                promoted = self.cache.promote_matching_transcript(transcript, local_intent)
+                if promoted: self.logger.info("Avatar promoted %s existing cached clip(s) to %s", promoted, local_intent)
+                cached = self.cache.select(transcript, reference_hash, cache_model, intent=local_intent)
+                if cached:
+                    self.status = f"Cache hit - playing {profile.name}"
+                    self.logger.info("Avatar intent cache hit (%s) in %.2fs", intent, time.monotonic() - started)
+                    self.ready.put(self.cache.root / cached["media_path"]); return
+            self.status = f"Cold start - asking {profile.name}..."
+            system = _load_system_prompt(profile)
+            system += " Reply with exactly one natural short sentence, at most 12 words. No markdown."
+            if intent == "general":
+                live_context = context_snapshot or {}
+            else:
+                live_context = {intent: (context_snapshot or {}).get(intent, {})}
+            compact_context = {
+                name: {"available": value.get("available", False), "data": value.get("data"), "reason": value.get("reason")}
+                for name, value in live_context.items()
+            }
+            system += (
+                " Classify the user's request as exactly one of general, news, weather, calendar, or smarthome. "
+                "Use live facts only for the matching category; if that category is unavailable, say so plainly and invent nothing. "
+                "Return exactly two lines: INTENT: <category> then REPLY: <your reply>. "
+                f"Current mirror data: {json.dumps(compact_context, ensure_ascii=False, separators=(',', ':'))}"
+            )
+            if self.openai_client is None:
+                from openai import OpenAI
+                self.openai_client = OpenAI()
+            llm_model = os.getenv("AVATAR_LLM_MODEL", "gpt-5-nano-2025-08-07")
+            request = {"model": llm_model, "max_output_tokens": int(os.getenv("AVATAR_LLM_MAX_OUTPUT_TOKENS", "160")), "input": [{"role":"system","content":system}, {"role":"user","content":transcript}]}
+            if llm_model.startswith("gpt-5"):
+                request["reasoning"] = {"effort": os.getenv("AVATAR_LLM_REASONING_EFFORT", "minimal")}
+            response = self.openai_client.responses.create(**request)
+            raw_text = _response_text(response)
+            if not raw_text:
+                status = getattr(response, "status", "unknown")
+                detail = getattr(response, "incomplete_details", None)
+                raise RuntimeError(f"OpenAI returned no visible response text (status={status}, detail={detail})")
+            model_intent, text = _response_intent_and_text(raw_text, local_intent)
+            intent = _effective_intent(local_intent, model_intent)
+            text = _spoken_reply(text, int(os.getenv("AVATAR_MAX_REPLY_WORDS", "12")))
+            if not text:
+                raise RuntimeError("OpenAI returned no Avatar reply text")
+            self.status = f"Cold start - creating {profile.name} video..."; self.logger.info("Avatar text reply ready in %.2fs; submitting fal video", time.monotonic() - started)
+            self.logger.info("Avatar reply sent to Fal: %s", text)
+            cached = self.cache.lookup(text, reference_hash, cache_model) if intent not in TIME_SENSITIVE_INTENTS else None
+            if cached:
+                self.logger.info("Avatar cache hit")
+                self.ready.put(self.cache.root / cached["media_path"]); return
+            staging = self.cache.root / "staging" / f"turn-{time.time_ns()}.mp4"
+            video_prompt = (
+                "The uploaded character is the only subject, speaking naturally and directly to camera with subtle facial expressions. "
+                "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video. "
+                f'Say exactly: "{text}"'
+            )
+            self.logger.info("Avatar Fal prompt: %s", video_prompt)
+            stream_first = os.getenv("AVATAR_STREAM_FIRST", "1").lower() in ("1", "true", "yes", "on")
+            streamed = threading.Event()
+            stream_url = None
+            def stream_when_ready(url):
+                nonlocal stream_url
+                stream_url = url
+                if stream_first:
+                    self.ready.put({"stream_url": url})
+                    streamed.set()
+            result = self.fal.generate_from_text(profile.reference_image, text, staging, model=model, prompt=video_prompt, duration_seconds=5, resolution=os.getenv("AVATAR_FAL_RESOLUTION", "480P"), on_video_ready=stream_when_ready, defer_download=stream_first)
+            self.logger.info("Avatar fal video ready in %.2fs (upload %.2fs, queue %.2fs, generation %.2fs, download %.2fs)", time.monotonic() - started, result.timings.get("image_upload", 0), result.timings.get("queue", 0), result.timings.get("generation", 0), result.timings.get("download", 0))
+            if streamed.is_set(): self.logger.info("Avatar cache download deferred until playback has completed")
+            if intent not in TIME_SENSITIVE_INTENTS:
+                if streamed.is_set():
+                    self._deferred_cache = {"url": stream_url, "staging": staging, "text": text, "intent": intent, "model": cache_model, "duration_seconds": result.duration_seconds, "transcript": transcript, "reference_hash": reference_hash, "avatar": profile.key}
+                else:
+                    record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=reference_hash, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v4-avatar", "avatar": profile.key})
+                    self.ready.put(self.cache.root / record["media_path"])
+            else:
+                if not streamed.is_set(): self.ready.put(staging)
+        except Exception as exc:
+            self.logger.exception("Avatar turn failed")
+            self.ready.put(exc)
 
     def update(self):
-        now = time.monotonic()
-        dt = min(now - self._last_frame, 0.1)
-        self._last_frame = now
+        now = time.monotonic(); self._alpha = min(1.0, self._alpha + min(now - self._last_update, 0.1) * 3) if (self.recording or self.status not in ("Ready: SPACE to talk", "Playing")) else max(0.0, self._alpha - min(now - self._last_update, 0.1) * 2); self._last_update = now
+        while not self.ready.empty():
+            item = self.ready.get_nowait()
+            if isinstance(item, Exception):
+                background_network.set_paused(False)
+                self._hold_background_for_playback = False
+                self._turn_active = False
+                self.status = f"Error: {item}"; continue
+            try:
+                self._apparition_pending = False
+                if isinstance(item, dict) and "stream_url" in item:
+                    self._playback_label = "Fal live stream (reply video)"
+                    self.player.play(item["stream_url"], self._bounds)
+                    self.status = f"Streaming {self._turn_profile.name if self._turn_profile else 'avatar'} video..."; self._hold_background_for_playback = True
+                else:
+                    self._playback_label = f"local clip: {Path(item).name}"
+                    self.player.play(item, self._bounds); self.status = "Playing"
+                    background_network.set_paused(False)
+            except Exception as exc:
+                self.logger.exception("Avatar playback startup failed")
+                self._hold_background_for_playback = False
+                self._turn_active = False
+                background_network.set_paused(False)
+                self.status = f"Playback error: {exc}"
+        try:
+            self.player.update(__import__("pygame"))
+        except Exception as exc:
+            self.logger.exception("Avatar playback update failed")
+            self.player.stop()
+            self._hold_background_for_playback = False
+            self._turn_active = False
+            background_network.set_paused(False)
+            self.status = f"Playback error: {exc}"
+        if self._apparition_pending and (self.player.has_frame or not self.player.playing):
+            self._apparition_pending = False
+        if self._hold_background_for_playback and not self.player.playing:
+            self._hold_background_for_playback = False
+            self._turn_active = False
+            self._turn_profile = None
+            self.status = "Ready: SPACE to talk"
+            background_network.set_paused(False)
+            self.logger.info("Avatar playback complete; background network requests resumed")
+        elif self._turn_active and self.status == "Playing" and not self.player.playing:
+            self._turn_active = False
+            self._turn_profile = None
+            self.status = "Ready: SPACE to talk"
+        if not self.player.playing and self._deferred_cache and not self._cache_downloading:
+            pending = self._deferred_cache; self._deferred_cache = None; self._cache_downloading = True
+            threading.Thread(target=self._save_after_playback, args=(pending,), daemon=True, name="avatar-cache-save").start()
 
-        visible = self.state in ("listening", "thinking", "speaking") or (
-            self.state == "idle" and now - self._last_active < LINGER_SEC
-        )
-        target = 1.0 if visible else 0.0
-        speed = 2.5 * dt
-        self.alpha += max(-speed, min(speed, target - self.alpha))
-        if self.alpha <= 0.01 and self.state == "idle":
-            self.state = "hidden"
-            self._envelope.clear()
-            self._env_clock = 0.0
-
-        if now >= self._next_blink:
-            self._blink_until = now + 0.13
-            self._next_blink = now + random.uniform(2.0, 6.0)
-
-        self._think_phase += dt
-
-        # Consume envelope in real time while speaking
-        target_open = 0.0
-        target_narrow = 0.0
-        if self.state == "speaking" and self._envelope:
-            self._env_clock += dt
-            consumed = None
-            while self._envelope and self._env_clock >= WINDOW_SEC:
-                consumed = self._envelope.popleft()
-                self._env_clock -= WINDOW_SEC
-            if consumed:
-                rms, zcr = consumed
-                self._level_max = max(self._level_max * 0.999, rms, 500.0)
-                target_open = min(1.0, rms / self._level_max)
-                target_narrow = min(1.0, max(0.0, zcr * 1.8 - 0.3))
-
-        rate = 18.0 if target_open > self._openness else 10.0
-        self._openness += (target_open - self._openness) * min(1.0, rate * dt)
-        self._narrow += (target_narrow - self._narrow) * min(1.0, 8.0 * dt)
-
-    def _pick_frame(self, now):
-        """Choose which face frame to show this frame."""
-        if now < self._blink_until and "blink" in self._frames:
-            return "blink"
-        if self.state == "speaking":
-            o = self._openness
-            if o < 0.12:
-                return "neutral"
-            # Hissy consonants and oo-sounds use the narrower shapes
-            if self._narrow > 0.55 and "small" in self._frames:
-                return "small"
-            if o < 0.35:
-                return self._first_available("small", "round", "open")
-            if o < 0.7:
-                if self._narrow < 0.25 and "round" in self._frames and o < 0.5:
-                    return "round"
-                return self._first_available("open", "wide", "small")
-            return self._first_available("wide", "open", "small")
-        if now < self._smile_until and "smile" in self._frames:
-            return "smile"
-        if self.state == "listening" and "smile" in self._frames:
-            # Attentive half-smile while listening
-            return "smile" if (int(now) % 8) < 2 else "neutral"
-        return "neutral"
-
-    def _first_available(self, *keys):
-        for k in keys:
-            if k in self._frames:
-                return k
-        return "neutral"
+    def _save_after_playback(self, pending):
+        try:
+            self.logger.info("Avatar playback complete; downloading response for cache")
+            self.fal.download_video(pending["url"], pending["staging"])
+            record = self.cache.add_clip(pending["staging"], spoken_text=pending["text"], intent=pending["intent"], model=pending["model"], reference_sha256=pending["reference_hash"], tags=sorted(time_of_day_tags()), duration_seconds=pending["duration_seconds"], metadata={"transcript": pending["transcript"], "prompt_version": "portrait-v4-avatar", "avatar": pending["avatar"]})
+            self.logger.info("Avatar response saved to cache: %s", record["media_path"])
+        except Exception:
+            self.logger.exception("Avatar background cache save failed")
+        finally:
+            self._cache_downloading = False
 
     def draw(self, screen, position):
-        try:
-            if self.alpha <= 0.01:
-                return
-
-            if isinstance(position, dict):
-                x, y = position.get('x', 0), position.get('y', 0)
-                width = position.get('width', self.size)
-                height = position.get('height', self.size)
-            else:
-                x, y = position
-                width = height = self.size
-
-            if self.has_face:
-                self._draw_face_frames(screen, x, y, width, height)
-            else:
-                self._draw_procedural(screen, x, y, width, height)
-        except Exception as e:
-            logger.error(f"Avatar draw error: {e}")
-
-    # ------------------------------------------------------------------
-    # Realistic frame compositing (the Holly look)
-    # ------------------------------------------------------------------
-
-    def _draw_face_frames(self, screen, x, y, width, height):
-        now = time.monotonic()
-        target_h = min(height, self.size)
-        frame = self._get_scaled(self._pick_frame(now), target_h)
-
-        # Slow drift so the face feels alive, never static
-        bob_y = math.sin(now * 0.9) * 3
-        bob_x = math.sin(now * 0.6) * 2
-
-        fx = x + (width - frame.get_width()) // 2 + int(bob_x)
-        fy = y + (height - target_h) // 2 + int(bob_y)
-
-        # Semi-transparent ghost-on-glass: fainter when idle
-        base_alpha = self.transparency if self.state == "speaking" else int(self.transparency * 0.82)
-        frame.set_alpha(int(base_alpha * self.alpha))
-        screen.blit(frame, (fx, fy))
-
-        if self.scanlines:
-            self._draw_scanlines(screen, fx, fy, frame.get_width(), target_h)
-
-        if self.state == "thinking":
-            self._draw_thinking_dots(screen, x + width // 2, fy + target_h + 18, now)
-
-    def _draw_scanlines(self, screen, x, y, w, h):
-        """Faint CRT scanlines over the face for the retro monitor look."""
-        if (self._scanline_surf is None
-                or self._scanline_surf.get_size() != (w, h)):
-            surf = pygame.Surface((w, h), pygame.SRCALPHA)
-            for ly in range(0, h, 3):
-                pygame.draw.line(surf, (0, 0, 0, 60), (0, ly), (w, ly))
-            self._scanline_surf = surf
-        self._scanline_surf.set_alpha(int(110 * self.alpha))
-        screen.blit(self._scanline_surf, (x, y))
-
-    def _draw_thinking_dots(self, screen, cx, dy, now):
-        for i in (-1, 0, 1):
-            phase = math.sin(self._think_phase * 4.0 - i * 0.9)
-            a = int((90 + 100 * max(0.0, phase)) * self.alpha)
-            dot = pygame.Surface((8, 8), pygame.SRCALPHA)
-            pygame.draw.circle(dot, (*COLOR_FACE, a), (4, 4), 3)
-            screen.blit(dot, (cx + i * 18 - 4, dy))
-
-    # ------------------------------------------------------------------
-    # Procedural fallback (used until face frames exist)
-    # ------------------------------------------------------------------
-
-    def _draw_procedural(self, screen, x, y, width, height):
-        s = min(width, height, self.size)
-        if self._surface is None or self._surface.get_width() != s:
-            self._surface = pygame.Surface((s, s), pygame.SRCALPHA)
-        surf = self._surface
-        surf.fill((0, 0, 0, 0))
-
-        cx, cy = s // 2, s // 2
-        now = time.monotonic()
-        head_r = int(s * 0.38)
-        head_cy = int(cy + math.sin(now * 1.3) * s * 0.008)
-
-        pygame.draw.circle(surf, (*COLOR_FACE, 200), (cx, head_cy), head_r, 2)
-
-        # Eyes
-        eye_dx = int(head_r * 0.42)
-        eye_y = head_cy - int(head_r * 0.18)
-        eye_w = max(4, int(head_r * 0.16))
-        eye_h = max(4, int(head_r * 0.22))
-        if now < self._blink_until:
-            eye_h = max(2, eye_h // 6)
-        for side in (-1, 1):
-            rect = pygame.Rect(
-                cx + side * eye_dx - eye_w // 2, eye_y - eye_h // 2, eye_w, eye_h
-            )
-            pygame.draw.ellipse(surf, (*COLOR_FACE, 230), rect)
-
-        # Mouth
-        mouth_y = head_cy + int(head_r * 0.4)
-        base_w = int(head_r * 0.62)
-        if self.state == "speaking":
-            open_h = int(2 + self._openness * head_r * 0.34)
-            w = int(base_w * (1.0 - 0.35 * self._narrow))
-            rect = pygame.Rect(cx - w // 2, mouth_y - open_h // 2, w, open_h)
-            if open_h > 5:
-                pygame.draw.ellipse(surf, (*COLOR_MOUTH_FILL, 220), rect)
-                pygame.draw.ellipse(surf, (*COLOR_FACE, 220), rect, 2)
-            else:
-                pygame.draw.line(surf, (*COLOR_FACE, 220),
-                                 (cx - w // 2, mouth_y), (cx + w // 2, mouth_y), 2)
-        else:
-            rect = pygame.Rect(cx - base_w // 2, mouth_y - int(head_r * 0.18),
-                               base_w, int(head_r * 0.32))
-            pygame.draw.arc(surf, (*COLOR_FACE, 200), rect,
-                            math.pi * 1.15, math.pi * 1.85, 2)
-
-        if self.state == "thinking":
-            self._draw_thinking_dots(screen, x + width // 2,
-                                     y + (height + s) // 2 + 10, now)
-
-        surf.set_alpha(int(self.alpha * 255))
-        screen.blit(surf, (x + (width - s) // 2, y + (height - s) // 2))
-
+        width, height = int(position.get("width", self.size)), int(position.get("height", self.size))
+        self._bounds = (width, height)
+        # Keep the portrait visible while the background decoder buffers its
+        # first frame; otherwise streaming introduces a black transition.
+        if self.player.has_frame:
+            self.player.draw(screen, position)
+        elif self._portrait is not None and self._alpha > 0.01 and not self._apparition_pending:
+            scale = min(width / self._portrait.get_width(), height / self._portrait.get_height())
+            image = pygame.transform.smoothscale(self._portrait, (max(1, int(self._portrait.get_width() * scale)), max(1, int(self._portrait.get_height() * scale))))
+            image.set_alpha(int(255 * self._alpha))
+            x = position.get("x", 0) + (width - image.get_width()) // 2; y = position.get("y", 0) + (height - image.get_height()) // 2
+            screen.blit(image, (x, y))
+        font = pygame.font.Font(None, 26); label = font.render(self.status, True, (242, 222, 172)); label.set_alpha(235)
+        screen.blit(label, (position.get("x", 0) + 12, position.get("y", 0) + 12))
+        # Temporary Pi troubleshooting overlay.  It never displays signed URLs,
+        # prompts, keys, or transcribed speech; only the current local stage.
+        if os.getenv("AVATAR_DEBUG_OVERLAY", "1").lower() in ("1", "true", "yes", "on"):
+            debug_font = pygame.font.Font(None, 19)
+            lines = [f"AVATAR DEBUG - {self.profile.name}", f"stage: {self.status}", f"source: {self._playback_label}", self.player.diagnostic(), f"apparition_pending={self._apparition_pending} queue={self.ready.qsize()}"]
+            y = position.get("y", 0) + 42
+            for line in lines:
+                debug = debug_font.render(line, True, (180, 230, 255)); debug.set_alpha(245)
+                screen.blit(debug, (position.get("x", 0) + 12, y)); y += 18
     def cleanup(self):
-        pass
+        background_network.set_paused(False)
+        self._stop_warmed_microphone()
+        self.player.cleanup()
