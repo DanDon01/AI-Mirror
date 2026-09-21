@@ -124,6 +124,7 @@ const Panels = (function () {
     // what is actually reporting, so the model draws the house it has
     // readings for and leaves out the rest.
     const roomsLit = e.rooms_lit || 0;
+    const rooms = e.rooms || {};
     const generating = (e.solar_watts || 0) > 0;
     const exporting = (e.grid_watts || 0) < 0;
     const car = e.car || null;
@@ -234,6 +235,9 @@ const Panels = (function () {
                        HOUSE.rows.upper[0] * H, HOUSE.rows.upper[1] * H));
     });
     const lit = windows.slice(0, Math.max(0, Math.min(roomsLit, windows.length)));
+    if ((rooms.bedroom || {}).occupied === true && lit.indexOf(windows[0]) < 0) {
+      lit.push(windows[0]);
+    }
 
     // ---- porch and garage --------------------------------------------
 
@@ -371,6 +375,26 @@ const Panels = (function () {
       return '<polygon class="' + cls + '" points="' +
              pts.map(function (q) { return to(q).join(','); }).join(' ') + '"/>';
     }
+    function polyFill(pts, color, cls) {
+      if (!color) return '';
+      return '<polygon class="' + cls + '" style="fill:' + color + '" points="' +
+             pts.map(function (q) { return to(q).join(','); }).join(' ') + '"/>';
+    }
+    function temperatureColor(value) {
+      if (typeof value !== 'number') return null;
+      const t = Math.max(0, Math.min(1, (value - 15) / 10));
+      const r = Math.round(42 + (238 - 42) * t);
+      const g = Math.round(112 + (70 - 112) * t);
+      const b = Math.round(255 + (54 - 255) * t);
+      return 'rgba(' + r + ',' + g + ',' + b + ',0.32)';
+    }
+    function curtainSVG(state) {
+      if (!state) return '';
+      const target = windows[2];
+      if (!target) return '';
+      const colour = state === 'open' ? 'rgba(135,205,255,0.14)' : 'rgba(48,72,112,0.62)';
+      return polyFill(target, colour, 'curtain ' + (state === 'open' ? 'open' : 'closed'));
+    }
     function path(pts) {
       return pts.map(function (q) { return to(q).join(','); }).join(' ');
     }
@@ -447,7 +471,16 @@ const Panels = (function () {
       // Shell: faint render, the painted band, then the openings.
       walls.map(function (w) { return poly(w, 'render'); }).join('') +
       bands.map(function (b) { return poly(b, 'band'); }).join('') +
+      // Temperature is carried as a restrained wash in each storey, not
+      // as a label: 15C is blue, 25C is red, and the range blends between.
+      [windows[0], windows[1], windows[3]].filter(Boolean).map(function (w) {
+        return polyFill(w, temperatureColor((rooms.upstairs || {}).temperature_c), 'room-temp');
+      }).join('') +
+      [windows[2]].filter(Boolean).map(function (w) {
+        return polyFill(w, temperatureColor((rooms.downstairs || {}).temperature_c), 'room-temp');
+      }).join('') +
       lit.map(function (w) { return poly(w, 'win lit'); }).join('') +
+      curtainSVG((rooms.livingroom || {}).curtain) +
       behind.map(function (b) { return line(b, 'behind'); }).join('') +
       floor.map(function (f) { return line(f, 'soft'); }).join('') +
       structure.map(function (st) { return line(st, 'edge'); }).join('') +
@@ -518,30 +551,8 @@ const Panels = (function () {
       sub = 'Used today';
     }
 
-    const rooms = d.rooms || {};
-    const upstairs = rooms.upstairs || {};
-    const downstairs = rooms.downstairs || {};
-    const bedroom = rooms.bedroom || {};
-    const living = rooms.livingroom || {};
-    const climate = [];
-    if (typeof upstairs.temperature_c === 'number') climate.push(
-      '<span class="room-read"><b>UP</b>' + upstairs.temperature_c + '°</span>');
-    if (typeof downstairs.temperature_c === 'number') climate.push(
-      '<span class="room-read"><b>DOWN</b>' + downstairs.temperature_c + '°</span>');
-    if (typeof upstairs.humidity_pct === 'number') climate.push(
-      '<span>U ' + upstairs.humidity_pct + '%</span>');
-    if (typeof downstairs.humidity_pct === 'number') climate.push(
-      '<span>D ' + downstairs.humidity_pct + '%</span>');
-    if (typeof bedroom.occupied === 'boolean') climate.push(
-      '<span class="presence ' + (bedroom.occupied ? 'on' : '') + '">BED ' +
-      (bedroom.occupied ? 'OCCUPIED' : 'CLEAR') + '</span>');
-    if (living.curtain) climate.push(
-      '<span>CURTAIN ' + living.curtain.toUpperCase() + '</span>');
-    const roomState = climate.length ? '<div class="room-states">' + climate.join('') + '</div>' : '';
-
     return (
       '<div class="p-head">Home energy</div>' + solar +
-      roomState +
       '<div class="house">' + houseSVG(d) + '</div>' +
       '<div class="foot">' +
       (hero ? '<div><div class="p-hero">' + hero + '</div>' +

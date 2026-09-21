@@ -463,16 +463,9 @@ body {
   color: #FFD6A2;
 }
 .p-energy .solar .p-sub { margin-top: 5px; font-size: 16px; color: #8C7A63; }
-.p-energy .room-states { position: absolute; left: 34px; top: 43px; z-index: 2;
-                          display: flex; align-items: center; gap: 13px;
-                          color: rgba(190, 210, 238, 0.72); font-size: 13px;
-                          letter-spacing: 0.08em; white-space: nowrap; }
-.p-energy .room-read { display: inline-flex; gap: 5px; align-items: baseline;
-                       color: rgba(235, 242, 252, 0.90); font-family: var(--ff-display);
-                       font-size: 22px; letter-spacing: 0; }
-.p-energy .room-read b { color: rgba(160, 190, 228, 0.52); font-family: var(--ff-body);
-                         font-size: 10px; letter-spacing: 0.08em; }
-.p-energy .room-states .presence.on { color: rgba(255, 198, 126, 0.95); }
+.p-energy .room-temp { stroke: none; mix-blend-mode: screen; }
+.p-energy .curtain.closed { stroke: rgba(104, 143, 196, 0.42); stroke-width: 0.8; }
+.p-energy .curtain.open { stroke: rgba(172, 220, 255, 0.35); stroke-width: 0.8; }
 
 .p-energy .foot  { position: absolute; left: 34px; bottom: 27px;
                    display: flex; align-items: flex-end; gap: 27px; }
