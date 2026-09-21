@@ -40,5 +40,37 @@ class AvatarCacheTests(unittest.TestCase):
             found = cache.select("good evening", ref, "model", intent="greeting_evening", when=__import__('datetime').datetime(2026, 9, 3, 23))
             self.assertIsNotNone(found)
 
+    def test_intent_pool_never_crosses_avatar_references_or_models(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            mechanic_media = root / "mechanic.mp4"
+            officer_media = root / "officer.mp4"
+            mechanic_media.write_bytes(b"mechanic-video")
+            officer_media.write_bytes(b"officer-video")
+            cache = AvatarCache(root / "library")
+            mechanic_ref = "m" * 64
+            officer_ref = "o" * 64
+            model = "model::portrait-v4-avatar"
+            mechanic = cache.add_clip(
+                mechanic_media, spoken_text="Morning, boss.", intent="greeting",
+                model=model, reference_sha256=mechanic_ref, tags=["morning"],
+            )
+            officer = cache.add_clip(
+                officer_media, spoken_text="Good morning, sir.", intent="greeting",
+                model=model, reference_sha256=officer_ref, tags=["morning"],
+            )
+            when = __import__('datetime').datetime(2026, 9, 3, 9)
+
+            selected = cache.select(
+                "unseen greeting", officer_ref, model,
+                intent="greeting", when=when,
+            )
+            self.assertEqual(selected["cache_key"], officer["cache_key"])
+            self.assertNotEqual(selected["cache_key"], mechanic["cache_key"])
+            self.assertIsNone(cache.select(
+                "unseen greeting", officer_ref, "different-model",
+                intent="greeting", when=when,
+            ))
+
 if __name__ == "__main__": unittest.main()
 

@@ -167,8 +167,14 @@ class AvatarCache:
     def select(self, spoken_text: str, reference_sha256: str, model: str, *, intent: str = "general", when: datetime | None = None) -> dict | None:
         exact = self.lookup(spoken_text, reference_sha256, model)
         if exact: return exact
-        rows = [r for r in self.inspect() if r["intent"] == intent and r["status"] == "approved"
-                and time_of_day_tags(when).intersection(json.loads(r["tags_json"]))]
+        rows = [
+            r for r in self.inspect()
+            if r["intent"] == intent
+            and r["status"] == "approved"
+            and r["reference_sha256"] == reference_sha256
+            and r["model"] == model
+            and time_of_day_tags(when).intersection(json.loads(r["tags_json"]))
+        ]
         if not rows: return None
         rows.sort(key=lambda row: (row["use_count"], row["last_used_at"] or "", row["id"]))
         return rows[0]
