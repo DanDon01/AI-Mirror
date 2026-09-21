@@ -46,6 +46,12 @@ _WMO_GLYPH = {
     2: "partly", 3: "cloud",
     45: "cloud", 48: "cloud",
 }
+for _code in (51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82):
+    _WMO_GLYPH[_code] = "rain"
+for _code in (71, 73, 75, 77, 85, 86):
+    _WMO_GLYPH[_code] = "cloud"
+for _code in (95, 96, 99):
+    _WMO_GLYPH[_code] = "storm"
 
 
 def _glyph_for(code):
@@ -147,8 +153,10 @@ class Bridge:
 
         block = (data.get("weather") or [{}])[0]
         main_condition = (block.get("main") or "").lower()
-        if "rain" in main_condition or "drizzle" in main_condition or "thunder" in main_condition:
-            current_glyph = "cloud"
+        if "thunder" in main_condition:
+            current_glyph = "storm"
+        elif "rain" in main_condition or "drizzle" in main_condition:
+            current_glyph = "rain"
         elif "cloud" in main_condition:
             current_glyph = "partly"
         else:

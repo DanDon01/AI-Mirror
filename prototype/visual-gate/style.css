@@ -586,17 +586,10 @@ body {
   pointer-events: none;
 }
 
-.p-wx .current-weather { position: absolute; left: 34px; top: 54px; display: flex; gap: 14px;
+.p-wx .current-weather { position: absolute; left: 34px; top: 42px; display: flex; gap: 18px;
                           align-items: center; color: var(--ink); }
-.p-wx .current-weather svg { width: 66px; height: 66px; }
-.p-wx .current-temp { font-family: var(--ff-display); font-size: 66px; line-height: .82; }
-.p-wx .current-condition { margin-top: 8px; color: var(--ink-2); font-size: 16px; }
-.p-wx .alert { position: absolute; right: 34px; top: 70px; text-align: right; }
-.p-wx .alert-k { font-size: 22px; letter-spacing: 0.04em; color: var(--cool); opacity: 0.8; }
-.p-wx .alert-v { margin-top: 8px; font-family: var(--ff-display);
-                 font-size: 77px; line-height: 0.9; color: var(--ink); }
-
-.p-wx .wave { position: absolute; left: 0; bottom: 155px; width: 567px; height: 97px; }
+.p-wx .current-weather svg { width: 82px; height: 82px; }
+.p-wx .current-temp { font-family: var(--ff-display); font-size: 86px; line-height: .82; }
 
 .p-wx .hours {
   position: absolute; left: 34px; right: 34px; bottom: 31px;

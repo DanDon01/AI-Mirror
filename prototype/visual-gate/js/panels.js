@@ -637,21 +637,23 @@ const Panels = (function () {
 
   const GLYPH = {
     sun:
-      '<g stroke="rgba(246,226,176,0.9)" stroke-width="2.1" stroke-linecap="round">' +
+      '<g stroke="rgba(151,224,255,0.92)" stroke-width="1.8" fill="none" stroke-linecap="round">' +
       '<line x1="23" y1="4"  x2="23" y2="10"/><line x1="23" y1="36" x2="23" y2="42"/>' +
       '<line x1="4"  y1="23" x2="10" y2="23"/><line x1="36" y1="23" x2="42" y2="23"/>' +
       '<line x1="9.5" y1="9.5" x2="13.8" y2="13.8"/><line x1="32.2" y1="32.2" x2="36.5" y2="36.5"/>' +
       '<line x1="9.5" y1="36.5" x2="13.8" y2="32.2"/><line x1="32.2" y1="13.8" x2="36.5" y2="9.5"/>' +
-      '</g><circle cx="23" cy="23" r="8.4" fill="rgba(248,231,190,0.92)"/>',
+      '</g><circle cx="23" cy="23" r="8.4" fill="rgba(151,224,255,0.18)" stroke="rgba(151,224,255,0.92)" stroke-width="1.8"/>',
     cloud:
-      '<g fill="rgba(206,224,250,0.80)">' +
-      '<circle cx="15" cy="28" r="8"/><circle cx="25" cy="22" r="11"/>' +
-      '<circle cx="34" cy="28.5" r="7.5"/><rect x="14" y="28" width="21" height="8" rx="4"/></g>',
+      '<path d="M9 35h27a7 7 0 0 0 0-14 11 11 0 0 0-21-1 7.5 7.5 0 0 0-6 15Z" fill="rgba(151,224,255,0.10)" stroke="rgba(151,224,255,0.9)" stroke-width="1.8"/>',
     partly:
-      '<circle cx="31" cy="15" r="7.4" fill="rgba(248,231,190,0.86)"/>' +
-      '<g fill="rgba(206,224,250,0.78)">' +
-      '<circle cx="14" cy="30" r="7.6"/><circle cx="23" cy="25" r="10"/>' +
-      '<circle cx="31" cy="30.5" r="7"/><rect x="13" y="30" width="19" height="7.5" rx="3.8"/></g>',
+      '<circle cx="31" cy="15" r="7.4" fill="rgba(151,224,255,0.13)" stroke="rgba(151,224,255,0.85)" stroke-width="1.6"/>' +
+      '<path d="M8 36h26a7 7 0 0 0 0-13 10 10 0 0 0-19-1 7.5 7.5 0 0 0-7 14Z" fill="rgba(151,224,255,0.10)" stroke="rgba(151,224,255,0.9)" stroke-width="1.8"/>',
+    rain:
+      '<path d="M8 28h27a7 7 0 0 0 0-14 10 10 0 0 0-19-1 7 7 0 0 0-8 15Z" fill="rgba(151,224,255,0.08)" stroke="rgba(151,224,255,0.9)" stroke-width="1.8"/>' +
+      '<g stroke="rgba(151,224,255,0.9)" stroke-width="1.8" stroke-linecap="round"><path d="m15 33-3 6"/><path d="m24 33-3 6"/><path d="m33 33-3 6"/></g>',
+    storm:
+      '<path d="M8 28h27a7 7 0 0 0 0-14 10 10 0 0 0-19-1 7 7 0 0 0-8 15Z" fill="rgba(151,224,255,0.08)" stroke="rgba(151,224,255,0.9)" stroke-width="1.8"/>' +
+      '<path d="m24 25-6 10h5l-2 8 8-12h-5l4-6Z" fill="rgba(151,224,255,0.26)" stroke="rgba(151,224,255,0.95)" stroke-width="1.4" stroke-linejoin="round"/>',
   };
 
   function buildWeather(w) {
@@ -662,17 +664,10 @@ const Panels = (function () {
              '</svg><div class="c">' + h.c + '°</div></div>';
     }).join('');
     return (
-      '<div class="glow"></div>' +
-      '<div class="p-head">Outlook</div>' +
       '<div class="current-weather"><svg viewBox="0 0 46 46" aria-hidden="true">' +
       (GLYPH[w.glyph] || GLYPH.cloud) + '</svg><div><div class="current-temp">' +
       (typeof w.temperature_c === 'number' ? w.temperature_c + '°' : '--') +
-      '</div><div class="current-condition">' + (w.condition_label || 'Weather') + '</div></div></div>' +
-      (w.alert_label ? '<div class="alert"><div class="alert-k">' + w.alert_label + '</div>' +
-      '<div class="alert-v">' + (w.alert_lead || '') + '</div></div>' : '') +
-      '<svg class="wave" viewBox="0 0 630 120" preserveAspectRatio="none" aria-hidden="true">' +
-      '<path d="M0 86 C 118 86, 150 34, 268 40 C 386 46, 446 96, 630 62" ' +
-      'fill="none" stroke="rgba(178,206,244,0.40)" stroke-width="1.6"/></svg>' +
+      '</div></div></div>' +
       '<div class="hours">' + hours + '</div>'
     );
   }
