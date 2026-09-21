@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
-# Generate and install the AI-Mirror systemd unit for THIS user/machine.
+# Generate and install the AI-Mirror systemd units for THIS user/machine.
 # Fills the template placeholders from whoami/pwd so no personal paths
 # are ever committed to git. Run from anywhere in the checkout:
 #
-#   ./deploy/install-service.sh
+#   ./deploy/install-service.sh            install both, boot into visual
+#   ./deploy/install-service.sh pygame     install both, boot into pygame
+#
+# Both units are always installed; exactly one is enabled. Switch later
+# without reinstalling:  ./deploy/mirror-mode.sh visual|pygame
 #
 set -euo pipefail
+
+MODE="${1:-visual}"
+case "$MODE" in
+    visual|pygame) ;;
+    *) echo "unknown mode: $MODE  (expected visual or pygame)" >&2; exit 2 ;;
+esac
 
 # Resolve the project directory (parent of this script's dir)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,37 +33,46 @@ else
     echo "WARN: no venv at $PROJECT_DIR/venv - using system $PYTHON"
 fi
 
-TEMPLATE="$SCRIPT_DIR/ai-mirror.service"
-if [ ! -f "$TEMPLATE" ]; then
-    echo "ERROR: template not found at $TEMPLATE" >&2
-    exit 1
-fi
-
-echo "Installing ai-mirror.service with:"
+echo "Installing both mirror units with:"
 echo "  User           = $USER_NAME"
 echo "  WorkingDir     = $PROJECT_DIR"
 echo "  Python         = $PYTHON"
 echo "  XDG_RUNTIME_DIR= /run/user/$UID_NUM"
+echo "  Boot mode      = $MODE"
 
-# Substitute placeholders into a temp unit, then install it
-TMP_UNIT="$(mktemp)"
-sed \
-    -e "s|__USER__|$USER_NAME|g" \
-    -e "s|__PROJECT_DIR__|$PROJECT_DIR|g" \
-    -e "s|__PYTHON__|$PYTHON|g" \
-    -e "s|__HOME__|$HOME_DIR|g" \
-    -e "s|__UID__|$UID_NUM|g" \
-    "$TEMPLATE" > "$TMP_UNIT"
+install_unit() {
+    local name="$1"
+    local template="$SCRIPT_DIR/$name.service"
+    if [ ! -f "$template" ]; then
+        echo "ERROR: template not found at $template" >&2
+        exit 1
+    fi
+    # Substitute placeholders into a temp unit, then install it
+    local tmp
+    tmp="$(mktemp)"
+    sed \
+        -e "s|__USER__|$USER_NAME|g" \
+        -e "s|__PROJECT_DIR__|$PROJECT_DIR|g" \
+        -e "s|__PYTHON__|$PYTHON|g" \
+        -e "s|__HOME__|$HOME_DIR|g" \
+        -e "s|__UID__|$UID_NUM|g" \
+        "$template" > "$tmp"
+    sudo cp "$tmp" "/etc/systemd/system/$name.service"
+    rm -f "$tmp"
+    echo "  installed /etc/systemd/system/$name.service"
+}
 
-sudo cp "$TMP_UNIT" /etc/systemd/system/ai-mirror.service
-rm -f "$TMP_UNIT"
+install_unit ai-mirror
+install_unit ai-mirror-visual
+
+# The visual unit runs run.sh directly, so it has to be executable in
+# the checkout. A clone onto a filesystem that drops the mode bit would
+# otherwise fail with a bare 203/EXEC and no clue why.
+chmod +x "$PROJECT_DIR/prototype/visual-gate/run.sh" \
+         "$SCRIPT_DIR/mirror-mode.sh" 2>/dev/null || true
 
 sudo systemctl daemon-reload
-sudo systemctl enable ai-mirror
-sudo systemctl restart ai-mirror
 
-sleep 2
-echo
-sudo systemctl --no-pager --lines=10 status ai-mirror || true
-echo
-echo "Follow logs with:  journalctl -u ai-mirror -f"
+# One place decides which unit is enabled, so the two scripts cannot
+# disagree about what "installed and enabled" means.
+exec "$SCRIPT_DIR/mirror-mode.sh" "$MODE"

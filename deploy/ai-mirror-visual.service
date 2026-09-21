@@ -1,0 +1,44 @@
+# systemd unit TEMPLATE for the AI-Mirror visual gate (Chromium).
+#
+# Do not install this file directly - the __PLACEHOLDERS__ below are
+# filled in for your user and paths by:
+#
+#   ./deploy/install-service.sh
+#
+# This is the Chromium prototype in prototype/visual-gate, not the
+# Pygame app. Only one of the two is ever enabled; switch with:
+#
+#   ./deploy/mirror-mode.sh visual
+#   ./deploy/mirror-mode.sh pygame
+#
+# Logs: journalctl -u ai-mirror-visual -f
+
+[Unit]
+Description=AI-Mirror visual gate (Chromium)
+After=network-online.target graphical.target
+Wants=network-online.target
+# Boot grace: don't count restarts as failure during slow Pi startup
+StartLimitIntervalSec=120
+StartLimitBurst=10
+# Both units drive the same display. Whichever lost the race would sit
+# behind the other holding a screen it cannot draw on, so make it
+# impossible for systemd to run them together.
+Conflicts=ai-mirror.service
+
+[Service]
+User=__USER__
+WorkingDirectory=__PROJECT_DIR__
+# --plain drops the frame-rate counter. The plate is authored at
+# 1440x2560 and run.sh fits it to the real display by default, so no
+# other flags are needed here.
+ExecStart=__PROJECT_DIR__/prototype/visual-gate/run.sh --plain
+Restart=always
+RestartSec=5
+# Display: X11 path. If the Pi runs Wayland (labwc, the Bookworm default)
+# and this still fails on the display, see PI_TESTING.md.
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=__HOME__/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+
+[Install]
+WantedBy=graphical.target

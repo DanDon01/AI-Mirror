@@ -8,6 +8,10 @@
 # That script detects your username, project directory, and venv, writes
 # the real unit to /etc/systemd/system/, and starts it. Logs:
 #   journalctl -u ai-mirror -f   (plus the app's magic_mirror.log)
+#
+# This is the Pygame app. The Chromium visual gate is the other unit,
+# ai-mirror-visual.service; switch between them with:
+#   ./deploy/mirror-mode.sh visual|pygame
 
 [Unit]
 Description=AI-Mirror smart mirror
@@ -16,6 +20,8 @@ Wants=network-online.target
 # Boot grace: don't count restarts as failure during slow Pi startup
 StartLimitIntervalSec=120
 StartLimitBurst=10
+# Both units drive the same display, so never let systemd run the pair.
+Conflicts=ai-mirror-visual.service
 
 [Service]
 User=__USER__

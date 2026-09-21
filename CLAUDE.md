@@ -148,9 +148,29 @@ HA_TOKEN=
 ```
 
 ## Deployment (Pi as an appliance)
-- `deploy/ai-mirror.service` - systemd unit (auto-restart, start on boot). Adjust
-  User/WorkingDirectory, then `sudo cp` to /etc/systemd/system and enable.
-- `deploy/deploy.sh` - run on the Pi: git pull, pip install, smoke test, restart service.
+- **Two boot modes, one display.** The Pi can boot into either front end:
+  - `visual` - the Chromium prototype in `prototype/visual-gate` (unit
+    `ai-mirror-visual.service`). This is the default.
+  - `pygame` - `AI-Mirror.py` (unit `ai-mirror.service`).
+
+  Both units are installed; exactly one is ever enabled, and each carries
+  `Conflicts=` against the other so systemd cannot run the pair. Two front
+  ends on one display means whichever lost the race holds a screen it
+  cannot draw on.
+- `deploy/install-service.sh [visual|pygame]` - fills the unit templates for
+  this user/machine, installs both, enables the chosen one. Defaults to visual.
+- `deploy/mirror-mode.sh [visual|pygame]` - switch modes later without
+  reinstalling. With no argument it reports the current mode.
+- **The visual gate still renders `fixtures/DEV-FIXTURE.json`.** Booting into
+  it puts invented biometrics, prices, appointments and energy figures on the
+  wall. It is labelled on screen, but it is not live data and must not be
+  mistaken for it. Wire the real data sources before treating visual mode as
+  the finished mirror.
+- `deploy/ai-mirror.service`, `deploy/ai-mirror-visual.service` - unit
+  TEMPLATES with `__PLACEHOLDERS__`; never `cp` these directly, run
+  install-service.sh so no personal paths reach git.
+- `deploy/deploy.sh` - run on the Pi: git pull, pip install, smoke test,
+  restart whichever unit is enabled.
 - `smoke_test.py` - headless import + 30-frame draw test; CI runs it on every push
   (`.github/workflows/ci.yml`). Run it before restarting the mirror after changes.
 - Web panel at `http://<pi-ip>:8780` replaces keyboard controls once wall-mounted

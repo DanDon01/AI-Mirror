@@ -23,13 +23,24 @@ fi
 "$PY" smoke_test.py
 
 echo "== Restarting service =="
-if systemctl is-enabled ai-mirror >/dev/null 2>&1; then
-    sudo systemctl restart ai-mirror
+# Restart whichever mode the mirror is actually in. Hardcoding the
+# Pygame unit here meant a deploy in visual mode restarted a unit that
+# was not running and left the one that was on the old code.
+ACTIVE=""
+for UNIT in ai-mirror-visual ai-mirror; do
+    if systemctl is-enabled "$UNIT" >/dev/null 2>&1; then ACTIVE="$UNIT"; break; fi
+done
+
+if [ -n "$ACTIVE" ]; then
+    sudo systemctl restart "$ACTIVE"
     sleep 3
-    systemctl --no-pager --lines=5 status ai-mirror
+    systemctl --no-pager --lines=5 status "$ACTIVE"
 else
-    echo "ai-mirror service not installed; start manually with:"
+    echo "No mirror unit is enabled. Install with:"
+    echo "  ./deploy/install-service.sh"
+    echo "or start one by hand:"
     echo "  $PY AI-Mirror.py"
+    echo "  ./prototype/visual-gate/run.sh"
 fi
 
 echo "Deploy complete."
