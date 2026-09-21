@@ -56,7 +56,9 @@ const Panels = (function () {
   /** Flattened isometric: a true 30 degree projection makes a portrait
       house in a landscape box, so the vertical is compressed. */
   function project(p) {
-    return [(p[0] - p[2]) * 0.94, (p[0] + p[2]) * 0.342 - p[1]];
+    // Left-front view: the front (+z) remains nearest, while the house's
+    // x-axis is mirrored so the garage and porch read on the left.
+    return [(p[2] - p[0]) * 0.94, (p[0] + p[2]) * 0.342 - p[1]];
   }
 
   /** The form of the house, in one place.
@@ -113,7 +115,7 @@ const Panels = (function () {
     // ridge from the party wall toward the hip; both fractions.
     pv: { rows: 2, cols: 5, gap: 0.022,
           uStart: 0.13, uSpan: 0.72, uMargin: 0.055,
-          vStart: 0.18, vSpan: 0.72 },
+          vStart: 0.30, vSpan: 0.60 },
     // The rooflight takes one panel's place in the array rather than
     // sitting beside it, which is how it reads on the roof.
     rooflight: { row: 1, col: 1 },
@@ -238,6 +240,9 @@ const Panels = (function () {
     if ((rooms.bedroom || {}).occupied === true && lit.indexOf(windows[0]) < 0) {
       lit.push(windows[0]);
     }
+    if ((rooms.livingroom || {}).occupied === true && lit.indexOf(windows[2]) < 0) {
+      lit.push(windows[2]);
+    }
 
     // ---- porch and garage --------------------------------------------
 
@@ -294,6 +299,12 @@ const Panels = (function () {
       end:  [[cx1, CAR.yWaist, cz0], [cx1, CAR.yWaist, cz1],
              [cx1 - RAKE_F, CAR.yRoof, cz1], [cx1 - RAKE_F, CAR.yRoof, cz0]],
     };
+    const headlights = [
+      [[CAR.x1 + 0.002, 0.11, CAR.z0 + 0.08], [CAR.x1 + 0.002, 0.11, CAR.z0 + 0.15],
+       [CAR.x1 + 0.002, 0.17, CAR.z0 + 0.15], [CAR.x1 + 0.002, 0.17, CAR.z0 + 0.08]],
+      [[CAR.x1 + 0.002, 0.11, CAR.z1 - 0.15], [CAR.x1 + 0.002, 0.11, CAR.z1 - 0.08],
+       [CAR.x1 + 0.002, 0.17, CAR.z1 - 0.08], [CAR.x1 + 0.002, 0.17, CAR.z1 - 0.15]],
+    ];
 
     function onFlank(a, b, y0, y1) {
       return [[a, y0, CAR.z1], [b, y0, CAR.z1], [b, y1, CAR.z1], [a, y1, CAR.z1]];
@@ -318,8 +329,8 @@ const Panels = (function () {
 
     // Generation down the party-wall end of the front, just outboard of
     // the wall. Anywhere else on this elevation it crosses a window.
-    const solarPts = [roofPoint(0.12, 0.09),
-                      [0.06 * W, H, D + 0.05], [0.06 * W, 0.15, D + 0.05]];
+    const solarPts = [roofPoint(0.12, 0.34),
+                      [0.34 * W, H, D + 0.05], [0.34 * W, 0.15, D + 0.05]];
 
     // The grid, along the front of the plot. In this projection a point
     // offset equally in x and z lands directly below where it started,
@@ -381,12 +392,15 @@ const Panels = (function () {
              pts.map(function (q) { return to(q).join(','); }).join(' ') + '"/>';
     }
     function temperatureColor(value) {
+      return temperatureColorWithAlpha(value, 0.32);
+    }
+    function temperatureColorWithAlpha(value, alpha) {
       if (typeof value !== 'number') return null;
       const t = Math.max(0, Math.min(1, (value - 15) / 10));
       const r = Math.round(42 + (238 - 42) * t);
       const g = Math.round(112 + (70 - 112) * t);
       const b = Math.round(255 + (54 - 255) * t);
-      return 'rgba(' + r + ',' + g + ',' + b + ',0.32)';
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
     }
     function curtainSVG(state) {
       if (!state) return '';
@@ -440,6 +454,7 @@ const Panels = (function () {
         poly(cabin.top, 'car-glass') +
         poly(cabin.end, 'car-glass') +
         poly(cabin.side, 'car-glass') +
+        headlights.map(function (h) { return poly(h, 'car-light'); }).join('') +
         wheels.map(function (w) { return poly(w, 'car-wheel'); }).join('') +
         (pct >= 0 ? poly(chargeTrack, 'car-track') : '') +
         (pct > 0 ? poly(chargeFill, 'car-cell' + state) : '') +
@@ -471,8 +486,16 @@ const Panels = (function () {
       // Shell: faint render, the painted band, then the openings.
       walls.map(function (w) { return poly(w, 'render'); }).join('') +
       bands.map(function (b) { return poly(b, 'band'); }).join('') +
-      // Temperature is carried as a restrained wash in each storey, not
-      // as a label: 15C is blue, 25C is red, and the range blends between.
+      // Temperature washes the two storeys independently: 15C is blue,
+      // 25C is red, and the range blends between.
+      polyFill(onZ(D, 0, W, PL, MID),
+               temperatureColorWithAlpha((rooms.downstairs || {}).temperature_c, 0.15), 'storey-temp') +
+      polyFill(onX(W, 0, D, PL, MID),
+               temperatureColorWithAlpha((rooms.downstairs || {}).temperature_c, 0.15), 'storey-temp') +
+      polyFill(onZ(D, 0, W, MID, H),
+               temperatureColorWithAlpha((rooms.upstairs || {}).temperature_c, 0.15), 'storey-temp') +
+      polyFill(onX(W, 0, D, MID, H),
+               temperatureColorWithAlpha((rooms.upstairs || {}).temperature_c, 0.15), 'storey-temp') +
       [windows[0], windows[1], windows[3]].filter(Boolean).map(function (w) {
         return polyFill(w, temperatureColor((rooms.upstairs || {}).temperature_c), 'room-temp');
       }).join('') +
@@ -489,14 +512,15 @@ const Panels = (function () {
       // through the slope and the array.
       roofPlanes.map(function (r) { return poly(r, 'roof'); }).join('') +
       array.map(function (a) {
-        return poly(a, generating ? 'pv live' : 'pv');
+        const band = Math.max(1, Math.min(4, Math.ceil((e.solar_watts || 0) / 750)));
+        return poly(a, generating ? 'pv live solar-' + band : 'pv');
       }).join('') +
       (rooflight ? poly(rooflight, 'rooflight') : '') +
       poly(chimney.side, 'stack') + poly(chimney.end, 'stack') +
       poly(chimney.top, 'stack-top') +
       // Porch last of the building: it stands in front of the wall.
       poly(porch.end, 'out-shell') + poly(porch.front, 'out-shell') +
-      poly(porch.roof, 'out-roof') + poly(porch.door, 'win lit') +
+      poly(porch.roof, 'out-roof') + poly(porch.door, 'porch-door') +
       (car ? carSVG(car.charging) : '') +
       // pathLength normalises each run to 100 units, so one dash pattern
       // works on all of them however long they actually are. In user
@@ -552,7 +576,7 @@ const Panels = (function () {
     }
 
     return (
-      '<div class="p-head">Home energy</div>' + solar +
+      solar +
       '<div class="house">' + houseSVG(d) + '</div>' +
       '<div class="foot">' +
       (hero ? '<div><div class="p-hero">' + hero + '</div>' +

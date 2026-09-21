@@ -342,10 +342,15 @@ body {
                         stroke: rgba(160, 190, 230, 0.40); stroke-width: 1; }
 .p-energy .out-door   { fill: rgba(10, 9, 9, 0.94);
                         stroke: rgba(150, 118, 96, 0.40); stroke-width: 0.8; }
+.p-energy .porch-door { fill: rgba(18, 24, 32, 0.94);
+                        stroke: rgba(180, 214, 244, 0.62); stroke-width: 1; }
+.p-energy .win        { fill: rgba(68, 103, 140, 0.20);
+                        stroke: rgba(175, 210, 244, 0.45); stroke-width: 0.8; }
 .p-energy .win.lit {
   fill: url(#lit);
   filter: drop-shadow(0 0 16px rgba(255, 168, 78, 0.45));
 }
+.p-energy .storey-temp { stroke: none; }
 
 /* The array. A hairline head edge is what makes eight quadrilaterals
    read as panels lying on a slope rather than as blue patches. */
@@ -358,6 +363,10 @@ body {
   stroke: rgba(186, 220, 255, 0.55);
   filter: drop-shadow(0 0 12px rgba(120, 176, 240, 0.30));
 }
+.p-energy .pv.live.solar-1 { fill: rgba(223, 180, 76, 0.30); }
+.p-energy .pv.live.solar-2 { fill: rgba(244, 194, 66, 0.46); }
+.p-energy .pv.live.solar-3 { fill: rgba(255, 204, 70, 0.62); }
+.p-energy .pv.live.solar-4 { fill: rgba(255, 218, 104, 0.78); }
 
 /* A conduit is a track plus a pulse. One definition, three meanings:
    generation down the roof, grid inward, grid outward - direction is
@@ -417,6 +426,12 @@ body {
   fill: rgba(52, 78, 112, 0.86);
   stroke: rgba(180, 212, 248, 0.46);
   stroke-width: 0.9;
+}
+.p-energy .car-light {
+  fill: rgba(255, 231, 168, 0.78);
+  stroke: rgba(255, 245, 210, 0.88);
+  stroke-width: 0.6;
+  filter: drop-shadow(0 0 4px rgba(255, 214, 120, 0.55));
 }
 .p-energy .car-track {
   fill: rgba(10, 16, 26, 0.90);

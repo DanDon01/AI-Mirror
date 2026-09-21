@@ -439,6 +439,10 @@ class Bridge:
         if occupancy is not None and str(occupancy).lower() not in ("unknown", "unavailable"):
             room_values.setdefault("bedroom", {})["occupied"] = str(occupancy).lower() in ("on", "occupied", "home")
 
+        living_occupancy = self._ha_state(self.gate.get("livingroom_occupancy_entity"))
+        if living_occupancy is not None and str(living_occupancy).lower() not in ("unknown", "unavailable"):
+            room_values.setdefault("livingroom", {})["occupied"] = str(living_occupancy).lower() in ("on", "occupied", "home")
+
         curtain = self._ha_state(self.gate.get("livingroom_curtain_entity"))
         if curtain is not None and str(curtain).lower() not in ("unknown", "unavailable"):
             room_values.setdefault("livingroom", {})["curtain"] = str(curtain).lower()
@@ -541,7 +545,8 @@ class Bridge:
         payload = {key: self.gate.get(key) for key in {
             "power_entity", "solar_entity", "car_soc_entity", "light_entities",
             "upstairs_temp_entity", "upstairs_humidity_entity", "downstairs_temp_entity",
-            "downstairs_humidity_entity", "bedroom_occupancy_entity", "livingroom_curtain_entity",
+            "downstairs_humidity_entity", "bedroom_occupancy_entity",
+            "livingroom_occupancy_entity", "livingroom_curtain_entity",
         }}
         payload["visibility"] = self.visibility
         try:
@@ -557,7 +562,8 @@ class Bridge:
             "power_entity", "solar_entity", "car_soc_entity",
             "light_entities", "upstairs_temp_entity", "upstairs_humidity_entity",
             "downstairs_temp_entity", "downstairs_humidity_entity",
-            "bedroom_occupancy_entity", "livingroom_curtain_entity",
+            "bedroom_occupancy_entity", "livingroom_occupancy_entity",
+            "livingroom_curtain_entity",
         }
         clean = {}
         for key, value in updates.items():

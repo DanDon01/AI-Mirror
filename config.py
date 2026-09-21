@@ -674,6 +674,7 @@ CONFIG = {
         'downstairs_temp_entity': os.getenv('VISUAL_GATE_DOWNSTAIRS_TEMP_ENTITY', ''),
         'downstairs_humidity_entity': os.getenv('VISUAL_GATE_DOWNSTAIRS_HUMIDITY_ENTITY', ''),
         'bedroom_occupancy_entity': os.getenv('VISUAL_GATE_BEDROOM_OCCUPANCY_ENTITY', ''),
+        'livingroom_occupancy_entity': os.getenv('VISUAL_GATE_LIVINGROOM_OCCUPANCY_ENTITY', ''),
         'livingroom_curtain_entity': os.getenv('VISUAL_GATE_LIVINGROOM_CURTAIN_ENTITY', ''),
         'rain_probability_pct': int(os.getenv('VISUAL_GATE_RAIN_THRESHOLD', '55')),
     },
