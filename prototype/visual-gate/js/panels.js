@@ -103,19 +103,21 @@ const Panels = (function () {
     plinth: 0.17,   // the dark painted band around the base
 
     rows: { lower: [0.16, 0.44], upper: [0.60, 0.88] },
-    frontUpper: [[0.10, 0.40], [0.54, 0.78]],
+    // Keep only the principal upper-front window; the two side windows
+    // made the elevation read like a different house.
+    frontUpper: [[0.54, 0.78]],
     frontLower: [[0.10, 0.46]],
-    flankUpper: [[0.28, 0.62]],
+    flankUpper: [],
 
     porch:   { x0: 0.64, x1: 0.86, out: 0.17, height: 0.46, fall: 0.06 },
     garage:  { x0: 1.00, x1: 1.30, z0: 0.34, z1: 1.04, height: 0.42, ridge: 0.09 },
-    chimney: { x0: 0.02, x1: 0.17, halfDepth: 0.075, above: 0.19, sink: 0.30 },
+    chimney: { x0: 0.18, x1: 0.33, halfDepth: 0.075, above: 0.19, sink: 0.30 },
 
     // The array on the front slope. u runs eaves to ridge, v along the
     // ridge from the party wall toward the hip; both fractions.
     pv: { rows: 2, cols: 5, gap: 0.022,
           uStart: 0.13, uSpan: 0.72, uMargin: 0.055,
-          vStart: 0.30, vSpan: 0.60 },
+          vStart: 0.42, vSpan: 0.46 },
     // The rooflight takes one panel's place in the array rather than
     // sitting beside it, which is how it reads on the roof.
     rooflight: { row: 1, col: 1 },
@@ -240,8 +242,8 @@ const Panels = (function () {
     if ((rooms.bedroom || {}).occupied === true && lit.indexOf(windows[0]) < 0) {
       lit.push(windows[0]);
     }
-    if ((rooms.livingroom || {}).occupied === true && lit.indexOf(windows[2]) < 0) {
-      lit.push(windows[2]);
+    if ((rooms.livingroom || {}).occupied === true && lit.indexOf(windows[1]) < 0) {
+      lit.push(windows[1]);
     }
 
     // ---- porch and garage --------------------------------------------
@@ -329,8 +331,8 @@ const Panels = (function () {
 
     // Generation down the party-wall end of the front, just outboard of
     // the wall. Anywhere else on this elevation it crosses a window.
-    const solarPts = [roofPoint(0.12, 0.34),
-                      [0.34 * W, H, D + 0.05], [0.34 * W, 0.15, D + 0.05]];
+    const solarPts = [roofPoint(0.12, 0.46),
+                      [0.46 * W, H, D + 0.05], [0.46 * W, 0.15, D + 0.05]];
 
     // The grid, along the front of the plot. In this projection a point
     // offset equally in x and z lands directly below where it started,
@@ -404,7 +406,7 @@ const Panels = (function () {
     }
     function curtainSVG(state) {
       if (!state) return '';
-      const target = windows[2];
+      const target = windows[1];
       if (!target) return '';
       const colour = state === 'open' ? 'rgba(135,205,255,0.14)' : 'rgba(48,72,112,0.62)';
       return polyFill(target, colour, 'curtain ' + (state === 'open' ? 'open' : 'closed'));
@@ -461,7 +463,9 @@ const Panels = (function () {
         '</g>';
     }
 
-    const chargeAt = to([0.06, 0.34, 2.52]);
+    // Keep the battery marker attached to the vehicle rather than floating
+    // at the end of the driveway.
+    const chargeAt = to([1.25, 0.34, 2.15]);
 
     return (
       '<svg viewBox="0 0 ' + BW + ' ' + BH + '" aria-hidden="true">' +
@@ -492,10 +496,10 @@ const Panels = (function () {
                temperatureColorWithAlpha((rooms.upstairs || {}).temperature_c, 0.15), 'storey-temp') +
       polyFill(onX(W, 0, D, MID, H),
                temperatureColorWithAlpha((rooms.upstairs || {}).temperature_c, 0.15), 'storey-temp') +
-      [windows[0], windows[1], windows[3]].filter(Boolean).map(function (w) {
+      [windows[0]].filter(Boolean).map(function (w) {
         return polyFill(w, temperatureColor((rooms.upstairs || {}).temperature_c), 'room-temp');
       }).join('') +
-      [windows[2]].filter(Boolean).map(function (w) {
+      [windows[1]].filter(Boolean).map(function (w) {
         return polyFill(w, temperatureColor((rooms.downstairs || {}).temperature_c), 'room-temp');
       }).join('') +
       lit.map(function (w) { return poly(w, 'win lit'); }).join('') +
