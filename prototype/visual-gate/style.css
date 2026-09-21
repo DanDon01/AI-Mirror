@@ -502,25 +502,28 @@ body {
   padding: 0 30px 0 22px;
   transform-origin: 100% 50%;
   will-change: transform, opacity;
-  /* A slab caught edge on: a lit leading edge, a wash across the face,
-     nothing at all on the trailing side. */
-  background: linear-gradient(100deg,
-    rgba(150, 186, 232, 0.10) 0%,
-    rgba(110, 150, 205, 0.042) 44%,
-    rgba(0, 0, 0, 0) 100%);
-  border-left: 2px solid rgba(198, 222, 255, 0.50);
-  box-shadow: -12px 0 30px rgba(70, 116, 190, 0.13);
+  border: 1px solid rgba(var(--event-rgb), 0.42);
+  border-left: 4px solid rgba(var(--event-rgb), 0.78);
+  border-radius: 8px;
+  background: linear-gradient(105deg,
+    rgba(var(--event-rgb), 0.28) 0%,
+    rgba(var(--event-rgb), 0.12) 48%,
+    rgba(8, 15, 26, 0.16) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(0,0,0,0.22),
+    0 8px 24px rgba(var(--event-rgb), 0.10);
+  backdrop-filter: blur(8px);
 }
 
 /* The next appointment: nearest the viewer, and --lift rises with it as
    its start time closes in. */
 .p-cal .blade.lead {
-  border-left-color: rgba(230, 242, 255, calc(0.62 + 0.38 * var(--lift, 0)));
-  background: linear-gradient(100deg,
-    rgba(180, 210, 250, calc(0.11 + 0.11 * var(--lift, 0))) 0%,
-    rgba(120, 160, 215, 0.055) 44%,
-    rgba(0, 0, 0, 0) 100%);
-  box-shadow: -16px 0 46px rgba(112, 162, 236, calc(0.15 + 0.25 * var(--lift, 0)));
+  border-left-color: rgba(var(--event-rgb), calc(0.72 + 0.28 * var(--lift, 0)));
+  background: linear-gradient(105deg,
+    rgba(var(--event-rgb), calc(0.32 + 0.12 * var(--lift, 0))) 0%,
+    rgba(var(--event-rgb), 0.14) 48%,
+    rgba(8, 15, 26, 0.13) 100%);
+  box-shadow: 0 8px 30px rgba(var(--event-rgb), calc(0.12 + 0.18 * var(--lift, 0)));
 }
 
 .p-cal .at {
@@ -530,14 +533,6 @@ body {
 .p-cal .what { font-family: var(--ff-display); font-size: 36px; color: var(--ink); flex: 1; }
 .p-cal .blade.lead .at   { opacity: calc(0.78 + 0.22 * var(--lift, 0)); }
 .p-cal .blade.lead .what { font-size: 39px; }
-.p-cal .pip {
-  width: 10px; height: 10px; border-radius: 50%; flex: none;
-  background: var(--glass); box-shadow: 0 0 14px rgba(168,196,236,0.7);
-}
-.p-cal .blade.warm .pip { background: var(--warm); box-shadow: 0 0 14px rgba(255,178,94,0.75); }
-.p-cal .blade.lead .pip {
-  box-shadow: 0 0 calc(14px + 16px * var(--lift, 0)) rgba(198, 222, 255, 0.95);
-}
 
 /* ---- 7. News ---- */
 

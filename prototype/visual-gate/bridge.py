@@ -256,6 +256,7 @@ class Bridge:
                 "at": "all day" if ev.get("all_day") else local.strftime("%H:%M"),
                 "title": ev.get("summary") or "",
                 "tone": "cool",
+                "color": list(ev.get("color") or (120, 180, 240)),
             }
             if not out:
                 ref = now.astimezone() if local.tzinfo else now

@@ -569,11 +569,13 @@ const Panels = (function () {
   // arrive from the right edge, furthest last.
   function buildCalendar(events) {
     const rows = events.slice(0, 4).map(function (e, i) {
+      const tint = Array.isArray(e.color) && e.color.length >= 3
+        ? e.color.slice(0, 3).map(function (v) { return Math.max(0, Math.min(255, Number(v) || 0)); }).join(',')
+        : '120,180,240';
       return '<div class="blade' + (i === 0 ? ' lead' : '') +
-             (e.tone === 'warm' ? ' warm' : '') + '">' +
+             (e.tone === 'warm' ? ' warm' : '') + '" style="--event-rgb:' + tint + '">' +
              '<span class="at">' + e.at + '</span>' +
-             '<span class="what">' + e.title + '</span>' +
-             '<span class="pip"></span></div>';
+             '<span class="what">' + e.title + '</span></div>';
     }).join('');
     return '<div class="p-head">Next up</div><div class="blades">' + rows + '</div>';
   }
