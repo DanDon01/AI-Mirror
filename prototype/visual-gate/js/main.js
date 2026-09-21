@@ -53,7 +53,7 @@
   // the opening 12s of every third loop (roughly once every 2m24s).
   const BIO_CYCLE_COUNT = 3;
   const BIO_WINDOW = 12;
-  const POLL_MS = 20000;
+  const POLL_MS = 2000; // local bridge only; HA is fetched once by SmartHomeModule
   const T = {
     morphOut: [12.0, 15.5],    // heart -> brain
     morphBack: [26.0, 29.5],   // brain -> heart

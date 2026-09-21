@@ -676,6 +676,15 @@ CONFIG = {
         'bedroom_occupancy_entity': os.getenv('VISUAL_GATE_BEDROOM_OCCUPANCY_ENTITY', ''),
         'livingroom_occupancy_entity': os.getenv('VISUAL_GATE_LIVINGROOM_OCCUPANCY_ENTITY', ''),
         'livingroom_curtain_entity': os.getenv('VISUAL_GATE_LIVINGROOM_CURTAIN_ENTITY', ''),
+        # Optional mappings into the SAME HA snapshot; never separate clients.
+        **{key: os.getenv('VISUAL_GATE_' + key.upper(), '') for key in (
+            'livingroom_light_entity', 'bedroom_light_entity', 'upstairs_light_entity',
+            'doorbell_camera_entity', 'external_camera_entity',
+            'doorbell_motion_entity', 'external_motion_entity',
+            'car_charging_entity', 'battery_soc_entity', 'battery_charging_entity')},
+        'car_charging_entity': os.getenv('VISUAL_GATE_CAR_CHARGING', os.getenv('VISUAL_GATE_CAR_CHARGING_ENTITY', '')),
+        'doorbell_motion_entity': os.getenv('VISUAL_GATE_DOORBELL_PERSON', os.getenv('VISUAL_GATE_DOORBELL_MOTION_ENTITY', '')),
+        'external_motion_entity': os.getenv('VISUAL_GATE_FRONTCAMERA_MOTION', os.getenv('VISUAL_GATE_EXTERNAL_MOTION_ENTITY', '')),
         'rain_probability_pct': int(os.getenv('VISUAL_GATE_RAIN_THRESHOLD', '55')),
     },
     

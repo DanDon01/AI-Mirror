@@ -90,11 +90,7 @@
       document.getElementById('payload').textContent = JSON.stringify(data, null, 2);
     }
     async function saveConfig() {
-      const keys = ['power_entity','solar_entity','car_soc_entity','light_entities',
-        'upstairs_temp_entity','upstairs_humidity_entity','downstairs_temp_entity',
-        'downstairs_humidity_entity','bedroom_occupancy_entity',
-        'livingroom_occupancy_entity','livingroom_curtain_entity'];
-      const updates = {}; for (const key of keys) updates[key] = document.getElementById('cfg-' + key)?.value || '';
+      const updates = {}; for (const input of document.querySelectorAll('[id^="cfg-"]')) updates[input.id.slice(4)] = input.value;
       const r = await fetch('/api/control/config', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updates)});
       document.getElementById('saveMeta').textContent = r.ok ? 'Saved and applied.' : 'Save failed.';
       refresh();

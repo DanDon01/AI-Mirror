@@ -37,6 +37,12 @@ if PROJECT not in sys.path:
 
 logger = logging.getLogger("bridge")
 SETTINGS_PATH = os.path.join(HERE, "settings.json")
+TWIN_ENTITIES = {
+    'livingroom_light_entity', 'bedroom_light_entity', 'upstairs_light_entity',
+    'doorbell_camera_entity', 'external_camera_entity',
+    'doorbell_motion_entity', 'external_motion_entity', 'car_charging_entity',
+    'battery_soc_entity', 'battery_charging_entity',
+}
 
 # Open-Meteo WMO codes, collapsed to the four glyphs the page draws.
 # Anything unrecognised becomes cloud, which is the honest default for a
@@ -111,6 +117,15 @@ class Bridge:
                 self.visibility.update(saved.get("visibility", {}))
         except (FileNotFoundError, OSError, ValueError):
             pass
+
+        # Reuse the existing single background HA fetcher. The old five-minute
+        # display refresh missed motion and curtain transitions entirely.
+        home = self.modules.get('smarthome')
+        if home is not None:
+            home.update_interval = timedelta(seconds=5)
+            home.dashboard_update_interval = timedelta(seconds=5)
+            from api_tracker import api_tracker
+            api_tracker.set_limit('home-assistant', hourly=900, daily=20000)
 
     @staticmethod
     def _build(name, entry):
@@ -337,9 +352,9 @@ class Bridge:
                 out["rate_p_kwh"] = round(rate, 2)
                 out["offpeak"] = bool(getattr(octo, "is_offpeak", False))
 
-            car = self._car(octo)
-            if car:
-                out["car"] = car
+        car = self._car(octo)
+        if car:
+            out["car"] = car
 
         live = self._ha_numbers()
         if live.get("watts_now") is not None:
@@ -354,37 +369,37 @@ class Bridge:
             out["rooms_lit"] = live["rooms_lit"]
         if live.get("rooms"):
             out["rooms"] = live["rooms"]
+        for key in ('battery', 'cameras'):
+            if live.get(key):
+                out[key] = live[key]
 
         return out or None
 
     def _car(self, octo):
-        """Charging state from the Intelligent Octopus dispatch slots.
-
-        A planned dispatch whose window covers now is the car actually
-        drawing; that is what the panel means by charging.
-        """
-        planned = getattr(octo, "planned_dispatches", None) or []
-        now = datetime.now(timezone.utc)
-        charging = False
-        for slot in planned:
-            start = _parse_iso(slot.get("start") or slot.get("startDt"))
-            end = _parse_iso(slot.get("end") or slot.get("endDt"))
-            if start and end and start <= now <= end:
-                charging = True
-                break
-
-        out = {"charging": charging}
+        """Actual charging is HA telemetry, never a planned Octopus slot."""
+        out = {}
+        charging = self._ha_boolean('car_charging_entity')
+        if charging is not None:
+            out['charging'] = charging
 
         # State of charge, if the account exposes it. Octopus does not
         # always return one, and a charge level is not something to
         # guess at, so the panel goes without when it is missing.
         prefs = getattr(octo, "charge_prefs", None) or {}
-        soc = _num(prefs.get("currentSoc") or prefs.get("soc"))
+        soc = _num(self._ha_state(self.gate.get("car_soc_entity")))
         if soc is None:
-            soc = _num(self._ha_state(self.gate.get("car_soc_entity")))
+            soc = _num(prefs.get("currentSoc", prefs.get("soc")))
         if soc is not None:
             out["charge_pct"] = int(round(soc))
-        return out if (planned or "charge_pct" in out) else None
+        return out or None
+
+    def _ha_boolean(self, key):
+        value = str(self._ha_state(self.gate.get(key)) or '').lower()
+        if value in ('on', 'occupied', 'home', 'charging', 'detected'):
+            return True
+        if value in ('off', 'clear', 'not_home', 'idle', 'discharging', 'not_charging'):
+            return False
+        return None
 
     # ---- Home Assistant -----------------------------------------------
 
@@ -393,6 +408,9 @@ class Bridge:
         if mod is None:
             return {}
         all_states = getattr(mod, "_all_states", None)
+        updated = getattr(mod, '_states_updated', None)
+        if isinstance(updated, datetime) and (datetime.now() - updated).total_seconds() > 30:
+            return {}  # stale motion must never remain active on the house
         if isinstance(all_states, list):
             return {row.get("entity_id"): row for row in all_states
                     if isinstance(row, dict) and row.get("entity_id")}
@@ -446,6 +464,41 @@ class Bridge:
         curtain = self._ha_state(self.gate.get("livingroom_curtain_entity"))
         if curtain is not None and str(curtain).lower() not in ("unknown", "unavailable"):
             room_values.setdefault("livingroom", {})["curtain"] = str(curtain).lower()
+            row = self._ha_states().get(self.gate.get('livingroom_curtain_entity'), {})
+            position = _num((row.get('attributes') or {}).get('current_position'))
+            if position is not None:
+                room_values['livingroom']['curtain_position'] = max(0, min(100, position))
+        for room in ('livingroom', 'bedroom', 'upstairs'):
+            value = self._ha_boolean(room + '_light_entity')
+            if value is not None:
+                room_values.setdefault(room, {})['light'] = value
+        # Existing selected lights can be mapped only when their area is
+        # explicit in the entity ID/friendly name. Never allocate a count
+        # of lights to arbitrary windows or infer lights from occupancy.
+        for room, names in (('livingroom', ('livingroom', 'living_room')),
+                            ('bedroom', ('bedroom',)), ('upstairs', ('upstairs',))):
+            if 'light' in room_values.get(room, {}):
+                continue
+            values = []
+            for eid in lights:
+                row = self._ha_states().get(eid, {})
+                label = (eid + ' ' + str((row.get('attributes') or {}).get('friendly_name', ''))).lower().replace(' ', '_')
+                if any(name in label for name in names) and row.get('state') in ('on', 'off'):
+                    values.append(row['state'] == 'on')
+            if values:
+                room_values.setdefault(room, {})['light'] = any(values)
+        for room, key in (('porch', 'doorbell_motion_entity'), ('external', 'external_motion_entity')):
+            value = self._ha_boolean(key)
+            if value is not None:
+                room_values.setdefault(room, {})['occupied'] = value
+        out['cameras'] = {name: bool(self.gate.get(name + '_camera_entity'))
+                          for name in ('doorbell', 'external')}
+        soc = _num(self._ha_state(self.gate.get('battery_soc_entity')))
+        if soc is not None:
+            out['battery'] = {'charge_pct': max(0, min(100, soc))}
+            charging = self._ha_boolean('battery_charging_entity')
+            if charging is not None:
+                out['battery']['charging'] = charging
         if room_values:
             out["rooms"] = room_values
         return out
@@ -547,7 +600,7 @@ class Bridge:
             "upstairs_temp_entity", "upstairs_humidity_entity", "downstairs_temp_entity",
             "downstairs_humidity_entity", "bedroom_occupancy_entity",
             "livingroom_occupancy_entity", "livingroom_curtain_entity",
-        }}
+        } | TWIN_ENTITIES}
         payload["visibility"] = self.visibility
         try:
             with open(SETTINGS_PATH, "w", encoding="utf-8") as fh:
@@ -564,7 +617,7 @@ class Bridge:
             "downstairs_temp_entity", "downstairs_humidity_entity",
             "bedroom_occupancy_entity", "livingroom_occupancy_entity",
             "livingroom_curtain_entity",
-        }
+        } | TWIN_ENTITIES
         clean = {}
         for key, value in updates.items():
             if key not in allowed:
