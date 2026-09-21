@@ -669,6 +669,12 @@ CONFIG = {
         'light_entities': [e.strip() for e in os.getenv(
             'VISUAL_GATE_LIGHT_ENTITIES', os.getenv('HA_LIGHT_ENTITIES', '')
         ).split(',') if e.strip()],
+        'upstairs_temp_entity': os.getenv('VISUAL_GATE_UPSTAIRS_TEMP_ENTITY', ''),
+        'upstairs_humidity_entity': os.getenv('VISUAL_GATE_UPSTAIRS_HUMIDITY_ENTITY', ''),
+        'downstairs_temp_entity': os.getenv('VISUAL_GATE_DOWNSTAIRS_TEMP_ENTITY', ''),
+        'downstairs_humidity_entity': os.getenv('VISUAL_GATE_DOWNSTAIRS_HUMIDITY_ENTITY', ''),
+        'bedroom_occupancy_entity': os.getenv('VISUAL_GATE_BEDROOM_OCCUPANCY_ENTITY', ''),
+        'livingroom_curtain_entity': os.getenv('VISUAL_GATE_LIVINGROOM_CURTAIN_ENTITY', ''),
         'rain_probability_pct': int(os.getenv('VISUAL_GATE_RAIN_THRESHOLD', '55')),
     },
     

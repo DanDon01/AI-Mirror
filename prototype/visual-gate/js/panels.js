@@ -518,8 +518,30 @@ const Panels = (function () {
       sub = 'Used today';
     }
 
+    const rooms = d.rooms || {};
+    const upstairs = rooms.upstairs || {};
+    const downstairs = rooms.downstairs || {};
+    const bedroom = rooms.bedroom || {};
+    const living = rooms.livingroom || {};
+    const climate = [];
+    if (typeof upstairs.temperature_c === 'number') climate.push(
+      '<span class="room-read"><b>UP</b>' + upstairs.temperature_c + '°</span>');
+    if (typeof downstairs.temperature_c === 'number') climate.push(
+      '<span class="room-read"><b>DOWN</b>' + downstairs.temperature_c + '°</span>');
+    if (typeof upstairs.humidity_pct === 'number') climate.push(
+      '<span>U ' + upstairs.humidity_pct + '%</span>');
+    if (typeof downstairs.humidity_pct === 'number') climate.push(
+      '<span>D ' + downstairs.humidity_pct + '%</span>');
+    if (typeof bedroom.occupied === 'boolean') climate.push(
+      '<span class="presence ' + (bedroom.occupied ? 'on' : '') + '">BED ' +
+      (bedroom.occupied ? 'OCCUPIED' : 'CLEAR') + '</span>');
+    if (living.curtain) climate.push(
+      '<span>CURTAIN ' + living.curtain.toUpperCase() + '</span>');
+    const roomState = climate.length ? '<div class="room-states">' + climate.join('') + '</div>' : '';
+
     return (
       '<div class="p-head">Home energy</div>' + solar +
+      roomState +
       '<div class="house">' + houseSVG(d) + '</div>' +
       '<div class="foot">' +
       (hero ? '<div><div class="p-hero">' + hero + '</div>' +

@@ -322,6 +322,8 @@ class Bridge:
             out["grid_watts"] = out["watts_now"] - out["solar_watts"]
         if live.get("rooms_lit") is not None:
             out["rooms_lit"] = live["rooms_lit"]
+        if live.get("rooms"):
+            out["rooms"] = live["rooms"]
 
         return out or None
 
@@ -394,6 +396,24 @@ class Bridge:
                     if state == "on":
                         lit += 1
                 out["rooms_lit"] = lit
+        room_values = {}
+        for room, prefix in (("upstairs", "upstairs"), ("downstairs", "downstairs")):
+            temp = _num(self._ha_state(self.gate.get(f"{prefix}_temp_entity")))
+            humidity = _num(self._ha_state(self.gate.get(f"{prefix}_humidity_entity")))
+            if temp is not None:
+                room_values.setdefault(room, {})["temperature_c"] = round(temp, 1)
+            if humidity is not None:
+                room_values.setdefault(room, {})["humidity_pct"] = round(humidity, 1)
+
+        occupancy = self._ha_state(self.gate.get("bedroom_occupancy_entity"))
+        if occupancy is not None and str(occupancy).lower() not in ("unknown", "unavailable"):
+            room_values.setdefault("bedroom", {})["occupied"] = str(occupancy).lower() in ("on", "occupied", "home")
+
+        curtain = self._ha_state(self.gate.get("livingroom_curtain_entity"))
+        if curtain is not None and str(curtain).lower() not in ("unknown", "unavailable"):
+            room_values.setdefault("livingroom", {})["curtain"] = str(curtain).lower()
+        if room_values:
+            out["rooms"] = room_values
         return out
 
     # ---- payload ------------------------------------------------------
