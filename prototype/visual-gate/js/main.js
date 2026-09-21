@@ -48,6 +48,11 @@
   }
 
   const LOOP = 48;
+  // Biometrics are a periodic glance, not a permanent dashboard.  The
+  // visual loop remains 48s for the other modules; show this layer during
+  // the opening 12s of every third loop (roughly once every 2m24s).
+  const BIO_CYCLE_COUNT = 3;
+  const BIO_WINDOW = 12;
   const POLL_MS = 20000;
   const T = {
     morphOut: [12.0, 15.5],    // heart -> brain
@@ -138,7 +143,11 @@
 
   function renderAt(t, railT) {
     const have = bioState();
-    const showBio = visibility.biometrics !== false && (have.heart || have.sleep);
+    const timeline = railT === undefined ? t : railT;
+    const cycle = Math.floor(Math.max(0, timeline) / LOOP);
+    const bioWindow = cycle % BIO_CYCLE_COUNT === 0 && t < BIO_WINDOW;
+    const showBio = visibility.biometrics !== false && bioWindow &&
+      (have.heart || have.sleep);
     bioEl.hidden = !showBio;
 
     if (showBio) {

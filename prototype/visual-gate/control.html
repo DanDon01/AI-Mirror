@@ -31,7 +31,7 @@
 <body>
   <h1>AI-Mirror controls</h1>
   <div class="meta">Live diagnostics for the visual gate. Mirror display: <a href="http://" id="display">visual port</a></div>
-  <p><button onclick="refresh()">Refresh data</button> <button onclick="pump()">Request feed update</button></p>
+  <p><button onclick="refresh()">Refresh data</button> <button onclick="pump()">Request feed update</button> <button onclick="refreshCalendar()">Refresh calendar</button></p>
   <h2>Feeds</h2><div class="grid" id="feeds"></div>
     <h2>Configuration</h2><div class="grid" id="config"></div>
   <p><button onclick="saveConfig()">Save HA mappings</button> <span class="meta" id="saveMeta"></span></p>
@@ -57,6 +57,13 @@
       }
       if (!feeds.children.length) feeds.innerHTML = '<div class="meta">No live feeds have returned data yet.</div>';
       const status = await (await fetch('/api/control/status', {cache: 'no-store'})).json();
+      const cal = status.calendar || {};
+      const calCard = document.createElement('div'); calCard.className = 'card';
+      calCard.innerHTML = '<div class="label">calendar</div><div class="value">' +
+        (cal.available ? (cal.parsed_events || 0) + ' events' : 'unavailable') + '</div>' +
+        '<div class="meta">credentials: ' + (cal.credentials_configured ? 'configured' : 'missing') +
+        (cal.last_error ? '<br>error: ' + cal.last_error : '') + '</div>';
+      feeds.appendChild(calCard);
       const config = document.getElementById('config'); config.innerHTML = '';
       for (const [key, set] of Object.entries(status.configured_entities || {})) {
         const card = document.createElement('div'); card.className = 'card';
@@ -130,6 +137,11 @@
       refresh();
     }
     async function pump() { await fetch('/api/control/pump', {method: 'POST'}); refresh(); }
+    async function refreshCalendar() {
+      const r = await fetch('/api/control/calendar-refresh', {method: 'POST'});
+      document.getElementById('saveMeta').textContent = r.ok ? 'Calendar refresh queued.' : 'Calendar refresh failed.';
+      setTimeout(refresh, 1500);
+    }
     refresh().catch(e => document.getElementById('payload').textContent = String(e));
     setInterval(() => refresh().catch(() => {}), 10000);
   </script>

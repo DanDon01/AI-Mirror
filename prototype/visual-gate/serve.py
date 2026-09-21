@@ -64,6 +64,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path == "/api/control/calendar-refresh":
+            if self.bridge is None:
+                self.send_error(503, "live bridge unavailable")
+                return
+            try:
+                self._json({"ok": True, "queued": self.bridge.refresh_calendar()})
+            except Exception:
+                logger.exception("manual calendar refresh failed")
+                self.send_error(500, "calendar refresh failed")
+            return
         if path in ("/api/avatar", "/api/tickers", "/api/modules"):
             if self.bridge is None:
                 self.send_error(503, "live bridge unavailable")

@@ -461,6 +461,21 @@ class Bridge:
 
     def control_status(self):
         """Safe diagnostics for the LAN control page; never expose secrets."""
+        calendar = self.modules.get("calendar")
+        calendar_status = {"available": bool(calendar)}
+        if calendar is not None:
+            last_update = getattr(calendar, "last_update", None)
+            calendar_status.update({
+                "events": len(getattr(calendar, "events", []) or []),
+                "parsed_events": len(calendar.parsed_events(4))
+                    if callable(getattr(calendar, "parsed_events", None)) else 0,
+                "credentials_configured": all(bool(getattr(calendar, "config", {}).get(k))
+                                               for k in ("client_id", "client_secret", "refresh_token")),
+                "fetch_in_flight": not getattr(calendar, "_fetcher", None).idle
+                    if getattr(calendar, "_fetcher", None) is not None else False,
+                "last_update": last_update.isoformat() if hasattr(last_update, "isoformat") else None,
+                "last_error": getattr(calendar, "last_error", None),
+            })
         return {
             "modules": {name: True for name in sorted(self.modules)},
             "configured_entities": {
@@ -474,7 +489,14 @@ class Bridge:
             "visibility": self.visibility.copy(),
             "avatars": self._avatars(),
             "tickers": self._tickers(),
+            "calendar": calendar_status,
         }
+
+    def refresh_calendar(self):
+        mod = self.modules.get("calendar")
+        if mod is None or not hasattr(mod, "force_refresh"):
+            return False
+        return bool(mod.force_refresh())
 
     @staticmethod
     def _avatars():

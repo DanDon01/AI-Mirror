@@ -49,6 +49,8 @@ class CalendarModule(InstrumentPanel):
         self.last_update = datetime.datetime.min
         self.update_interval = datetime.timedelta(hours=1)  # Update every hour
         self.service = None
+        self.last_error = None
+        self.last_fetch_started = None
         self.env_file = os.path.join(os.path.dirname(__file__), '..', 'Variables.env')
         self.load_tokens()
 
@@ -69,10 +71,18 @@ class CalendarModule(InstrumentPanel):
 
     def load_tokens(self):
         load_dotenv(self.env_file)
-        self.config['client_id'] = os.getenv('GOOGLE_CLIENT_ID')
-        self.config['client_secret'] = os.getenv('GOOGLE_CLIENT_SECRET')
-        self.config['access_token'] = os.getenv('GOOGLE_ACCESS_TOKEN')
-        self.config['refresh_token'] = os.getenv('GOOGLE_REFRESH_TOKEN')
+        # Keep values supplied by the caller when Variables.env is absent or
+        # incomplete.  The old pygame path often passed a complete config;
+        # replacing it with four Nones made the visual bridge look unconfigured.
+        for key, env_name in (
+            ('client_id', 'GOOGLE_CLIENT_ID'),
+            ('client_secret', 'GOOGLE_CLIENT_SECRET'),
+            ('access_token', 'GOOGLE_ACCESS_TOKEN'),
+            ('refresh_token', 'GOOGLE_REFRESH_TOKEN'),
+        ):
+            value = os.getenv(env_name)
+            if value:
+                self.config[key] = value
 
     def save_tokens(self, creds):
         self.config['access_token'] = creds.token
@@ -166,6 +176,7 @@ class CalendarModule(InstrumentPanel):
                 from data_cache import data_cache
                 data_cache.save("calendar", self.events)
                 logging.info(f"Calendar updated: {len(self.events)} events")
+                self.last_error = None
 
                 # "Calm for static, flare on change": a brief highlight the
                 # instant the event list actually differs, not on every
@@ -176,6 +187,7 @@ class CalendarModule(InstrumentPanel):
                 self._events_key = key
             else:
                 logging.error(f"Error updating Calendar data: {value}")
+                self.last_error = str(value)
                 # Keep showing the previous events rather than blanking
             self.last_update = datetime.datetime.now()
 
@@ -184,7 +196,14 @@ class CalendarModule(InstrumentPanel):
             return
         if not api_tracker.allow("calendar", "google-calendar"):
             return
-        self._fetcher.submit(self._fetch_events_blocking)
+        if self._fetcher.submit(self._fetch_events_blocking):
+            self.last_fetch_started = time.time()
+
+    def force_refresh(self):
+        """Queue a calendar refresh immediately, without blocking the UI."""
+        self.last_update = datetime.datetime.min
+        self.update()
+        return not self._fetcher.idle
 
     def parsed_events(self, limit=7):
         """Events resolved to real datetimes, soonest first."""
