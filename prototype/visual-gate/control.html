@@ -19,6 +19,10 @@
     button { background: #142235; border: 1px solid #41678e; color: #d9edff; border-radius: 7px;
       padding: 10px 14px; font-size: 15px; }
     button.active { border-color: #62c995; color: #9ee8c1; }
+    .ticker-row { display:flex; align-items:center; justify-content:space-between; gap:8px;
+      padding:7px 9px; margin:4px 0; background:#101722; border:1px solid #243447; border-radius:6px; }
+    .ticker-row label { flex:1; }
+    .ticker-row button { padding:3px 10px; border-color:#714b55; color:#f0a7ad; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #0e141d; border: 1px solid #202e3e;
       border-radius: 8px; padding: 12px; max-height: 420px; overflow: auto; font-size: 12px; }
     a { color: #9ed3ff; }
@@ -33,8 +37,9 @@
   <p><button onclick="saveConfig()">Save HA mappings</button> <span class="meta" id="saveMeta"></span></p>
   <h2>Avatar selection</h2><div class="grid" id="avatars"></div>
   <p class="meta" id="avatarMeta">Avatar selection is persisted for the avatar/Pygame mode.</p>
-  <h2>Stock watchlist</h2><textarea id="tickers" rows="5" style="width:100%;box-sizing:border-box;background:#0b1119;color:#d9e4f5;border:1px solid #30455d;border-radius:5px;padding:8px"></textarea>
-  <p><button onclick="saveTickers()">Save tickers</button> <span class="meta" id="tickerMeta"></span></p>
+  <h2>Stock watchlist</h2><div id="tickerRows"></div>
+  <p><input id="newTicker" placeholder="Add ticker, e.g. RR.L" style="width:70%;box-sizing:border-box;background:#0b1119;color:#d9e4f5;border:1px solid #30455d;border-radius:5px;padding:9px">
+    <button onclick="addTicker()">Add</button> <span class="meta" id="tickerMeta"></span></p>
   <h2>Visual modules</h2><div class="grid" id="modules"></div>
   <h2>Visual data</h2><pre id="payload">Loading...</pre>
   <script>
@@ -69,7 +74,7 @@
         b.className = avatar.selected ? 'active' : ''; b.disabled = !avatar.reference_available;
         b.onclick = () => selectAvatar(avatar.key); avatars.appendChild(b);
       }
-      document.getElementById('tickers').value = (status.tickers || []).join('\n');
+      if (!document.getElementById('tickerRows').contains(document.activeElement)) renderTickers(status.tickers || []);
       const modules = document.getElementById('modules'); modules.innerHTML = '';
       for (const [key, on] of Object.entries(status.visibility || {})) {
         const b = document.createElement('button'); b.textContent = key + ': ' + (on ? 'ON' : 'OFF');
@@ -91,10 +96,34 @@
       document.getElementById('avatarMeta').textContent = r.ok ? 'Avatar selection saved.' : 'Avatar selection failed.';
       refresh();
     }
+    function renderTickers(tickers) {
+      const box = document.getElementById('tickerRows'); box.innerHTML = '';
+      if (!tickers.length) { box.innerHTML = '<div class="meta">No tickers selected.</div>'; return; }
+      for (const ticker of tickers) {
+        const row = document.createElement('div'); row.className = 'ticker-row';
+        row.innerHTML = '<label><input type="checkbox" checked> ' + ticker + '</label>' +
+          '<button title="Remove ' + ticker + '" aria-label="Remove ' + ticker + '">×</button>';
+        row.querySelector('input').onchange = saveTickers;
+        row.querySelector('button').onclick = () => { row.remove(); saveTickers(); };
+        box.appendChild(row);
+      }
+    }
     async function saveTickers() {
-      const r = await fetch('/api/tickers', {method:'POST', body:document.getElementById('tickers').value});
+      const tickers = [...document.querySelectorAll('#tickerRows input[type=checkbox]:checked')]
+        .map(box => box.parentElement.textContent.trim());
+      const r = await fetch('/api/tickers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tickers})});
       document.getElementById('tickerMeta').textContent = r.ok ? 'Watchlist saved.' : 'Watchlist save failed.';
-      refresh();
+      if (r.ok) renderTickers((await r.json()).tickers || tickers);
+    }
+    async function addTicker() {
+      const input = document.getElementById('newTicker'); const value = input.value.trim();
+      if (!value) return;
+      const current = [...document.querySelectorAll('#tickerRows input[type=checkbox]')].map(box => box.parentElement.textContent.trim());
+      if (!current.includes(value)) current.push(value);
+      input.value = '';
+      const r = await fetch('/api/tickers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tickers:current})});
+      document.getElementById('tickerMeta').textContent = r.ok ? 'Ticker added.' : 'Ticker add failed.';
+      if (r.ok) renderTickers((await r.json()).tickers || current);
     }
     async function toggleModule(key, value) {
       await fetch('/api/modules', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[key]:value})});
