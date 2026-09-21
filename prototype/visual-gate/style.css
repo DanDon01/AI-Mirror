@@ -351,6 +351,12 @@ body {
   filter: drop-shadow(0 0 16px rgba(255, 168, 78, 0.45));
 }
 .p-energy .storey-temp { stroke: none; }
+.p-energy .drive {
+  stroke: rgba(164, 196, 228, 0.55);
+  stroke-width: 1.1;
+  fill: none;
+  stroke-dasharray: 2 3;
+}
 
 /* The array. A hairline head edge is what makes eight quadrilaterals
    read as panels lying on a slope rather than as blue patches. */

@@ -103,11 +103,9 @@ const Panels = (function () {
     plinth: 0.17,   // the dark painted band around the base
 
     rows: { lower: [0.16, 0.44], upper: [0.60, 0.88] },
-    // Keep only the principal upper-front window; the two side windows
-    // made the elevation read like a different house.
-    frontUpper: [[0.54, 0.78]],
+    frontUpper: [[0.10, 0.40], [0.54, 0.78]],
     frontLower: [[0.10, 0.46]],
-    flankUpper: [],
+    flankUpper: [[0.28, 0.62]],
 
     porch:   { x0: 0.64, x1: 0.86, out: 0.17, height: 0.46, fall: 0.06 },
     garage:  { x0: 1.00, x1: 1.30, z0: 0.34, z1: 1.04, height: 0.42, ridge: 0.09 },
@@ -117,7 +115,7 @@ const Panels = (function () {
     // ridge from the party wall toward the hip; both fractions.
     pv: { rows: 2, cols: 5, gap: 0.022,
           uStart: 0.13, uSpan: 0.72, uMargin: 0.055,
-          vStart: 0.42, vSpan: 0.46 },
+          vStart: 0.30, vSpan: 0.60 },
     // The rooflight takes one panel's place in the array rather than
     // sitting beside it, which is how it reads on the roof.
     rooflight: { row: 1, col: 1 },
@@ -200,6 +198,8 @@ const Panels = (function () {
 
     const O = 0.26;
     const plot = rect(0, -O, HOUSE.garage.x1 * W + 0.06, -O, D + O);
+    // Boundary of the drive/parking apron from the annotated reference.
+    const drive = rect(0.008, -0.04, 1.52, 1.54, 2.62);
 
     // The painted band around the base of the walls, which is most of
     // what makes this house this house rather than a generic one.
@@ -242,8 +242,8 @@ const Panels = (function () {
     if ((rooms.bedroom || {}).occupied === true && lit.indexOf(windows[0]) < 0) {
       lit.push(windows[0]);
     }
-    if ((rooms.livingroom || {}).occupied === true && lit.indexOf(windows[1]) < 0) {
-      lit.push(windows[1]);
+    if ((rooms.livingroom || {}).occupied === true && lit.indexOf(windows[2]) < 0) {
+      lit.push(windows[2]);
     }
 
     // ---- porch and garage --------------------------------------------
@@ -331,8 +331,8 @@ const Panels = (function () {
 
     // Generation down the party-wall end of the front, just outboard of
     // the wall. Anywhere else on this elevation it crosses a window.
-    const solarPts = [roofPoint(0.12, 0.46),
-                      [0.46 * W, H, D + 0.05], [0.46 * W, 0.15, D + 0.05]];
+    const solarPts = [roofPoint(0.12, 0.34),
+                      [0.34 * W, H, D + 0.05], [0.34 * W, 0.15, D + 0.05]];
 
     // The grid, along the front of the plot. In this projection a point
     // offset equally in x and z lands directly below where it started,
@@ -356,7 +356,7 @@ const Panels = (function () {
     // drawing was letterboxed to 81% and centred.
     const BW = 523, BH = 263, PAD = 11;
     const all = [];
-    structure.concat(behind, floor, plot).forEach(function (g) { all.push(g[0], g[1]); });
+    structure.concat(behind, floor, plot, drive).forEach(function (g) { all.push(g[0], g[1]); });
     if (car) pad.forEach(function (g) { all.push(g[0], g[1]); });
     windows.forEach(function (w) { w.forEach(function (q) { all.push(q); }); });
     [porch.roof, porch.front, garage.roof, garage.gable,
@@ -406,7 +406,7 @@ const Panels = (function () {
     }
     function curtainSVG(state) {
       if (!state) return '';
-      const target = windows[1];
+      const target = windows[2];
       if (!target) return '';
       const colour = state === 'open' ? 'rgba(135,205,255,0.14)' : 'rgba(48,72,112,0.62)';
       return polyFill(target, colour, 'curtain ' + (state === 'open' ? 'open' : 'closed'));
@@ -465,7 +465,7 @@ const Panels = (function () {
 
     // Keep the battery marker attached to the vehicle rather than floating
     // at the end of the driveway.
-    const chargeAt = to([1.25, 0.34, 2.15]);
+    const chargeAt = to([1.10, 0.34, 2.45]);
 
     return (
       '<svg viewBox="0 0 ' + BW + ' ' + BH + '" aria-hidden="true">' +
@@ -483,23 +483,16 @@ const Panels = (function () {
       '</linearGradient>' +
       '</defs>' +
       plot.map(function (q) { return line(q, 'plinth'); }).join('') +
+      drive.map(function (q) { return line(q, 'drive'); }).join('') +
       // Shell: faint render, the painted band, then the openings.
       walls.map(function (w) { return poly(w, 'render'); }).join('') +
       bands.map(function (b) { return poly(b, 'band'); }).join('') +
       // Temperature washes the two storeys independently: 15C is blue,
       // 25C is red, and the range blends between.
-      polyFill(onZ(D, 0, W, PL, MID),
-               temperatureColorWithAlpha((rooms.downstairs || {}).temperature_c, 0.15), 'storey-temp') +
-      polyFill(onX(W, 0, D, PL, MID),
-               temperatureColorWithAlpha((rooms.downstairs || {}).temperature_c, 0.15), 'storey-temp') +
-      polyFill(onZ(D, 0, W, MID, H),
-               temperatureColorWithAlpha((rooms.upstairs || {}).temperature_c, 0.15), 'storey-temp') +
-      polyFill(onX(W, 0, D, MID, H),
-               temperatureColorWithAlpha((rooms.upstairs || {}).temperature_c, 0.15), 'storey-temp') +
-      [windows[0]].filter(Boolean).map(function (w) {
+      [windows[0], windows[1], windows[3]].filter(Boolean).map(function (w) {
         return polyFill(w, temperatureColor((rooms.upstairs || {}).temperature_c), 'room-temp');
       }).join('') +
-      [windows[1]].filter(Boolean).map(function (w) {
+      [windows[2]].filter(Boolean).map(function (w) {
         return polyFill(w, temperatureColor((rooms.downstairs || {}).temperature_c), 'room-temp');
       }).join('') +
       lit.map(function (w) { return poly(w, 'win lit'); }).join('') +
