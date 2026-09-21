@@ -101,7 +101,7 @@
   window.__perf = perf;
 
   // ---- state ---------------------------------------------------------
-  let data = null, bpm = 0, started = 0;
+  let data = null, bpm = 0, started = 0, visibility = {};
   let bioEl, heartEl, sleepEl, haloEl;
 
   /** Which biometric forms have a reading behind them.
@@ -138,7 +138,7 @@
 
   function renderAt(t, railT) {
     const have = bioState();
-    const showBio = have.heart || have.sleep;
+    const showBio = visibility.biometrics !== false && (have.heart || have.sleep);
     bioEl.hidden = !showBio;
 
     if (showBio) {
@@ -178,6 +178,7 @@
       throw new Error('refusing to render unlabelled data');
     }
     data = next;
+    visibility = next._visibility || {};
     bpm = (next.biometrics && next.biometrics.resting_bpm) || 0;
 
     const b = next.biometrics || {};
@@ -189,7 +190,7 @@
     document.body.dataset.source = isFixture ? 'fixture' : 'live';
 
     Frame.apply(next);
-    Markets.apply(next.markets);
+    Markets.apply(next.markets, visibility.markets !== false);
     Panels.apply(next);
   }
 

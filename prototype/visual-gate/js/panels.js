@@ -686,11 +686,12 @@ const Panels = (function () {
       document.querySelector('.slot[data-slot="1"]'),
     ];
     slots.forEach(function (slot) { slot.innerHTML = ''; });
+    const visible = data._visibility || {};
     const available = {
-      energy: !!data.energy,
-      cal: Array.isArray(data.calendar) && data.calendar.length > 0,
-      news: !!data.event,
-      wx: !!data.weather,
+      energy: visible.energy !== false && !!data.energy,
+      cal: visible.calendar !== false && Array.isArray(data.calendar) && data.calendar.length > 0,
+      news: visible.news !== false && !!data.event,
+      wx: visible.weather !== false && !!data.weather,
     };
     entries = SCHEDULE.filter(function (s) { return available[s.kind]; }).map(function (s) {
       const made = BUILD[s.kind](data);

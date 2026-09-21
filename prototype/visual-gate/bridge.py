@@ -24,6 +24,7 @@ import os
 import sys
 import threading
 import time
+import json
 from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -35,6 +36,7 @@ if PROJECT not in sys.path:
     sys.path.insert(0, PROJECT)
 
 logger = logging.getLogger("bridge")
+SETTINGS_PATH = os.path.join(HERE, "settings.json")
 
 # Open-Meteo WMO codes, collapsed to the four glyphs the page draws.
 # Anything unrecognised becomes cloud, which is the honest default for a
@@ -92,7 +94,17 @@ class Bridge:
                 # One dead feed must not take the mirror down with it.
                 logger.warning("bridge: %s unavailable (%s)", name, exc)
 
-        self.gate = CONFIG.get("visual_gate", {}) or {}
+        self.gate = dict(CONFIG.get("visual_gate", {}) or {})
+        self.visibility = {"biometrics": True, "markets": True, "energy": True,
+                          "calendar": True, "news": True, "weather": True}
+        try:
+            with open(SETTINGS_PATH, encoding="utf-8") as fh:
+                saved = json.load(fh)
+            if isinstance(saved, dict):
+                self.gate.update(saved)
+                self.visibility.update(saved.get("visibility", {}))
+        except (FileNotFoundError, OSError, ValueError):
+            pass
 
     @staticmethod
     def _build(name, entry):
@@ -421,7 +433,8 @@ class Bridge:
     def snapshot(self):
         """The page payload. Only keys with real data behind them."""
         with self._lock:
-            out = {"_live": True, "generated": int(time.time())}
+            out = {"_live": True, "generated": int(time.time()),
+                   "_visibility": self.visibility.copy()}
             for key, fn in (("weather", self._weather),
                             ("biometrics", self._biometrics),
                             ("calendar", self._calendar),
@@ -445,7 +458,84 @@ class Bridge:
                 key: bool(value) for key, value in self.gate.items()
                 if key.endswith("_entity") or key == "light_entities"
             },
+            "entity_values": {
+                key: value for key, value in self.gate.items()
+                if key.endswith("_entity") or key == "light_entities"
+            },
+            "visibility": self.visibility.copy(),
+            "avatars": self._avatars(),
+            "tickers": self._tickers(),
         }
+
+    @staticmethod
+    def _avatars():
+        try:
+            from avatar_profiles import AvatarProfiles
+            return AvatarProfiles().options()
+        except Exception as exc:
+            logger.warning("avatar options unavailable: %s", exc)
+            return []
+
+    def select_avatar(self, key):
+        from avatar_profiles import AvatarProfiles
+        return AvatarProfiles().select(key).key
+
+    def _tickers(self):
+        mod = self.modules.get("stocks")
+        return mod.get_tickers() if mod and hasattr(mod, "get_tickers") else []
+
+    def set_tickers(self, symbols):
+        mod = self.modules.get("stocks")
+        if mod and hasattr(mod, "set_tickers"):
+            mod.set_tickers(symbols)
+        return self._tickers()
+
+    def set_visibility(self, updates):
+        for key, value in updates.items():
+            if key in self.visibility:
+                self.visibility[key] = bool(value)
+        self._persist_settings()
+        return self.visibility.copy()
+
+    def _persist_settings(self):
+        payload = {key: self.gate.get(key) for key in {
+            "power_entity", "solar_entity", "car_soc_entity", "light_entities",
+            "upstairs_temp_entity", "upstairs_humidity_entity", "downstairs_temp_entity",
+            "downstairs_humidity_entity", "bedroom_occupancy_entity", "livingroom_curtain_entity",
+        }}
+        payload["visibility"] = self.visibility
+        try:
+            with open(SETTINGS_PATH, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2)
+                fh.write("\n")
+        except OSError:
+            logger.exception("could not persist visual-gate settings")
+
+    def update_gate(self, updates):
+        """Apply and persist non-secret visual-gate entity settings."""
+        allowed = {
+            "power_entity", "solar_entity", "car_soc_entity",
+            "light_entities", "upstairs_temp_entity", "upstairs_humidity_entity",
+            "downstairs_temp_entity", "downstairs_humidity_entity",
+            "bedroom_occupancy_entity", "livingroom_curtain_entity",
+        }
+        clean = {}
+        for key, value in updates.items():
+            if key not in allowed:
+                continue
+            if key == "light_entities":
+                if isinstance(value, str):
+                    value = [item.strip() for item in value.split(",") if item.strip()]
+                if not isinstance(value, list):
+                    continue
+                clean[key] = [str(item).strip() for item in value if str(item).strip()]
+            elif value is None:
+                clean[key] = ""
+            else:
+                clean[key] = str(value).strip()
+        self.gate.update(clean)
+        self._persist_settings()
+        return self.control_status()
 
 
 def _parse_iso(text):

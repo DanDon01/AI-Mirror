@@ -158,11 +158,11 @@ const Markets = (function () {
 
       Re-rendering on every poll would restart the scroll from zero
       every twenty seconds, which reads as the rail stuttering. */
-  function apply(quotes) {
+  function apply(quotes, visible) {
     run = run || document.getElementById('marketsRun');
     const rail = document.getElementById('markets');
 
-    if (!quotes || !quotes.length) {
+    if (visible === false || !quotes || !quotes.length) {
       rail.hidden = true;
       runWidth = 0;
       signature = '';

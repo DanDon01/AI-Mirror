@@ -50,9 +50,55 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 self._json({"live": True, **self.bridge.control_status()})
             return
+        if self.path.split("?")[0] in ("/api/avatars", "/api/tickers", "/api/modules"):
+            if self.bridge is None:
+                self._json({"error": "live bridge unavailable"})
+            else:
+                status = self.bridge.control_status()
+                key = self.path.split("?")[0].rsplit("/", 1)[-1]
+                self._json({"avatars": status["avatars"]} if key == "avatars" else
+                           {"tickers": status["tickers"]} if key == "tickers" else
+                           {"modules": status["visibility"]})
+            return
         super().do_GET()
 
     def do_POST(self):
+        path = self.path.split("?")[0]
+        if path in ("/api/avatar", "/api/tickers", "/api/modules"):
+            if self.bridge is None:
+                self.send_error(503, "live bridge unavailable")
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                payload = json.loads(raw) if raw.startswith("{") else {"value": raw}
+                if path == "/api/avatar":
+                    result = {"avatar": self.bridge.select_avatar(payload.get("value", ""))}
+                elif path == "/api/tickers":
+                    symbols = payload.get("tickers", payload.get("value", ""))
+                    if isinstance(symbols, str):
+                        symbols = [item.strip() for item in symbols.replace(",", "\n").splitlines() if item.strip()]
+                    result = {"tickers": self.bridge.set_tickers(symbols or [])}
+                else:
+                    result = {"modules": self.bridge.set_visibility(payload)}
+                self._json({"ok": True, **result})
+            except Exception as exc:
+                self.send_error(400, str(exc))
+            return
+        if path == "/api/control/config":
+            if self.bridge is None:
+                self.send_error(503, "live bridge unavailable")
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                updates = json.loads(self.rfile.read(length) or b"{}")
+                self._json(self.bridge.update_gate(updates))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                self.send_error(400, "invalid configuration")
+            except Exception:
+                logger.exception("visual-gate configuration update failed")
+                self.send_error(500, "configuration update failed")
+            return
         if self.path.split("?")[0] == "/api/control/pump":
             if self.bridge is None:
                 self.send_error(503, "live bridge unavailable")

@@ -18,6 +18,7 @@
     .value { margin-top: 5px; font-size: 21px; color: #edf5ff; }
     button { background: #142235; border: 1px solid #41678e; color: #d9edff; border-radius: 7px;
       padding: 10px 14px; font-size: 15px; }
+    button.active { border-color: #62c995; color: #9ee8c1; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #0e141d; border: 1px solid #202e3e;
       border-radius: 8px; padding: 12px; max-height: 420px; overflow: auto; font-size: 12px; }
     a { color: #9ed3ff; }
@@ -28,7 +29,13 @@
   <div class="meta">Live diagnostics for the visual gate. Mirror display: <a href="http://" id="display">visual port</a></div>
   <p><button onclick="refresh()">Refresh data</button> <button onclick="pump()">Request feed update</button></p>
   <h2>Feeds</h2><div class="grid" id="feeds"></div>
-  <h2>Configuration</h2><div class="grid" id="config"></div>
+    <h2>Configuration</h2><div class="grid" id="config"></div>
+  <p><button onclick="saveConfig()">Save HA mappings</button> <span class="meta" id="saveMeta"></span></p>
+  <h2>Avatar selection</h2><div class="grid" id="avatars"></div>
+  <p class="meta" id="avatarMeta">Avatar selection is persisted for the avatar/Pygame mode.</p>
+  <h2>Stock watchlist</h2><textarea id="tickers" rows="5" style="width:100%;box-sizing:border-box;background:#0b1119;color:#d9e4f5;border:1px solid #30455d;border-radius:5px;padding:8px"></textarea>
+  <p><button onclick="saveTickers()">Save tickers</button> <span class="meta" id="tickerMeta"></span></p>
+  <h2>Visual modules</h2><div class="grid" id="modules"></div>
   <h2>Visual data</h2><pre id="payload">Loading...</pre>
   <script>
     const display = document.getElementById('display');
@@ -48,11 +55,50 @@
       const config = document.getElementById('config'); config.innerHTML = '';
       for (const [key, set] of Object.entries(status.configured_entities || {})) {
         const card = document.createElement('div'); card.className = 'card';
-        card.innerHTML = '<div class="label">' + key.replaceAll('_', ' ') + '</div>' +
-          '<div class="value">' + (set ? 'configured' : 'not set') + '</div>';
+        const input = document.createElement('input'); input.id = 'cfg-' + key;
+        input.value = status.entity_values && status.entity_values[key] || '';
+        input.placeholder = key === 'light_entities' ? 'comma-separated entity ids' : 'entity id';
+        input.style = 'width:100%;box-sizing:border-box;margin-top:7px;background:#0b1119;color:#d9e4f5;border:1px solid #30455d;border-radius:5px;padding:7px';
+        card.innerHTML = '<div class="label">' + key.replaceAll('_', ' ') + '</div>';
+        card.appendChild(input);
         config.appendChild(card);
       }
+      const avatars = document.getElementById('avatars'); avatars.innerHTML = '';
+      for (const avatar of (status.avatars || [])) {
+        const b = document.createElement('button'); b.textContent = avatar.name;
+        b.className = avatar.selected ? 'active' : ''; b.disabled = !avatar.reference_available;
+        b.onclick = () => selectAvatar(avatar.key); avatars.appendChild(b);
+      }
+      document.getElementById('tickers').value = (status.tickers || []).join('\n');
+      const modules = document.getElementById('modules'); modules.innerHTML = '';
+      for (const [key, on] of Object.entries(status.visibility || {})) {
+        const b = document.createElement('button'); b.textContent = key + ': ' + (on ? 'ON' : 'OFF');
+        b.className = on ? 'active' : ''; b.onclick = () => toggleModule(key, !on); modules.appendChild(b);
+      }
       document.getElementById('payload').textContent = JSON.stringify(data, null, 2);
+    }
+    async function saveConfig() {
+      const keys = ['power_entity','solar_entity','car_soc_entity','light_entities',
+        'upstairs_temp_entity','upstairs_humidity_entity','downstairs_temp_entity',
+        'downstairs_humidity_entity','bedroom_occupancy_entity','livingroom_curtain_entity'];
+      const updates = {}; for (const key of keys) updates[key] = document.getElementById('cfg-' + key)?.value || '';
+      const r = await fetch('/api/control/config', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updates)});
+      document.getElementById('saveMeta').textContent = r.ok ? 'Saved and applied.' : 'Save failed.';
+      refresh();
+    }
+    async function selectAvatar(key) {
+      const r = await fetch('/api/avatar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:key})});
+      document.getElementById('avatarMeta').textContent = r.ok ? 'Avatar selection saved.' : 'Avatar selection failed.';
+      refresh();
+    }
+    async function saveTickers() {
+      const r = await fetch('/api/tickers', {method:'POST', body:document.getElementById('tickers').value});
+      document.getElementById('tickerMeta').textContent = r.ok ? 'Watchlist saved.' : 'Watchlist save failed.';
+      refresh();
+    }
+    async function toggleModule(key, value) {
+      await fetch('/api/modules', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[key]:value})});
+      refresh();
     }
     async function pump() { await fetch('/api/control/pump', {method: 'POST'}); refresh(); }
     refresh().catch(e => document.getElementById('payload').textContent = String(e));

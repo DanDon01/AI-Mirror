@@ -14,6 +14,7 @@ __pycache__/
 # Environment variables / secrets
 Variables.env
 .env
+prototype/visual-gate/settings.json
 
 # Data directory (debug output, recordings, temp files)
 data/
