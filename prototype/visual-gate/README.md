@@ -23,7 +23,9 @@ Everything else stays black, because black is the mirror.
 `fixtures/DEV-FIXTURE.json` is invented and labelled as such, in the file
 and on screen. Production uses `/api/state.json` from `serve.py`; it must
 never load the fixture. Where live data is absent, the answer is to draw
-nothing, not to substitute a number.
+nothing, not to substitute a number. The production server listens on the
+Pi's LAN at port 8780, so it can be opened from another device on the same
+network at `http://<pi-ip>:8780/`.
 
 ## Running it
 

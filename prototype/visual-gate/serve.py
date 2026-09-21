@@ -8,7 +8,7 @@ The page polls that. Everything it draws comes from there, and anything
 absent from the payload is not drawn at all - a feed that is down makes
 its panel stay away rather than show a number nobody measured.
 
-    python3 serve.py                 live data, ephemeral port
+    python3 serve.py                 live data, LAN port 8780
     python3 serve.py --port 8795     live data, fixed port
     python3 serve.py --fixture       the development fixture instead
 
@@ -86,10 +86,10 @@ def free_port():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=0,
-                    help="fixed port; default is an ephemeral one")
-    ap.add_argument("--bind", default="127.0.0.1",
-                    help="interface to serve on")
+    ap.add_argument("--port", type=int, default=8780,
+                    help="port to serve on (default: 8780)")
+    ap.add_argument("--bind", default="0.0.0.0",
+                    help="interface to serve on (default: all interfaces)")
     ap.add_argument("--fixture", action="store_true",
                     help="serve the development fixture, not live data")
     ap.add_argument("--interval", type=float, default=1.0,

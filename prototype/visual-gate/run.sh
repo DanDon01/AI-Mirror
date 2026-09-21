@@ -57,15 +57,12 @@ for candidate in "../../venv/bin/python" "../../.venv/bin/python" python3; do
 done
 [ -n "$PYTHON" ] || { echo "Python not found; it serves the prototype" >&2; exit 1; }
 
-# An ephemeral port, so a server left running from an earlier attempt
-# cannot shadow this one and hand the browser a dead connection.
-PORT="$("$PYTHON" - <<'PY'
-import socket
-s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()
-PY
-)"
+# Keep the visual gate on the same stable LAN port as the old web panel,
+# so phones and other browsers can reach it without an SSH tunnel.
+PORT=8780
+BIND=0.0.0.0
 
-SERVER_ARGS=(serve.py --port "$PORT" --bind 127.0.0.1)
+SERVER_ARGS=(serve.py --port "$PORT" --bind "$BIND")
 [ "$FIXTURE" = "1" ] && SERVER_ARGS+=(--fixture)
 "$PYTHON" "${SERVER_ARGS[@]}" &
 SERVER_PID=$!
