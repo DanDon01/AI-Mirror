@@ -59,8 +59,12 @@ const HomeTwin = (() => {
     box(W,H,D,steel,W/2,H/2,D/2);
     // Existing pitched roof, garage and porch proportions retained as world coordinates.
     const frontRoof=quad([0,H,D],[W,H,D],[1.96,RIDGE,D/2],[0,RIDGE,D/2],roofMat);home.add(frontRoof);
+    // The matching rear pitch was absent, leaving the roof open when seen
+    // through the translucent shell.  Keep the roof coordinates fixed; this
+    // simply closes the existing pitched volume behind the ridge.
+    const backRoof=quad([0,H,0],[W,H,0],[1.96,RIDGE,D/2],[0,RIDGE,D/2],roofMat);home.add(backRoof);
     const hipRoof=quad([W,H,0],[W,H,D],[1.96,RIDGE,D/2],[1.96,RIDGE,D/2],roofMat);home.add(hipRoof);
-    [frontRoof,hipRoof].forEach(m=>home.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),edge.clone())));
+    [frontRoof,backRoof,hipRoof].forEach(m=>home.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),edge.clone())));
     box(.25,.46,.19,new THREE.MeshStandardMaterial({color:0x302e2f,metalness:.12,roughness:.9}),.445,2.35,.815,true);
     box(.77,.71,1.67,new THREE.MeshPhysicalMaterial({color:0x172b37,emissive:0x061c2a,emissiveIntensity:.18,metalness:.28,roughness:.68,transparent:true,opacity:.3,depthWrite:false}),2.885,.355,1.035);
     const gRoof=quad([W,.89,.20],[3.27,.71,.20],[3.27,.71,1.87],[W,.89,1.87],roofMat);home.add(gRoof);home.add(new THREE.LineSegments(new THREE.EdgesGeometry(gRoof.geometry),edge.clone()));
@@ -73,14 +77,25 @@ const HomeTwin = (() => {
     // Two suspended illuminated slabs and a few translucent partitions make
     // the actual two-storey layout immediately readable through the shell.
     const floorMat=new THREE.MeshStandardMaterial({color:0x0b4964,emissive:0x0b8ab6,emissiveIntensity:.38,transparent:true,opacity:.32,depthWrite:false,side:THREE.DoubleSide});
-    const partitionMat=new THREE.MeshPhysicalMaterial({color:0x0a3b52,emissive:0x0b4160,emissiveIntensity:.18,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide});
+    const partitionMat=new THREE.MeshPhysicalMaterial({color:0x0a3b52,emissive:0x0b4160,emissiveIntensity:.12,transparent:true,opacity:.15,depthWrite:false,side:THREE.DoubleSide});
     function innerFrame(w,d,y){const g=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,.028,d));const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x4db6de,transparent:true,opacity:.38}));l.position.set(W/2,y,D/2);home.add(l);}
     box(2.28,.045,1.48,floorMat,1.25,.80,.825);innerFrame(2.28,1.48,.80);
     box(2.22,.032,1.42,floorMat,1.25,.12,.825);innerFrame(2.22,1.42,.12);
-    box(.028,.70,1.28,partitionMat,.96,.43,.82);
-    box(.72,.70,.028,partitionMat,1.68,.43,.78);
-    box(.028,.70,1.2,partitionMat,1.26,1.20,.82);
-    box(.65,.70,.028,partitionMat,.79,1.20,.80);
+    // Ground floor: a narrow hallway at the left, with living room at the
+    // front and kitchen at the back.  Names/anchors intentionally live here
+    // so future HA effects have stable architectural destinations.
+    const roomAnchors={
+      hallway:[.40,.43,.83], livingroom:[1.62,.43,1.24], kitchen:[1.62,.43,.40],
+      bedroom1:[.63,1.20,1.24], bedroom2:[1.82,1.20,1.24],
+      bedroom3:[.63,1.20,.40], bathroom:[1.82,1.20,.40]
+    };
+    home.userData.roomAnchors=roomAnchors;
+    box(.028,.70,1.42,partitionMat,.82,.43,.825);       // hallway | rooms
+    box(1.58,.70,.028,partitionMat,1.62,.43,.825);       // living room / kitchen
+    // First floor: two crossing dividers form bedroom 1, bedroom 2, bedroom
+    // 3 and bathroom.  The dividers are intentionally faint holographic glass.
+    box(.028,.70,1.42,partitionMat,1.25,1.20,.825);
+    box(2.22,.70,.028,partitionMat,1.25,1.20,.825);
     // Windows are actual translucent emissive planes; only real light state changes them.
     const windows=[];
     function window(w,h,x,y,z,room){
