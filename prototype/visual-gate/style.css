@@ -224,7 +224,7 @@ body {
    at half size the heart's figure was stranded 300px away from it and
    read as an unrelated number. */
 #bioHeart { left: 26px; top: 250px; }
-#bioSleep { left: 470px; top: 270px; }
+#bioSleep { left: 228px; top: 490px; }
 
 .bio-n {
   font-family: var(--ff-display);
@@ -242,7 +242,7 @@ body {
   color: var(--ink-3);
 }
 
-#bioSleep .bio-n { font-size: 52px; }
+#bioSleep .bio-n { font-size: 40px; }
 
 /* ======================= PANELS ===========================
    A single centred upper stage, plus a dedicated lower-right stage for the

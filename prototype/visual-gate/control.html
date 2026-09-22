@@ -5,46 +5,81 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI-Mirror controls</title>
   <style>
-    :root { color-scheme: dark; }
-    body { margin: 0; padding: 18px; background: #080a0f; color: #d9e4f5;
-      font: 15px system-ui, sans-serif; max-width: 760px; margin-inline: auto; }
-    h1 { color: #9ed3ff; font-weight: 400; margin: 0 0 4px; }
-    h2 { color: #8fb8dc; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
-      margin: 24px 0 8px; }
-    .meta { color: #77879a; font-size: 13px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
-    .card { background: #101722; border: 1px solid #243447; border-radius: 8px; padding: 12px; }
-    .label { color: #8295aa; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-    .value { margin-top: 5px; font-size: 21px; color: #edf5ff; }
-    button { background: #142235; border: 1px solid #41678e; color: #d9edff; border-radius: 7px;
-      padding: 10px 14px; font-size: 15px; }
-    button.active { border-color: #62c995; color: #9ee8c1; }
-    .ticker-row { display:flex; align-items:center; justify-content:space-between; gap:8px;
-      padding:7px 9px; margin:4px 0; background:#101722; border:1px solid #243447; border-radius:6px; }
-    .ticker-row label { flex:1; }
-    .ticker-row button { padding:3px 10px; border-color:#714b55; color:#f0a7ad; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #0e141d; border: 1px solid #202e3e;
-      border-radius: 8px; padding: 12px; max-height: 420px; overflow: auto; font-size: 12px; }
-    a { color: #9ed3ff; }
+    :root { color-scheme:dark; --bg:#080b10; --card:#101722; --line:#27384d;
+      --ink:#edf5ff; --muted:#8a9bad; --blue:#8fd4ff; --green:#8ee5b5; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:18px; color:var(--ink); font:15px system-ui,sans-serif;
+      background:radial-gradient(900px 500px at 50% -170px,#173653 0%,var(--bg) 60%); }
+    .shell { max-width:980px; margin:auto; }
+    .topbar { display:flex; align-items:center; gap:14px; margin:2px 0 12px; }
+    h1 { color:var(--ink); font-weight:500; font-size:1.45rem; margin:0; }
+    .live { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:.78rem; margin-top:4px; }
+    .live::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 11px rgba(142,229,181,.7); }
+    .display-link { margin-left:auto; color:var(--blue); font-size:.84rem; text-decoration:none; }
+    nav { display:flex; gap:7px; overflow:auto; padding:6px 0 14px; }
+    nav a { color:var(--muted); text-decoration:none; border:1px solid transparent; border-radius:999px; padding:7px 10px; white-space:nowrap; font-size:.78rem; }
+    nav a:hover { color:var(--ink); border-color:var(--line); background:rgba(143,212,255,.07); }
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:13px; }
+    .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .section { background:linear-gradient(145deg,rgba(20,29,43,.96),rgba(10,15,23,.98)); border:1px solid var(--line); border-radius:14px; padding:15px; box-shadow:0 12px 28px rgba(0,0,0,.14); }
+    .section.wide { grid-column:1/-1; }
+    h2 { color:#b9d9f0; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; margin:0 0 12px; font-weight:700; }
+    .meta { color:var(--muted); font-size:.78rem; line-height:1.4; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; }
+    .card { background:#0c131d; border:1px solid #26384e; border-radius:10px; padding:11px; }
+    .label { color:#93a9bf; font-size:.68rem; text-transform:uppercase; letter-spacing:.09em; }
+    .value { margin-top:5px; font-size:1.12rem; color:var(--ink); }
+    button { cursor:pointer; background:#16263a; border:1px solid #3c6286; color:#d9edff; border-radius:9px; padding:9px 12px; font:inherit; transition:.15s ease; }
+    button:hover:not(:disabled) { background:#1d3047; border-color:#86b9df; }
+    button.active { border-color:#62c995; color:#9ee8c1; background:rgba(50,132,87,.16); }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    input { min-width:0; background:#0a1018; color:var(--ink); border:1px solid #304b67; border-radius:8px; padding:9px; font:inherit; }
+    .ticker-controls { display:flex; gap:8px; margin-top:10px; }
+    .ticker-controls input { flex:1; }
+    #tickerRows { display:flex; flex-wrap:wrap; gap:7px; min-height:34px; }
+    .ticker-row { display:inline-flex; align-items:center; gap:7px; padding:5px 5px 5px 9px; background:#0d1825; border:1px solid #314a66; border-radius:999px; }
+    .ticker-row label { white-space:nowrap; }
+    .ticker-row input { width:15px; height:15px; accent-color:#8fd4ff; margin:0 4px 0 0; padding:0; }
+    .ticker-row button { padding:0; min-width:23px; width:23px; height:23px; border:0; background:transparent; color:#b5c6d6; font-size:18px; line-height:1; }
+    .ticker-row button:hover { color:#ff9aa5; background:rgba(255,105,120,.12); }
+    details summary { cursor:pointer; color:#c4e3f8; font-size:.84rem; }
+    details[open] summary { margin-bottom:12px; }
+    pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; background:#090e15; border:1px solid #223348; border-radius:9px; padding:12px; max-height:420px; overflow:auto; font-size:12px; }
+    .saved { color:var(--green); }
+    @media (max-width:680px) { body { padding:12px; } .layout { grid-template-columns:1fr; } .section.wide { grid-column:auto; } .display-link { font-size:.76rem; } }
   </style>
 </head>
 <body>
-  <h1>AI-Mirror controls</h1>
-  <div class="meta">Live diagnostics for the visual gate. Mirror display: <a href="http://" id="display">visual port</a></div>
-  <p><button onclick="refresh()">Refresh data</button> <button onclick="pump()">Request feed update</button> <button onclick="refreshCalendar()">Refresh calendar</button></p>
-  <h2>Feeds</h2><div class="grid" id="feeds"></div>
-    <h2>Configuration</h2><div class="grid" id="config"></div>
-  <p><button onclick="saveConfig()">Save HA mappings</button> <span class="meta" id="saveMeta"></span></p>
-  <h2>Avatar selection</h2><div class="grid" id="avatars"></div>
-  <p class="meta" id="avatarMeta">Avatar selection is persisted for the avatar/Pygame mode.</p>
-  <h2>Stock watchlist</h2><div id="tickerRows"></div>
-  <p><input id="newTicker" placeholder="Add ticker, e.g. RR.L" style="width:70%;box-sizing:border-box;background:#0b1119;color:#d9e4f5;border:1px solid #30455d;border-radius:5px;padding:9px">
-    <button onclick="addTicker()">Add</button> <span class="meta" id="tickerMeta"></span></p>
-  <h2>Visual modules</h2><div class="grid" id="modules"></div>
-  <h2>Visual data</h2><pre id="payload">Loading...</pre>
+  <main class="shell">
+    <header class="topbar">
+      <div><h1>AI-Mirror controls</h1><div class="live">Visual Gate live</div></div>
+      <a class="display-link" href="http://" id="display">Open mirror display ↗</a>
+    </header>
+    <nav aria-label="Control sections">
+      <a href="#overview">Overview</a><a href="#avatars-section">Avatar</a><a href="#stocks">Stocks</a>
+      <a href="#modules-section">Modules</a><a href="#config-section">Mappings</a><a href="#diagnostics">Diagnostics</a>
+    </nav>
+    <div class="toolbar">
+      <button onclick="refresh()">Refresh data</button><button onclick="pump()">Request feed update</button><button onclick="refreshCalendar()">Refresh calendar</button>
+      <span class="meta" id="saveMeta"></span>
+    </div>
+    <div class="layout">
+      <section class="section wide" id="overview"><h2>Live feeds</h2><div class="grid" id="feeds"></div></section>
+      <section class="section" id="avatars-section"><h2>Avatar selection</h2><div class="grid" id="avatars"></div><p class="meta" id="avatarMeta">Avatar selection is persisted for the avatar/Pygame mode.</p></section>
+      <section class="section" id="modules-section"><h2>Visual modules</h2><div class="grid" id="modules"></div><p class="meta">Choose which live modules can appear in the mirror rotation.</p></section>
+      <section class="section wide" id="stocks"><h2>Stock watchlist</h2><div id="tickerRows"></div>
+        <div class="ticker-controls"><input id="newTicker" placeholder="Add ticker, e.g. RR.L"><button onclick="addTicker()">Add ticker</button></div>
+        <p class="meta" id="tickerMeta">Tick a symbol to display it; × removes it from the watchlist.</p></section>
+      <section class="section wide" id="config-section"><h2>Home Assistant mappings</h2><div class="grid" id="config"></div>
+        <p><button onclick="saveConfig()">Save mappings</button></p><p class="meta">Entity IDs are stored locally on the Pi and are never returned here as credentials.</p></section>
+      <section class="section wide" id="diagnostics"><h2>Diagnostics</h2><details><summary>Raw visual data</summary><pre id="payload">Loading...</pre></details></section>
+    </div>
+  </main>
   <script>
     const display = document.getElementById('display');
     display.href = location.protocol + '//' + location.hostname + ':8795/';
+    let mappingsDirty = false;
+    let tickersDirty = false;
     async function refresh() {
       const r = await fetch('/api/state.json', {cache: 'no-store'});
       const data = await r.json();
@@ -64,16 +99,20 @@
         '<div class="meta">credentials: ' + (cal.credentials_configured ? 'configured' : 'missing') +
         (cal.last_error ? '<br>error: ' + cal.last_error : '') + '</div>';
       feeds.appendChild(calCard);
-      const config = document.getElementById('config'); config.innerHTML = '';
-      for (const [key, set] of Object.entries(status.configured_entities || {})) {
-        const card = document.createElement('div'); card.className = 'card';
-        const input = document.createElement('input'); input.id = 'cfg-' + key;
-        input.value = status.entity_values && status.entity_values[key] || '';
-        input.placeholder = key === 'light_entities' ? 'comma-separated entity ids' : 'entity id';
-        input.style = 'width:100%;box-sizing:border-box;margin-top:7px;background:#0b1119;color:#d9e4f5;border:1px solid #30455d;border-radius:5px;padding:7px';
-        card.innerHTML = '<div class="label">' + key.replaceAll('_', ' ') + '</div>';
-        card.appendChild(input);
-        config.appendChild(card);
+      const config = document.getElementById('config');
+      if (!mappingsDirty) {
+        config.innerHTML = '';
+        for (const [key, set] of Object.entries(status.configured_entities || {})) {
+          const card = document.createElement('div'); card.className = 'card';
+          const input = document.createElement('input'); input.id = 'cfg-' + key;
+          input.value = status.entity_values && status.entity_values[key] || '';
+          input.placeholder = key === 'light_entities' ? 'comma-separated entity ids' : 'entity id';
+          input.style.marginTop = '7px'; input.style.width = '100%';
+          input.oninput = () => { mappingsDirty = true; document.getElementById('saveMeta').textContent = 'Unsaved mapping changes'; };
+          card.innerHTML = '<div class="label">' + key.replaceAll('_', ' ') + '</div>';
+          card.appendChild(input);
+          config.appendChild(card);
+        }
       }
       const avatars = document.getElementById('avatars'); avatars.innerHTML = '';
       for (const avatar of (status.avatars || [])) {
@@ -81,7 +120,7 @@
         b.className = avatar.selected ? 'active' : ''; b.disabled = !avatar.reference_available;
         b.onclick = () => selectAvatar(avatar.key); avatars.appendChild(b);
       }
-      if (!document.getElementById('tickerRows').contains(document.activeElement)) renderTickers(status.tickers || []);
+      if (!tickersDirty && !document.getElementById('tickerRows').contains(document.activeElement)) renderTickers(status.tickers || []);
       const modules = document.getElementById('modules'); modules.innerHTML = '';
       for (const [key, on] of Object.entries(status.visibility || {})) {
         const b = document.createElement('button'); b.textContent = key + ': ' + (on ? 'ON' : 'OFF');
@@ -92,6 +131,7 @@
     async function saveConfig() {
       const updates = {}; for (const input of document.querySelectorAll('[id^="cfg-"]')) updates[input.id.slice(4)] = input.value;
       const r = await fetch('/api/control/config', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updates)});
+      mappingsDirty = !r.ok;
       document.getElementById('saveMeta').textContent = r.ok ? 'Saved and applied.' : 'Save failed.';
       refresh();
     }
@@ -107,8 +147,8 @@
         const row = document.createElement('div'); row.className = 'ticker-row';
         row.innerHTML = '<label><input type="checkbox" checked> ' + ticker + '</label>' +
           '<button title="Remove ' + ticker + '" aria-label="Remove ' + ticker + '">×</button>';
-        row.querySelector('input').onchange = saveTickers;
-        row.querySelector('button').onclick = () => { row.remove(); saveTickers(); };
+        row.querySelector('input').onchange = () => { tickersDirty = true; saveTickers(); };
+        row.querySelector('button').onclick = () => { row.remove(); tickersDirty = true; saveTickers(); };
         box.appendChild(row);
       }
     }
@@ -117,7 +157,7 @@
         .map(box => box.parentElement.textContent.trim());
       const r = await fetch('/api/tickers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tickers})});
       document.getElementById('tickerMeta').textContent = r.ok ? 'Watchlist saved.' : 'Watchlist save failed.';
-      if (r.ok) renderTickers((await r.json()).tickers || tickers);
+      if (r.ok) { tickersDirty = false; renderTickers((await r.json()).tickers || tickers); }
     }
     async function addTicker() {
       const input = document.getElementById('newTicker'); const value = input.value.trim();
@@ -125,9 +165,10 @@
       const current = [...document.querySelectorAll('#tickerRows input[type=checkbox]')].map(box => box.parentElement.textContent.trim());
       if (!current.includes(value)) current.push(value);
       input.value = '';
+      tickersDirty = true;
       const r = await fetch('/api/tickers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tickers:current})});
       document.getElementById('tickerMeta').textContent = r.ok ? 'Ticker added.' : 'Ticker add failed.';
-      if (r.ok) renderTickers((await r.json()).tickers || current);
+      if (r.ok) { tickersDirty = false; renderTickers((await r.json()).tickers || current); }
     }
     async function toggleModule(key, value) {
       await fetch('/api/modules', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[key]:value})});
@@ -139,6 +180,9 @@
       document.getElementById('saveMeta').textContent = r.ok ? 'Calendar refresh queued.' : 'Calendar refresh failed.';
       setTimeout(refresh, 1500);
     }
+    document.getElementById('newTicker').addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); addTicker(); }
+    });
     refresh().catch(e => document.getElementById('payload').textContent = String(e));
     setInterval(() => refresh().catch(() => {}), 10000);
   </script>

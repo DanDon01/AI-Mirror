@@ -346,6 +346,13 @@ const HomeTwin = (() => {
     },dispose(){renderer.dispose();canvas.remove();}};
   }
   function render(){return '';} // no SVG fallback: the house is a WebGL scene.
-  function mount(el){let fx;return now=>{if(!fx)fx=buildScene(el);if(fx)fx.frame(now);};}
+  function mount(el){
+    let fx;
+    const frame=now=>{if(!fx)fx=buildScene(el);if(fx)fx.frame(now);};
+    // Panels are refreshed from live state. Explicit disposal is essential on
+    // Chromium/Pi: removing a canvas alone does not release its WebGL context.
+    frame.dispose=()=>{if(fx){fx.dispose();fx=null;}};
+    return frame;
+  }
   return {update,render,mount};
 })();

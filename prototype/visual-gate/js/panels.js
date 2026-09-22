@@ -20,9 +20,9 @@ const Panels = (function () {
   // one. The digital twin has its own lower-right stage so it can remain
   // substantial without competing with a calendar, news or biometric readout.
   const SCHEDULE = [
-    { slot: 0, kind: 'cal',    from: 20.0, to: 34.0 },
-    { slot: 0, kind: 'news',   from: 40.0, to: 54.0 },
-    { slot: 1, kind: 'energy', from: 60.0, to: 78.0 },
+    { slot: 0, kind: 'cal',    from: 18.0, to: 30.0 },
+    { slot: 0, kind: 'news',   from: 34.0, to: 46.0 },
+    { slot: 1, kind: 'energy', from: 50.0, to: 80.0 },
   ];
 
   const RISE = 1.25;   // seconds of arrival
@@ -236,6 +236,12 @@ const Panels = (function () {
 
   function apply(data) {
     HomeTwin.update(Object.assign({}, data.energy || {}, { weather: data.weather || null }));
+    // Do this before replacing panel DOM. A WebGL renderer retains a browser
+    // context after its canvas is detached; leaving these behind every poll
+    // eventually makes Chromium refuse to render the house at all.
+    entries.forEach(function (entry) {
+      if (entry.home && entry.home.dispose) entry.home.dispose();
+    });
     const slots = [
       document.querySelector('.slot[data-slot="0"]'),
       document.querySelector('.slot[data-slot="1"]'),
@@ -258,10 +264,9 @@ const Panels = (function () {
       el.className = 'panel ' + made[0];
       el.innerHTML = made[1];
       slots[s.slot].appendChild(el);
+      // Construct the renderer only when its scheduled window actually opens.
+      // This avoids creating an invisible WebGL context for every bridge poll.
       const home = s.kind === 'energy' ? HomeTwin.mount(el.querySelector('.house')) : null;
-      // A WebGL renderer needs to own its canvas once; subsequent timeline
-      // frames merely advance the scene. This does not affect panel layout.
-      if (home) home(performance.now() / 1000);
       return {
         el: el, from: s.from, to: s.to,
         tilt: s.slot === 0 ? 2.0 : -2.0,
