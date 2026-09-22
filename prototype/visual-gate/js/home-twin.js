@@ -5,24 +5,16 @@ const HomeTwin = (() => {
   const W=2.5,D=1.65,H=1.65,RIDGE=2.23;
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const num=v=>typeof v==='number'&&Number.isFinite(v);
-  let state={}, received=-Infinity, eventEnergy=0, lastWatts=null;
+  let state={}, received=-Infinity;
 
   function update(data, now=performance.now()/1000) {
     state=data||{}; received=now;
-    const watts=Number(state.watts_now);
-    if(num(watts) && num(lastWatts)) eventEnergy=Math.max(eventEnergy,Math.min(1,Math.abs(watts-lastWatts)/180));
-    if(num(watts))lastWatts=watts;
   }
   function quad(a,b,c,d,material) {
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute([...a,...b,...c,...d],3));
     g.setIndex([0,1,2,0,2,3]);g.computeVertexNormals();
     return new THREE.Mesh(g,material);
-  }
-  function glowTexture() {
-    const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
-    const g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.18,'rgba(180,238,255,.9)');g.addColorStop(1,'rgba(80,190,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);
-    return new THREE.CanvasTexture(c);
   }
   // A low-poly trapezoid gives the car a proper glazed cabin silhouette without
   // spending Pi GPU time on a downloaded mesh.
@@ -43,8 +35,11 @@ const HomeTwin = (() => {
     renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;renderer.outputEncoding=THREE.sRGBEncoding;
     const scene=new THREE.Scene();
     // View from the real home's left-front side: garage and porch lead.
-    const camera=new THREE.PerspectiveCamera(35,660/410,.1,30);camera.position.set(-5.1,3.35,5.4);camera.lookAt(1.55,.9,.95);
+    const camera=new THREE.PerspectiveCamera(35,660/410,.1,30);camera.position.set(-5.1,3.75,5.4);camera.lookAt(1.55,1.08,.95);
     const home=new THREE.Group();scene.add(home);
+    // Both habitable storeys gain the requested 20% vertical volume.  The
+    // car cancels this scale locally below, so it stays a normal-sized vehicle.
+    home.scale.y=1.2;
     // A deliberately transparent shell: this is a live holographic scan, not
     // a miniature physical house.  depthWrite is off so floor volumes remain
     // legible through the smoked outer skin.
@@ -137,7 +132,7 @@ const HomeTwin = (() => {
       cell.setAttribute('position',new THREE.Float32BufferAttribute(lines,3));home.add(new THREE.LineSegments(cell,new THREE.LineBasicMaterial({color:0x3a83bb,transparent:true,opacity:.52})));
     }
     // The existing car becomes a real shaded model, still deliberately dark.
-    const car=new THREE.Group();car.position.z=.34;home.add(car);
+    const car=new THREE.Group();car.position.z=.34;car.scale.y=1/1.2;home.add(car);
     const carPaint=new THREE.MeshStandardMaterial({color:0x121c27,metalness:.56,roughness:.48});
     const carBody=new THREE.Mesh(new THREE.BoxGeometry(1.3,.16,.5),carPaint);carBody.position.set(.78,.22,2.24);car.add(carBody);
     const bonnet=new THREE.Mesh(new THREE.BoxGeometry(.43,.08,.47),carPaint);bonnet.position.set(1.2,.34,2.24);car.add(bonnet);
@@ -152,40 +147,27 @@ const HomeTwin = (() => {
     // Interior warmth is local to the living room.  Keeping its falloff short
     // prevents it from bleaching the parked car when a room light is on.
     const amber=new THREE.PointLight(0xffa344,.04,.82,2);amber.position.set(.7,.65,1.22);home.add(amber);
-    const particles=[],flowLines=[],sprite=glowTexture();
-    const paths=[[[.72,1.94,.92],[.92,1.45,1.05],[1.2,.83,1.05]],[[4,.17,2.5],[3.1,.35,2.0],[1.2,.78,1.05]],[[1.2,.78,1.05],[1.7,.60,.68],[2.4,.42,.32]]];
-    const colours=[0x48d9ff,0xffaf62,0x7ae8ff];
-    for(let p=0;p<3;p++){const group=new THREE.Group();home.add(group);for(let i=0;i<16;i++){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:sprite,color:colours[p],transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));s.scale.set(.09,.09,.09);group.add(s);}particles.push(group);const g=new THREE.BufferGeometry().setFromPoints(paths[p].map(v=>new THREE.Vector3(...v)));const m=new THREE.LineDashedMaterial({color:colours[p],transparent:true,opacity:0,dashSize:.09,gapSize:.13,depthWrite:false,blending:THREE.AdditiveBlending});const l=new THREE.Line(g,m);l.computeLineDistances();home.add(l);flowLines.push(m);}
-    // Sparse fixed points create a restrained holographic interior, not a
-    // noisy backdrop.  They shimmer gently with the scan state.
+    // Sparse fixed points give the transparent twin internal depth without
+    // turning into an animated electrical effect.
     const pointPositions=[];for(let i=0;i<42;i++){const x=.14+((i*37)%100)/100*2.22,y=.18+((i*53)%100)/100*1.32,z=.14+((i*71)%100)/100*1.34;pointPositions.push(x,y,z);}
     const pointGeometry=new THREE.BufferGeometry();pointGeometry.setAttribute('position',new THREE.Float32BufferAttribute(pointPositions,3));
     const holoPoints=new THREE.Points(pointGeometry,new THREE.PointsMaterial({color:0x4dceff,size:.018,transparent:true,opacity:.18,depthWrite:false,sizeAttenuation:true}));home.add(holoPoints);
-    // A travelling, thin rectangular scan contour gives the requested scan
-    // without the broad translucent band that looked like a rendering error.
-    const scan=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.62,.018,1.78)),new THREE.LineBasicMaterial({color:0x63d7ff,transparent:true,opacity:0,depthWrite:false}));scan.position.set(1.31,.1,.89);home.add(scan);
-    function pathAt(path,t){const n=path.length-1,i=Math.min(n-1,Math.floor(t*n)),f=t*n-i,a=path[i],b=path[i+1];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];}
     return {frame(now){
       if(now-received>30)state={};
-      const rooms=state.rooms||{},solarWatts=Math.max(0,Number(state.solar_watts)||0),watts=Math.max(0,Number(state.watts_now)||0);
-      const solarPower=clamp(solarWatts/2800,0,1), importPower=clamp(Math.max(0,watts-solarWatts)/1600,0,1), batteryPower=state.battery&&state.battery.charging===true?1:0;
-      const levels=[solarPower,importPower,batteryPower];eventEnergy*=.978;
-      panels.forEach((m,i)=>{m.material.emissiveIntensity=.1+solarPower*.42+Math.sin(now*1.5+i)*solarPower*.035;m.material.color.setHSL(.61,.84,.16+solarPower*.07);});
+      const rooms=state.rooms||{},solarWatts=Math.max(0,Number(state.solar_watts)||0);
+      const solarPower=clamp(solarWatts/2800,0,1);
+      panels.forEach(m=>{m.material.emissiveIntensity=.1+solarPower*.42;m.material.color.setHSL(.61,.84,.16+solarPower*.07);});
       windows.forEach(w=>{const lit=rooms[w.room]&&rooms[w.room].light===true;w.m.material.color.setHex(lit?0x7a3f14:0x0c496a);w.m.material.emissive.setHex(lit?0xc05a12:0x08263b);w.m.material.emissiveIntensity=lit?.32+.06*Math.sin(now*1.2):.12;});
-      amber.intensity=(rooms.livingroom&&rooms.livingroom.light?.28:.02)+eventEnergy*.06;
+      amber.intensity=rooms.livingroom&&rooms.livingroom.light?.28:.02;
       const living=rooms.livingroom||{};const open=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);curtains[0].position.x=.68-(.24*open);curtains[1].position.x=.68+(.24*open);curtains[0].scale.x=curtains[1].scale.x=.95-open*.78;
-      carChargeLed.material.opacity=state.car&&state.car.charging===true?.42+.14*Math.sin(now*3):0;
+      carChargeLed.material.opacity=state.car&&state.car.charging===true?.42:0;
       const cameras=state.cameras||{},porchActive=rooms.porch&&rooms.porch.occupied===true,externalActive=rooms.external&&rooms.external.occupied===true;
       doorbellLens.material.color.setHex(porchActive?0xffa34a:0x285b72);doorbellLens.material.opacity=porchActive?.7+.15*Math.sin(now*5):(cameras.doorbell ? .5 : .28);
       cameraLens.material.color.setHex(externalActive?0xffa34a:0x285b72);cameraLens.material.opacity=externalActive?.7+.15*Math.sin(now*5.3):(cameras.external ? .5 : .28);
-      for(let g=0;g<3;g++){const level=levels[g],group=particles[g];group.visible=level>.015;flowLines[g].opacity=.025+level*.32;flowLines[g].dashOffset=-now*(.3+level*.75);group.children.forEach((s,i)=>{const t=(now*(.11+level*.23)+i/group.children.length+g*.23)%1;s.position.fromArray(pathAt(paths[g],t));s.material.opacity=(.08+level*.28)*(i%3?1:.62);s.scale.setScalar((.045+level*.052)*(i%3?1:.72));});}
-      const phase=now%24,scanning=phase>18&&phase<20.8;
-      scan.material.opacity=scanning?.3*Math.sin((phase-18)/2.8*Math.PI):0;
-      scan.position.y=.12+(scanning?(phase-18)/2.8*1.72:0);
-      holoPoints.material.opacity=.12+(scanning?.12:0)+Math.sin(now*.7)*.025;
+      holoPoints.material.opacity=.14;
       // A slow front-only orbit reveals depth without making the home feel as
       // though it is rotating.  One 96-second left-to-right-and-back sweep.
-      const orbit=Math.sin(now*.065);home.rotation.y=-.16;home.position.y=Math.sin(now*.16)*.018;camera.position.x=-5.1+orbit*1.05;camera.position.z=5.55+Math.cos(now*.065)*.16;camera.lookAt(1.55,.9,.95);renderer.render(scene,camera);
+      const orbit=Math.sin(now*.065);home.rotation.y=-.16;home.position.y=0;camera.position.x=-5.1+orbit*1.05;camera.position.z=5.55+Math.cos(now*.065)*.16;camera.lookAt(1.55,1.08,.95);renderer.render(scene,camera);
     },dispose(){renderer.dispose();canvas.remove();}};
   }
   function render(){return '';} // no SVG fallback: the house is a WebGL scene.
