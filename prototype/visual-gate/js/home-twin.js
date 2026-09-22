@@ -204,6 +204,10 @@ const HomeTwin = (() => {
     const pointPositions=[];for(let i=0;i<42;i++){const x=.14+((i*37)%100)/100*2.22,y=.18+((i*53)%100)/100*1.32,z=.14+((i*71)%100)/100*1.34;pointPositions.push(x,y,z);}
     const pointGeometry=new THREE.BufferGeometry();pointGeometry.setAttribute('position',new THREE.Float32BufferAttribute(pointPositions,3));
     const holoPoints=new THREE.Points(pointGeometry,new THREE.PointsMaterial({color:0x4dceff,size:.018,transparent:true,opacity:.18,depthWrite:false,sizeAttenuation:true}));home.add(holoPoints);
+    // Environmental particles exist only for measured noteworthy weather.
+    // They are outside the shell and share compact point buffers for Pi-safe use.
+    function weatherField(count,colour,size){const base=[],live=[];for(let i=0;i<count;i++){const x=-.8+((i*37)%100)/100*4.2,y=.1+((i*53)%100)/100*3.1,z=-.55+((i*71)%100)/100*3.0;base.push(x,y,z);live.push(x,y,z);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(live,3));const m=new THREE.PointsMaterial({color:colour,size,transparent:true,opacity:0,depthWrite:false,sizeAttenuation:true});const p=new THREE.Points(g,m);scene.add(p);return{base,mesh:p,attr:g.attributes.position};}
+    const rainField=weatherField(84,0x66bde3,.017),snowField=weatherField(52,0xd4efff,.026),windField=weatherField(38,0x8dbbd3,.014),heatField=weatherField(26,0xffb36a,.022);
     let curtainOpen=1,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE';
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
     const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
@@ -236,6 +240,10 @@ const HomeTwin = (() => {
       cameraLens.material.color.setHex(externalActive?0xffa34a:0x285b72);cameraLens.material.opacity=externalActive?.7+.15*Math.sin(now*5.3):(cameras.external ? .5 : .28);
       for(const name of Object.keys(figures)){const f=figures[name],active=rooms[name]&&rooms[name].occupied===true;f.level+=((active?1:0)-f.level)*.12;f.mat.opacity=f.level*.58;}
       holoPoints.material.opacity=.14;
+      const weather=state.weather||{},rain=Number(weather.rain_mm_h),snow=Number(weather.snow_mm_h),wind=Number(weather.wind_mph),outsideTemp=Number(weather.temperature_c),condition=String(weather.condition||'').toLowerCase();
+      const heavyRain=num(rain)&&rain>=4, snowfall=num(snow)&&snow>0&&condition.includes('snow'), strongWind=num(wind)&&wind>=40, highHeat=num(outsideTemp)&&outsideTemp>=28;
+      function weatherVisible(field,on,opacity,fall,drift=0){field.mesh.material.opacity=on?opacity:0;if(!on)return;const a=field.attr.array;for(let i=0;i<a.length;i+=3){a[i]=field.base[i]+(((now*drift+i*.07)%1)-.5)*.45;a[i+1]=field.base[i+1]-((now*fall+i*.037)%3.2);a[i+2]=field.base[i+2]+(((now*drift+i*.11)%1)-.5)*.2;}field.attr.needsUpdate=true;}
+      weatherVisible(rainField,heavyRain,.48,1.4,strongWind?.32:.06);weatherVisible(snowField,snowfall,.55,.18,strongWind?.12:.025);weatherVisible(windField,strongWind&&!heavyRain&&!snowfall,.2,.04,.45);weatherVisible(heatField,highHeat,.16,-.035,.08);
       // Camera director: an eased 90-degree front-side idle orbit, overridden
       // by real motion/alarm events.  It manipulates this Three camera only.
       let wanted=null;

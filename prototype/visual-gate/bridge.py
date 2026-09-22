@@ -187,6 +187,18 @@ class Bridge:
             "condition": main_condition,
             "glyph": current_glyph,
         }
+        # Preserve measured current conditions for the house scene.  Values
+        # are omitted when the provider does not report them; the renderer
+        # must never turn a forecast or a vague "rain" label into a storm.
+        wind = _num((data.get('wind') or {}).get('speed'))
+        if wind is not None:
+            out['wind_mph'] = round(wind * 2.23694, 1)  # OpenWeather m/s
+        rain_mm = _num((data.get('rain') or {}).get('1h'))
+        if rain_mm is not None:
+            out['rain_mm_h'] = rain_mm
+        snow_mm = _num((data.get('snow') or {}).get('1h'))
+        if snow_mm is not None:
+            out['snow_mm_h'] = snow_mm
 
         hourly = data.get("hourly") or {}
         times = hourly.get("time") or []

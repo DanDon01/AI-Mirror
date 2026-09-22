@@ -214,7 +214,7 @@ const Panels = (function () {
   };
 
   function apply(data) {
-    HomeTwin.update(data.energy || {});
+    HomeTwin.update(Object.assign({}, data.energy || {}, { weather: data.weather || null }));
     const slots = [
       document.querySelector('.slot[data-slot="0"]'),
       document.querySelector('.slot[data-slot="1"]'),
