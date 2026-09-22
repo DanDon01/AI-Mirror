@@ -76,7 +76,8 @@ def main():
               # Same closed HA snapshot after a panel rebuild: it must remain
               # closed rather than replaying its animation on every poll.
               ('closed-repoll',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},16.7),
-              ('partial',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':50,'light':True}}},3)]
+              ('partial',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':50,'light':True}}},3),
+              ('curtain-focus',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':0,'light':True}}},3)]
             for name,data,t in cases:
                 data.setdefault('watts_now',468)
                 evaluate(f'Panels.apply({json.dumps({"energy": data})});Panels.frame(10,0)')

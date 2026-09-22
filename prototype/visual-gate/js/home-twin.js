@@ -8,7 +8,7 @@ const HomeTwin = (() => {
   let state={}, received=-Infinity;
   // This survives a panel rebuild when a fresh live snapshot arrives.  A
   // static HA curtain state must not replay its movement every polling pass.
-  const curtainState={known:false,target:1,open:1,lastAt:null};
+  const curtainState={known:false,target:1,open:1,lastAt:null,eventUntil:0};
 
   function curtainTarget(data) {
     const living=data&&data.rooms&&data.rooms.livingroom;
@@ -24,7 +24,7 @@ const HomeTwin = (() => {
     const nextCurtain=curtainTarget(state);
     if(nextCurtain!==null){
       if(!curtainState.known){curtainState.known=true;curtainState.target=curtainState.open=nextCurtain;}
-      else if(Math.abs(nextCurtain-curtainState.target)>.005){curtainState.target=nextCurtain;curtainState.lastAt=null;}
+      else if(Math.abs(nextCurtain-curtainState.target)>.005){curtainState.target=nextCurtain;curtainState.lastAt=null;curtainState.eventUntil=now+4.5;}
     }
   }
   function quad(a,b,c,d,material) {
@@ -316,6 +316,7 @@ const HomeTwin = (() => {
       if(triggered)wanted=[.92,1.35,D];
       else if(porchActive)wanted=[1.93,.45,2.0];
       else if(externalActive)wanted=[1.42,.35,2.06];
+      else if(now<curtainState.eventUntil)wanted=roomAnchors.livingroom;
       else if(living.occupied===true)wanted=roomAnchors.livingroom;
       else if(rooms.bedroom&&rooms.bedroom.occupied===true)wanted=roomAnchors.bedroom1;
       else if(upstairs.occupied===true)wanted=roomAnchors.bedroom2;
