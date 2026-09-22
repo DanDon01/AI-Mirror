@@ -112,7 +112,12 @@ const HomeTwin = (() => {
       return m;
     }
     window(.84,.352,.10,1.284,D+.012,'bedroom');window(.64,.352,1.74,1.284,D+.013,'upstairs');window(1.02,.42,.18,.49,D+.014,'livingroom');
-    const door=window(.34,.54,1.93,.36,2.013,'door');door.material.color.setHex(0x1a536e);
+    const door=window(.34,.54,1.93,.36,2.013,'door');door.material.color.setHex(0x1a536e);door.material.opacity=.84;
+    // The contact sensor drives a physical entrance door, not a text status.
+    // The surrounding frame stays in the facade while the leaf pivots inward
+    // about its left hinge, exposing the hall when the real contact is open.
+    home.remove(door);
+    const doorPivot=new THREE.Group();doorPivot.position.set(1.76,.36,2.025);door.position.set(.17,0,0);doorPivot.add(door);home.add(doorPivot);
     window(.13,.27,1.66,.50,2.014,'porch');window(.13,.27,2.20,.50,2.014,'porch');
     // Tiny physical camera details belong to the architecture, not to a UI
     // overlay.  They use existing porch/external camera/motion state below.
@@ -208,7 +213,7 @@ const HomeTwin = (() => {
     // They are outside the shell and share compact point buffers for Pi-safe use.
     function weatherField(count,colour,size){const base=[],live=[];for(let i=0;i<count;i++){const x=-.8+((i*37)%100)/100*4.2,y=.1+((i*53)%100)/100*3.1,z=-.55+((i*71)%100)/100*3.0;base.push(x,y,z);live.push(x,y,z);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(live,3));const m=new THREE.PointsMaterial({color:colour,size,transparent:true,opacity:0,depthWrite:false,sizeAttenuation:true});const p=new THREE.Points(g,m);scene.add(p);return{base,mesh:p,attr:g.attributes.position};}
     const rainField=weatherField(84,0x66bde3,.017),snowField=weatherField(52,0xd4efff,.026),windField=weatherField(38,0x8dbbd3,.014),heatField=weatherField(26,0xffb36a,.022);
-    let curtainOpen=1,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
+    let curtainOpen=1,doorOpen=0,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
     const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
     function thermalColour(value){const t=clamp(Number(value),17,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
@@ -227,6 +232,7 @@ const HomeTwin = (() => {
       amber.intensity=living.light===true?.28:.02;
       ledLevel+=((living.led===true?1:0)-ledLevel)*.10;ledStrip.material.emissiveIntensity=.04+ledLevel*.72;
       const devices=state.devices||{};tvLevel+=((devices.tv===true?1:0)-tvLevel)*.09;tvScreen.material.emissiveIntensity=.03+tvLevel*.62;tvGlow.intensity=tvLevel*.36;
+      doorOpen+=((devices.front_door_open===true?1:0)-doorOpen)*.08;doorPivot.rotation.y=-doorOpen*.95;
       const alarm=String(devices.alarm||''),triggered=/trigger|alarm/.test(alarm),armed=/armed/.test(alarm),alarmColour=triggered?0xf0352e:(armed?0xffaa55:0x3f8fb1),alarmTarget=triggered?1:(armed?.45:0);
       alarmLevel+=(alarmTarget-alarmLevel)*.1;alarmBox.material.emissive.setHex(alarmColour);alarmBox.material.emissiveIntensity=.08+alarmLevel*.8;alarmLed.material.color.setHex(alarmColour);alarmLed.material.opacity=.22+alarmLevel*.7;
       const openTarget=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);curtainOpen+=(openTarget-curtainOpen)*.09;curtains[0].position.x=.18-(.24*curtainOpen);curtains[1].position.x=.18+(.24*curtainOpen);curtains[0].scale.x=curtains[1].scale.x=.95-curtainOpen*.78;
