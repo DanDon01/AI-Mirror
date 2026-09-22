@@ -34,13 +34,16 @@ const HomeTwin = (() => {
     return new THREE.Mesh(g,material);
   }
   function buildScene(el) {
-    const canvas=document.createElement('canvas');canvas.className='home-twin-webgl';canvas.width=580;canvas.height=365;el.textContent='';el.appendChild(canvas);
+    // Larger than the old SVG frame, with a slightly wider camera view.  The
+    // twin needs breathing room for its slow parallax rather than clipping at
+    // the edge of the energy panel.
+    const canvas=document.createElement('canvas');canvas.className='home-twin-webgl';canvas.width=660;canvas.height=410;el.textContent='';el.appendChild(canvas);
     const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'high-performance'});
-    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.setSize(580,365,false);renderer.setClearColor(0x000000,0);
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.setSize(660,410,false);renderer.setClearColor(0x000000,0);
     renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;renderer.outputEncoding=THREE.sRGBEncoding;
     const scene=new THREE.Scene();
     // View from the real home's left-front side: garage and porch lead.
-    const camera=new THREE.PerspectiveCamera(31,580/365,.1,30);camera.position.set(-5.1,3.35,5.4);camera.lookAt(1.55,.9,.95);
+    const camera=new THREE.PerspectiveCamera(35,660/410,.1,30);camera.position.set(-5.1,3.35,5.4);camera.lookAt(1.55,.9,.95);
     const home=new THREE.Group();scene.add(home);
     // A deliberately transparent shell: this is a live holographic scan, not
     // a miniature physical house.  depthWrite is off so floor volumes remain
