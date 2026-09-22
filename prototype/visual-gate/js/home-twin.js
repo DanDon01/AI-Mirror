@@ -94,8 +94,8 @@ const HomeTwin = (() => {
     function innerFrame(w,d,y){const g=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,.028,d));const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x4db6de,transparent:true,opacity:.38}));l.position.set(MAIN_C,y,D/2);home.add(l);}
     // The upper slab remains visible through the shell, but without a bright
     // perimeter that reads as an accidental band through the first-floor windows.
-    box(2.78,.025,1.48,upperFloorMat,1.00,.80,.825);
-    box(2.92,.024,1.58,floorMat,1.00,.03,.825);innerFrame(2.92,1.58,.03);
+    const upperFloor=box(2.78,.025,1.48,upperFloorMat,1.00,.80,.825);
+    const groundFloor=box(2.92,.024,1.58,floorMat,1.00,.03,.825);innerFrame(2.92,1.58,.03);
     // Named, individual thermal zones sit almost invisibly within each floor.
     // They are deliberately separate meshes so future HA state can colour a
     // room without needing to rebuild the architecture.
@@ -230,18 +230,16 @@ const HomeTwin = (() => {
     // They are outside the shell and share compact point buffers for Pi-safe use.
     function weatherField(count,colour,size){const base=[],live=[];for(let i=0;i<count;i++){const x=-.8+((i*37)%100)/100*4.2,y=.1+((i*53)%100)/100*3.1,z=-.55+((i*71)%100)/100*3.0;base.push(x,y,z);live.push(x,y,z);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(live,3));const m=new THREE.PointsMaterial({color:colour,size,transparent:true,opacity:0,depthWrite:false,sizeAttenuation:true});const p=new THREE.Points(g,m);scene.add(p);return{base,mesh:p,attr:g.attributes.position};}
     const rainField=weatherField(84,0x66bde3,.017),snowField=weatherField(52,0xd4efff,.026),windField=weatherField(38,0x8dbbd3,.014),heatField=weatherField(26,0xffb36a,.022);
-    // Temperature is normally communicated by the quiet thermal volumes.
-    // A reading only materialises briefly when live HA data first arrives or
-    // actually changes, and is anchored at the appropriate storey.
-    function thermalLabel(x,y,z){const c=document.createElement('canvas');c.width=256;c.height=96;const ctx=c.getContext('2d');const tex=new THREE.CanvasTexture(c);tex.minFilter=THREE.LinearFilter;const mat=new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0,depthWrite:false,depthTest:false});const sprite=new THREE.Sprite(mat);sprite.position.set(x,y,z);sprite.scale.set(.58,.218,1);home.add(sprite);return{c,ctx,tex,mat,level:0,last:null};}
-    const floorTemps={ground:thermalLabel(1.18,.48,1.69),first:thermalLabel(1.18,1.30,1.69)};
-    function revealTemperature(label,value){if(!num(value))return;if(label.last===null||Math.abs(label.last-value)>=.05){label.last=value;label.level=1;const ctx=label.ctx;ctx.clearRect(0,0,256,96);ctx.save();ctx.translate(256,0);ctx.scale(-1,1);ctx.font='600 50px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='#46cffa';ctx.shadowBlur=12;ctx.fillStyle='#d9f7ff';ctx.fillText(value.toFixed(1)+'°',128,50);ctx.restore();label.tex.needsUpdate=true;}}
     let doorOpen=0,carPresence=1,carStateReady=false,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
     const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
     function thermalColour(value){const t=clamp(Number(value),17,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
     function setFixture(name,on,intensity=1){const f=fixtures[name];if(!f)return;f.level+=((on?intensity:0)-f.level)*.11;f.mat.emissiveIntensity=.02+f.level*.78;f.pool.intensity=f.level*.72;}
     function setThermal(name,value){const zone=roomZones[name];if(!zone)return;const valid=num(value),target=valid?thermalColour(value):new THREE.Color(0x0b5270);zone.material.color.lerp(target,.07);zone.material.emissive.lerp(target,.05);const opacity=valid?.075:.035;zone.material.opacity+=(opacity-zone.material.opacity)*.07;}
+    // The floor slabs themselves carry the two real floor temperatures.
+    // This keeps thermal information architectural and permanently readable
+    // without introducing numeric labels or solid colour blocks.
+    function setFloorThermal(floor,value,base){const valid=num(value),thermal=valid?thermalColour(value):base.clone();const target=base.clone().lerp(thermal,valid?.52:0);floor.material.color.lerp(target,.045);floor.material.emissive.lerp(target,.035);floor.material.emissiveIntensity+=( (valid?.38:.24)-floor.material.emissiveIntensity)*.04;}
     return {frame(now){
       if(now-received>30)state={};
       const rooms=state.rooms||{},wattsNow=Number(state.watts_now),exporting=num(wattsNow)&&wattsNow<0,chargerLoad=num(wattsNow)&&wattsNow>6000;
@@ -275,8 +273,8 @@ const HomeTwin = (() => {
       const downTemp=rooms.downstairs&&rooms.downstairs.temperature_c,upTemp=upstairs.temperature_c;
       for(const name of ['hallway','livingroom','kitchen'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||downTemp);
       for(const name of ['bedroom1','bedroom2','bedroom3','bathroom'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||upTemp);
-      revealTemperature(floorTemps.ground,downTemp);revealTemperature(floorTemps.first,upTemp);
-      for(const label of Object.values(floorTemps)){label.level*=.993;label.mat.opacity=label.level*.78;}
+      setFloorThermal(groundFloor,downTemp,new THREE.Color(0x0a4058));
+      setFloorThermal(upperFloor,upTemp,new THREE.Color(0x0b4a63));
       carChargeLed.material.opacity=0;chargerLed.material.color.setHex(chargerLoad?0xff9b4a:0x48bddd);chargerLed.material.opacity=chargerLoad?.65:.3;chargerFace.material.emissive.setHex(chargerLoad?0x9a4b16:0x082d3d);chargerFace.material.emissiveIntensity=chargerLoad?.65:.18;
       // Presence drives an understated driveway arrival/departure rather than
       // an abrupt visibility toggle.  The first live state is adopted
