@@ -198,7 +198,7 @@ const HomeTwin = (() => {
     }
     presenceFigure('porch',1.93,.05,2.10);presenceFigure('external',1.42,.05,2.06);
     presenceFigure('livingroom',.72,.16,1.10);presenceFigure('bedroom',.44,.84,1.18);presenceFigure('upstairs',1.82,.84,.48);
-    scene.add(new THREE.HemisphereLight(0x466477,0x010203,.26));
+    const hemi=new THREE.HemisphereLight(0x466477,0x010203,.26);scene.add(hemi);
     const key=new THREE.DirectionalLight(0x9ab9c9,.68);key.position.set(-4,6,5);scene.add(key);
     const rim=new THREE.DirectionalLight(0x28688c,.24);rim.position.set(4,3,-4);scene.add(rim);
     // Interior warmth is local to the living room.  Keeping its falloff short
@@ -273,6 +273,12 @@ const HomeTwin = (() => {
       for(const name of Object.keys(figures)){const f=figures[name],active=rooms[name]&&rooms[name].occupied===true;f.level+=((active?1:0)-f.level)*.12;f.mat.opacity=f.level*.58;}
       holoPoints.material.opacity=.14;
       const weather=state.weather||{},rain=Number(weather.rain_mm_h),snow=Number(weather.snow_mm_h),wind=Number(weather.wind_mph),outsideTemp=Number(weather.temperature_c),condition=String(weather.condition||'').toLowerCase();
+      // Actual sunrise/sunset-derived state subtly shifts the model's
+      // ambience; it never adds a clock, label, or guessed night mode.
+      const night=weather.is_night===true;
+      hemi.intensity+=( (night?.15:.26)-hemi.intensity)*.025;
+      key.intensity+=( (night?.38:.68)-key.intensity)*.025;
+      rim.intensity+=( (night?.34:.24)-rim.intensity)*.025;
       const heavyRain=num(rain)&&rain>=4, snowfall=num(snow)&&snow>0&&condition.includes('snow'), strongWind=num(wind)&&wind>=40, highHeat=num(outsideTemp)&&outsideTemp>=28;
       function weatherVisible(field,on,opacity,fall,drift=0){field.mesh.material.opacity=on?opacity:0;if(!on)return;const a=field.attr.array;for(let i=0;i<a.length;i+=3){a[i]=field.base[i]+(((now*drift+i*.07)%1)-.5)*.45;a[i+1]=field.base[i+1]-((now*fall+i*.037)%3.2);a[i+2]=field.base[i+2]+(((now*drift+i*.11)%1)-.5)*.2;}field.attr.needsUpdate=true;}
       weatherVisible(rainField,heavyRain,.48,1.4,strongWind?.32:.06);weatherVisible(snowField,snowfall,.55,.18,strongWind?.12:.025);weatherVisible(windField,strongWind&&!heavyRain&&!snowfall,.2,.04,.45);weatherVisible(heatField,highHeat,.16,-.035,.08);

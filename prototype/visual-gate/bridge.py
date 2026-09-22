@@ -187,6 +187,13 @@ class Bridge:
             "condition": main_condition,
             "glyph": current_glyph,
         }
+        # Day/night is derived only when the provider supplied its actual
+        # local sunrise and sunset timestamps.  Omitting it is preferable to
+        # guessing from a clock or a forecast condition.
+        sun = data.get('sys') or {}
+        sunrise, sunset = _num(sun.get('sunrise')), _num(sun.get('sunset'))
+        if sunrise is not None and sunset is not None:
+            out['is_night'] = not (sunrise <= time.time() < sunset)
         # Preserve measured current conditions for the house scene.  Values
         # are omitted when the provider does not report them; the renderer
         # must never turn a forecast or a vague "rain" label into a storm.

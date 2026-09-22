@@ -64,6 +64,7 @@ def main():
             evaluate("document.querySelector('.fixture-mark').textContent='OFFLINE VISUAL QA - SYNTHETIC SENSOR CASE';document.querySelector('.fixture-mark').style.display='block'")
             output=HERE/'shots';output.mkdir(exist_ok=True)
             cases=[('idle', {'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain':'open'}}},20),
+              ('night',{'watts_now':468,'weather':{'is_night':True},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
               ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},2),
               ('export',{'watts_now':-900,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
               ('charger',{'watts_now':6200,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},5),
