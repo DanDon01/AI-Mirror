@@ -177,8 +177,8 @@ body {
 
 .bio {
   position: absolute;
-  left: 324px; top: 744px;
-  width: 792px; height: 792px;
+  left: 420px; top: 260px;
+  width: 600px; height: 600px;
   will-change: transform;
 }
 
@@ -190,14 +190,14 @@ body {
 #bioCanvas {
   position: absolute;
   left: 0; top: 0;
-  width: 792px; height: 792px;
+  width: 600px; height: 600px;
   display: block;
 }
 
 .bio-halo {
   position: absolute;
-  left: 396px; top: 396px;
-  width: 720px; height: 547px;
+  left: 300px; top: 300px;
+  width: 570px; height: 420px;
   transform: translate(-50%, -50%);
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 50%,
@@ -223,12 +223,12 @@ body {
    against the edge of their own form rather than out at the margin -
    at half size the heart's figure was stranded 300px away from it and
    read as an unrelated number. */
-#bioHeart { left: 36px; top: 330px; }
-#bioSleep { left: 631px; top: 356px; }
+#bioHeart { left: 26px; top: 250px; }
+#bioSleep { left: 470px; top: 270px; }
 
 .bio-n {
   font-family: var(--ff-display);
-  font-size: 88px;
+  font-size: 74px;
   line-height: 0.82;
   letter-spacing: -0.03em;
   color: var(--ink);
@@ -242,31 +242,25 @@ body {
   color: var(--ink-3);
 }
 
-#bioSleep .bio-n { font-size: 60px; }
+#bioSleep .bio-n { font-size: 52px; }
 
 /* ======================= PANELS ===========================
-   Two slots in a band between the reflection and the markets rail.
-   Nothing here is ever on permanently: panels.js raises one when its
-   data changes and on a slow rotation, then puts it away again. */
+   A single centred upper stage, plus a dedicated lower-right stage for the
+   house. Only one is scheduled at any moment. */
 
 .panels {
   position: absolute;
-  left: 0; top: 340px;
-  width: 1440px; height: 461px;
+  inset: 0;
   perspective: 2400px;
 }
 
-/* Hard against both edges, with the gap in the middle rather than
-   split between the margins - the mirror's own frame is the left and
-   right boundary, so the content should meet it. */
 .slot {
   position: absolute;
-  top: 0;
-  width: 567px; height: 461px;
+  width: 720px; height: 480px;
   transform-style: preserve-3d;
 }
-.slot[data-slot="0"] { left: 80px; }
-.slot[data-slot="1"] { left: 793px; }
+.slot[data-slot="0"] { left: 360px; top: 315px; }
+.slot[data-slot="1"] { left: 730px; top: 1580px; width: 680px; height: 520px; }
 
 /* No card. The panel is a positioning frame and nothing else: no fill,
    no edges, no clipping. Everything inside floats on the mirror, which
@@ -283,7 +277,7 @@ body {
   transform-style: preserve-3d;
 }
 
-.slot[data-slot="0"] .panel { transform: rotateY(2deg); }
+.slot[data-slot="0"] .panel { transform: rotateY(0deg); }
 .slot[data-slot="1"] .panel { transform: rotateY(-2deg); }
 
 .panel > * { opacity: var(--content, 1); }
@@ -313,7 +307,7 @@ body {
 
 /* The hero figure for a panel: serif, large, with a small tracked unit
    underneath rather than a KEY: VALUE pair beside it. */
-.p-hero { font-family: var(--ff-display); font-size: 83px; line-height: 0.9;
+.p-hero { font-family: var(--ff-display); font-size: 58px; line-height: 0.9;
           letter-spacing: -0.02em; color: var(--ink); }
 .p-sub  { margin-top: 9px; font-size: 19px; font-weight: 500;
           letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-3); }
@@ -322,7 +316,7 @@ body {
 
 /* Architectural geometry and materials: home-twin.css */
 
-.p-energy .foot  { position: absolute; z-index: 2; left: 34px; bottom: 27px;
+.p-energy .foot  { position: absolute; z-index: 2; left: 28px; bottom: 24px;
                    display: flex; align-items: flex-end; gap: 27px; }
 .p-energy .bars  { display: flex; align-items: flex-end; gap: 6px; height: 49px; }
 
@@ -393,26 +387,23 @@ body {
 
 .p-news { overflow: visible; }
 .p-news .news-ribbon {
-  position: absolute; right: -34px; top: 144px;
+  position: absolute; left: 40px; top: 144px;
   width: 640px; min-height: 96px;
   display: flex; align-items: center; gap: 15px;
   padding: 0 28px 0 25px;
   box-sizing: border-box;
   color: var(--ink);
-  background: linear-gradient(90deg, rgba(97,160,208,0.02), rgba(122,190,234,0.16) 14%, rgba(24,55,82,0.30) 74%, rgba(113,184,230,0.10));
-  border-top: 1px solid rgba(168,220,255,calc(0.14 + var(--reveal, 0) * 0.46));
-  border-bottom: 1px solid rgba(168,220,255,calc(0.08 + var(--reveal, 0) * 0.30));
-  box-shadow: -28px 0 52px rgba(54,147,211,calc(0.02 + var(--reveal, 0) * 0.10));
+  background: linear-gradient(105deg, rgba(138,207,248,0.08), rgba(47,105,144,0.19) 38%, rgba(16,43,68,0.28) 72%, rgba(125,194,236,0.10));
+  border-top: 1px solid rgba(191,231,255,calc(0.20 + var(--reveal, 0) * 0.40));
+  border-bottom: 1px solid rgba(150,214,248,calc(0.13 + var(--reveal, 0) * 0.27));
+  box-shadow: inset 0 1px 0 rgba(231,248,255,0.10), inset 0 -1px 0 rgba(2,13,25,0.38), -28px 0 52px rgba(54,147,211,calc(0.03 + var(--reveal, 0) * 0.11));
+  backdrop-filter: blur(12px) saturate(120%);
   will-change: transform;
 }
 .p-news .news-ribbon::before {
   content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 2px;
   background: linear-gradient(#d9f3ff, rgba(101,194,245,0.15));
   box-shadow: 0 0 16px rgba(108,205,255,0.48);
-}
-.p-news .news-signal {
-  flex: none; width: 10px; height: 10px; border-radius: 50%;
-  background: #bceaff; box-shadow: 0 0 15px rgba(146,218,255,0.86);
 }
 .p-news .news-source { flex: none; font-size: 18px; font-weight: 700; letter-spacing: .07em; color: #b8ddf3; }
 .p-news .news-sep { color: rgba(188,226,246,.45); font-size: 26px; }

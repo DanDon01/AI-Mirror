@@ -35,88 +35,126 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI-Mirror</title>
 <style>
-  body { background:#0a0a0c; color:#b9b9be; font-family:'Segoe UI',sans-serif;
-         margin:0; padding:16px; max-width:640px; margin:auto; }
-  h1 { color:#5ac3ff; font-weight:300; font-size:1.5em; margin:8px 0 16px; }
-  h2 { color:#468cdc; font-size:0.95em; text-transform:uppercase;
-       letter-spacing:1px; margin:22px 0 8px; font-weight:500; }
+  :root { color-scheme:dark; --bg:#090b10; --card:#111722; --card-2:#0d121b;
+          --line:#253143; --ink:#edf4ff; --muted:#8f9bad; --blue:#69c6ff;
+          --green:#80e1af; --danger:#ff8d9b; }
+  * { box-sizing:border-box; }
+  body { background:radial-gradient(1000px 520px at 50% -180px,#17344d 0%,var(--bg) 58%);
+         color:var(--ink); font-family:Inter,'Segoe UI',sans-serif; margin:0; padding:18px; }
+  .shell { max-width:980px; margin:auto; }
+  .topbar { display:flex; align-items:center; gap:14px; margin:3px 0 18px; }
+  h1 { color:var(--ink); font-weight:450; font-size:1.35rem; letter-spacing:.01em; margin:0; }
+  .live { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:.78rem; }
+  .live::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 12px rgba(128,225,175,.6); }
+  .refresh { margin-left:auto; flex:0; min-width:auto; padding:8px 11px; font-size:.8rem; }
+  nav { display:flex; gap:6px; overflow-x:auto; padding-bottom:12px; margin-bottom:4px; }
+  nav a { white-space:nowrap; padding:7px 10px; color:var(--muted); font-size:.78rem; text-decoration:none; border:1px solid transparent; border-radius:999px; }
+  nav a:hover { color:var(--ink); border-color:var(--line); background:rgba(105,198,255,.06); }
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .card { background:linear-gradient(145deg,rgba(22,31,45,.96),rgba(11,15,23,.96));
+          border:1px solid var(--line); border-radius:14px; padding:15px; box-shadow:0 12px 30px rgba(0,0,0,.15); }
+  .card.wide { grid-column:1 / -1; }
+  h2 { color:#b9dbf4; font-size:.72rem; text-transform:uppercase; letter-spacing:.14em; margin:0 0 12px; font-weight:650; }
   .row { display:flex; flex-wrap:wrap; gap:8px; }
-  button { background:#16161a; color:#b9b9be; border:1px solid #2a2a30;
-           border-radius:8px; padding:10px 14px; font-size:0.95em;
-           cursor:pointer; flex:1 1 28%; min-width:90px; }
-  button.on { border-color:#2e7d4f; color:#7fd9a4; }
-  button.off { opacity:0.55; }
-  button.state-active { border-color:#5ac3ff; color:#5ac3ff; }
-  table { width:100%; border-collapse:collapse; font-size:0.85em; }
-  td, th { padding:4px 6px; text-align:left; border-bottom:1px solid #1c1c22; }
-  th { color:#8c8c91; font-weight:500; }
-  pre { background:#101014; border:1px solid #1c1c22; border-radius:8px;
-        padding:10px; font-size:0.72em; overflow-x:auto; white-space:pre-wrap;
-        max-height:300px; overflow-y:auto; }
-  textarea { width:100%; box-sizing:border-box; background:#101014;
-        color:#cfcfd4; border:1px solid #2a2a30; border-radius:8px;
-        padding:10px; font-family:monospace; font-size:0.95em; }
-  .meta { color:#5a5a5f; font-size:0.8em; margin-top:4px; }
-  .saved { color:#7fd9a4; }
-  .halist { max-height:340px; overflow-y:auto; border:1px solid #1c1c22;
-        border-radius:8px; padding:6px 10px; }
-  .halist label { display:flex; align-items:center; gap:10px; padding:6px 2px;
-        font-size:0.92em; border-bottom:1px solid #141418; }
-  .halist input { width:18px; height:18px; }
-  .halist .st { color:#6a6a70; margin-left:auto; font-size:0.85em; }
+  button { background:#172130; color:#dbe8f6; border:1px solid #304056; border-radius:9px;
+           padding:10px 12px; font-size:.88rem; cursor:pointer; flex:1 1 28%; min-width:82px;
+           transition:background .15s,border-color .15s,transform .15s; }
+  button:hover:not(:disabled) { border-color:#6b9fc1; background:#1d2b3d; }
+  button:active:not(:disabled) { transform:translateY(1px); }
+  button:disabled { cursor:not-allowed; }
+  button.on { border-color:#31895a; color:var(--green); background:rgba(42,109,74,.16); }
+  button.off { color:#788596; background:#111822; }
+  button.state-active { border-color:var(--blue); color:#d8f2ff; background:rgba(57,145,204,.18); box-shadow:inset 0 0 0 1px rgba(105,198,255,.13); }
+  .meta { color:var(--muted); font-size:.78rem; line-height:1.35; margin-top:9px; }
+  .saved { color:var(--green); }
+  .split { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .count { color:var(--muted); font-size:.75rem; }
+  .ticker-add { display:flex; gap:8px; margin-bottom:10px; }
+  input[type=text] { min-width:0; flex:1; background:#0a1018; color:var(--ink); border:1px solid #304056; border-radius:9px; padding:10px 11px; font:inherit; text-transform:uppercase; }
+  .ticker-add button { flex:0; min-width:78px; }
+  .chips { display:flex; flex-wrap:wrap; gap:7px; min-height:38px; }
+  .chip { display:inline-flex; align-items:center; gap:7px; padding:6px 7px 6px 9px; border:1px solid #33455c; border-radius:999px; background:#101a27; font-size:.84rem; }
+  .chip input { accent-color:var(--blue); width:15px; height:15px; margin:0; }
+  .chip.off { opacity:.48; }
+  .chip button { min-width:22px; flex:0; padding:0; width:22px; height:22px; border:0; color:#aebccd; background:transparent; font-size:1.1rem; line-height:1; }
+  .chip button:hover { color:var(--danger); background:rgba(255,141,155,.12); }
+  .halist { max-height:330px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:4px 10px; background:#0b1018; }
+  .halist label { display:flex; align-items:center; gap:10px; padding:9px 2px; font-size:.88rem; border-bottom:1px solid rgba(48,64,86,.48); }
+  .halist label:last-child { border-bottom:0; }
+  .halist input { width:17px; height:17px; accent-color:var(--blue); }
+  .halist .st { color:var(--muted); margin-left:auto; font-size:.78rem; max-width:36%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .entity-tools { display:flex; gap:7px; margin-bottom:8px; }
+  .entity-tools button { flex:0; min-width:auto; padding:7px 9px; font-size:.76rem; }
+  table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  td, th { padding:7px 6px; text-align:left; border-bottom:1px solid rgba(48,64,86,.58); }
+  th { color:var(--muted); font-weight:550; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; }
+  pre { margin:0; background:#080c12; border:1px solid var(--line); border-radius:10px;
+        padding:11px; font-size:.72rem; overflow-x:auto; white-space:pre-wrap; max-height:300px; overflow-y:auto; }
+  details summary { cursor:pointer; color:#b9dbf4; font-size:.82rem; }
+  details[open] summary { margin-bottom:12px; }
+  @media (max-width:680px) { body { padding:12px; } .grid { grid-template-columns:1fr; } .card.wide { grid-column:auto; } .topbar { margin-bottom:12px; } .halist { max-height:270px; } }
 </style>
 </head>
 <body>
-<h1>AI-Mirror</h1>
-
-<h2>State</h2>
-<div class="row" id="states"></div>
-
-<h2>Theme</h2>
-<div class="row" id="themes"></div>
-<div class="row" style="margin-top:8px">
-  <button id="ringBtn" onclick="postRing()">Portal ring</button>
-</div>
-
-<h2>Moments</h2>
-<div class="row">
-  <button onclick="post('/api/trigger_moment')">Trigger a moment</button>
-  <button id="guestModeBtn" onclick="post('/api/guest_mode')">Guest mode</button>
-</div>
-<div class="meta" id="momentMeta">Fires something now for guests, ignoring the usual rarity cooldowns.</div>
-<div class="meta" id="guestModeMeta">Guest mode: moments fire much more often while it's on -- for a party, not a normal day.</div>
-
-<h2>Avatar character</h2>
-<div class="row" id="avatars"></div>
-<div class="meta" id="avatarMeta">Loading avatar choices...</div>
-
-<h2>Modules</h2>
-<div class="row" id="modules"></div>
-
-<h2>Stocks watchlist</h2>
-<textarea id="tickers" rows="8" placeholder="loading..."></textarea>
-<div class="row" style="margin-top:8px">
-  <button onclick="saveTickers()">Save watchlist</button>
-  <button onclick="loadTickers()">Reload</button>
-</div>
-<div class="meta" id="tickersMeta">One symbol per line. e.g. AAPL, MSFT, RR.L (London), BTC/USD (crypto)</div>
-
-<h2>Smart home entities</h2>
-<div class="halist" id="haList">loading...</div>
-<div class="row" style="margin-top:8px">
-  <button onclick="saveEntities()">Save entities</button>
-  <button onclick="loadEntities()">Reload</button>
-</div>
-<div class="meta" id="haMeta">Tick which entities to show. Untick everything to auto-pick.</div>
-
-<h2>API usage (24h)</h2>
-<table id="api"><thead>
-<tr><th>Service</th><th>Day</th><th>Hour</th><th>Cost</th></tr>
-</thead><tbody></tbody></table>
-<div class="meta" id="apiTotals"></div>
-
-<h2>Recent log</h2>
-<pre id="log">loading...</pre>
+<main class="shell">
+  <header class="topbar">
+    <div><h1>AI-Mirror</h1><span class="live">Local control</span></div>
+    <button class="refresh" onclick="refreshAll()">Refresh</button>
+  </header>
+  <nav aria-label="Control sections">
+    <a href="#mirror">Mirror</a><a href="#avatar">Avatar</a><a href="#modules">Modules</a>
+    <a href="#stocks">Stocks</a><a href="#home">Home</a><a href="#system">System</a>
+  </nav>
+  <div class="grid">
+    <section class="card" id="mirror">
+      <h2>Mirror state</h2><div class="row" id="states"></div>
+      <div class="meta">Choose how the mirror behaves right now.</div>
+    </section>
+    <section class="card">
+      <h2>Theme & effects</h2><div class="row" id="themes"></div>
+      <div class="row" style="margin-top:8px"><button id="ringBtn" onclick="postRing()">Portal ring</button></div>
+    </section>
+    <section class="card" id="avatar">
+      <h2>Avatar character</h2><div class="row" id="avatars"></div>
+      <div class="meta" id="avatarMeta">Loading avatar choices...</div>
+    </section>
+    <section class="card">
+      <h2>Moments</h2><div class="row">
+        <button onclick="post('/api/trigger_moment')">Trigger now</button>
+        <button id="guestModeBtn" onclick="post('/api/guest_mode')">Guest mode</button>
+      </div>
+      <div class="meta" id="momentMeta">Fires something now for guests, ignoring the usual rarity cooldowns.</div>
+      <div class="meta" id="guestModeMeta">Guest mode makes moments more frequent.</div>
+    </section>
+    <section class="card wide" id="modules">
+      <div class="split"><h2>Visible modules</h2><span class="count" id="moduleCount"></span></div>
+      <div class="row" id="modules"></div>
+      <div class="meta">Tap a module to show or hide it on the mirror.</div>
+    </section>
+    <section class="card" id="stocks">
+      <div class="split"><h2>Stocks watchlist</h2><span class="count" id="tickerCount"></span></div>
+      <div class="ticker-add"><input id="tickerInput" type="text" placeholder="Add ticker e.g. RR.L" maxlength="20"><button onclick="addTicker()">Add</button></div>
+      <div class="chips" id="tickerList">Loading…</div>
+      <div class="row" style="margin-top:10px"><button onclick="saveTickers()">Save display list</button><button onclick="loadTickers()">Reload</button></div>
+      <div class="meta" id="tickersMeta">Tick symbols to display; × removes a symbol. Supports AAPL, RR.L and BTC/USD.</div>
+    </section>
+    <section class="card" id="home">
+      <div class="split"><h2>Smart home entities</h2><span class="count" id="entityCount"></span></div>
+      <div class="entity-tools"><button onclick="setEntityChecks(true)">All</button><button onclick="setEntityChecks(false)">None</button></div>
+      <div class="halist" id="haList">Loading…</div>
+      <div class="row" style="margin-top:10px"><button onclick="saveEntities()">Save selection</button><button onclick="loadEntities()">Reload</button></div>
+      <div class="meta" id="haMeta">Tick which entities the mirror can display.</div>
+    </section>
+    <section class="card wide" id="system">
+      <h2>System</h2>
+      <details open><summary>API usage · last 24 hours</summary>
+        <table id="api"><thead><tr><th>Service</th><th>Day</th><th>Hour</th><th>Cost</th></tr></thead><tbody></tbody></table>
+        <div class="meta" id="apiTotals"></div>
+      </details>
+      <details><summary>Recent log</summary><pre id="log">Loading…</pre></details>
+    </section>
+  </div>
+</main>
 
 <script>
 const STATES = ["active", "screensaver", "sleep"];
@@ -129,6 +167,10 @@ async function getStatus() {
 async function post(path) {
   await fetch(path, { method: "POST" });
   refresh();
+}
+
+function refreshAll() {
+  refresh(); refreshLog(); loadTickers(); loadEntities(); loadThemes(); loadAvatars();
 }
 
 async function loadThemes() {
@@ -218,6 +260,8 @@ function render(s) {
     b.onclick = () => post("/api/toggle?module=" + name);
     mods.appendChild(b);
   }
+  document.getElementById("moduleCount").textContent =
+    Object.values(s.modules).filter(Boolean).length + " on";
 
   const tbody = document.querySelector("#api tbody");
   tbody.innerHTML = "";
@@ -264,16 +308,43 @@ async function loadTickers() {
   try {
     const r = await fetch("/api/tickers");
     const j = await r.json();
-    document.getElementById("tickers").value = (j.tickers || []).join("\\n");
+    tickerItems = (j.tickers || []).map(symbol => ({ symbol, enabled: true }));
+    renderTickers();
     document.getElementById("tickersMeta").textContent =
-      (j.tickers || []).length + " symbols. One per line. e.g. AAPL, RR.L, BTC/USD";
+      "Tick symbols to display; × removes a symbol. Supports AAPL, RR.L and BTC/USD.";
   } catch (e) {}
 }
 
+let tickerItems = [];
+function renderTickers() {
+  const list = document.getElementById("tickerList");
+  list.innerHTML = "";
+  for (const item of tickerItems) {
+    const chip = document.createElement("label");
+    chip.className = "chip" + (item.enabled ? "" : " off");
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = item.enabled;
+    cb.onchange = () => { item.enabled = cb.checked; renderTickers(); };
+    const name = document.createElement("span"); name.textContent = item.symbol;
+    const remove = document.createElement("button"); remove.type = "button"; remove.title = "Remove " + item.symbol; remove.textContent = "×";
+    remove.onclick = () => { tickerItems = tickerItems.filter(t => t !== item); renderTickers(); };
+    chip.append(cb, name, remove); list.appendChild(chip);
+  }
+  if (!tickerItems.length) list.textContent = "No symbols selected.";
+  document.getElementById("tickerCount").textContent = tickerItems.filter(t => t.enabled).length + " displayed";
+}
+
+function addTicker() {
+  const input = document.getElementById("tickerInput");
+  const symbol = input.value.trim().toUpperCase();
+  if (!symbol) return;
+  if (tickerItems.some(t => t.symbol === symbol)) { input.select(); return; }
+  tickerItems.push({ symbol, enabled: true }); input.value = ""; renderTickers();
+}
+
 async function saveTickers() {
-  const v = document.getElementById("tickers").value;
   const meta = document.getElementById("tickersMeta");
-  await fetch("/api/tickers", { method: "POST", body: v });
+  const symbols = tickerItems.filter(t => t.enabled).map(t => t.symbol);
+  await fetch("/api/tickers", { method: "POST", body: symbols.join("\\n") });
   meta.innerHTML = "<span class='saved'>Saved - refetching prices...</span>";
   setTimeout(loadTickers, 1500);
 }
@@ -300,7 +371,13 @@ async function loadEntities() {
     }
     document.getElementById("haMeta").textContent =
       ents.filter(e => e.shown).length + " shown of " + ents.length + " offered";
+    document.getElementById("entityCount").textContent =
+      ents.filter(e => e.shown).length + " / " + ents.length;
   } catch (e) {}
+}
+
+function setEntityChecks(checked) {
+  document.querySelectorAll("#haList input").forEach(cb => { cb.checked = checked; });
 }
 
 async function saveEntities() {
@@ -317,6 +394,9 @@ loadTickers();
 loadEntities();
 loadThemes();
 loadAvatars();
+document.getElementById("tickerInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); addTicker(); }
+});
 setInterval(refresh, 5000);
 setInterval(refreshLog, 10000);
 setInterval(loadThemes, 10000);

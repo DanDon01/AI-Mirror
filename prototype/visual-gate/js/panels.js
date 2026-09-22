@@ -16,17 +16,13 @@
 const Panels = (function () {
   'use strict';
 
-  // Long enough to read on the way past, short enough that the mirror is
-  // empty more often than it is busy. Spread across both biometric
-  // phases on purpose: scheduling every panel against the heart left the
-  // brain on screen with nothing beside it for a third of the loop.
-  // A kind may appear more than once; the second energy rise is the
-  // "usage just changed" case rather than the rotation.
+  // The upper-stage modules take turns, with six quiet seconds between each
+  // one. The digital twin has its own lower-right stage so it can remain
+  // substantial without competing with a calendar, news or biometric readout.
   const SCHEDULE = [
-    { slot: 0, kind: 'energy', from:  0.0, to: 48.0 },   // quiet architecture
-    { slot: 1, kind: 'cal',    from:  7.0, to: 17.5 },   // heart -> brain
-    { slot: 1, kind: 'news',   from: 18.5, to: 28.0 },
-    { slot: 1, kind: 'wx',     from: 30.0, to: 42.0 },
+    { slot: 0, kind: 'cal',    from: 20.0, to: 34.0 },
+    { slot: 0, kind: 'news',   from: 40.0, to: 54.0 },
+    { slot: 1, kind: 'energy', from: 60.0, to: 74.0 },
   ];
 
   const RISE = 1.25;   // seconds of arrival
@@ -75,20 +71,29 @@ const Panels = (function () {
     // Live power if the house reports it, otherwise what it has used so
     // far today. Both are measurements; which one is available depends
     // on whether there is a meter reading watts as well as a tariff.
-    let hero = '', sub = '';
+    let hero = '', heroColour = '';
     if (typeof d.watts_now === 'number') {
       hero = d.watts_now + ' W';
-      sub = d.label || 'Home usage';
+      // The reading carries its direction without a written label: near-zero
+      // rests in graphite, import warms progressively to soft yellow, and
+      // export turns the same figure into the cold blue of generation.
+      const watts = d.watts_now;
+      const mix = function (from, to, amount) {
+        return from.map(function (v, i) { return Math.round(v + (to[i] - v) * amount); });
+      };
+      const amount = Math.min(Math.abs(watts) / 7000, 1);
+      const rgb = watts < 0
+        ? mix([82, 91, 101], [124, 211, 255], amount)
+        : mix([82, 91, 101], [255, 224, 163], amount);
+      heroColour = ' style="color:rgb(' + rgb.join(',') + ')"';
     } else if (typeof d.today_kwh === 'number') {
       hero = d.today_kwh.toFixed(1) + ' kWh';
-      sub = 'Used today';
     }
 
     return (
       '<div class="house">' + HomeTwin.render() + '</div>' +
       '<div class="foot">' +
-      (hero ? '<div><div class="p-hero">' + hero + '</div>' +
-              '<div class="p-sub">' + sub + '</div></div>' : '') +
+      (hero ? '<div class="p-hero"' + heroColour + '>' + hero + '</div>' : '') +
       bars +
       '</div>'
     );
@@ -100,6 +105,12 @@ const Panels = (function () {
   // the next appointment nearest the viewer and the rest receding. They
   // arrive from the right edge, furthest last.
   function buildCalendar(events) {
+    const today = new Date();
+    const dateStamp = [
+      String(today.getDate()).padStart(2, '0'),
+      String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getFullYear()).slice(-2)
+    ].join(':');
     const rows = events.slice(0, 4).map(function (e, i) {
       const tint = Array.isArray(e.color) && e.color.length >= 3
         ? e.color.slice(0, 3).map(function (v) { return Math.max(0, Math.min(255, Number(v) || 0)); }).join(',')
@@ -109,7 +120,7 @@ const Panels = (function () {
              '<span class="at">' + e.at + '</span>' +
              '<span class="what">' + e.title + '</span></div>';
     }).join('');
-    return '<div class="p-head">Next up</div><div class="blades">' + rows + '</div>';
+    return '<div class="p-head">' + dateStamp + '</div><div class="blades">' + rows + '</div>';
   }
 
   /** Drives the blade stack.
@@ -158,8 +169,7 @@ const Panels = (function () {
     // news card.  The publisher identifies the source without a second
     // "NEWS" heading or decorative dashboard furniture.
     return (
-      '<div class="news-ribbon"><span class="news-signal"></span>' +
-      '<span class="news-source">' + e.source + '</span>' +
+      '<div class="news-ribbon"><span class="news-source">' + e.source + '</span>' +
       '<span class="news-sep">&#183;</span>' +
       '<span class="news-headline">' + e.headline + '</span></div>'
     );
@@ -169,7 +179,7 @@ const Panels = (function () {
     const ribbon = root.querySelector('.news-ribbon');
     return function (p) {
       // It travels in from the physical right-hand edge and leaves the same
-      // way; the scheduler already gives this a calm hold in the middle.
+      // way; the scheduler gives it a calm hold in the centred upper stage.
       const x = (1 - p) * 510;
       ribbon.style.transform = 'translate3d(' + x.toFixed(1) + 'px,0,0)';
       ribbon.style.setProperty('--reveal', p.toFixed(3));

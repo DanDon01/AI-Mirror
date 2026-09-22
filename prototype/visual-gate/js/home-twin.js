@@ -46,13 +46,13 @@ const HomeTwin = (() => {
     // Larger than the old SVG frame, with a slightly wider camera view.  The
     // twin needs breathing room for its slow parallax rather than clipping at
     // the edge of the energy panel.
-    const canvas=document.createElement('canvas');canvas.className='home-twin-webgl';canvas.width=660;canvas.height=410;el.textContent='';el.appendChild(canvas);
+    const canvas=document.createElement('canvas');canvas.className='home-twin-webgl';canvas.width=710;canvas.height=440;el.textContent='';el.appendChild(canvas);
     const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'high-performance'});
-    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.setSize(660,410,false);renderer.setClearColor(0x000000,0);
-    renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;renderer.outputEncoding=THREE.sRGBEncoding;
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.setSize(710,440,false);renderer.setClearColor(0x000000,0);
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.outputEncoding=THREE.sRGBEncoding;
     const scene=new THREE.Scene();
     // View from the real home's left-front side: garage and porch lead.
-    const camera=new THREE.PerspectiveCamera(35,660/410,.1,30);camera.position.set(-5.1,4.25,6.5);camera.lookAt(1.25,1.08,.95);
+    const camera=new THREE.PerspectiveCamera(33,710/440,.1,30);camera.position.set(-5.1,4.25,6.5);camera.lookAt(1.25,1.08,.95);
     const home=new THREE.Group();scene.add(home);
     // Both habitable storeys gain the requested 20% vertical volume.  The
     // car cancels this scale locally below, so it stays a normal-sized vehicle.
@@ -215,9 +215,9 @@ const HomeTwin = (() => {
     }
     presenceFigure('porch',1.93,.05,2.10);presenceFigure('external',1.42,.05,2.06);
     presenceFigure('livingroom',.72,.16,1.10);presenceFigure('bedroom',.44,.84,1.18);presenceFigure('upstairs',1.82,.84,.48);
-    const hemi=new THREE.HemisphereLight(0x466477,0x010203,.26);scene.add(hemi);
-    const key=new THREE.DirectionalLight(0x9ab9c9,.68);key.position.set(-4,6,5);scene.add(key);
-    const rim=new THREE.DirectionalLight(0x28688c,.24);rim.position.set(4,3,-4);scene.add(rim);
+    const hemi=new THREE.HemisphereLight(0x466477,0x010203,.34);scene.add(hemi);
+    const key=new THREE.DirectionalLight(0x9ab9c9,.84);key.position.set(-4,6,5);scene.add(key);
+    const rim=new THREE.DirectionalLight(0x28688c,.34);rim.position.set(4,3,-4);scene.add(rim);
     // Interior warmth is local to the living room.  Keeping its falloff short
     // prevents it from bleaching the parked car when a room light is on.
     const amber=new THREE.PointLight(0xffa344,.04,.82,2);amber.position.set(.7,.65,1.22);home.add(amber);
