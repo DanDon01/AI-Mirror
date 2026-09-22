@@ -71,38 +71,44 @@ const HomeTwin = (() => {
     trim(W+.08,.055,.07,W/2,H,D+.025);trim(.07,.055,D+.08,W+.025,H,D/2);trim(.07,.055,D+.08,-.025,H,D/2);trim(.08,.06,.08,1.96,RIDGE,D/2);
     // Two suspended illuminated slabs and a few translucent partitions make
     // the actual two-storey layout immediately readable through the shell.
-    const floorMat=new THREE.MeshStandardMaterial({color:0x0b4964,emissive:0x0b8ab6,emissiveIntensity:.38,transparent:true,opacity:.32,depthWrite:false,side:THREE.DoubleSide});
-    const partitionMat=new THREE.MeshPhysicalMaterial({color:0x0a3b52,emissive:0x0b4160,emissiveIntensity:.12,transparent:true,opacity:.15,depthWrite:false,side:THREE.DoubleSide});
+    const floorMat=new THREE.MeshStandardMaterial({color:0x0a4058,emissive:0x0b789c,emissiveIntensity:.28,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide});
+    const upperFloorMat=floorMat.clone();upperFloorMat.color.setHex(0x0b4a63);upperFloorMat.emissive.setHex(0x0b88ae);upperFloorMat.opacity=.28;
     function innerFrame(w,d,y){const g=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,.028,d));const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x4db6de,transparent:true,opacity:.38}));l.position.set(W/2,y,D/2);home.add(l);}
     // The upper slab remains visible through the shell, but without a bright
     // perimeter that reads as an accidental band through the first-floor windows.
-    box(2.28,.025,1.48,floorMat,1.25,.80,.825);
+    box(2.28,.025,1.48,upperFloorMat,1.25,.80,.825);
     box(2.22,.032,1.42,floorMat,1.25,.12,.825);innerFrame(2.22,1.42,.12);
-    // Ground floor: a narrow hallway at the left, with living room at the
-    // front and kitchen at the back.  Names/anchors intentionally live here
-    // so future HA effects have stable architectural destinations.
+    // Named, individual thermal zones sit almost invisibly within each floor.
+    // They are deliberately separate meshes so future HA state can colour a
+    // room without needing to rebuild the architecture.
     const roomAnchors={
       hallway:[.40,.43,.83], livingroom:[1.62,.43,1.24], kitchen:[1.62,.43,.40],
       bedroom1:[.63,1.20,1.24], bedroom2:[1.82,1.20,1.24],
       bedroom3:[.63,1.20,.40], bathroom:[1.82,1.20,.40]
     };
     home.userData.roomAnchors=roomAnchors;
-    box(.028,.70,1.42,partitionMat,.82,.43,.825);       // hallway | rooms
-    box(1.58,.70,.028,partitionMat,1.62,.43,.825);       // living room / kitchen
-    // First floor: two crossing dividers form bedroom 1, bedroom 2, bedroom
-    // 3 and bathroom.  The dividers are intentionally faint holographic glass.
-    box(.028,.70,1.42,partitionMat,1.25,1.20,.825);
-    box(2.22,.70,.028,partitionMat,1.25,1.20,.825);
+    const roomZones={};
+    function roomZone(name,w,d,x,y,z){const mat=new THREE.MeshStandardMaterial({color:0x0b5270,emissive:0x063047,emissiveIntensity:.18,transparent:true,opacity:.035,depthWrite:false,side:THREE.DoubleSide});const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat);m.rotation.x=-Math.PI/2;m.position.set(x,y,z);m.name='zone-'+name;m.userData={room:name,thermal:true};home.add(m);roomZones[name]=m;}
+    roomZone('hallway',.72,1.38,.43,.145,.825);roomZone('livingroom',1.48,.66,1.62,.145,1.18);roomZone('kitchen',1.48,.66,1.62,.145,.47);
+    roomZone('bedroom1',1.02,.66,.64,.825,1.18);roomZone('bedroom2',1.02,.66,1.86,.825,1.18);roomZone('bedroom3',1.02,.66,.64,.825,.47);roomZone('bathroom',1.02,.66,1.86,.825,.47);
+    home.userData.roomZones=roomZones;
+    // Floor-plan boundaries replace full-height transparent blue walls. They
+    // remain readable from any orbit, but cannot alpha-stack into opaque blocks.
+    function planBoundaries(y,segments){const v=[];segments.forEach(s=>v.push(s[0],y,s[1],s[2],y,s[3]));const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));home.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x52b7dc,transparent:true,opacity:.42,depthWrite:false})));}
+    function cornerPost(x,z,y0,y1){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x,y0,z),new THREE.Vector3(x,y1,z)]);home.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:0x3b91b4,transparent:true,opacity:.2,depthWrite:false})));}
+    planBoundaries(.155,[[.82,.13,.82,1.52],[.82,.825,2.38,.825]]);
+    planBoundaries(.835,[[1.25,.13,1.25,1.52],[.14,.825,2.36,.825]]);
+    cornerPost(.82,.825,.15,.76);cornerPost(1.25,.825,.83,1.54);
     // Windows are actual translucent emissive planes; only real light state changes them.
     const windows=[];
     function window(w,h,x,y,z,room){
       const recess=new THREE.Mesh(new THREE.PlaneGeometry(w+.12,h+.12),wallInset);recess.position.set(x,y,z-.01);home.add(recess);
       const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),glass.clone());m.position.set(x,y,z+.012);windows.push({m,room});home.add(m);
-      const frameMat=new THREE.MeshStandardMaterial({color:0x596b76,metalness:.72,roughness:.28});
-      for(const [fw,fh,fx,fy] of [[w+.12,.035,x,y+h/2+.035],[w+.12,.035,x,y-h/2-.035],[.035,h+.12,x-w/2-.035,y],[.035,h+.12,x+w/2+.035,y]]){const f=new THREE.Mesh(new THREE.BoxGeometry(fw,fh,.05),frameMat);f.position.set(fx,fy,z+.02);home.add(f);}
+      const frameMat=new THREE.MeshStandardMaterial({color:0x596b76,metalness:.72,roughness:.28}),frame=.021,lip=.024;
+      for(const [fw,fh,fx,fy] of [[w+.08,frame,x,y+h/2+lip],[w+.08,frame,x,y-h/2-lip],[frame,h+.08,x-w/2-lip,y],[frame,h+.08,x+w/2+lip,y]]){const f=new THREE.Mesh(new THREE.BoxGeometry(fw,fh,.05),frameMat);f.position.set(fx,fy,z+.02);home.add(f);}
       return m;
     }
-    window(.84,.44,.60,1.24,D+.012,'bedroom');window(.64,.44,1.74,1.24,D+.013,'upstairs');window(1.02,.42,.68,.49,D+.014,'livingroom');
+    window(.84,.352,.60,1.284,D+.012,'bedroom');window(.64,.352,1.74,1.284,D+.013,'upstairs');window(1.02,.42,.68,.49,D+.014,'livingroom');
     const door=window(.34,.54,1.93,.36,2.013,'door');door.material.color.setHex(0x1a536e);
     // Tiny physical camera details belong to the architecture, not to a UI
     // overlay.  They use existing porch/external camera/motion state below.
