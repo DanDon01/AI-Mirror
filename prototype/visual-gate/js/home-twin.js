@@ -130,7 +130,7 @@ const HomeTwin = (() => {
     const cameraLens=new THREE.Mesh(new THREE.SphereGeometry(.026,10,8),new THREE.MeshBasicMaterial({color:0x285b72,transparent:true,opacity:.5}));cameraLens.position.set(1.86,.98,2.093);frontCamera.add(cameraLens);
     // Curtains remain real-state geometry and slide, rather than changing the window material.
     const curtainMat=new THREE.MeshStandardMaterial({color:0x303a48,metalness:.25,roughness:.65,transparent:true,opacity:.88});
-    const curtains=[new THREE.Mesh(new THREE.BoxGeometry(.48,.43,.025),curtainMat),new THREE.Mesh(new THREE.BoxGeometry(.48,.43,.025),curtainMat.clone())];
+    const curtains=[new THREE.Mesh(new THREE.BoxGeometry(.51,.43,.025),curtainMat),new THREE.Mesh(new THREE.BoxGeometry(.51,.43,.025),curtainMat.clone())];
     curtains.forEach(m=>{m.position.set(.18,.49,D+.03);home.add(m);});
     // Recessed sectional garage door, with physical slats rather than a flat outline.
     const garageDoor=new THREE.Mesh(new THREE.PlaneGeometry(.667,.52),wallInset);garageDoor.position.set(GARAGE_C,.34,1.873);home.add(garageDoor);
@@ -235,7 +235,16 @@ const HomeTwin = (() => {
       doorOpen+=((devices.front_door_open===true?1:0)-doorOpen)*.08;doorPivot.rotation.y=-doorOpen*.95;
       const alarm=String(devices.alarm||''),triggered=/trigger|alarm/.test(alarm),armed=/armed/.test(alarm),alarmColour=triggered?0xf0352e:(armed?0xffaa55:0x3f8fb1),alarmTarget=triggered?1:(armed?.45:0);
       alarmLevel+=(alarmTarget-alarmLevel)*.1;alarmBox.material.emissive.setHex(alarmColour);alarmBox.material.emissiveIntensity=.08+alarmLevel*.8;alarmLed.material.color.setHex(alarmColour);alarmLed.material.opacity=.22+alarmLevel*.7;
-      const openTarget=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);curtainOpen+=(openTarget-curtainOpen)*.09;curtains[0].position.x=.18-(.24*curtainOpen);curtains[1].position.x=.18+(.24*curtainOpen);curtains[0].scale.x=curtains[1].scale.x=.95-curtainOpen*.78;
+      // Open curtains are not merely transparent: they are hidden entirely.
+      // On a state change the two physical panels ease from the side returns
+      // to their respective halves of the window, then reverse and vanish
+      // once the real curtain has fully opened.
+      const openTarget=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);
+      curtainOpen+=(openTarget-curtainOpen)*.018;
+      const closed=1-curtainOpen;
+      curtains[0].position.x=-.60+(.525*closed);
+      curtains[1].position.x=.96-(.525*closed);
+      curtains[0].visible=curtains[1].visible=openTarget<.999||curtainOpen<.992;
       const downTemp=rooms.downstairs&&rooms.downstairs.temperature_c,upTemp=upstairs.temperature_c;
       for(const name of ['hallway','livingroom','kitchen'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||downTemp);
       for(const name of ['bedroom1','bedroom2','bedroom3','bathroom'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||upTemp);
