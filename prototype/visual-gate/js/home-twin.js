@@ -208,7 +208,7 @@ const HomeTwin = (() => {
     // They are outside the shell and share compact point buffers for Pi-safe use.
     function weatherField(count,colour,size){const base=[],live=[];for(let i=0;i<count;i++){const x=-.8+((i*37)%100)/100*4.2,y=.1+((i*53)%100)/100*3.1,z=-.55+((i*71)%100)/100*3.0;base.push(x,y,z);live.push(x,y,z);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(live,3));const m=new THREE.PointsMaterial({color:colour,size,transparent:true,opacity:0,depthWrite:false,sizeAttenuation:true});const p=new THREE.Points(g,m);scene.add(p);return{base,mesh:p,attr:g.attributes.position};}
     const rainField=weatherField(84,0x66bde3,.017),snowField=weatherField(52,0xd4efff,.026),windField=weatherField(38,0x8dbbd3,.014),heatField=weatherField(26,0xffb36a,.022);
-    let curtainOpen=1,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE';
+    let curtainOpen=1,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
     const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
     function thermalColour(value){const t=clamp(Number(value),17,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
@@ -255,10 +255,20 @@ const HomeTwin = (() => {
       else if(upstairs.occupied===true)wanted=roomAnchors.bedroom2;
       const targetFocus=!!wanted;focusLevel+=((targetFocus?1:0)-focusLevel)*.07;
       focusState=targetFocus?(focusLevel<.96?'TRANSITION_IN':'FOCUS'):(focusLevel>.04?'TRANSITION_OUT':'IDLE');
-      const azimuth=Math.sin(now*.035)*(Math.PI/4),radius=7.7;
+      // A long ping-pong orbit.  It is deliberately referenced to the
+      // steady animation clock rather than a timeline transition: left →
+      // right takes about 4.4 minutes, then it returns at the same pace.
+      // This avoids a camera wrap or a fast centre sweep between panels.
+      const azimuth=Math.sin(now*.012)*(Math.PI/4),radius=7.7;
       idleCamera.set(1.25+Math.sin(azimuth)*radius,4.25,.95+Math.cos(azimuth)*radius);
       if(wanted)focusTarget.lerp(new THREE.Vector3(...wanted),.11);else focusTarget.lerp(new THREE.Vector3(1.25,1.08,.95),.055);
       focusCamera.copy(idleCamera).sub(focusTarget).normalize().multiplyScalar(3.1).add(focusTarget);focusCamera.y=Math.max(focusCamera.y,focusTarget.y+1.35);
+      // A newly mounted panel used to start at a fixed left-front camera,
+      // then lerp toward whatever global clock phase happened to be current.
+      // That made its first rendered frames look like a whip-pan.  Adopt the
+      // current orbit position once, then interpolate only between adjacent
+      // orbit frames.
+      if(!cameraReady){camera.position.copy(idleCamera);camera.lookAt(focusTarget);cameraReady=true;}
       camera.position.lerp(idleCamera,.08).lerp(focusCamera,focusLevel);camera.lookAt(focusTarget);
       const fov=35-focusLevel*12;if(Math.abs(camera.fov-fov)>.02){camera.fov=fov;camera.updateProjectionMatrix();}
       home.rotation.y=-.16;home.position.y=0;renderer.render(scene,camera);
