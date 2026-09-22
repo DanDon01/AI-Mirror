@@ -79,7 +79,9 @@ const HomeTwin = (() => {
     const floorMat=new THREE.MeshStandardMaterial({color:0x0b4964,emissive:0x0b8ab6,emissiveIntensity:.38,transparent:true,opacity:.32,depthWrite:false,side:THREE.DoubleSide});
     const partitionMat=new THREE.MeshPhysicalMaterial({color:0x0a3b52,emissive:0x0b4160,emissiveIntensity:.12,transparent:true,opacity:.15,depthWrite:false,side:THREE.DoubleSide});
     function innerFrame(w,d,y){const g=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,.028,d));const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x4db6de,transparent:true,opacity:.38}));l.position.set(W/2,y,D/2);home.add(l);}
-    box(2.28,.045,1.48,floorMat,1.25,.80,.825);innerFrame(2.28,1.48,.80);
+    // The upper slab remains visible through the shell, but without a bright
+    // perimeter that reads as an accidental band through the first-floor windows.
+    box(2.28,.025,1.48,floorMat,1.25,.80,.825);
     box(2.22,.032,1.42,floorMat,1.25,.12,.825);innerFrame(2.22,1.42,.12);
     // Ground floor: a narrow hallway at the left, with living room at the
     // front and kitchen at the back.  Names/anchors intentionally live here
@@ -107,6 +109,15 @@ const HomeTwin = (() => {
     }
     window(.84,.44,.60,1.24,D+.012,'bedroom');window(.64,.44,1.74,1.24,D+.013,'upstairs');window(1.02,.42,.68,.49,D+.014,'livingroom');
     const door=window(.34,.54,1.93,.36,2.013,'door');door.material.color.setHex(0x1a536e);
+    // Tiny physical camera details belong to the architecture, not to a UI
+    // overlay.  They use existing porch/external camera/motion state below.
+    const doorbell=new THREE.Group();home.add(doorbell);
+    const doorbellBody=new THREE.Mesh(new THREE.BoxGeometry(.065,.17,.034),new THREE.MeshStandardMaterial({color:0x18252d,metalness:.72,roughness:.3}));doorbellBody.position.set(1.68,.43,2.035);doorbell.add(doorbellBody);
+    const doorbellLens=new THREE.Mesh(new THREE.SphereGeometry(.019,10,8),new THREE.MeshBasicMaterial({color:0x285b72,transparent:true,opacity:.5}));doorbellLens.position.set(1.68,.47,2.06);doorbell.add(doorbellLens);
+    const frontCamera=new THREE.Group();home.add(frontCamera);
+    const cameraMount=new THREE.Mesh(new THREE.CylinderGeometry(.026,.026,.13,10),new THREE.MeshStandardMaterial({color:0x202b32,metalness:.68,roughness:.34}));cameraMount.rotation.x=Math.PI/2;cameraMount.position.set(1.86,.96,1.98);frontCamera.add(cameraMount);
+    const cameraBody=new THREE.Mesh(new THREE.BoxGeometry(.13,.075,.085),new THREE.MeshStandardMaterial({color:0x17232c,metalness:.64,roughness:.3}));cameraBody.position.set(1.86,.98,2.04);frontCamera.add(cameraBody);
+    const cameraLens=new THREE.Mesh(new THREE.SphereGeometry(.026,10,8),new THREE.MeshBasicMaterial({color:0x285b72,transparent:true,opacity:.5}));cameraLens.position.set(1.86,.98,2.093);frontCamera.add(cameraLens);
     // Curtains remain real-state geometry and slide, rather than changing the window material.
     const curtainMat=new THREE.MeshStandardMaterial({color:0x303a48,metalness:.25,roughness:.65,transparent:true,opacity:.88});
     const curtains=[new THREE.Mesh(new THREE.BoxGeometry(.48,.43,.025),curtainMat),new THREE.Mesh(new THREE.BoxGeometry(.48,.43,.025),curtainMat.clone())];
@@ -126,7 +137,7 @@ const HomeTwin = (() => {
       cell.setAttribute('position',new THREE.Float32BufferAttribute(lines,3));home.add(new THREE.LineSegments(cell,new THREE.LineBasicMaterial({color:0x3a83bb,transparent:true,opacity:.52})));
     }
     // The existing car becomes a real shaded model, still deliberately dark.
-    const car=new THREE.Group();home.add(car);
+    const car=new THREE.Group();car.position.z=.34;home.add(car);
     const carPaint=new THREE.MeshStandardMaterial({color:0x121c27,metalness:.56,roughness:.48});
     const carBody=new THREE.Mesh(new THREE.BoxGeometry(1.3,.16,.5),carPaint);carBody.position.set(.78,.22,2.24);car.add(carBody);
     const bonnet=new THREE.Mesh(new THREE.BoxGeometry(.43,.08,.47),carPaint);bonnet.position.set(1.2,.34,2.24);car.add(bonnet);
@@ -164,12 +175,17 @@ const HomeTwin = (() => {
       amber.intensity=(rooms.livingroom&&rooms.livingroom.light?.28:.02)+eventEnergy*.06;
       const living=rooms.livingroom||{};const open=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);curtains[0].position.x=.68-(.24*open);curtains[1].position.x=.68+(.24*open);curtains[0].scale.x=curtains[1].scale.x=.95-open*.78;
       carChargeLed.material.opacity=state.car&&state.car.charging===true?.42+.14*Math.sin(now*3):0;
+      const cameras=state.cameras||{},porchActive=rooms.porch&&rooms.porch.occupied===true,externalActive=rooms.external&&rooms.external.occupied===true;
+      doorbellLens.material.color.setHex(porchActive?0xffa34a:0x285b72);doorbellLens.material.opacity=porchActive?.7+.15*Math.sin(now*5):(cameras.doorbell ? .5 : .28);
+      cameraLens.material.color.setHex(externalActive?0xffa34a:0x285b72);cameraLens.material.opacity=externalActive?.7+.15*Math.sin(now*5.3):(cameras.external ? .5 : .28);
       for(let g=0;g<3;g++){const level=levels[g],group=particles[g];group.visible=level>.015;flowLines[g].opacity=.025+level*.32;flowLines[g].dashOffset=-now*(.3+level*.75);group.children.forEach((s,i)=>{const t=(now*(.11+level*.23)+i/group.children.length+g*.23)%1;s.position.fromArray(pathAt(paths[g],t));s.material.opacity=(.08+level*.28)*(i%3?1:.62);s.scale.setScalar((.045+level*.052)*(i%3?1:.72));});}
       const phase=now%24,scanning=phase>18&&phase<20.8;
       scan.material.opacity=scanning?.3*Math.sin((phase-18)/2.8*Math.PI):0;
       scan.position.y=.12+(scanning?(phase-18)/2.8*1.72:0);
       holoPoints.material.opacity=.12+(scanning?.12:0)+Math.sin(now*.7)*.025;
-      home.rotation.y=-.16+Math.sin(now*.10)*.025;home.position.y=Math.sin(now*.16)*.018;camera.position.x=-5.1+Math.sin(now*.10)*.11;camera.position.z=5.4+Math.cos(now*.10)*.09;camera.lookAt(1.55,.9,.95);renderer.render(scene,camera);
+      // A slow front-only orbit reveals depth without making the home feel as
+      // though it is rotating.  One 96-second left-to-right-and-back sweep.
+      const orbit=Math.sin(now*.065);home.rotation.y=-.16;home.position.y=Math.sin(now*.16)*.018;camera.position.x=-5.1+orbit*1.05;camera.position.z=5.55+Math.cos(now*.065)*.16;camera.lookAt(1.55,.9,.95);renderer.render(scene,camera);
     },dispose(){renderer.dispose();canvas.remove();}};
   }
   function render(){return '';} // no SVG fallback: the house is a WebGL scene.
