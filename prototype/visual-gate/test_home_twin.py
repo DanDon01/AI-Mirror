@@ -53,6 +53,25 @@ class HomeTelemetryTests(unittest.TestCase):
     def test_home_battery_not_invented(self):
         self.assertNotIn('battery', self.bridge._ha_numbers())
 
+    def test_optional_digital_twin_entities_are_spatial(self):
+        self.entity('porch_light_entity', 'on')
+        self.entity('bedroom2_light_entity', 'off')
+        self.entity('livingroom_spotlights_entity', 'on')
+        self.entity('livingroom_led_entity', 'on')
+        self.entity('livingroom_tv_entity', 'playing')
+        self.entity('alarm_entity', 'armed_away')
+        self.entity('car_presence_entity', 'on')
+        self.entity('upstairs_occupancy_entity', 'on')
+        data = self.bridge._ha_numbers()
+        self.assertTrue(data['rooms']['porch']['light'])
+        self.assertFalse(data['rooms']['bedroom2']['light'])
+        self.assertTrue(data['rooms']['livingroom']['spotlights'])
+        self.assertTrue(data['rooms']['livingroom']['led'])
+        self.assertTrue(data['devices']['tv'])
+        self.assertEqual(data['devices']['alarm'], 'armed_away')
+        self.assertTrue(data['devices']['car_present'])
+        self.assertTrue(data['rooms']['upstairs']['occupied'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -679,6 +679,11 @@ CONFIG = {
         # Optional mappings into the SAME HA snapshot; never separate clients.
         **{key: os.getenv('VISUAL_GATE_' + key.upper(), '') for key in (
             'livingroom_light_entity', 'bedroom_light_entity', 'upstairs_light_entity',
+            'porch_light_entity', 'hall_light_entity',
+            'bedroom1_light_entity', 'bedroom2_light_entity', 'bedroom3_light_entity',
+            'bathroom_light_entity', 'livingroom_spotlights_entity',
+            'livingroom_led_entity', 'livingroom_tv_entity', 'alarm_entity',
+            'car_presence_entity', 'upstairs_occupancy_entity', 'front_door_contact_entity',
             'doorbell_camera_entity', 'external_camera_entity',
             'doorbell_motion_entity', 'external_motion_entity',
             'car_charging_entity', 'battery_soc_entity', 'battery_charging_entity')},

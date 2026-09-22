@@ -305,7 +305,7 @@ body {
 
 /* Architectural geometry and materials: home-twin.css */
 
-.p-energy .foot  { position: absolute; left: 34px; bottom: 27px;
+.p-energy .foot  { position: absolute; z-index: 2; left: 34px; bottom: 27px;
                    display: flex; align-items: flex-end; gap: 27px; }
 .p-energy .bars  { display: flex; align-items: flex-end; gap: 6px; height: 49px; }
 

@@ -35,7 +35,7 @@ const HomeTwin = (() => {
     renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;renderer.outputEncoding=THREE.sRGBEncoding;
     const scene=new THREE.Scene();
     // View from the real home's left-front side: garage and porch lead.
-    const camera=new THREE.PerspectiveCamera(35,660/410,.1,30);camera.position.set(-5.1,3.75,5.4);camera.lookAt(1.25,1.08,.95);
+    const camera=new THREE.PerspectiveCamera(35,660/410,.1,30);camera.position.set(-5.1,4.25,6.5);camera.lookAt(1.25,1.08,.95);
     const home=new THREE.Group();scene.add(home);
     // Both habitable storeys gain the requested 20% vertical volume.  The
     // car cancels this scale locally below, so it stays a normal-sized vehicle.
@@ -161,6 +161,38 @@ const HomeTwin = (() => {
     const chargerBody=new THREE.Mesh(new THREE.BoxGeometry(.05,.22,.13),new THREE.MeshStandardMaterial({color:0x16252d,metalness:.62,roughness:.34}));chargerBody.position.set(1.505,.40,1.83);charger.add(chargerBody);
     const chargerFace=new THREE.Mesh(new THREE.PlaneGeometry(.095,.16),new THREE.MeshStandardMaterial({color:0x173c4c,emissive:0x082d3d,emissiveIntensity:.18,metalness:.3,roughness:.32}));chargerFace.rotation.y=-Math.PI/2;chargerFace.position.set(1.477,.40,1.83);charger.add(chargerFace);
     const chargerLed=new THREE.Mesh(new THREE.SphereGeometry(.014,8,6),new THREE.MeshBasicMaterial({color:0x48bddd,transparent:true,opacity:.3}));chargerLed.position.set(1.47,.43,1.83);charger.add(chargerLed);
+    // Real-light fixtures: deliberately few, spatial and architectural. Each
+    // has a tiny physical source and a gently interpolated local light pool.
+    const fixtures={};
+    function fixture(name,x,y,z,colour=0xffa34a,distance=.8){
+      const mat=new THREE.MeshStandardMaterial({color:0x253039,emissive:colour,emissiveIntensity:.02,metalness:.35,roughness:.35});
+      const source=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.012,12),mat);source.rotation.x=Math.PI/2;source.position.set(x,y,z);home.add(source);
+      const pool=new THREE.PointLight(colour,0,distance,2);pool.position.set(x,y-.035,z);home.add(pool);
+      fixtures[name]={mat,pool,level:0,colour};
+    }
+    fixture('porch',1.93,.69,1.94,0xffa34a,1.15);
+    fixture('hallway',2.02,.66,.82,0xffbd67,.68);
+    fixture('bedroom1',.44,1.48,1.18,0xffbd67,.72);fixture('bedroom2',1.82,1.48,1.18,0xffbd67,.72);
+    fixture('bedroom3',.44,1.48,.47,0xffbd67,.72);fixture('bathroom',1.82,1.48,.47,0xffd594,.62);
+    fixture('livingroom',.72,.67,1.18,0xffaf5b,1.15);
+    fixture('spot1',.18,.67,1.18,0xffc16c,.62);fixture('spot2',.62,.67,1.18,0xffc16c,.62);fixture('spot3',1.06,.67,1.18,0xffc16c,.62);
+    const ledStrip=new THREE.Mesh(new THREE.BoxGeometry(.025,.035,.88),new THREE.MeshStandardMaterial({color:0x142f3c,emissive:0x176987,emissiveIntensity:.04,metalness:.35,roughness:.3}));ledStrip.position.set(X0+.018,.55,.83);home.add(ledStrip);
+    const tvScreen=new THREE.Mesh(new THREE.BoxGeometry(.035,.25,.42),new THREE.MeshStandardMaterial({color:0x070a0d,emissive:0x0a2940,emissiveIntensity:.03,metalness:.25,roughness:.32}));tvScreen.position.set(.70,.45,.22);home.add(tvScreen);
+    const tvGlow=new THREE.PointLight(0x398ec2,0,.9,2);tvGlow.position.set(.66,.45,.30);home.add(tvGlow);
+    // Alarm box occupies the front wall gap between the two upstairs windows.
+    const alarmBox=new THREE.Mesh(new THREE.BoxGeometry(.13,.10,.038),new THREE.MeshStandardMaterial({color:0x17242d,emissive:0x18313e,emissiveIntensity:.08,metalness:.58,roughness:.3}));alarmBox.position.set(.92,1.35,D+.035);home.add(alarmBox);
+    const alarmLed=new THREE.Mesh(new THREE.SphereGeometry(.018,8,6),new THREE.MeshBasicMaterial({color:0x3f8fb1,transparent:true,opacity:.35}));alarmLed.position.set(.92,1.35,D+.06);home.add(alarmLed);
+    // Approximate presence only: sparse, anonymous point silhouettes map a
+    // binary sensor to an area, never to a claimed exact person position.
+    const figures={};
+    function presenceFigure(name,x,y,z){
+      const points=[0,.48,0,-.11,.33,0,.11,.33,0,-.08,.08,0,.08,.08,0,-.14,.22,0,.14,.22,0];
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points,3));
+      const m=new THREE.PointsMaterial({color:0x83dcff,size:.042,transparent:true,opacity:0,depthWrite:false,sizeAttenuation:true});
+      const p=new THREE.Points(g,m);p.position.set(x,y,z);home.add(p);figures[name]={mesh:p,mat:m,level:0};
+    }
+    presenceFigure('porch',1.93,.05,2.10);presenceFigure('external',1.42,.05,2.06);
+    presenceFigure('livingroom',.72,.16,1.10);presenceFigure('bedroom',.44,.84,1.18);presenceFigure('upstairs',1.82,.84,.48);
     scene.add(new THREE.HemisphereLight(0x466477,0x010203,.26));
     const key=new THREE.DirectionalLight(0x9ab9c9,.68);key.position.set(-4,6,5);scene.add(key);
     const rim=new THREE.DirectionalLight(0x28688c,.24);rim.position.set(4,3,-4);scene.add(rim);
@@ -172,22 +204,56 @@ const HomeTwin = (() => {
     const pointPositions=[];for(let i=0;i<42;i++){const x=.14+((i*37)%100)/100*2.22,y=.18+((i*53)%100)/100*1.32,z=.14+((i*71)%100)/100*1.34;pointPositions.push(x,y,z);}
     const pointGeometry=new THREE.BufferGeometry();pointGeometry.setAttribute('position',new THREE.Float32BufferAttribute(pointPositions,3));
     const holoPoints=new THREE.Points(pointGeometry,new THREE.PointsMaterial({color:0x4dceff,size:.018,transparent:true,opacity:.18,depthWrite:false,sizeAttenuation:true}));home.add(holoPoints);
+    let curtainOpen=1,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE';
+    const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
+    const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
+    function thermalColour(value){const t=clamp(Number(value),17,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
+    function setFixture(name,on,intensity=1){const f=fixtures[name];if(!f)return;f.level+=((on?intensity:0)-f.level)*.11;f.mat.emissiveIntensity=.02+f.level*.78;f.pool.intensity=f.level*.72;}
+    function setThermal(name,value){const zone=roomZones[name];if(!zone)return;const valid=num(value),target=valid?thermalColour(value):new THREE.Color(0x0b5270);zone.material.color.lerp(target,.07);zone.material.emissive.lerp(target,.05);const opacity=valid?.075:.035;zone.material.opacity+=(opacity-zone.material.opacity)*.07;}
     return {frame(now){
       if(now-received>30)state={};
       const rooms=state.rooms||{},solarWatts=Math.max(0,Number(state.solar_watts)||0);
       const solarPower=clamp(solarWatts/2800,0,1);
       panels.forEach(m=>{m.material.emissiveIntensity=.1+solarPower*.42;m.material.color.setHSL(.61,.84,.16+solarPower*.07);});
       windows.forEach(w=>{const lit=rooms[w.room]&&rooms[w.room].light===true;w.m.material.color.setHex(lit?0x7a3f14:0x0c496a);w.m.material.emissive.setHex(lit?0xc05a12:0x08263b);w.m.material.emissiveIntensity=lit?.32+.06*Math.sin(now*1.2):.12;});
-      amber.intensity=rooms.livingroom&&rooms.livingroom.light?.28:.02;
-      const living=rooms.livingroom||{};const open=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);curtains[0].position.x=.18-(.24*open);curtains[1].position.x=.18+(.24*open);curtains[0].scale.x=curtains[1].scale.x=.95-open*.78;
+      const living=rooms.livingroom||{},bedroom=rooms.bedroom||{},upstairs=rooms.upstairs||{};
+      setFixture('porch',rooms.porch&&rooms.porch.light===true);setFixture('hallway',rooms.hallway&&rooms.hallway.light===true);
+      setFixture('bedroom1',rooms.bedroom1&&rooms.bedroom1.light===true || bedroom.light===true);setFixture('bedroom2',rooms.bedroom2&&rooms.bedroom2.light===true || upstairs.light===true);setFixture('bedroom3',rooms.bedroom3&&rooms.bedroom3.light===true || upstairs.light===true);setFixture('bathroom',rooms.bathroom&&rooms.bathroom.light===true);
+      setFixture('livingroom',living.light===true);for(const n of ['spot1','spot2','spot3'])setFixture(n,living.spotlights===true,.78);
+      amber.intensity=living.light===true?.28:.02;
+      ledLevel+=((living.led===true?1:0)-ledLevel)*.10;ledStrip.material.emissiveIntensity=.04+ledLevel*.72;
+      const devices=state.devices||{};tvLevel+=((devices.tv===true?1:0)-tvLevel)*.09;tvScreen.material.emissiveIntensity=.03+tvLevel*.62;tvGlow.intensity=tvLevel*.36;
+      const alarm=String(devices.alarm||''),triggered=/trigger|alarm/.test(alarm),armed=/armed/.test(alarm),alarmColour=triggered?0xf0352e:(armed?0xffaa55:0x3f8fb1),alarmTarget=triggered?1:(armed?.45:0);
+      alarmLevel+=(alarmTarget-alarmLevel)*.1;alarmBox.material.emissive.setHex(alarmColour);alarmBox.material.emissiveIntensity=.08+alarmLevel*.8;alarmLed.material.color.setHex(alarmColour);alarmLed.material.opacity=.22+alarmLevel*.7;
+      const openTarget=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);curtainOpen+=(openTarget-curtainOpen)*.09;curtains[0].position.x=.18-(.24*curtainOpen);curtains[1].position.x=.18+(.24*curtainOpen);curtains[0].scale.x=curtains[1].scale.x=.95-curtainOpen*.78;
+      const downTemp=rooms.downstairs&&rooms.downstairs.temperature_c,upTemp=upstairs.temperature_c;
+      for(const name of ['hallway','livingroom','kitchen'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||downTemp);
+      for(const name of ['bedroom1','bedroom2','bedroom3','bathroom'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||upTemp);
       const charging=state.car&&state.car.charging===true;carChargeLed.material.opacity=charging?.42:0;chargerLed.material.color.setHex(charging?0xff9b4a:0x48bddd);chargerLed.material.opacity=charging?.65:.3;
+      car.visible=devices.car_present!==false;
       const cameras=state.cameras||{},porchActive=rooms.porch&&rooms.porch.occupied===true,externalActive=rooms.external&&rooms.external.occupied===true;
       doorbellLens.material.color.setHex(porchActive?0xffa34a:0x285b72);doorbellLens.material.opacity=porchActive?.7+.15*Math.sin(now*5):(cameras.doorbell ? .5 : .28);
       cameraLens.material.color.setHex(externalActive?0xffa34a:0x285b72);cameraLens.material.opacity=externalActive?.7+.15*Math.sin(now*5.3):(cameras.external ? .5 : .28);
+      for(const name of Object.keys(figures)){const f=figures[name],active=rooms[name]&&rooms[name].occupied===true;f.level+=((active?1:0)-f.level)*.12;f.mat.opacity=f.level*.58;}
       holoPoints.material.opacity=.14;
-      // A slow front-only orbit reveals depth without making the home feel as
-      // though it is rotating.  One 96-second left-to-right-and-back sweep.
-      const orbit=Math.sin(now*.065);home.rotation.y=-.16;home.position.y=0;camera.position.x=-5.1+orbit*1.05;camera.position.z=5.55+Math.cos(now*.065)*.16;camera.lookAt(1.25,1.08,.95);renderer.render(scene,camera);
+      // Camera director: an eased 90-degree front-side idle orbit, overridden
+      // by real motion/alarm events.  It manipulates this Three camera only.
+      let wanted=null;
+      if(triggered)wanted=[.92,1.35,D];
+      else if(porchActive)wanted=[1.93,.45,2.0];
+      else if(externalActive)wanted=[1.42,.35,2.06];
+      else if(living.occupied===true)wanted=roomAnchors.livingroom;
+      else if(rooms.bedroom&&rooms.bedroom.occupied===true)wanted=roomAnchors.bedroom1;
+      else if(upstairs.occupied===true)wanted=roomAnchors.bedroom2;
+      const targetFocus=!!wanted;focusLevel+=((targetFocus?1:0)-focusLevel)*.07;
+      focusState=targetFocus?(focusLevel<.96?'TRANSITION_IN':'FOCUS'):(focusLevel>.04?'TRANSITION_OUT':'IDLE');
+      const azimuth=Math.sin(now*.035)*(Math.PI/4),radius=7.7;
+      idleCamera.set(1.25+Math.sin(azimuth)*radius,4.25,.95+Math.cos(azimuth)*radius);
+      if(wanted)focusTarget.lerp(new THREE.Vector3(...wanted),.11);else focusTarget.lerp(new THREE.Vector3(1.25,1.08,.95),.055);
+      focusCamera.copy(idleCamera).sub(focusTarget).normalize().multiplyScalar(3.1).add(focusTarget);focusCamera.y=Math.max(focusCamera.y,focusTarget.y+1.35);
+      camera.position.lerp(idleCamera,.08).lerp(focusCamera,focusLevel);camera.lookAt(focusTarget);
+      const fov=35-focusLevel*12;if(Math.abs(camera.fov-fov)>.02){camera.fov=fov;camera.updateProjectionMatrix();}
+      home.rotation.y=-.16;home.position.y=0;renderer.render(scene,camera);
     },dispose(){renderer.dispose();canvas.remove();}};
   }
   function render(){return '';} // no SVG fallback: the house is a WebGL scene.

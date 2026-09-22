@@ -39,6 +39,11 @@ logger = logging.getLogger("bridge")
 SETTINGS_PATH = os.path.join(HERE, "settings.json")
 TWIN_ENTITIES = {
     'livingroom_light_entity', 'bedroom_light_entity', 'upstairs_light_entity',
+    'porch_light_entity', 'hall_light_entity',
+    'bedroom1_light_entity', 'bedroom2_light_entity', 'bedroom3_light_entity',
+    'bathroom_light_entity', 'livingroom_spotlights_entity',
+    'livingroom_led_entity', 'livingroom_tv_entity', 'alarm_entity',
+    'car_presence_entity', 'upstairs_occupancy_entity', 'front_door_contact_entity',
     'doorbell_camera_entity', 'external_camera_entity',
     'doorbell_motion_entity', 'external_motion_entity', 'car_charging_entity',
     'battery_soc_entity', 'battery_charging_entity',
@@ -491,8 +496,42 @@ class Bridge:
             value = self._ha_boolean(key)
             if value is not None:
                 room_values.setdefault(room, {})['occupied'] = value
+        for room, key in (
+            ('porch', 'porch_light_entity'), ('hallway', 'hall_light_entity'),
+            ('bedroom1', 'bedroom1_light_entity'), ('bedroom2', 'bedroom2_light_entity'),
+            ('bedroom3', 'bedroom3_light_entity'), ('bathroom', 'bathroom_light_entity'),
+        ):
+            value = self._ha_boolean(key)
+            if value is not None:
+                room_values.setdefault(room, {})['light'] = value
+        living = room_values.setdefault('livingroom', {}) if any(
+            self.gate.get(key) for key in ('livingroom_spotlights_entity', 'livingroom_led_entity')
+        ) else None
+        if living is not None:
+            for field, key in (('spotlights', 'livingroom_spotlights_entity'), ('led', 'livingroom_led_entity')):
+                value = self._ha_boolean(key)
+                if value is not None:
+                    living[field] = value
+        devices = {}
+        tv_state = str(self._ha_state(self.gate.get('livingroom_tv_entity')) or '').lower()
+        if tv_state and tv_state not in ('unknown', 'unavailable'):
+            devices['tv'] = tv_state not in ('off', 'standby', 'idle')
+        alarm_state = self._ha_state(self.gate.get('alarm_entity'))
+        if alarm_state is not None and str(alarm_state).lower() not in ('unknown', 'unavailable'):
+            devices['alarm'] = str(alarm_state).lower()
+        car_present = self._ha_boolean('car_presence_entity')
+        if car_present is not None:
+            devices['car_present'] = car_present
+        upstairs_presence = self._ha_boolean('upstairs_occupancy_entity')
+        if upstairs_presence is not None:
+            room_values.setdefault('upstairs', {})['occupied'] = upstairs_presence
+        front_door_open = self._ha_boolean('front_door_contact_entity')
+        if front_door_open is not None:
+            devices['front_door_open'] = front_door_open
         out['cameras'] = {name: bool(self.gate.get(name + '_camera_entity'))
                           for name in ('doorbell', 'external')}
+        if devices:
+            out['devices'] = devices
         soc = _num(self._ha_state(self.gate.get('battery_soc_entity')))
         if soc is not None:
             out['battery'] = {'charge_pct': max(0, min(100, soc))}
