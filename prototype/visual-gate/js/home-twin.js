@@ -287,6 +287,9 @@ const HomeTwin = (() => {
       else if(upstairs.occupied===true)wanted=roomAnchors.bedroom2;
       const targetFocus=!!wanted;focusLevel+=((targetFocus?1:0)-focusLevel)*.07;
       focusState=targetFocus?(focusLevel<.96?'TRANSITION_IN':'FOCUS'):(focusLevel>.04?'TRANSITION_OUT':'IDLE');
+      // During a real event, let the transparent architecture reveal the
+      // active zone instead of overlaying explanatory UI.
+      steel.opacity=.25-focusLevel*.11;roofMat.opacity=.34-focusLevel*.12;wallInset.opacity=.28-focusLevel*.10;
       // A long ping-pong orbit.  It is deliberately referenced to the
       // steady animation clock rather than a timeline transition: left →
       // right takes about 4.4 minutes, then it returns at the same pace.
@@ -294,7 +297,9 @@ const HomeTwin = (() => {
       const azimuth=Math.sin(now*.012)*(Math.PI/4),radius=7.7;
       idleCamera.set(1.25+Math.sin(azimuth)*radius,4.25,.95+Math.cos(azimuth)*radius);
       if(wanted)focusTarget.lerp(new THREE.Vector3(...wanted),.11);else focusTarget.lerp(new THREE.Vector3(1.25,1.08,.95),.055);
-      focusCamera.copy(idleCamera).sub(focusTarget).normalize().multiplyScalar(3.1).add(focusTarget);focusCamera.y=Math.max(focusCamera.y,focusTarget.y+1.35);
+      // Approximately a 2x apparent-size inspection, rather than an
+      // extreme crop that obscures the location of the event.
+      focusCamera.copy(idleCamera).sub(focusTarget).normalize().multiplyScalar(4.7).add(focusTarget);focusCamera.y=Math.max(focusCamera.y,focusTarget.y+1.35);
       // A newly mounted panel used to start at a fixed left-front camera,
       // then lerp toward whatever global clock phase happened to be current.
       // That made its first rendered frames look like a whip-pan.  Adopt the
@@ -302,7 +307,7 @@ const HomeTwin = (() => {
       // orbit frames.
       if(!cameraReady){camera.position.copy(idleCamera);camera.lookAt(focusTarget);cameraReady=true;}
       camera.position.lerp(idleCamera,.08).lerp(focusCamera,focusLevel);camera.lookAt(focusTarget);
-      const fov=35-focusLevel*12;if(Math.abs(camera.fov-fov)>.02){camera.fov=fov;camera.updateProjectionMatrix();}
+      const fov=35-focusLevel*6;if(Math.abs(camera.fov-fov)>.02){camera.fov=fov;camera.updateProjectionMatrix();}
       home.rotation.y=-.16;home.position.y=0;renderer.render(scene,camera);
     },dispose(){renderer.dispose();canvas.remove();}};
   }
