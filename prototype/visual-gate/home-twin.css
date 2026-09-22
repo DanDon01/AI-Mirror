@@ -1,6 +1,6 @@
 /* Opaque architectural surfaces on true black; no internal coloured planes. */
 .p-energy .house { position:absolute; left:0; top:0; width:580px; height:365px; }
-.home-twin-webgl { position:absolute; inset:0; z-index:1; display:block; width:580px; height:365px; pointer-events:none; }
+.home-twin-webgl { position:absolute; inset:0; z-index:1; display:block; width:580px; height:365px; pointer-events:none; transform:scaleX(-1); }
 .home-twin { stroke-linejoin:round; stroke-linecap:round; }
 .home-twin .twin-world { filter:url(#twin-edge); }
 .home-twin .wall { fill:url(#twin-wall); stroke:#85c8ea; stroke-opacity:.8; stroke-width:1.05; }
