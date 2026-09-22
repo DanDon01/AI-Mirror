@@ -301,8 +301,15 @@ const HomeTwin = (() => {
       key.intensity+=( (night?.38:.68)-key.intensity)*.025;
       rim.intensity+=( (night?.34:.24)-rim.intensity)*.025;
       const heavyRain=num(rain)&&rain>=4, snowfall=num(snow)&&snow>0&&condition.includes('snow'), strongWind=num(wind)&&wind>=40, highHeat=num(outsideTemp)&&outsideTemp>=28;
+      const rainStrength=heavyRain?clamp((rain-4)/8,0,1):0;
+      const snowStrength=snowfall?clamp(snow/5,0,1):0;
+      const windStrength=strongWind?clamp((wind-40)/40,0,1):0;
+      const heatStrength=highHeat?clamp((outsideTemp-28)/8,0,1):0;
       function weatherVisible(field,on,opacity,fall,drift=0){field.mesh.material.opacity=on?opacity:0;if(!on)return;const a=field.attr.array;for(let i=0;i<a.length;i+=3){a[i]=field.base[i]+(((now*drift+i*.07)%1)-.5)*.45;a[i+1]=field.base[i+1]-((now*fall+i*.037)%3.2);a[i+2]=field.base[i+2]+(((now*drift+i*.11)%1)-.5)*.2;}field.attr.needsUpdate=true;}
-      weatherVisible(rainField,heavyRain,.48,1.4,strongWind?.32:.06);weatherVisible(snowField,snowfall,.55,.18,strongWind?.12:.025);weatherVisible(windField,strongWind&&!heavyRain&&!snowfall,.2,.04,.45);weatherVisible(heatField,highHeat,.16,-.035,.08);
+      weatherVisible(rainField,heavyRain,.40+rainStrength*.28,1.05+rainStrength*.7,strongWind?.18+windStrength*.28:.05);
+      weatherVisible(snowField,snowfall,.38+snowStrength*.28,.10+snowStrength*.14,strongWind?.06+windStrength*.18:.025);
+      weatherVisible(windField,strongWind&&!heavyRain&&!snowfall,.13+windStrength*.16,.025,.28+windStrength*.30);
+      weatherVisible(heatField,highHeat,.10+heatStrength*.12,-.02-heatStrength*.025,.06+heatStrength*.05);
       // Camera director: an eased 90-degree front-side idle orbit, overridden
       // by real motion/alarm events.  It manipulates this Three camera only.
       let wanted=null;
