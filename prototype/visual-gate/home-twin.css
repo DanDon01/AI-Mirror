@@ -1,17 +1,18 @@
 /* Opaque architectural surfaces on true black; no internal coloured planes. */
 .p-energy .house { position:absolute; left:0; top:0; width:580px; height:365px; }
-.p-energy .house svg.home-twin { width:580px; height:365px; overflow:visible; }
+.home-twin-webgl { position:absolute; inset:0; z-index:1; display:block; width:580px; height:365px; pointer-events:none; }
 .home-twin { stroke-linejoin:round; stroke-linecap:round; }
-.home-twin .wall { fill:#171d25; stroke:#708495; stroke-width:.9; }
-.home-twin .wall.side { fill:#101720; }
-.home-twin .floor-joint { fill:none; stroke:#4e5d6a; stroke-width:.5; }
-.home-twin .roof-plane { fill:#202a35; stroke:#768b9b; stroke-width:.9; }
-.home-twin .roof-hip { fill:#17212b; stroke:#637989; stroke-width:.8; }
+.home-twin .twin-world { filter:url(#twin-edge); }
+.home-twin .wall { fill:url(#twin-wall); stroke:#85c8ea; stroke-opacity:.8; stroke-width:1.05; }
+.home-twin .wall.side { fill:#0a1824; }
+.home-twin .floor-joint { fill:none; stroke:#5fbbe8; stroke-opacity:.6; stroke-width:.65; }
+.home-twin .roof-plane { fill:url(#twin-roof); stroke:#9bd9fa; stroke-opacity:.85; stroke-width:1.05; }
+.home-twin .roof-hip { fill:#102536; stroke:#70bde8; stroke-opacity:.72; stroke-width:.9; }
 .home-twin .chimney { fill:#343334; stroke:#6d6662; stroke-width:.7; }
 .home-twin .chimney.top { fill:#48423d; }
 .home-twin .chimney.side { fill:#28272a; }
-.home-twin .solar-panel { stroke:#99a9b5; stroke-width:.7; }
-.home-twin .solar-cell { fill:none; stroke:#8297a5; stroke-opacity:.58; stroke-width:.35; }
+.home-twin .solar-panel { stroke:#75e4ff; stroke-opacity:.9; stroke-width:.8; filter:drop-shadow(0 0 2px rgba(44,184,255,.7)); }
+.home-twin .solar-cell { fill:none; stroke:#b2f4ff; stroke-opacity:.7; stroke-width:.38; }
 .home-twin .garage, .home-twin .porch { fill:#29272a; stroke:#736c68; stroke-width:.85; }
 .home-twin .garage.side,.home-twin .porch.side { fill:#1c1f25; }
 .home-twin .garage-roof,.home-twin .porch-roof { fill:#303944; stroke:#91a1ad; stroke-width:.8; }
@@ -19,13 +20,13 @@
 .home-twin .garage-slat { fill:none; stroke:#626b73; stroke-width:.45; }
 .home-twin .entrance { fill:#101820; stroke:#a0adb4; stroke-width:.85; }
 .home-twin .door-glass { fill:#29434f; stroke:#697d86; stroke-width:.55; }
-.home-twin .window { fill:#101921; stroke:none; }
-.home-twin .window.lit { fill:#e2b850; }
-.home-twin .window-frame { fill:none; stroke:#91a6b3; stroke-width:.9; }
+.home-twin .window { fill:url(#twin-glass); stroke:none; }
+.home-twin .window.lit { fill:#e7a840; filter:drop-shadow(0 0 5px rgba(255,165,55,.72)); }
+.home-twin .window-frame { fill:none; stroke:#b2e2fa; stroke-opacity:.82; stroke-width:1; }
 .home-twin .mullion { stroke:#8295a2; stroke-width:.55; }
 .home-twin .fabric { fill:#394047; stroke:#697078; stroke-width:.45; }
 .home-twin .pleat { stroke:#171e26; stroke-width:.7; }
-.home-twin .drive-outline { fill:none; stroke:#7f8b94; stroke-width:1; }
+.home-twin .drive-outline { fill:none; stroke:#6dc6eb; stroke-opacity:.55; stroke-width:1; }
 .home-twin .coach { fill:#263240; stroke:#798a99; stroke-width:.65; }
 .home-twin .coach.top { fill:#354351; }
 .home-twin .coach.front { fill:#1d2833; }
@@ -38,7 +39,7 @@
 .home-twin .hub { fill:#8a939b; }
 .home-twin .headlamp { stroke:#a8b7be; stroke-width:1.8; }
 .home-twin .tail-lamp { stroke:#7f4947; stroke-width:1.5; }
-.home-twin .charging { filter:drop-shadow(0 0 5px #bfa45b); }
+.home-twin .charging { filter:drop-shadow(0 0 7px #f1b85d); }
 .home-twin .battery-caption { fill:#b4c8d8; font:20px var(--ff-display); }
 .home-twin .battery-caption rect,.home-twin .battery-caption path { fill:none; stroke:#a4becf; stroke-width:.8; }
 .home-twin .battery-caption .battery-level { fill:#a4becf; stroke:none; }

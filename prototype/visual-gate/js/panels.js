@@ -233,11 +233,15 @@ const Panels = (function () {
       el.className = 'panel ' + made[0];
       el.innerHTML = made[1];
       slots[s.slot].appendChild(el);
+      const home = s.kind === 'energy' ? HomeTwin.mount(el.querySelector('.house')) : null;
+      // A WebGL renderer needs to own its canvas once; subsequent timeline
+      // frames merely advance the scene. This does not affect panel layout.
+      if (home) home(performance.now() / 1000);
       return {
         el: el, from: s.from, to: s.to,
         tilt: s.slot === 0 ? 2.0 : -2.0,
         tick: s.kind === 'cal' ? bladeTicker(el, data.calendar) : null,
-        home: s.kind === 'energy' ? HomeTwin.mount(el.querySelector('.house')) : null,
+        home: home,
       };
     });
   }

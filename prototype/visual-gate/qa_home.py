@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 def main():
     server, port = start_server()
     profile = tempfile.mkdtemp(prefix='mirror-home-qa-')
-    proc = subprocess.Popen([CHROME, '--headless=new', '--disable-gpu',
+    proc = subprocess.Popen([CHROME, '--headless=new',
         '--no-first-run', '--disable-extensions', '--remote-debugging-port=9378',
         '--remote-allow-origins=*', '--user-data-dir=' + profile, 'about:blank'],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -53,25 +53,27 @@ def main():
             # Production layout and panel builder, without live requests.
             html=(HERE/'index.html').read_text(encoding='utf-8')
             html=re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
-            html=html.replace('</body>', '<script src="js/home-twin.js"></script><script src="js/panels.js"></script></body>')
+            html=html.replace('</body>', '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script src="js/home-twin.js"></script><script src="js/panels.js"></script></body>')
             call('Page.setDocumentContent',dict(frameId=call('Page.getFrameTree')['frameTree']['frame']['id'],html=html))
             for _ in range(40):
-                if evaluate("typeof HomeTwin !== 'undefined'"):break
+                if evaluate("typeof HomeTwin !== 'undefined' && typeof THREE !== 'undefined'"):break
                 time.sleep(.1)
+            if not evaluate("typeof HomeTwin !== 'undefined' && typeof THREE !== 'undefined'"):
+                raise RuntimeError('Three.js did not load for visual QA')
             evaluate('document.fonts.ready.then(()=>true)')
             evaluate("document.querySelector('.fixture-mark').textContent='OFFLINE VISUAL QA - SYNTHETIC SENSOR CASE';document.querySelector('.fixture-mark').style.display='block'")
             output=HERE/'shots';output.mkdir(exist_ok=True)
             cases=[('idle', {'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain':'open'}}},20),
               ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},2),
               ('first',{'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},6),
-              ('closed',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},3),
+              ('closed',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},16.7),
               ('partial',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':50,'light':True}}},3)]
             for name,data,t in cases:
                 data['watts_now']=468
                 evaluate(f'Panels.apply({json.dumps({"energy": data})});Panels.frame(10,0)')
                 evaluate(f'HomeTwin.update({json.dumps(data)},0)')
-                for i in range(1,121): evaluate(f'HomeTwin.render({i/24})')
-                evaluate(f'document.querySelector(".house").innerHTML=HomeTwin.render({t})')
+                for i in range(1,121): evaluate(f'Panels.frame(10,{i/24})')
+                evaluate(f'Panels.frame(10,{t})')
                 time.sleep(.1)
                 shot=call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
                 (output/f'home-{name}.png').write_bytes(base64.b64decode(shot['data']))
