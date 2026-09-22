@@ -42,28 +42,42 @@ const HomeTwin = (() => {
     // View from the real home's left-front side: garage and porch lead.
     const camera=new THREE.PerspectiveCamera(31,580/365,.1,30);camera.position.set(-5.1,3.35,5.4);camera.lookAt(1.55,.9,.95);
     const home=new THREE.Group();scene.add(home);
-    const steel=new THREE.MeshStandardMaterial({color:0x1c252e,metalness:.42,roughness:.66});
-    const wallInset=new THREE.MeshStandardMaterial({color:0x090d12,metalness:.18,roughness:.86});
-    const roofMat=new THREE.MeshStandardMaterial({color:0x202831,metalness:.26,roughness:.8,side:THREE.DoubleSide});
-    const edge=new THREE.LineBasicMaterial({color:0x4d7890,transparent:true,opacity:.38});
-    const glass=new THREE.MeshPhysicalMaterial({color:0x0c496a,emissive:0x08263b,emissiveIntensity:.12,metalness:.12,roughness:.12,transparent:true,opacity:.68,side:THREE.DoubleSide});
+    // A deliberately transparent shell: this is a live holographic scan, not
+    // a miniature physical house.  depthWrite is off so floor volumes remain
+    // legible through the smoked outer skin.
+    const steel=new THREE.MeshPhysicalMaterial({color:0x142936,emissive:0x062132,emissiveIntensity:.3,metalness:.38,roughness:.42,transparent:true,opacity:.25,depthWrite:false,side:THREE.DoubleSide});
+    const wallInset=new THREE.MeshStandardMaterial({color:0x061017,emissive:0x082b42,emissiveIntensity:.18,transparent:true,opacity:.28,depthWrite:false,side:THREE.DoubleSide});
+    const roofMat=new THREE.MeshPhysicalMaterial({color:0x162c3a,emissive:0x08263a,emissiveIntensity:.2,metalness:.26,roughness:.55,transparent:true,opacity:.34,depthWrite:false,side:THREE.DoubleSide});
+    const edge=new THREE.LineBasicMaterial({color:0x4d9abe,transparent:true,opacity:.24});
+    const glass=new THREE.MeshPhysicalMaterial({color:0x0c6087,emissive:0x08334d,emissiveIntensity:.2,metalness:.12,roughness:.1,transparent:true,opacity:.46,depthWrite:false,side:THREE.DoubleSide});
     const solar=new THREE.MeshStandardMaterial({color:0x042560,emissive:0x063d98,emissiveIntensity:.12,metalness:.34,roughness:.3,side:THREE.DoubleSide});
     const dark=new THREE.MeshStandardMaterial({color:0x10151b,metalness:.74,roughness:.38});
-    function box(w,h,d,mat,x,y,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);home.add(m);const l=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),edge.clone());l.position.copy(m.position);home.add(l);return m;}
+    function box(w,h,d,mat,x,y,z,outlined=false){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);home.add(m);if(outlined){const l=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),edge.clone());l.position.copy(m.position);home.add(l);}return m;}
     box(W,H,D,steel,W/2,H/2,D/2);
     // Existing pitched roof, garage and porch proportions retained as world coordinates.
     const frontRoof=quad([0,H,D],[W,H,D],[1.96,RIDGE,D/2],[0,RIDGE,D/2],roofMat);home.add(frontRoof);
     const hipRoof=quad([W,H,0],[W,H,D],[1.96,RIDGE,D/2],[1.96,RIDGE,D/2],roofMat);home.add(hipRoof);
     [frontRoof,hipRoof].forEach(m=>home.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),edge.clone())));
-    box(.25,.46,.19,new THREE.MeshStandardMaterial({color:0x302e2f,metalness:.12,roughness:.9}),.445,2.35,.815);
-    box(.77,.71,1.67,new THREE.MeshStandardMaterial({color:0x292b2e,metalness:.32,roughness:.78}),2.885,.355,1.035);
+    box(.25,.46,.19,new THREE.MeshStandardMaterial({color:0x302e2f,metalness:.12,roughness:.9}),.445,2.35,.815,true);
+    box(.77,.71,1.67,new THREE.MeshPhysicalMaterial({color:0x172b37,emissive:0x061c2a,emissiveIntensity:.18,metalness:.28,roughness:.68,transparent:true,opacity:.3,depthWrite:false}),2.885,.355,1.035);
     const gRoof=quad([W,.89,.20],[3.27,.71,.20],[3.27,.71,1.87],[W,.89,1.87],roofMat);home.add(gRoof);home.add(new THREE.LineSegments(new THREE.EdgesGeometry(gRoof.geometry),edge.clone()));
-    box(.54,.72,.32,new THREE.MeshStandardMaterial({color:0x282629,metalness:.22,roughness:.78}),1.93,.36,1.81);
+    box(.54,.72,.32,new THREE.MeshPhysicalMaterial({color:0x182b36,emissive:0x061b29,emissiveIntensity:.15,metalness:.22,roughness:.72,transparent:true,opacity:.32,depthWrite:false}),1.93,.36,1.81);
     const pRoof=quad([1.62,.84,D],[2.24,.84,D],[2.24,.75,2.01],[1.62,.75,2.01],roofMat);home.add(pRoof);
     // Thin fascia/eaves make the pitched roof read as a constructed volume.
     const fascia=new THREE.MeshStandardMaterial({color:0x111821,metalness:.52,roughness:.5});
     function trim(w,h,d,x,y,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),fascia);m.position.set(x,y,z);home.add(m);}
     trim(W+.08,.055,.07,W/2,H,D+.025);trim(.07,.055,D+.08,W+.025,H,D/2);trim(.07,.055,D+.08,-.025,H,D/2);trim(.08,.06,.08,1.96,RIDGE,D/2);
+    // Two suspended illuminated slabs and a few translucent partitions make
+    // the actual two-storey layout immediately readable through the shell.
+    const floorMat=new THREE.MeshStandardMaterial({color:0x0b4964,emissive:0x0b8ab6,emissiveIntensity:.38,transparent:true,opacity:.32,depthWrite:false,side:THREE.DoubleSide});
+    const partitionMat=new THREE.MeshPhysicalMaterial({color:0x0a3b52,emissive:0x0b4160,emissiveIntensity:.18,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide});
+    function innerFrame(w,d,y){const g=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,.028,d));const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x4db6de,transparent:true,opacity:.38}));l.position.set(W/2,y,D/2);home.add(l);}
+    box(2.28,.045,1.48,floorMat,1.25,.80,.825);innerFrame(2.28,1.48,.80);
+    box(2.22,.032,1.42,floorMat,1.25,.12,.825);innerFrame(2.22,1.42,.12);
+    box(.028,.70,1.28,partitionMat,.96,.43,.82);
+    box(.72,.70,.028,partitionMat,1.68,.43,.78);
+    box(.028,.70,1.2,partitionMat,1.26,1.20,.82);
+    box(.65,.70,.028,partitionMat,.79,1.20,.80);
     // Windows are actual translucent emissive planes; only real light state changes them.
     const windows=[];
     function window(w,h,x,y,z,room){
@@ -113,7 +127,14 @@ const HomeTwin = (() => {
     const paths=[[[.72,1.94,.92],[.92,1.45,1.05],[1.2,.83,1.05]],[[4,.17,2.5],[3.1,.35,2.0],[1.2,.78,1.05]],[[1.2,.78,1.05],[1.7,.60,.68],[2.4,.42,.32]]];
     const colours=[0x48d9ff,0xffaf62,0x7ae8ff];
     for(let p=0;p<3;p++){const group=new THREE.Group();home.add(group);for(let i=0;i<16;i++){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:sprite,color:colours[p],transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));s.scale.set(.09,.09,.09);group.add(s);}particles.push(group);const g=new THREE.BufferGeometry().setFromPoints(paths[p].map(v=>new THREE.Vector3(...v)));const m=new THREE.LineDashedMaterial({color:colours[p],transparent:true,opacity:0,dashSize:.09,gapSize:.13,depthWrite:false,blending:THREE.AdditiveBlending});const l=new THREE.Line(g,m);l.computeLineDistances();home.add(l);flowLines.push(m);}
-    const scan=new THREE.Mesh(new THREE.PlaneGeometry(3.3,2.4),new THREE.MeshBasicMaterial({color:0x57d8ff,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));scan.rotation.x=-Math.PI/2;scan.position.set(1.45,.1,1.2);home.add(scan);
+    // Sparse fixed points create a restrained holographic interior, not a
+    // noisy backdrop.  They shimmer gently with the scan state.
+    const pointPositions=[];for(let i=0;i<42;i++){const x=.14+((i*37)%100)/100*2.22,y=.18+((i*53)%100)/100*1.32,z=.14+((i*71)%100)/100*1.34;pointPositions.push(x,y,z);}
+    const pointGeometry=new THREE.BufferGeometry();pointGeometry.setAttribute('position',new THREE.Float32BufferAttribute(pointPositions,3));
+    const holoPoints=new THREE.Points(pointGeometry,new THREE.PointsMaterial({color:0x4dceff,size:.018,transparent:true,opacity:.18,depthWrite:false,sizeAttenuation:true}));home.add(holoPoints);
+    // A travelling, thin rectangular scan contour gives the requested scan
+    // without the broad translucent band that looked like a rendering error.
+    const scan=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.62,.018,1.78)),new THREE.LineBasicMaterial({color:0x63d7ff,transparent:true,opacity:0,depthWrite:false}));scan.position.set(1.31,.1,.89);home.add(scan);
     function pathAt(path,t){const n=path.length-1,i=Math.min(n-1,Math.floor(t*n)),f=t*n-i,a=path[i],b=path[i+1];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];}
     return {frame(now){
       if(now-received>30)state={};
@@ -125,10 +146,11 @@ const HomeTwin = (() => {
       amber.intensity=(rooms.livingroom&&rooms.livingroom.light?.28:.02)+eventEnergy*.06;
       const living=rooms.livingroom||{};const open=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);curtains[0].position.x=.68-(.24*open);curtains[1].position.x=.68+(.24*open);curtains[0].scale.x=curtains[1].scale.x=.95-open*.78;
       carChargeLed.material.opacity=state.car&&state.car.charging===true?.42+.14*Math.sin(now*3):0;
-      for(let g=0;g<3;g++){const level=levels[g],group=particles[g];group.visible=level>.015;flowLines[g].opacity=.03+level*.43;flowLines[g].dashOffset=-now*(.3+level*.75);group.children.forEach((s,i)=>{const t=(now*(.11+level*.23)+i/group.children.length+g*.23)%1;s.position.fromArray(pathAt(paths[g],t));s.material.opacity=(.24+level*.76)*(i%3?1:.62);s.scale.setScalar((.06+level*.075)*(i%3?1:.72));});}
-      // Disabled until it can be reintroduced as a genuinely subtle effect:
-      // a broad translucent plane reads as a rendering defect on the mirror.
-      scan.material.opacity=0;
+      for(let g=0;g<3;g++){const level=levels[g],group=particles[g];group.visible=level>.015;flowLines[g].opacity=.025+level*.32;flowLines[g].dashOffset=-now*(.3+level*.75);group.children.forEach((s,i)=>{const t=(now*(.11+level*.23)+i/group.children.length+g*.23)%1;s.position.fromArray(pathAt(paths[g],t));s.material.opacity=(.08+level*.28)*(i%3?1:.62);s.scale.setScalar((.045+level*.052)*(i%3?1:.72));});}
+      const phase=now%24,scanning=phase>18&&phase<20.8;
+      scan.material.opacity=scanning?.3*Math.sin((phase-18)/2.8*Math.PI):0;
+      scan.position.y=.12+(scanning?(phase-18)/2.8*1.72:0);
+      holoPoints.material.opacity=.12+(scanning?.12:0)+Math.sin(now*.7)*.025;
       home.rotation.y=-.16+Math.sin(now*.10)*.025;home.position.y=Math.sin(now*.16)*.018;camera.position.x=-5.1+Math.sin(now*.10)*.11;camera.position.z=5.4+Math.cos(now*.10)*.09;camera.lookAt(1.55,.9,.95);renderer.render(scene,camera);
     },dispose(){renderer.dispose();canvas.remove();}};
   }
