@@ -247,6 +247,10 @@ const Panels = (function () {
   }
 
   function frame(t, now = performance.now()/1000) {
+    // A house focus frame will replace this immediately.  Resetting at the
+    // panel scheduler level prevents a completed energy slot from leaving
+    // another panel faded after the Three.js canvas has been unmounted.
+    document.documentElement.style.setProperty('--twin-focus', '0');
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
       const p = ramp(t, e.from, e.from + RISE) - ramp(t, e.to - FALL, e.to);

@@ -276,6 +276,11 @@ body {
 
 .panel > * { opacity: var(--content, 1); }
 
+/* During a real house event the Three.js twin becomes the sole emphasis.
+   This is a fade, not a new card or overlay; it resets with every schedule
+   frame when the energy scene is not active. */
+.panel:not(.p-energy) { opacity: calc(1 - var(--twin-focus, 0)); }
+
 .p-head {
   display: flex;
   align-items: center;

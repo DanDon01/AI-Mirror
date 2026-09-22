@@ -6,9 +6,26 @@ const HomeTwin = (() => {
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const num=v=>typeof v==='number'&&Number.isFinite(v);
   let state={}, received=-Infinity;
+  // This survives a panel rebuild when a fresh live snapshot arrives.  A
+  // static HA curtain state must not replay its movement every polling pass.
+  const curtainState={known:false,target:1,open:1,lastAt:null};
+
+  function curtainTarget(data) {
+    const living=data&&data.rooms&&data.rooms.livingroom;
+    if(!living)return null;
+    if(num(living.curtain_position))return clamp(living.curtain_position/100,0,1);
+    if(living.curtain==='closed')return 0;
+    if(living.curtain==='open')return 1;
+    return null;
+  }
 
   function update(data, now=performance.now()/1000) {
     state=data||{}; received=now;
+    const nextCurtain=curtainTarget(state);
+    if(nextCurtain!==null){
+      if(!curtainState.known){curtainState.known=true;curtainState.target=curtainState.open=nextCurtain;}
+      else if(Math.abs(nextCurtain-curtainState.target)>.005){curtainState.target=nextCurtain;curtainState.lastAt=null;}
+    }
   }
   function quad(a,b,c,d,material) {
     const g=new THREE.BufferGeometry();
@@ -219,7 +236,7 @@ const HomeTwin = (() => {
     function thermalLabel(x,y,z){const c=document.createElement('canvas');c.width=256;c.height=96;const ctx=c.getContext('2d');const tex=new THREE.CanvasTexture(c);tex.minFilter=THREE.LinearFilter;const mat=new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0,depthWrite:false,depthTest:false});const sprite=new THREE.Sprite(mat);sprite.position.set(x,y,z);sprite.scale.set(.58,.218,1);home.add(sprite);return{c,ctx,tex,mat,level:0,last:null};}
     const floorTemps={ground:thermalLabel(1.18,.48,1.69),first:thermalLabel(1.18,1.30,1.69)};
     function revealTemperature(label,value){if(!num(value))return;if(label.last===null||Math.abs(label.last-value)>=.05){label.last=value;label.level=1;const ctx=label.ctx;ctx.clearRect(0,0,256,96);ctx.save();ctx.translate(256,0);ctx.scale(-1,1);ctx.font='600 50px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='#46cffa';ctx.shadowBlur=12;ctx.fillStyle='#d9f7ff';ctx.fillText(value.toFixed(1)+'°',128,50);ctx.restore();label.tex.needsUpdate=true;}}
-    let curtainOpen=1,doorOpen=0,carPresence=1,carStateReady=false,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
+    let doorOpen=0,carPresence=1,carStateReady=false,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
     const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
     function thermalColour(value){const t=clamp(Number(value),17,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
@@ -245,12 +262,16 @@ const HomeTwin = (() => {
       // On a state change the two physical panels ease from the side returns
       // to their respective halves of the window, then reverse and vanish
       // once the real curtain has fully opened.
-      const openTarget=num(living.curtain_position)?clamp(living.curtain_position/100,0,1):(living.curtain==='closed'?0:1);
-      curtainOpen+=(openTarget-curtainOpen)*.018;
-      const closed=1-curtainOpen;
+      const openTarget=curtainState.known?curtainState.target:1;
+      const curtainDt=curtainState.lastAt===null?0:clamp(now-curtainState.lastAt,0,.12);
+      curtainState.lastAt=now;
+      // Time-based easing keeps the motion calm on a Pi without becoming a
+      // different speed at a lower frame rate (about 2.5s to settle).
+      curtainState.open+=(openTarget-curtainState.open)*(1-Math.exp(-curtainDt/.8));
+      const closed=1-curtainState.open;
       curtains[0].position.x=-.60+(.525*closed);
       curtains[1].position.x=.96-(.525*closed);
-      curtains[0].visible=curtains[1].visible=openTarget<.999||curtainOpen<.992;
+      curtains[0].visible=curtains[1].visible=openTarget<.999||curtainState.open<.992;
       const downTemp=rooms.downstairs&&rooms.downstairs.temperature_c,upTemp=upstairs.temperature_c;
       for(const name of ['hallway','livingroom','kitchen'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||downTemp);
       for(const name of ['bedroom1','bedroom2','bedroom3','bathroom'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||upTemp);
@@ -293,6 +314,7 @@ const HomeTwin = (() => {
       else if(upstairs.occupied===true)wanted=roomAnchors.bedroom2;
       const targetFocus=!!wanted;focusLevel+=((targetFocus?1:0)-focusLevel)*.07;
       focusState=targetFocus?(focusLevel<.96?'TRANSITION_IN':'FOCUS'):(focusLevel>.04?'TRANSITION_OUT':'IDLE');
+      document.documentElement.style.setProperty('--twin-focus',focusLevel.toFixed(3));
       // During a real event, let the transparent architecture reveal the
       // active zone instead of overlaying explanatory UI.
       steel.opacity=.25-focusLevel*.11;roofMat.opacity=.34-focusLevel*.12;wallInset.opacity=.28-focusLevel*.10;
