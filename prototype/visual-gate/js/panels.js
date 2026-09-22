@@ -154,31 +154,42 @@ const Panels = (function () {
   // ---- 7. News -------------------------------------------------------
 
   function buildNews(e) {
-    // No tracked "NEWS" label above a masthead that already says which
-    // newsroom this came from. One label, not two.
+    // A received item is a single edge-ribbon, not a permanently mounted
+    // news card.  The publisher identifies the source without a second
+    // "NEWS" heading or decorative dashboard furniture.
     return (
-      '<div class="limb">' + Art.limb('nw') + '</div>' +
-      '<div class="src">' + e.source + '</div>' +
-      '<div class="head">' + e.headline + '</div>' +
-      '<div class="rule"></div>' +
-      '<div class="when">' + e.time + '</div>'
+      '<div class="news-ribbon"><span class="news-signal"></span>' +
+      '<span class="news-source">' + e.source + '</span>' +
+      '<span class="news-sep">&#183;</span>' +
+      '<span class="news-headline">' + e.headline + '</span></div>'
     );
+  }
+
+  function newsTicker(root) {
+    const ribbon = root.querySelector('.news-ribbon');
+    return function (p) {
+      // It travels in from the physical right-hand edge and leaves the same
+      // way; the scheduler already gives this a calm hold in the middle.
+      const x = (1 - p) * 510;
+      ribbon.style.transform = 'translate3d(' + x.toFixed(1) + 'px,0,0)';
+      ribbon.style.setProperty('--reveal', p.toFixed(3));
+    };
   }
 
   // ---- 8. Weather detail ---------------------------------------------
 
   const GLYPH = {
     sun:
-      '<g stroke="rgba(151,224,255,0.92)" stroke-width="1.8" fill="none" stroke-linecap="round">' +
+      '<g stroke="rgba(255,207,105,0.94)" stroke-width="1.8" fill="none" stroke-linecap="round">' +
       '<line x1="23" y1="4"  x2="23" y2="10"/><line x1="23" y1="36" x2="23" y2="42"/>' +
       '<line x1="4"  y1="23" x2="10" y2="23"/><line x1="36" y1="23" x2="42" y2="23"/>' +
       '<line x1="9.5" y1="9.5" x2="13.8" y2="13.8"/><line x1="32.2" y1="32.2" x2="36.5" y2="36.5"/>' +
       '<line x1="9.5" y1="36.5" x2="13.8" y2="32.2"/><line x1="32.2" y1="13.8" x2="36.5" y2="9.5"/>' +
-      '</g><circle cx="23" cy="23" r="8.4" fill="rgba(151,224,255,0.18)" stroke="rgba(151,224,255,0.92)" stroke-width="1.8"/>',
+      '</g><circle cx="23" cy="23" r="8.4" fill="rgba(255,192,73,0.20)" stroke="rgba(255,217,132,0.95)" stroke-width="1.8"/>',
     cloud:
       '<path d="M9 35h27a7 7 0 0 0 0-14 11 11 0 0 0-21-1 7.5 7.5 0 0 0-6 15Z" fill="rgba(151,224,255,0.10)" stroke="rgba(151,224,255,0.9)" stroke-width="1.8"/>',
     partly:
-      '<circle cx="31" cy="15" r="7.4" fill="rgba(151,224,255,0.13)" stroke="rgba(151,224,255,0.85)" stroke-width="1.6"/>' +
+      '<circle cx="31" cy="15" r="7.4" fill="rgba(255,192,73,0.18)" stroke="rgba(255,217,132,0.92)" stroke-width="1.6"/>' +
       '<path d="M8 36h26a7 7 0 0 0 0-13 10 10 0 0 0-19-1 7.5 7.5 0 0 0-7 14Z" fill="rgba(151,224,255,0.10)" stroke="rgba(151,224,255,0.9)" stroke-width="1.8"/>',
     rain:
       '<path d="M8 28h27a7 7 0 0 0 0-14 10 10 0 0 0-19-1 7 7 0 0 0-8 15Z" fill="rgba(151,224,255,0.08)" stroke="rgba(151,224,255,0.9)" stroke-width="1.8"/>' +
@@ -240,7 +251,8 @@ const Panels = (function () {
       return {
         el: el, from: s.from, to: s.to,
         tilt: s.slot === 0 ? 2.0 : -2.0,
-        tick: s.kind === 'cal' ? bladeTicker(el, data.calendar) : null,
+        tick: s.kind === 'cal' ? bladeTicker(el, data.calendar) :
+          (s.kind === 'news' ? newsTicker(el) : null),
         home: home,
       };
     });

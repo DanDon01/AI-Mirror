@@ -73,7 +73,6 @@ body {
 }
 
 .stamp .time {
-  margin-top: 12px;
   font-family: var(--ff-display);
   font-size: 114px;
   line-height: 0.86;
@@ -82,18 +81,31 @@ body {
   color: var(--ink);
 }
 
+.stamp-row {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  margin-top: 12px;
+}
+
+.stamp-weather {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 .stamp .temp {
-  margin-top: 8px;
   font-family: var(--ff-display);
-  font-size: 72px;
+  font-size: 61px;
   line-height: 0.9;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 
 .stamp .cond {
-  margin-top: 11px;
-  font-size: 20px;
+  font-size: 18px;
   color: var(--ink-3);
 }
 
@@ -379,37 +391,32 @@ body {
 
 /* ---- 7. News ---- */
 
-/* A whole sphere now, not a limb. It used to be a much larger circle
-   with its centre off the panel, cropped to an arc by the card's edge -
-   with no card there is nothing to crop it, and an arc that stops in
-   mid-air reads as a stray line. */
-.p-news .limb {
-  position: absolute;
-  left: 300px; bottom: 18px;
-  width: 232px; height: 232px;
-}
-.p-news .src {
-  display: inline-block;
-  margin-top: 4px; padding: 7px 13px;
-  font-size: 20px; font-weight: 700; letter-spacing: 0.08em;
-  color: #0B0D12; background: var(--ink);
-}
-.p-news .head {
-  position: relative;
-  margin-top: 29px;
-  font-family: var(--ff-display);
-  font-size: 47px; line-height: 1.16;
+.p-news { overflow: visible; }
+.p-news .news-ribbon {
+  position: absolute; right: -34px; top: 144px;
+  width: 640px; min-height: 96px;
+  display: flex; align-items: center; gap: 15px;
+  padding: 0 28px 0 25px;
+  box-sizing: border-box;
   color: var(--ink);
+  background: linear-gradient(90deg, rgba(97,160,208,0.02), rgba(122,190,234,0.16) 14%, rgba(24,55,82,0.30) 74%, rgba(113,184,230,0.10));
+  border-top: 1px solid rgba(168,220,255,calc(0.14 + var(--reveal, 0) * 0.46));
+  border-bottom: 1px solid rgba(168,220,255,calc(0.08 + var(--reveal, 0) * 0.30));
+  box-shadow: -28px 0 52px rgba(54,147,211,calc(0.02 + var(--reveal, 0) * 0.10));
+  will-change: transform;
 }
-.p-news .rule {
-  position: absolute; left: 34px; bottom: 76px;
-  width: 94px; height: 2px;
-  background: linear-gradient(to right, rgba(226,236,255,0.85), rgba(226,236,255,0.10));
+.p-news .news-ribbon::before {
+  content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 2px;
+  background: linear-gradient(#d9f3ff, rgba(101,194,245,0.15));
+  box-shadow: 0 0 16px rgba(108,205,255,0.48);
 }
-.p-news .when {
-  position: absolute; left: 34px; bottom: 36px;
-  font-size: 20px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+.p-news .news-signal {
+  flex: none; width: 10px; height: 10px; border-radius: 50%;
+  background: #bceaff; box-shadow: 0 0 15px rgba(146,218,255,0.86);
 }
+.p-news .news-source { flex: none; font-size: 18px; font-weight: 700; letter-spacing: .07em; color: #b8ddf3; }
+.p-news .news-sep { color: rgba(188,226,246,.45); font-size: 26px; }
+.p-news .news-headline { font-family: var(--ff-display); font-size: 35px; line-height: 1.08; color: var(--ink); }
 
 /* ---- 8. Weather detail ---- */
 

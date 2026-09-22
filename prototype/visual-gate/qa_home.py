@@ -53,7 +53,7 @@ def main():
             # Production layout and panel builder, without live requests.
             html=(HERE/'index.html').read_text(encoding='utf-8')
             html=re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
-            html=html.replace('</body>', '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script src="js/home-twin.js"></script><script src="js/panels.js"></script></body>')
+            html=html.replace('</body>', '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script src="js/frame.js"></script><script src="js/home-twin.js"></script><script src="js/panels.js"></script></body>')
             call('Page.setDocumentContent',dict(frameId=call('Page.getFrameTree')['frameTree']['frame']['id'],html=html))
             for _ in range(40):
                 if evaluate("typeof HomeTwin !== 'undefined' && typeof THREE !== 'undefined'"):break
@@ -61,9 +61,11 @@ def main():
             if not evaluate("typeof HomeTwin !== 'undefined' && typeof THREE !== 'undefined'"):
                 raise RuntimeError('Three.js did not load for visual QA')
             evaluate('document.fonts.ready.then(()=>true)')
+            evaluate("Frame.apply({weather:{temperature_c:18,condition_label:'Partly cloudy'}})")
             evaluate("document.querySelector('.fixture-mark').textContent='OFFLINE VISUAL QA - SYNTHETIC SENSOR CASE';document.querySelector('.fixture-mark').style.display='block'")
             output=HERE/'shots';output.mkdir(exist_ok=True)
             cases=[('idle', {'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain':'open'}}},20),
+              ('news',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},20),
               ('night',{'watts_now':468,'weather':{'is_night':True},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
               ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},2),
               ('export',{'watts_now':-900,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
@@ -80,18 +82,24 @@ def main():
               ('curtain-focus',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':0,'light':True}}},3)]
             for name,data,t in cases:
                 data.setdefault('watts_now',468)
-                evaluate(f'Panels.apply({json.dumps({"energy": data})});Panels.frame(10,0)')
+                payload={"energy": data}
+                if name == 'news':
+                    payload['event']={'source':'BBC','headline':'A real headline enters from the mirror edge','time':'12:42'}
+                evaluate(f'Panels.apply({json.dumps(payload)});Panels.frame({t},0)')
                 evaluate(f'HomeTwin.update({json.dumps(data)},0)')
-                for i in range(1,121): evaluate(f'Panels.frame(10,{i/24})')
+                for i in range(1,121): evaluate(f'Panels.frame({t},{i/24})')
                 # Keep the scene clock deterministic for the captured frame.
                 # Omitting the second argument would jump the camera to the
                 # browser's unrelated performance clock immediately before
                 # capture, masking actual layout regressions.
-                evaluate(f'Panels.frame(10,{t},{t})')
+                evaluate(f'Panels.frame({t},{t},{t})')
                 time.sleep(.1)
                 shot=call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
                 (output/f'home-{name}.png').write_bytes(base64.b64decode(shot['data']))
-                shot=call('Page.captureScreenshot',{'format':'png','clip':{'x':70,'y':330,'width':620,'height':480,'scale':2}})
+                clip={'x':70,'y':330,'width':620,'height':480,'scale':2}
+                if name == 'news':
+                    clip={'x':750,'y':330,'width':690,'height':480,'scale':2}
+                shot=call('Page.captureScreenshot',{'format':'png','clip':clip})
                 (output/f'home-{name}-detail.png').write_bytes(base64.b64decode(shot['data']))
                 print(name,flush=True)
     finally:
