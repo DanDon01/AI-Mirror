@@ -110,6 +110,8 @@ const Markets = (function () {
 
   let run = null;
   let runWidth = 0;
+  let pendingQuotes = null;
+  let scrollOrigin = 0;
 
   /** A sparkline, drawn to the same scale as its own extremes so a quiet
       stock still shows shape rather than a flat line. */
@@ -154,6 +156,24 @@ const Markets = (function () {
 
   let signature = '';
 
+  // State carries incidental fields such as refresh timestamps. They are not
+  // visual quote changes, and using the raw response as a signature caused the
+  // rail to be rebuilt during its scroll on every bridge poll.
+  function quoteSignature(quotes) {
+    return JSON.stringify(quotes.map(function (q) {
+      return [q.sym, q.price, q.pct, q.currency, q.spark || []];
+    }));
+  }
+
+  function rebuild(quotes, nextSignature) {
+    const once = quotes.map(cell).join('');
+    // Two copies, so the scroll can wrap by a whole run width and no gap
+    // ever crosses the rail. Measured after layout, not assumed.
+    run.innerHTML = once + once;
+    runWidth = run.scrollWidth / 2;
+    signature = nextSignature;
+  }
+
   /** Rebuild only when the quotes actually changed.
 
       Re-rendering on every poll would restart the scroll from zero
@@ -166,24 +186,38 @@ const Markets = (function () {
       rail.hidden = true;
       runWidth = 0;
       signature = '';
+      pendingQuotes = null;
+      scrollOrigin = 0;
       return;
     }
     rail.hidden = false;
 
-    const next = JSON.stringify(quotes);
-    if (next === signature) return;
-    signature = next;
+    const next = quoteSignature(quotes);
+    if (next === signature || (pendingQuotes && pendingQuotes.signature === next)) return;
 
-    const once = quotes.map(cell).join('');
-    // Two copies, so the scroll can wrap by a whole run width and no gap
-    // ever crosses the rail. Measured after layout, not assumed.
-    run.innerHTML = once + once;
-    runWidth = run.scrollWidth / 2;
+    // Initial content has no scroll to protect. Thereafter retain the current
+    // GPU layer and queue real quote changes for the next invisible wrap.
+    if (!runWidth) rebuild(quotes, next);
+    else pendingQuotes = { quotes: quotes, signature: next };
   }
 
   function frame(t) {
     if (!runWidth) return;
-    const x = -((t * PX_PER_SECOND) % runWidth);
+    let phase = ((t - scrollOrigin) * PX_PER_SECOND) % runWidth;
+    // Rebuild only at the join between the duplicate runs. At phase zero the
+    // old and new copies are visually identical, so an updated quote cannot
+    // produce a hitch or a backwards jump halfway across the mirror.
+    if (pendingQuotes && phase < 2.2) {
+      const pending = pendingQuotes;
+      pendingQuotes = null;
+      rebuild(pending.quotes, pending.signature);
+      // A fresh run may have a different width. Start its coordinate system
+      // at this exact join instead of modulo-wrapping the current wall time
+      // against the new width, which would otherwise create a visible jump.
+      scrollOrigin = t;
+      phase = 0;
+    }
+    const x = -phase;
     run.style.transform = 'translate3d(' + x.toFixed(1) + 'px,0,0)';
   }
 

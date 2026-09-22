@@ -64,22 +64,22 @@ def main():
             evaluate("Frame.apply({weather:{temperature_c:18,condition_label:'Partly cloudy'}})")
             evaluate("document.querySelector('.fixture-mark').textContent='OFFLINE VISUAL QA - SYNTHETIC SENSOR CASE';document.querySelector('.fixture-mark').style.display='block'")
             output=HERE/'shots';output.mkdir(exist_ok=True)
-            cases=[('idle', {'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain':'open'}}},20),
-              ('news',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},20),
-              ('night',{'watts_now':468,'weather':{'is_night':True},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
-              ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},2),
-              ('export',{'watts_now':-900,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
-              ('charger',{'watts_now':6200,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},5),
-              ('car-away',{'watts_now':468,'devices':{'car_present':False},'rooms':{'livingroom':{'curtain_position':100}}},5),
-              ('heavy-rain',{'watts_now':468,'weather':{'rain_mm_h':5.2,'wind_mph':42,'temperature_c':12,'condition':'rain'},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},7),
-              ('door-open',{'watts_now':468,'car':{'charge_pct':42},'devices':{'front_door_open':True},'rooms':{'livingroom':{'curtain_position':100}}},8),
-              ('first',{'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},6),
-              ('closed',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},16.7),
+            cases=[('idle', {'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain':'open'}}},66),
+              ('news',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},46),
+              ('night',{'watts_now':468,'weather':{'is_night':True},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},66),
+              ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},66),
+              ('export',{'watts_now':-900,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},66),
+              ('charger',{'watts_now':6200,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},66),
+              ('car-away',{'watts_now':468,'devices':{'car_present':False},'rooms':{'livingroom':{'curtain_position':100}}},66),
+              ('heavy-rain',{'watts_now':468,'weather':{'rain_mm_h':5.2,'wind_mph':42,'temperature_c':12,'condition':'rain'},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},66),
+              ('door-open',{'watts_now':468,'car':{'charge_pct':42},'devices':{'front_door_open':True},'rooms':{'livingroom':{'curtain_position':100}}},66),
+              ('first',{'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},66),
+              ('closed',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},66),
               # Same closed HA snapshot after a panel rebuild: it must remain
               # closed rather than replaying its animation on every poll.
-              ('closed-repoll',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},16.7),
-              ('partial',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':50,'light':True}}},3),
-              ('curtain-focus',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':0,'light':True}}},3)]
+              ('closed-repoll',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},66),
+              ('partial',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':50,'light':True}}},66),
+              ('curtain-focus',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':0,'light':True}}},66)]
             for name,data,t in cases:
                 data.setdefault('watts_now',468)
                 payload={"energy": data}
@@ -96,7 +96,7 @@ def main():
                 time.sleep(.1)
                 shot=call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
                 (output/f'home-{name}.png').write_bytes(base64.b64decode(shot['data']))
-                clip={'x':70,'y':330,'width':620,'height':480,'scale':2}
+                clip={'x':690,'y':1510,'width':730,'height':610,'scale':2}
                 if name == 'news':
                     clip={'x':750,'y':330,'width':690,'height':480,'scale':2}
                 shot=call('Page.captureScreenshot',{'format':'png','clip':clip})

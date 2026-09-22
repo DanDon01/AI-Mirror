@@ -22,7 +22,7 @@ const Panels = (function () {
   const SCHEDULE = [
     { slot: 0, kind: 'cal',    from: 20.0, to: 34.0 },
     { slot: 0, kind: 'news',   from: 40.0, to: 54.0 },
-    { slot: 1, kind: 'energy', from: 60.0, to: 74.0 },
+    { slot: 1, kind: 'energy', from: 60.0, to: 78.0 },
   ];
 
   const RISE = 1.25;   // seconds of arrival
@@ -228,7 +228,7 @@ const Panels = (function () {
   // ---- assembly ------------------------------------------------------
 
   const BUILD = {
-    energy: function (d) { return ['p-energy', buildEnergy(d.energy)]; },
+    energy: function (d) { return ['p-energy', buildEnergy(d.energy || {})]; },
     cal:    function (d) { return ['p-cal', buildCalendar(d.calendar)]; },
     news:   function (d) { return ['p-news', buildNews(d.event)]; },
     wx:     function (d) { return ['p-wx', buildWeather(d.weather)]; },
@@ -243,7 +243,11 @@ const Panels = (function () {
     slots.forEach(function (slot) { slot.innerHTML = ''; });
     const visible = data._visibility || {};
     const available = {
-      energy: visible.energy !== false && !!data.energy,
+      // The house is still a valuable live digital twin when the meter is
+      // briefly unavailable: no watt figure is drawn, but genuine room,
+      // weather and home state can continue to be represented. A user toggle
+      // remains authoritative.
+      energy: visible.energy !== false,
       cal: visible.calendar !== false && Array.isArray(data.calendar) && data.calendar.length > 0,
       news: visible.news !== false && !!data.event,
       wx: visible.weather !== false && !!data.weather,

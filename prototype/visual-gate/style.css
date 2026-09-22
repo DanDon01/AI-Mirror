@@ -539,25 +539,6 @@ body {
 /* A run of cells scrolls under this, so it has to be wide enough to fade
    one out completely before the label. A narrow plate with a hard edge
    leaves half a price sitting under the word. */
-.markets-more {
-  position: absolute;
-  z-index: 2;
-  right: 0; top: 0;
-  width: 370px; height: 132px;
-  display: flex; align-items: center; justify-content: flex-end; gap: 12px;
-  padding-right: 39px;
-  font-size: 19px; font-weight: 500; letter-spacing: 0.22em;
-  text-transform: uppercase; color: #6E7482;
-  background: linear-gradient(to right, rgba(0,0,0,0) 0%, #000 34%, #000 100%);
-}
-.markets-more::before {
-  content: "";
-  position: absolute;
-  left: 202px; top: 0; bottom: 0;
-  width: 1px;
-  background: rgba(154, 184, 232, 0.16);
-}
-
 /* ======================= UTILITY ========================== */
 
 /* Moved to the top: the rail now sits where this used to. */
