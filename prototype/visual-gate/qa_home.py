@@ -67,6 +67,7 @@ def main():
               ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},2),
               ('export',{'watts_now':-900,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
               ('charger',{'watts_now':6200,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},5),
+              ('car-away',{'watts_now':468,'devices':{'car_present':False},'rooms':{'livingroom':{'curtain_position':100}}},5),
               ('heavy-rain',{'watts_now':468,'weather':{'rain_mm_h':5.2,'wind_mph':42,'temperature_c':12,'condition':'rain'},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},7),
               ('door-open',{'watts_now':468,'car':{'charge_pct':42},'devices':{'front_door_open':True},'rooms':{'livingroom':{'curtain_position':100}}},8),
               ('first',{'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},6),
@@ -77,7 +78,11 @@ def main():
                 evaluate(f'Panels.apply({json.dumps({"energy": data})});Panels.frame(10,0)')
                 evaluate(f'HomeTwin.update({json.dumps(data)},0)')
                 for i in range(1,121): evaluate(f'Panels.frame(10,{i/24})')
-                evaluate(f'Panels.frame(10,{t})')
+                # Keep the scene clock deterministic for the captured frame.
+                # Omitting the second argument would jump the camera to the
+                # browser's unrelated performance clock immediately before
+                # capture, masking actual layout regressions.
+                evaluate(f'Panels.frame(10,{t},{t})')
                 time.sleep(.1)
                 shot=call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
                 (output/f'home-{name}.png').write_bytes(base64.b64decode(shot['data']))

@@ -213,7 +213,13 @@ const HomeTwin = (() => {
     // They are outside the shell and share compact point buffers for Pi-safe use.
     function weatherField(count,colour,size){const base=[],live=[];for(let i=0;i<count;i++){const x=-.8+((i*37)%100)/100*4.2,y=.1+((i*53)%100)/100*3.1,z=-.55+((i*71)%100)/100*3.0;base.push(x,y,z);live.push(x,y,z);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(live,3));const m=new THREE.PointsMaterial({color:colour,size,transparent:true,opacity:0,depthWrite:false,sizeAttenuation:true});const p=new THREE.Points(g,m);scene.add(p);return{base,mesh:p,attr:g.attributes.position};}
     const rainField=weatherField(84,0x66bde3,.017),snowField=weatherField(52,0xd4efff,.026),windField=weatherField(38,0x8dbbd3,.014),heatField=weatherField(26,0xffb36a,.022);
-    let curtainOpen=1,doorOpen=0,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
+    // Temperature is normally communicated by the quiet thermal volumes.
+    // A reading only materialises briefly when live HA data first arrives or
+    // actually changes, and is anchored at the appropriate storey.
+    function thermalLabel(x,y,z){const c=document.createElement('canvas');c.width=256;c.height=96;const ctx=c.getContext('2d');const tex=new THREE.CanvasTexture(c);tex.minFilter=THREE.LinearFilter;const mat=new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0,depthWrite:false,depthTest:false});const sprite=new THREE.Sprite(mat);sprite.position.set(x,y,z);sprite.scale.set(.58,.218,1);home.add(sprite);return{c,ctx,tex,mat,level:0,last:null};}
+    const floorTemps={ground:thermalLabel(1.18,.48,1.69),first:thermalLabel(1.18,1.30,1.69)};
+    function revealTemperature(label,value){if(!num(value))return;if(label.last===null||Math.abs(label.last-value)>=.05){label.last=value;label.level=1;const ctx=label.ctx;ctx.clearRect(0,0,256,96);ctx.save();ctx.translate(256,0);ctx.scale(-1,1);ctx.font='600 50px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='#46cffa';ctx.shadowBlur=12;ctx.fillStyle='#d9f7ff';ctx.fillText(value.toFixed(1)+'°',128,50);ctx.restore();label.tex.needsUpdate=true;}}
+    let curtainOpen=1,doorOpen=0,carPresence=1,carStateReady=false,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
     const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
     function thermalColour(value){const t=clamp(Number(value),17,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
@@ -248,8 +254,19 @@ const HomeTwin = (() => {
       const downTemp=rooms.downstairs&&rooms.downstairs.temperature_c,upTemp=upstairs.temperature_c;
       for(const name of ['hallway','livingroom','kitchen'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||downTemp);
       for(const name of ['bedroom1','bedroom2','bedroom3','bathroom'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||upTemp);
+      revealTemperature(floorTemps.ground,downTemp);revealTemperature(floorTemps.first,upTemp);
+      for(const label of Object.values(floorTemps)){label.level*=.993;label.mat.opacity=label.level*.78;}
       carChargeLed.material.opacity=0;chargerLed.material.color.setHex(chargerLoad?0xff9b4a:0x48bddd);chargerLed.material.opacity=chargerLoad?.65:.3;chargerFace.material.emissive.setHex(chargerLoad?0x9a4b16:0x082d3d);chargerFace.material.emissiveIntensity=chargerLoad?.65:.18;
-      car.visible=devices.car_present!==false;
+      // Presence drives an understated driveway arrival/departure rather than
+      // an abrupt visibility toggle.  The first live state is adopted
+      // directly, so a page opened while the car is away never plays a fake
+      // departure animation.
+      const carTarget=devices.car_present===false?0:1;
+      if(!carStateReady){carPresence=carTarget;carStateReady=true;}
+      else carPresence+=(carTarget-carPresence)*.018;
+      car.visible=carTarget>0||carPresence>.012;
+      car.position.z=.34+(1-carPresence)*1.45;
+      car.scale.x=car.scale.z=.88+carPresence*.12;
       const cameras=state.cameras||{},porchActive=rooms.porch&&rooms.porch.occupied===true,externalActive=rooms.external&&rooms.external.occupied===true;
       doorbellLens.material.color.setHex(porchActive?0xffa34a:0x285b72);doorbellLens.material.opacity=porchActive?.7+.15*Math.sin(now*5):(cameras.doorbell ? .5 : .28);
       cameraLens.material.color.setHex(externalActive?0xffa34a:0x285b72);cameraLens.material.opacity=externalActive?.7+.15*Math.sin(now*5.3):(cameras.external ? .5 : .28);
