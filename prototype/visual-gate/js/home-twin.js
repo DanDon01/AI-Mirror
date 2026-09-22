@@ -212,8 +212,8 @@ const HomeTwin = (() => {
     function setThermal(name,value){const zone=roomZones[name];if(!zone)return;const valid=num(value),target=valid?thermalColour(value):new THREE.Color(0x0b5270);zone.material.color.lerp(target,.07);zone.material.emissive.lerp(target,.05);const opacity=valid?.075:.035;zone.material.opacity+=(opacity-zone.material.opacity)*.07;}
     return {frame(now){
       if(now-received>30)state={};
-      const rooms=state.rooms||{},solarWatts=Math.max(0,Number(state.solar_watts)||0);
-      const solarPower=clamp(solarWatts/2800,0,1);
+      const rooms=state.rooms||{},wattsNow=Number(state.watts_now),exporting=num(wattsNow)&&wattsNow<0,chargerLoad=num(wattsNow)&&wattsNow>6000;
+      const solarPower=exporting?clamp(Math.abs(wattsNow)/2800,0,1):0;
       panels.forEach(m=>{m.material.emissiveIntensity=.1+solarPower*.42;m.material.color.setHSL(.61,.84,.16+solarPower*.07);});
       windows.forEach(w=>{const lit=rooms[w.room]&&rooms[w.room].light===true;w.m.material.color.setHex(lit?0x7a3f14:0x0c496a);w.m.material.emissive.setHex(lit?0xc05a12:0x08263b);w.m.material.emissiveIntensity=lit?.32+.06*Math.sin(now*1.2):.12;});
       const living=rooms.livingroom||{},bedroom=rooms.bedroom||{},upstairs=rooms.upstairs||{};
@@ -229,7 +229,7 @@ const HomeTwin = (() => {
       const downTemp=rooms.downstairs&&rooms.downstairs.temperature_c,upTemp=upstairs.temperature_c;
       for(const name of ['hallway','livingroom','kitchen'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||downTemp);
       for(const name of ['bedroom1','bedroom2','bedroom3','bathroom'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||upTemp);
-      const charging=state.car&&state.car.charging===true;carChargeLed.material.opacity=charging?.42:0;chargerLed.material.color.setHex(charging?0xff9b4a:0x48bddd);chargerLed.material.opacity=charging?.65:.3;
+      carChargeLed.material.opacity=0;chargerLed.material.color.setHex(chargerLoad?0xff9b4a:0x48bddd);chargerLed.material.opacity=chargerLoad?.65:.3;chargerFace.material.emissive.setHex(chargerLoad?0x9a4b16:0x082d3d);chargerFace.material.emissiveIntensity=chargerLoad?.65:.18;
       car.visible=devices.car_present!==false;
       const cameras=state.cameras||{},porchActive=rooms.porch&&rooms.porch.occupied===true,externalActive=rooms.external&&rooms.external.occupied===true;
       doorbellLens.material.color.setHex(porchActive?0xffa34a:0x285b72);doorbellLens.material.opacity=porchActive?.7+.15*Math.sin(now*5):(cameras.doorbell ? .5 : .28);

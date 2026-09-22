@@ -65,11 +65,13 @@ def main():
             output=HERE/'shots';output.mkdir(exist_ok=True)
             cases=[('idle', {'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain':'open'}}},20),
               ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},2),
+              ('export',{'watts_now':-900,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},4),
+              ('charger',{'watts_now':6200,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},5),
               ('first',{'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},6),
               ('closed',{'solar_watts':2500,'car':{'charge_pct':42,'charging':True},'rooms':{'livingroom':{'curtain_position':0,'light':True,'occupied':True},'bedroom':{'occupied':True,'light':True},'porch':{'occupied':True},'external':{'occupied':True}}},16.7),
               ('partial',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':50,'light':True}}},3)]
             for name,data,t in cases:
-                data['watts_now']=468
+                data.setdefault('watts_now',468)
                 evaluate(f'Panels.apply({json.dumps({"energy": data})});Panels.frame(10,0)')
                 evaluate(f'HomeTwin.update({json.dumps(data)},0)')
                 for i in range(1,121): evaluate(f'Panels.frame(10,{i/24})')
