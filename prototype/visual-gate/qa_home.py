@@ -93,6 +93,13 @@ def main():
                 # browser's unrelated performance clock immediately before
                 # capture, masking actual layout regressions.
                 evaluate(f'Panels.frame({t},{t},{t})')
+                # The live bridge reapplies state every two seconds. The house
+                # must retain its canvas/context across those polls rather
+                # than repeatedly starting a new WebGL renderer on the Pi.
+                if name == 'idle':
+                    evaluate("window.__qaHomeCanvas=document.querySelector('.home-twin-webgl')")
+                elif not evaluate("window.__qaHomeCanvas===document.querySelector('.home-twin-webgl')"):
+                    raise RuntimeError('home WebGL canvas was recreated during a panel refresh')
                 time.sleep(.1)
                 shot=call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
                 (output/f'home-{name}.png').write_bytes(base64.b64decode(shot['data']))

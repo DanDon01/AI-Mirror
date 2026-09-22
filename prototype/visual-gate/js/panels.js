@@ -236,17 +236,6 @@ const Panels = (function () {
 
   function apply(data) {
     HomeTwin.update(Object.assign({}, data.energy || {}, { weather: data.weather || null }));
-    // Do this before replacing panel DOM. A WebGL renderer retains a browser
-    // context after its canvas is detached; leaving these behind every poll
-    // eventually makes Chromium refuse to render the house at all.
-    entries.forEach(function (entry) {
-      if (entry.home && entry.home.dispose) entry.home.dispose();
-    });
-    const slots = [
-      document.querySelector('.slot[data-slot="0"]'),
-      document.querySelector('.slot[data-slot="1"]'),
-    ];
-    slots.forEach(function (slot) { slot.innerHTML = ''; });
     const visible = data._visibility || {};
     const available = {
       // The house is still a valuable live digital twin when the meter is
@@ -258,7 +247,37 @@ const Panels = (function () {
       news: visible.news !== false && !!data.event,
       wx: visible.weather !== false && !!data.weather,
     };
+    const slots = [
+      document.querySelector('.slot[data-slot="0"]'),
+      document.querySelector('.slot[data-slot="1"]'),
+    ];
+    const retainedHome = available.energy
+      ? entries.find(function (entry) { return entry.kind === 'energy'; })
+      : null;
+
+    // Keep the actual WebGL canvas alive across the bridge's two-second
+    // refreshes. Rebuilding a Three.js scene on each poll can repeatedly
+    // restart shader compilation on the Pi, making the home slot look blank.
+    // Everything else remains cheap DOM and can be rebuilt normally.
+    entries.forEach(function (entry) {
+      if (entry !== retainedHome && entry.home && entry.home.dispose) entry.home.dispose();
+    });
+    slots.forEach(function (slot) { slot.innerHTML = ''; });
     entries = SCHEDULE.filter(function (s) { return available[s.kind]; }).map(function (s) {
+      if (s.kind === 'energy' && retainedHome) {
+        // Keep the canvas and renderer; replace only the DOM watt readout so
+        // the live value and its import/export colour remain current.
+        const replacement = document.createElement('div');
+        replacement.innerHTML = buildEnergy(data.energy || {});
+        const oldFoot = retainedHome.el.querySelector('.foot');
+        const newFoot = replacement.querySelector('.foot');
+        if (oldFoot && newFoot) oldFoot.replaceWith(newFoot);
+        slots[s.slot].appendChild(retainedHome.el);
+        return {
+          kind: s.kind, el: retainedHome.el, from: s.from, to: s.to,
+          tilt: s.slot === 0 ? 2.0 : -2.0, tick: null, home: retainedHome.home,
+        };
+      }
       const made = BUILD[s.kind](data);
       const el = document.createElement('div');
       el.className = 'panel ' + made[0];
@@ -268,7 +287,7 @@ const Panels = (function () {
       // This avoids creating an invisible WebGL context for every bridge poll.
       const home = s.kind === 'energy' ? HomeTwin.mount(el.querySelector('.house')) : null;
       return {
-        el: el, from: s.from, to: s.to,
+        kind: s.kind, el: el, from: s.from, to: s.to,
         tilt: s.slot === 0 ? 2.0 : -2.0,
         tick: s.kind === 'cal' ? bladeTicker(el, data.calendar) :
           (s.kind === 'news' ? newsTicker(el) : null),
