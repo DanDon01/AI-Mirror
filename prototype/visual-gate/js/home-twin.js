@@ -95,13 +95,16 @@ const HomeTwin = (() => {
     trim(MAIN_W+.08,.055,.07,MAIN_C,H,D+.025);trim(.07,.055,D+.08,W+.025,H,D/2);trim(.07,.055,D+.08,X0-.025,H,D/2);trim(.08,.06,.08,1.96,RIDGE,D/2);
     // Two suspended illuminated slabs and a few translucent partitions make
     // the actual two-storey layout immediately readable through the shell.
-    const floorMat=new THREE.MeshStandardMaterial({color:0x0a4058,emissive:0x0b789c,emissiveIntensity:.28,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide});
-    const upperFloorMat=floorMat.clone();upperFloorMat.color.setHex(0x0b4a63);upperFloorMat.emissive.setHex(0x0b88ae);upperFloorMat.opacity=.28;
+    // Each storey owns a separate thermal plane. They remain translucent
+    // enough to read as part of a holographic house, but are bright enough
+    // that a real downstairs/upstairs temperature is visible at a glance.
+    const floorMat=new THREE.MeshStandardMaterial({color:0x0a4058,emissive:0x0b789c,emissiveIntensity:.18,transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide});
+    const upperFloorMat=floorMat.clone();upperFloorMat.color.setHex(0x0b4a63);upperFloorMat.emissive.setHex(0x0b88ae);
     function innerFrame(w,d,y){const g=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,.028,d));const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x4db6de,transparent:true,opacity:.38}));l.position.set(MAIN_C,y,D/2);home.add(l);}
     // The upper slab remains visible through the shell, but without a bright
     // perimeter that reads as an accidental band through the first-floor windows.
-    const upperFloor=box(2.78,.025,1.48,upperFloorMat,1.00,.80,.825);
-    const groundFloor=box(2.92,.024,1.58,floorMat,1.00,.03,.825);innerFrame(2.92,1.58,.03);
+    const upperFloor=box(2.78,.025,1.48,upperFloorMat,1.00,.87,.825);
+    const groundFloor=box(2.92,.024,1.58,floorMat,1.00,.10,.825);innerFrame(2.92,1.58,.10);
     // Named, individual thermal zones sit almost invisibly within each floor.
     // They are deliberately separate meshes so future HA state can colour a
     // room without needing to rebuild the architecture.
@@ -245,7 +248,16 @@ const HomeTwin = (() => {
     // The floor slabs themselves carry the two real floor temperatures.
     // This keeps thermal information architectural and permanently readable
     // without introducing numeric labels or solid colour blocks.
-    function setFloorThermal(floor,value,base){const valid=num(value),thermal=valid?thermalColour(value):base.clone();const target=base.clone().lerp(thermal,valid?.52:0);floor.material.color.lerp(target,.045);floor.material.emissive.lerp(target,.035);floor.material.emissiveIntensity+=( (valid?.38:.24)-floor.material.emissiveIntensity)*.04;}
+    function setFloorThermal(floor,value,base){
+      const valid=num(value),thermal=valid?thermalColour(value):base.clone();
+      // Let the measured colour own the plane. The opacity/intensity ease so
+      // a changed sensor reads as physical thermal light, never a hard flash.
+      const target=base.clone().lerp(thermal,valid?.88:0);
+      floor.material.color.lerp(target,.075);
+      floor.material.emissive.lerp(target,.075);
+      floor.material.opacity+=( (valid?.52:.14)-floor.material.opacity)*.07;
+      floor.material.emissiveIntensity+=( (valid?1.05:.18)-floor.material.emissiveIntensity)*.07;
+    }
     return {frame(now){
       if(now-received>30)state={};
       const tuning=state._tuning||{};
