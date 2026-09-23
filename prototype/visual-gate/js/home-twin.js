@@ -98,8 +98,11 @@ const HomeTwin = (() => {
     // Each storey owns a separate thermal plane. They remain translucent
     // enough to read as part of a holographic house, but are bright enough
     // that a real downstairs/upstairs temperature is visible at a glance.
-    const floorMat=new THREE.MeshStandardMaterial({color:0x0a4058,emissive:0x0b789c,emissiveIntensity:.18,transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide});
-    const upperFloorMat=floorMat.clone();upperFloorMat.color.setHex(0x0b4a63);upperFloorMat.emissive.setHex(0x0b88ae);
+    // Basic material deliberately bypasses scene lighting and tone mapping:
+    // these are measured thermal colours, so 22°C must remain orange rather
+    // than being washed into the neutral architectural lighting.
+    const floorMat=new THREE.MeshBasicMaterial({color:0x0a4058,transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide});
+    const upperFloorMat=floorMat.clone();upperFloorMat.color.setHex(0x0b4a63);
     function innerFrame(w,d,y){const g=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,.028,d));const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x4db6de,transparent:true,opacity:.38}));l.position.set(MAIN_C,y,D/2);home.add(l);}
     // The upper slab remains visible through the shell, but without a bright
     // perimeter that reads as an accidental band through the first-floor windows.
@@ -243,7 +246,7 @@ const HomeTwin = (() => {
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
     // Thermal scale: cool blue begins at 16°C, a readable light blue sits at
     // 18°C, then the floors move through warm tones to deep red at 26°C.
-    const thermalStops=[[16,0x155ab6],[18,0x9be6ff],[20,0x45c6ed],[22,0xffd18a],[24,0xff8a3d],[26,0x9d0715]];
+    const thermalStops=[[16,0x155ab6],[18,0x9be6ff],[20,0x45bce8],[21,0xff7600],[22,0xff1800],[24,0xc90008],[26,0x700008]];
     function thermalColour(value){const t=clamp(Number(value),16,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
     function setFixture(name,on,intensity=1){const f=fixtures[name];if(!f)return;f.level+=((on?intensity:0)-f.level)*.11;f.mat.emissiveIntensity=.02+f.level*.78;f.pool.intensity=f.level*.72;}
     function setThermal(name,value){const zone=roomZones[name];if(!zone)return;const valid=num(value),target=valid?thermalColour(value):new THREE.Color(0x0b5270);zone.material.color.lerp(target,.07);zone.material.emissive.lerp(target,.05);const opacity=valid?.075:.035;zone.material.opacity+=(opacity-zone.material.opacity)*.07;}
@@ -256,9 +259,7 @@ const HomeTwin = (() => {
       // a changed sensor reads as physical thermal light, never a hard flash.
       const target=base.clone().lerp(thermal,valid?.88:0);
       floor.material.color.lerp(target,.075);
-      floor.material.emissive.lerp(target,.075);
       floor.material.opacity+=( (valid?.40:.14)-floor.material.opacity)*.07;
-      floor.material.emissiveIntensity+=( (valid?.82:.18)-floor.material.emissiveIntensity)*.07;
     }
     return {frame(now){
       if(now-received>30)state={};

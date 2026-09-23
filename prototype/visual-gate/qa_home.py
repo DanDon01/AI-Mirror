@@ -92,7 +92,7 @@ def main():
             cases=[('idle', {'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain':'open'}}},66),
               ('news',{'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},46),
               ('night',{'watts_now':468,'weather':{'is_night':True},'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},66),
-              ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':20.4},'upstairs':{'temperature_c':19.2},'livingroom':{'curtain_position':100}}},66),
+              ('ground',{'watts_now':468,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'downstairs':{'temperature_c':22},'upstairs':{'temperature_c':18},'livingroom':{'curtain_position':100}}},66),
               ('export',{'watts_now':-900,'solar_watts':1400,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},66),
               ('charger',{'watts_now':6200,'car':{'charge_pct':42},'rooms':{'livingroom':{'curtain_position':100}}},66),
               ('car-away',{'watts_now':468,'devices':{'car_present':False},'rooms':{'livingroom':{'curtain_position':100}}},66),
