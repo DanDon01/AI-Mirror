@@ -7,16 +7,41 @@ import re
 import os
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.request
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from capture_lib import CHROME, start_server
+from urllib.parse import urlsplit
+from capture_lib import CHROME
 from websockets.sync.client import connect
 
 HERE = Path(__file__).resolve().parent
 
+def start_fixture_server(fixture):
+    """Serve static QA assets and the fixture only inside this process."""
+    fixture_body=json.dumps(fixture).encode('utf-8')
+    class FixtureHandler(SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+        def do_GET(self):
+            if urlsplit(self.path).path == '/api/state.json':
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(fixture_body)))
+                self.end_headers()
+                self.wfile.write(fixture_body)
+                return
+            super().do_GET()
+    server=ThreadingHTTPServer(('127.0.0.1', 0),
+                               partial(FixtureHandler, directory=str(HERE)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
 def main():
-    server, port = start_server()
+    fixture=json.loads((HERE/'fixtures'/'DEV-FIXTURE.json').read_text(encoding='utf-8'))
+    server, port = start_fixture_server(fixture)
     profile = tempfile.mkdtemp(prefix='mirror-home-qa-')
     proc = subprocess.Popen([CHROME, '--headless=new',
         '--no-first-run', '--disable-extensions', '--remote-debugging-port=9378',
@@ -109,6 +134,26 @@ def main():
                 shot=call('Page.captureScreenshot',{'format':'png','clip':clip})
                 (output/f'home-{name}-detail.png').write_bytes(base64.b64decode(shot['data']))
                 print(name,flush=True)
+
+            # End-to-end rotation check: this loads the actual main.js and
+            # exercises its fetch/adopt/panel scheduling path. This isolated
+            # QA server serves the fixture; production endpoints are untouched.
+            call('Page.navigate',dict(url=f'http://127.0.0.1:{port}/index.html?manual=1'))
+            for _ in range(240):
+                if evaluate("document.body.dataset.ready === '1'"): break
+                time.sleep(.25)
+            else:
+                raise RuntimeError('full rotation page did not become ready: ' +
+                                   str(evaluate("document.body.dataset.error || ''")))
+            evaluate('window.__setTime(60)')
+            time.sleep(1)
+            live_status=evaluate("(() => { const panel=document.querySelector('.p-energy'); const canvas=document.querySelector('.p-energy .home-twin-webgl'); return JSON.stringify({panel:!!panel,canvas:!!canvas,hidden:panel&&panel.style.visibility,opacity:panel&&getComputedStyle(panel).opacity}); })()")
+            live_status=json.loads(live_status)
+            if not live_status['panel'] or not live_status['canvas'] or live_status['hidden'] == 'hidden':
+                raise RuntimeError('full rotation did not show house at t=60: ' + repr(live_status))
+            shot=call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
+            (output/'home-live-rotation.png').write_bytes(base64.b64decode(shot['data']))
+            print('live-rotation',flush=True)
     finally:
         proc.terminate();server.shutdown()
 
