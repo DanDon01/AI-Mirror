@@ -125,9 +125,17 @@
     // The object travels with the body part it describes, so the whole
     // section moves rather than the canvas being repositioned: the
     // readouts have to arrive with it.
-    const x = Number(tuning.bio_x) || 0;
-    const y = Number(tuning.bio_y) || 0;
-    const scale = Number(tuning.bio_scale) || 1;
+    const value = (key, legacy, fallback) => Number.isFinite(Number(tuning[key])) ?
+      Number(tuning[key]) : (Number(tuning[legacy]) || fallback);
+    // The group travels with the shape while it morphs. This keeps the
+    // particle handoff spatially continuous instead of snapping at either
+    // endpoint when heart and brain are tuned to different locations.
+    const x = value('heart_x', 'bio_x', 0) +
+      (value('brain_x', 'bio_x', 0) - value('heart_x', 'bio_x', 0)) * morph;
+    const y = value('heart_y', 'bio_y', 0) +
+      (value('brain_y', 'bio_y', 0) - value('heart_y', 'bio_y', 0)) * morph;
+    const scale = value('heart_scale', 'bio_scale', 1) +
+      (value('brain_scale', 'bio_scale', 1) - value('heart_scale', 'bio_scale', 1)) * morph;
     bioEl.style.transform =
       `translate3d(${x.toFixed(1)}px,${(y + (1 - morph) * CHEST_DROP).toFixed(1)}px,0) scale(${scale.toFixed(3)})`;
 

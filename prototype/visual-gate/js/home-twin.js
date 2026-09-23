@@ -336,7 +336,7 @@ const HomeTwin = (() => {
       // ease across, then reverse. The steady animation clock keeps it
       // independent of the 80-second panel scheduler, so it never snaps
       // back when the mirror timeline restarts.
-      const pause=7,travel=tune('home_orbit_seconds',54),orbitCycle=(pause+travel)*2;
+      const pause=tune('home_orbit_pause',7),travel=tune('home_orbit_seconds',54),orbitCycle=(pause+travel)*2;
       const orbitAt=now%orbitCycle;
       let orbitSide;
       if(orbitAt<pause) orbitSide=-1;
@@ -344,8 +344,9 @@ const HomeTwin = (() => {
       else if(orbitAt<pause+travel+pause) orbitSide=1;
       else {const x=(orbitAt-pause-travel-pause)/travel;orbitSide=Math.cos(Math.PI*x);}
       const azimuth=orbitSide*(Math.PI*tune('home_orbit_angle',45)/180),radius=tune('home_camera_radius',6.0);
-      idleCamera.set(1.25+Math.sin(azimuth)*radius,4.25,.95+Math.cos(azimuth)*radius);
-      if(wanted)focusTarget.lerp(new THREE.Vector3(...wanted),.11);else focusTarget.lerp(new THREE.Vector3(1.25,1.08,.95),.055);
+      const idleTarget=new THREE.Vector3(tune('home_target_x',1.25),tune('home_target_y',1.08),tune('home_target_z',.95));
+      idleCamera.set(idleTarget.x+Math.sin(azimuth)*radius,tune('home_camera_height',4.25),idleTarget.z+Math.cos(azimuth)*radius);
+      if(wanted)focusTarget.lerp(new THREE.Vector3(...wanted),.11);else focusTarget.lerp(idleTarget,.055);
       // Approximately a 2x apparent-size inspection, rather than an
       // extreme crop that obscures the location of the event.
       focusCamera.copy(idleCamera).sub(focusTarget).normalize().multiplyScalar(4.7).add(focusTarget);focusCamera.y=Math.max(focusCamera.y,focusTarget.y+1.35);
@@ -356,7 +357,7 @@ const HomeTwin = (() => {
       // orbit frames.
       if(!cameraReady){camera.position.copy(idleCamera);camera.lookAt(focusTarget);cameraReady=true;}
       camera.position.lerp(idleCamera,.08).lerp(focusCamera,focusLevel);camera.lookAt(focusTarget);
-      const fov=35-focusLevel*6;if(Math.abs(camera.fov-fov)>.02){camera.fov=fov;camera.updateProjectionMatrix();}
+      const fov=tune('home_camera_fov',33)-focusLevel*6;if(Math.abs(camera.fov-fov)>.02){camera.fov=fov;camera.updateProjectionMatrix();}
       renderer.toneMappingExposure=1.05*tune('home_brightness',1.0);
       el.style.setProperty('--twin-stage-scale',tune('home_stage_scale',1.0).toFixed(3));
       el.style.setProperty('--twin-x',tune('home_x',0).toFixed(1)+'px');

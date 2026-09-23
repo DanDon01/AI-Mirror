@@ -90,15 +90,24 @@
     let tuningDirty = false, tuningTimer = null, tuningValues = {};
     const TUNERS = [
       ['home_orbit_seconds', 'Orbit travel', 18, 140, 1, 's', 54],
-      ['home_orbit_angle', 'Orbit angle', 15, 60, 1, '°', 45],
+      ['home_orbit_angle', 'Orbit angle', 15, 75, 1, '°', 45],
+      ['home_orbit_pause', 'Orbit end pause', 0, 15, 1, 's', 7],
       ['home_camera_radius', 'View distance', 4.2, 9, 0.1, '', 6],
+      ['home_camera_height', 'Camera height', 2.4, 6.5, 0.1, '', 4.25],
+      ['home_camera_fov', 'Camera field of view', 20, 50, 1, '°', 33],
+      ['home_target_x', 'Camera aim horizontal', -1, 3.5, 0.05, '', 1.25],
+      ['home_target_y', 'Camera aim height', 0.25, 2.2, 0.05, '', 1.08],
+      ['home_target_z', 'Camera aim depth', -0.5, 2.5, 0.05, '', 0.95],
       ['home_brightness', 'House brightness', 0.4, 1.8, 0.05, '×', 1],
       ['home_stage_scale', 'House stage size', 0.6, 1.4, 0.05, '×', 1],
       ['home_x', 'House horizontal', -360, 360, 5, 'px', 0],
       ['home_y', 'House vertical', -360, 360, 5, 'px', 0],
-      ['bio_x', 'Heart / brain horizontal', -420, 420, 5, 'px', 0],
-      ['bio_y', 'Heart / brain vertical', -420, 420, 5, 'px', 0],
-      ['bio_scale', 'Heart / brain size', 0.55, 1.45, 0.05, '×', 1],
+      ['heart_x', 'Heart horizontal', -420, 420, 5, 'px', 0],
+      ['heart_y', 'Heart vertical', -420, 420, 5, 'px', 0],
+      ['heart_scale', 'Heart size', 0.55, 1.45, 0.05, '×', 1],
+      ['brain_x', 'Brain horizontal', -420, 420, 5, 'px', 0],
+      ['brain_y', 'Brain vertical', -420, 420, 5, 'px', 0],
+      ['brain_scale', 'Brain size', 0.55, 1.45, 0.05, '×', 1],
       ['calendar_x', 'Calendar horizontal', -360, 360, 5, 'px', 0],
       ['calendar_y', 'Calendar vertical', -360, 360, 5, 'px', 0],
       ['news_x', 'News horizontal', -360, 360, 5, 'px', 0],
@@ -182,7 +191,7 @@
       if (r.ok) tuningValues = (await r.json()).tuning || tuningValues;
     }
     function resetTuning() {
-      tuningValues = {home_orbit_seconds:54, home_orbit_angle:45, home_camera_radius:6, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, bio_x:0, bio_y:0, bio_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
+      tuningValues = {home_orbit_seconds:54, home_orbit_angle:45, home_orbit_pause:7, home_camera_radius:6, home_camera_height:4.25, home_camera_fov:33, home_target_x:1.25, home_target_y:1.08, home_target_z:.95, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, heart_x:0, heart_y:0, heart_scale:1, brain_x:0, brain_y:0, brain_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
       tuningDirty = true; saveTuning().then(() => { tuningDirty = false; renderTuning(tuningValues); });
     }
     async function saveConfig() {

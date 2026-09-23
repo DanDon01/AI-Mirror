@@ -94,9 +94,13 @@ class Bridge:
               "octopus_energy", "smarthome")
     TUNING_DEFAULTS = {
         "home_orbit_seconds": 54, "home_orbit_angle": 45,
-        "home_camera_radius": 6.0, "home_brightness": 1.0,
+        "home_orbit_pause": 7, "home_camera_radius": 6.0,
+        "home_camera_height": 4.25, "home_camera_fov": 33,
+        "home_target_x": 1.25, "home_target_y": 1.08, "home_target_z": .95,
+        "home_brightness": 1.0,
         "home_stage_scale": 1.0, "home_x": 0, "home_y": 0,
-        "bio_x": 0, "bio_y": 0, "bio_scale": 1.0,
+        "heart_x": 0, "heart_y": 0, "heart_scale": 1.0,
+        "brain_x": 0, "brain_y": 0, "brain_scale": 1.0,
         "calendar_x": 0, "calendar_y": 0, "news_x": 0, "news_y": 0,
     }
 
@@ -128,9 +132,17 @@ class Bridge:
             if isinstance(saved, dict):
                 self.gate.update(saved)
                 self.visibility.update(saved.get("visibility", {}))
-                self.tuning.update({key: value for key, value in
-                                    (saved.get("tuning", {}) or {}).items()
+                saved_tuning = saved.get("tuning", {}) or {}
+                self.tuning.update({key: value for key, value in saved_tuning.items()
                                     if key in self.TUNING_DEFAULTS})
+                # Preserve a profile made with the original shared biometric
+                # controls when upgrading to independently tunable forms.
+                for form in ("heart", "brain"):
+                    for axis in ("x", "y", "scale"):
+                        key = form + "_" + axis
+                        legacy = "bio_" + axis
+                        if key not in saved_tuning and legacy in saved_tuning:
+                            self.tuning[key] = saved_tuning[legacy]
         except (FileNotFoundError, OSError, ValueError):
             pass
 
@@ -711,11 +723,15 @@ class Bridge:
     def update_tuning(self, updates):
         """Persist bounded visual controls; never treat them as HA entities."""
         limits = {
-            "home_orbit_seconds": (18, 140), "home_orbit_angle": (15, 60),
-            "home_camera_radius": (4.2, 9.0), "home_brightness": (0.4, 1.8),
+            "home_orbit_seconds": (18, 140), "home_orbit_angle": (15, 75),
+            "home_orbit_pause": (0, 15), "home_camera_radius": (4.2, 9.0),
+            "home_camera_height": (2.4, 6.5), "home_camera_fov": (20, 50),
+            "home_target_x": (-1, 3.5), "home_target_y": (.25, 2.2),
+            "home_target_z": (-.5, 2.5), "home_brightness": (0.4, 1.8),
             "home_stage_scale": (0.6, 1.4), "home_x": (-360, 360),
-            "home_y": (-360, 360), "bio_x": (-420, 420), "bio_y": (-420, 420),
-            "bio_scale": (0.55, 1.45), "calendar_x": (-360, 360),
+            "home_y": (-360, 360), "heart_x": (-420, 420), "heart_y": (-420, 420),
+            "heart_scale": (0.55, 1.45), "brain_x": (-420, 420), "brain_y": (-420, 420),
+            "brain_scale": (0.55, 1.45), "calendar_x": (-360, 360),
             "calendar_y": (-360, 360), "news_x": (-360, 360),
             "news_y": (-360, 360),
         }
