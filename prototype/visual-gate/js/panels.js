@@ -28,7 +28,7 @@ const Panels = (function () {
   const RISE = 1.25;   // seconds of arrival
   const FALL = 0.90;   // seconds of departure, deliberately quicker
 
-  let entries = [];
+  let entries = [], tuning = {};
 
   function ramp(t, a, b) {
     const x = Math.max(0, Math.min(1, (t - a) / (b - a)));
@@ -235,7 +235,10 @@ const Panels = (function () {
   };
 
   function apply(data) {
-    HomeTwin.update(Object.assign({}, data.energy || {}, { weather: data.weather || null }));
+    tuning = data._tuning || {};
+    HomeTwin.update(Object.assign({}, data.energy || {}, {
+      weather: data.weather || null, _tuning: tuning,
+    }));
     const visible = data._visibility || {};
     const available = {
       // The house is still a valuable live digital twin when the meter is
@@ -316,9 +319,13 @@ const Panels = (function () {
       // Opacity lives on the children, not here: an opacity below 1 is a
       // grouping property, and it would flatten the calendar's blades
       // back into the plane they are supposed to be standing out of.
+      const x = e.kind === 'cal' ? Number(tuning.calendar_x) || 0 :
+        (e.kind === 'news' ? Number(tuning.news_x) || 0 : 0);
+      const y = e.kind === 'cal' ? Number(tuning.calendar_y) || 0 :
+        (e.kind === 'news' ? Number(tuning.news_y) || 0 : 0);
       el.style.transform =
-        'rotateY(' + e.tilt + 'deg) translate3d(0,' +
-        ((1 - p) * 40).toFixed(1) + 'px,0)';
+        'rotateY(' + e.tilt + 'deg) translate3d(' + x.toFixed(1) + 'px,' +
+        (y + (1 - p) * 40).toFixed(1) + 'px,0)';
       el.style.setProperty('--content', p.toFixed(3));
       if (e.tick) e.tick(p);
     }

@@ -95,14 +95,17 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 self.send_error(400, str(exc))
             return
-        if path == "/api/control/config":
+        if path in ("/api/control/config", "/api/control/tuning"):
             if self.bridge is None:
                 self.send_error(503, "live bridge unavailable")
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 updates = json.loads(self.rfile.read(length) or b"{}")
-                self._json(self.bridge.update_gate(updates))
+                if path == "/api/control/tuning":
+                    self._json({"tuning": self.bridge.update_tuning(updates)})
+                else:
+                    self._json(self.bridge.update_gate(updates))
             except (TypeError, ValueError, json.JSONDecodeError):
                 self.send_error(400, "invalid configuration")
             except Exception:

@@ -46,6 +46,12 @@
     details[open] summary { margin-bottom:12px; }
     pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; background:#090e15; border:1px solid #223348; border-radius:9px; padding:12px; max-height:420px; overflow:auto; font-size:12px; }
     .saved { color:var(--green); }
+    .tuning-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; }
+    .tune { display:grid; grid-template-columns:minmax(105px,1fr) minmax(110px,1.4fr) 58px; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid rgba(57,82,109,.45); }
+    .tune label { color:#b9c9d8; font-size:.78rem; }
+    .tune input[type=range] { width:100%; padding:0; accent-color:#8fd4ff; }
+    .tune output { color:var(--blue); font-variant-numeric:tabular-nums; text-align:right; font-size:.78rem; }
+    .tuning-actions { display:flex; align-items:center; gap:10px; margin-top:12px; }
     @media (max-width:680px) { body { padding:12px; } .layout { grid-template-columns:1fr; } .section.wide { grid-column:auto; } .display-link { font-size:.76rem; } }
   </style>
 </head>
@@ -56,7 +62,7 @@
       <a class="display-link" href="http://" id="display">Open mirror display ↗</a>
     </header>
     <nav aria-label="Control sections">
-      <a href="#overview">Overview</a><a href="#avatars-section">Avatar</a><a href="#stocks">Stocks</a>
+      <a href="#overview">Overview</a><a href="#tuning">Live tuning</a><a href="#avatars-section">Avatar</a><a href="#stocks">Stocks</a>
       <a href="#modules-section">Modules</a><a href="#config-section">Mappings</a><a href="#diagnostics">Diagnostics</a>
     </nav>
     <div class="toolbar">
@@ -67,6 +73,7 @@
       <section class="section wide" id="overview"><h2>Live feeds</h2><div class="grid" id="feeds"></div></section>
       <section class="section" id="avatars-section"><h2>Avatar selection</h2><div class="grid" id="avatars"></div><p class="meta" id="avatarMeta">Avatar selection is persisted for the avatar/Pygame mode.</p></section>
       <section class="section" id="modules-section"><h2>Visual modules</h2><div class="grid" id="modules"></div><p class="meta">Choose which live modules can appear in the mirror rotation.</p></section>
+      <section class="section wide" id="tuning"><h2>Live visual tuning</h2><p class="meta">Changes reach the mirror through its normal live poll, usually within two seconds. They are saved on the Pi; reset restores the authored defaults.</p><div class="tuning-grid" id="tuningRows"></div><div class="tuning-actions"><button onclick="resetTuning()">Reset visual defaults</button><span class="meta" id="tuningMeta"></span></div></section>
       <section class="section wide" id="stocks"><h2>Stock watchlist</h2><div id="tickerRows"></div>
         <div class="ticker-controls"><input id="newTicker" placeholder="Add ticker, e.g. RR.L"><button onclick="addTicker()">Add ticker</button></div>
         <p class="meta" id="tickerMeta">Tick a symbol to display it; × removes it from the watchlist.</p></section>
@@ -80,6 +87,23 @@
     display.href = location.protocol + '//' + location.hostname + ':8795/';
     let mappingsDirty = false;
     let tickersDirty = false;
+    let tuningDirty = false, tuningTimer = null, tuningValues = {};
+    const TUNERS = [
+      ['home_orbit_seconds', 'Orbit travel', 18, 140, 1, 's', 54],
+      ['home_orbit_angle', 'Orbit angle', 15, 60, 1, '°', 45],
+      ['home_camera_radius', 'View distance', 4.2, 9, 0.1, '', 6],
+      ['home_brightness', 'House brightness', 0.4, 1.8, 0.05, '×', 1],
+      ['home_stage_scale', 'House stage size', 0.6, 1.4, 0.05, '×', 1],
+      ['home_x', 'House horizontal', -360, 360, 5, 'px', 0],
+      ['home_y', 'House vertical', -360, 360, 5, 'px', 0],
+      ['bio_x', 'Heart / brain horizontal', -420, 420, 5, 'px', 0],
+      ['bio_y', 'Heart / brain vertical', -420, 420, 5, 'px', 0],
+      ['bio_scale', 'Heart / brain size', 0.55, 1.45, 0.05, '×', 1],
+      ['calendar_x', 'Calendar horizontal', -360, 360, 5, 'px', 0],
+      ['calendar_y', 'Calendar vertical', -360, 360, 5, 'px', 0],
+      ['news_x', 'News horizontal', -360, 360, 5, 'px', 0],
+      ['news_y', 'News vertical', -360, 360, 5, 'px', 0],
+    ];
     async function refresh() {
       const r = await fetch('/api/state.json', {cache: 'no-store'});
       const data = await r.json();
@@ -92,6 +116,7 @@
       }
       if (!feeds.children.length) feeds.innerHTML = '<div class="meta">No live feeds have returned data yet.</div>';
       const status = await (await fetch('/api/control/status', {cache: 'no-store'})).json();
+      renderTuning(status.tuning || {});
       const cal = status.calendar || {};
       const calCard = document.createElement('div'); calCard.className = 'card';
       calCard.innerHTML = '<div class="label">calendar</div><div class="value">' +
@@ -127,6 +152,38 @@
         b.className = on ? 'active' : ''; b.onclick = () => toggleModule(key, !on); modules.appendChild(b);
       }
       document.getElementById('payload').textContent = JSON.stringify(data, null, 2);
+    }
+    function tuneLabel(value, unit) { return Number(value).toFixed(unit === '×' ? 2 : 0) + unit; }
+    function renderTuning(values) {
+      const box = document.getElementById('tuningRows');
+      if (tuningDirty || box.contains(document.activeElement)) return;
+      tuningValues = Object.assign({}, values);
+      box.innerHTML = '';
+      for (const [key, label, min, max, step, unit, fallback] of TUNERS) {
+        const row = document.createElement('div'); row.className = 'tune';
+        const input = document.createElement('input'); input.type = 'range';
+        input.min = min; input.max = max; input.step = step;
+        input.value = Number.isFinite(Number(values[key])) ? values[key] : fallback;
+        const output = document.createElement('output'); output.textContent = tuneLabel(input.value, unit);
+        input.oninput = () => { output.textContent = tuneLabel(input.value, unit); queueTuning(key, input.value); };
+        row.innerHTML = '<label for="' + input.id + '">' + label + '</label>';
+        row.appendChild(input); row.appendChild(output); box.appendChild(row);
+      }
+    }
+    function queueTuning(key, value) {
+      tuningValues[key] = Number(value); tuningDirty = true;
+      document.getElementById('tuningMeta').textContent = 'Applying…';
+      clearTimeout(tuningTimer); tuningTimer = setTimeout(saveTuning, 140);
+    }
+    async function saveTuning() {
+      const r = await fetch('/api/control/tuning', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(tuningValues)});
+      tuningDirty = !r.ok;
+      document.getElementById('tuningMeta').textContent = r.ok ? 'Saved — mirror updates within two seconds.' : 'Could not save tuning.';
+      if (r.ok) tuningValues = (await r.json()).tuning || tuningValues;
+    }
+    function resetTuning() {
+      tuningValues = {home_orbit_seconds:54, home_orbit_angle:45, home_camera_radius:6, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, bio_x:0, bio_y:0, bio_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
+      tuningDirty = true; saveTuning().then(() => { tuningDirty = false; renderTuning(tuningValues); });
     }
     async function saveConfig() {
       const updates = {}; for (const input of document.querySelectorAll('[id^="cfg-"]')) updates[input.id.slice(4)] = input.value;

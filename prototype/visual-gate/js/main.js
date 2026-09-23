@@ -103,7 +103,7 @@
   window.__perf = perf;
 
   // ---- state ---------------------------------------------------------
-  let data = null, bpm = 0, started = 0, visibility = {};
+  let data = null, bpm = 0, started = 0, visibility = {}, tuning = {};
   let bioEl, heartEl, sleepEl, haloEl;
 
   /** Which biometric forms have a reading behind them.
@@ -124,8 +124,11 @@
     // The object travels with the body part it describes, so the whole
     // section moves rather than the canvas being repositioned: the
     // readouts have to arrive with it.
+    const x = Number(tuning.bio_x) || 0;
+    const y = Number(tuning.bio_y) || 0;
+    const scale = Number(tuning.bio_scale) || 1;
     bioEl.style.transform =
-      `translate3d(0,${((1 - morph) * CHEST_DROP).toFixed(1)}px,0)`;
+      `translate3d(${x.toFixed(1)}px,${(y + (1 - morph) * CHEST_DROP).toFixed(1)}px,0) scale(${scale.toFixed(3)})`;
 
     // One value leaves before the other arrives. Crossfading them left
     // both legible at once mid-morph, reading as two overlapping labels.
@@ -184,6 +187,7 @@
     }
     data = next;
     visibility = next._visibility || {};
+    tuning = next._tuning || {};
     bpm = (next.biometrics && next.biometrics.resting_bpm) || 0;
 
     const b = next.biometrics || {};

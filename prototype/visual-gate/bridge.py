@@ -92,6 +92,13 @@ class Bridge:
     # construct simply is not here, and everything it fed stays absent.
     WANTED = ("weather", "stocks", "calendar", "fitbit", "news",
               "octopus_energy", "smarthome")
+    TUNING_DEFAULTS = {
+        "home_orbit_seconds": 54, "home_orbit_angle": 45,
+        "home_camera_radius": 6.0, "home_brightness": 1.0,
+        "home_stage_scale": 1.0, "home_x": 0, "home_y": 0,
+        "bio_x": 0, "bio_y": 0, "bio_scale": 1.0,
+        "calendar_x": 0, "calendar_y": 0, "news_x": 0, "news_y": 0,
+    }
 
     def __init__(self):
         from config import CONFIG
@@ -112,6 +119,7 @@ class Bridge:
                 logger.warning("bridge: %s unavailable (%s)", name, exc)
 
         self.gate = dict(CONFIG.get("visual_gate", {}) or {})
+        self.tuning = self.TUNING_DEFAULTS.copy()
         self.visibility = {"biometrics": True, "markets": True, "energy": True,
                           "calendar": True, "news": True, "weather": True}
         try:
@@ -120,6 +128,9 @@ class Bridge:
             if isinstance(saved, dict):
                 self.gate.update(saved)
                 self.visibility.update(saved.get("visibility", {}))
+                self.tuning.update({key: value for key, value in
+                                    (saved.get("tuning", {}) or {}).items()
+                                    if key in self.TUNING_DEFAULTS})
         except (FileNotFoundError, OSError, ValueError):
             pass
 
@@ -567,7 +578,8 @@ class Bridge:
         """The page payload. Only keys with real data behind them."""
         with self._lock:
             out = {"_live": True, "generated": int(time.time()),
-                   "_visibility": self.visibility.copy()}
+                   "_visibility": self.visibility.copy(),
+                   "_tuning": self.tuning.copy()}
             for key, fn in (("weather", self._weather),
                             ("biometrics", self._biometrics),
                             ("calendar", self._calendar),
@@ -611,6 +623,7 @@ class Bridge:
                 if key.endswith("_entity") or key == "light_entities"
             },
             "visibility": self.visibility.copy(),
+            "tuning": self.tuning.copy(),
             "avatars": self._avatars(),
             "tickers": self._tickers(),
             "calendar": calendar_status,
@@ -660,6 +673,7 @@ class Bridge:
             "livingroom_occupancy_entity", "livingroom_curtain_entity",
         } | TWIN_ENTITIES}
         payload["visibility"] = self.visibility
+        payload["tuning"] = self.tuning
         try:
             with open(SETTINGS_PATH, "w", encoding="utf-8") as fh:
                 json.dump(payload, fh, indent=2)
@@ -693,6 +707,31 @@ class Bridge:
         self.gate.update(clean)
         self._persist_settings()
         return self.control_status()
+
+    def update_tuning(self, updates):
+        """Persist bounded visual controls; never treat them as HA entities."""
+        limits = {
+            "home_orbit_seconds": (18, 140), "home_orbit_angle": (15, 60),
+            "home_camera_radius": (4.2, 9.0), "home_brightness": (0.4, 1.8),
+            "home_stage_scale": (0.6, 1.4), "home_x": (-360, 360),
+            "home_y": (-360, 360), "bio_x": (-420, 420), "bio_y": (-420, 420),
+            "bio_scale": (0.55, 1.45), "calendar_x": (-360, 360),
+            "calendar_y": (-360, 360), "news_x": (-360, 360),
+            "news_y": (-360, 360),
+        }
+        for key, value in updates.items():
+            if key not in limits:
+                continue
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if value != value or value in (float("inf"), float("-inf")):
+                continue
+            lo, hi = limits[key]
+            self.tuning[key] = max(lo, min(hi, value))
+        self._persist_settings()
+        return self.tuning.copy()
 
 
 def _parse_iso(text):

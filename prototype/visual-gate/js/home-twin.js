@@ -43,16 +43,17 @@ const HomeTwin = (() => {
     return new THREE.Mesh(g,material);
   }
   function buildScene(el) {
-    // Larger than the old SVG frame, with a slightly wider camera view.  The
-    // twin needs breathing room for its slow parallax rather than clipping at
-    // the edge of the energy panel.
-    const canvas=document.createElement('canvas');canvas.className='home-twin-webgl';canvas.width=710;canvas.height=440;el.textContent='';el.appendChild(canvas);
+    // A larger lower-right stage gives the live twin enough presence to read
+    // as the house rather than a small status icon. Its centre remains fixed,
+    // so it grows into the surrounding black glass rather than shifting the
+    // rest of the mirror layout.
+    const canvas=document.createElement('canvas');canvas.className='home-twin-webgl';canvas.width=1100;canvas.height=680;el.textContent='';el.appendChild(canvas);
     const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'high-performance'});
-    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.setSize(710,440,false);renderer.setClearColor(0x000000,0);
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.setSize(1100,680,false);renderer.setClearColor(0x000000,0);
     renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.outputEncoding=THREE.sRGBEncoding;
     const scene=new THREE.Scene();
     // View from the real home's left-front side: garage and porch lead.
-    const camera=new THREE.PerspectiveCamera(33,710/440,.1,30);camera.position.set(-5.1,4.25,6.5);camera.lookAt(1.25,1.08,.95);
+    const camera=new THREE.PerspectiveCamera(33,1100/680,.1,30);camera.position.set(-5.1,4.25,6.5);camera.lookAt(1.25,1.08,.95);
     const home=new THREE.Group();scene.add(home);
     // Both habitable storeys gain the requested 20% vertical volume.  The
     // car cancels this scale locally below, so it stays a normal-sized vehicle.
@@ -242,6 +243,8 @@ const HomeTwin = (() => {
     function setFloorThermal(floor,value,base){const valid=num(value),thermal=valid?thermalColour(value):base.clone();const target=base.clone().lerp(thermal,valid?.52:0);floor.material.color.lerp(target,.045);floor.material.emissive.lerp(target,.035);floor.material.emissiveIntensity+=( (valid?.38:.24)-floor.material.emissiveIntensity)*.04;}
     return {frame(now){
       if(now-received>30)state={};
+      const tuning=state._tuning||{};
+      const tune=(key,fallback)=>Number.isFinite(Number(tuning[key]))?Number(tuning[key]):fallback;
       const rooms=state.rooms||{},wattsNow=Number(state.watts_now),exporting=num(wattsNow)&&wattsNow<0,chargerLoad=num(wattsNow)&&wattsNow>6000;
       const solarPower=exporting?clamp(Math.abs(wattsNow)/2800,0,1):0;
       panels.forEach(m=>{m.material.emissiveIntensity=.1+solarPower*.42;m.material.color.setHSL(.61,.84,.16+solarPower*.07);});
@@ -324,11 +327,18 @@ const HomeTwin = (() => {
       // During a real event, let the transparent architecture reveal the
       // active zone instead of overlaying explanatory UI.
       steel.opacity=.25-focusLevel*.11;roofMat.opacity=.34-focusLevel*.12;wallInset.opacity=.28-focusLevel*.10;
-      // A long ping-pong orbit.  It is deliberately referenced to the
-      // steady animation clock rather than a timeline transition: left →
-      // right takes about 4.4 minutes, then it returns at the same pace.
-      // This avoids a camera wrap or a fast centre sweep between panels.
-      const azimuth=Math.sin(now*.012)*(Math.PI/4),radius=7.7;
+      // A complete, front-side 90-degree idle orbit: pause at each end,
+      // ease across, then reverse. The steady animation clock keeps it
+      // independent of the 80-second panel scheduler, so it never snaps
+      // back when the mirror timeline restarts.
+      const pause=7,travel=tune('home_orbit_seconds',54),orbitCycle=(pause+travel)*2;
+      const orbitAt=now%orbitCycle;
+      let orbitSide;
+      if(orbitAt<pause) orbitSide=-1;
+      else if(orbitAt<pause+travel){const x=(orbitAt-pause)/travel;orbitSide=-Math.cos(Math.PI*x);}
+      else if(orbitAt<pause+travel+pause) orbitSide=1;
+      else {const x=(orbitAt-pause-travel-pause)/travel;orbitSide=Math.cos(Math.PI*x);}
+      const azimuth=orbitSide*(Math.PI*tune('home_orbit_angle',45)/180),radius=tune('home_camera_radius',6.0);
       idleCamera.set(1.25+Math.sin(azimuth)*radius,4.25,.95+Math.cos(azimuth)*radius);
       if(wanted)focusTarget.lerp(new THREE.Vector3(...wanted),.11);else focusTarget.lerp(new THREE.Vector3(1.25,1.08,.95),.055);
       // Approximately a 2x apparent-size inspection, rather than an
@@ -342,6 +352,10 @@ const HomeTwin = (() => {
       if(!cameraReady){camera.position.copy(idleCamera);camera.lookAt(focusTarget);cameraReady=true;}
       camera.position.lerp(idleCamera,.08).lerp(focusCamera,focusLevel);camera.lookAt(focusTarget);
       const fov=35-focusLevel*6;if(Math.abs(camera.fov-fov)>.02){camera.fov=fov;camera.updateProjectionMatrix();}
+      renderer.toneMappingExposure=1.05*tune('home_brightness',1.0);
+      el.style.setProperty('--twin-stage-scale',tune('home_stage_scale',1.0).toFixed(3));
+      el.style.setProperty('--twin-x',tune('home_x',0).toFixed(1)+'px');
+      el.style.setProperty('--twin-y',tune('home_y',0).toFixed(1)+'px');
       home.rotation.y=-.16;home.position.y=0;renderer.render(scene,camera);
     },dispose(){renderer.dispose();canvas.remove();}};
   }
