@@ -241,8 +241,10 @@ const HomeTwin = (() => {
     const rainField=weatherField(84,0x66bde3,.017),snowField=weatherField(52,0xd4efff,.026),windField=weatherField(38,0x8dbbd3,.014),heatField=weatherField(26,0xffb36a,.022);
     let doorOpen=0,carPresence=1,carStateReady=false,tvLevel=0,ledLevel=0,alarmLevel=0,focusLevel=0,focusState='IDLE',cameraReady=false;
     const focusTarget=new THREE.Vector3(1.25,1.08,.95),focusCamera=new THREE.Vector3(),idleCamera=new THREE.Vector3();
-    const thermalStops=[[17,0x1743c7],[19,0x168fdf],[21,0x45d7ee],[22,0xbcefff],[23,0xffd08a],[24,0xff9d45],[26,0xee3c32]];
-    function thermalColour(value){const t=clamp(Number(value),17,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
+    // Thermal scale: cool blue begins at 16°C, a readable light blue sits at
+    // 18°C, then the floors move through warm tones to deep red at 26°C.
+    const thermalStops=[[16,0x155ab6],[18,0x9be6ff],[20,0x45c6ed],[22,0xffd18a],[24,0xff8a3d],[26,0x9d0715]];
+    function thermalColour(value){const t=clamp(Number(value),16,26);for(let i=1;i<thermalStops.length;i++){if(t<=thermalStops[i][0]){const a=thermalStops[i-1],b=thermalStops[i],f=(t-a[0])/(b[0]-a[0]);return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);}}return new THREE.Color(thermalStops[thermalStops.length-1][1]);}
     function setFixture(name,on,intensity=1){const f=fixtures[name];if(!f)return;f.level+=((on?intensity:0)-f.level)*.11;f.mat.emissiveIntensity=.02+f.level*.78;f.pool.intensity=f.level*.72;}
     function setThermal(name,value){const zone=roomZones[name];if(!zone)return;const valid=num(value),target=valid?thermalColour(value):new THREE.Color(0x0b5270);zone.material.color.lerp(target,.07);zone.material.emissive.lerp(target,.05);const opacity=valid?.075:.035;zone.material.opacity+=(opacity-zone.material.opacity)*.07;}
     // The floor slabs themselves carry the two real floor temperatures.
@@ -255,8 +257,8 @@ const HomeTwin = (() => {
       const target=base.clone().lerp(thermal,valid?.88:0);
       floor.material.color.lerp(target,.075);
       floor.material.emissive.lerp(target,.075);
-      floor.material.opacity+=( (valid?.52:.14)-floor.material.opacity)*.07;
-      floor.material.emissiveIntensity+=( (valid?1.05:.18)-floor.material.emissiveIntensity)*.07;
+      floor.material.opacity+=( (valid?.40:.14)-floor.material.opacity)*.07;
+      floor.material.emissiveIntensity+=( (valid?.82:.18)-floor.material.emissiveIntensity)*.07;
     }
     return {frame(now){
       if(now-received>30)state={};
