@@ -52,6 +52,7 @@
   const LOOP = 80;
   const BIO_WINDOW = 14;
   const POLL_MS = 2000; // local bridge only; HA is fetched once by SmartHomeModule
+  const TUNING_POLL_MS = 250;
   const T = {
     morphOut: [4.5, 6.5],      // heart -> brain
     morphBack: [10.5, 12.5],   // brain -> heart
@@ -172,6 +173,17 @@
     return res.json();
   }
 
+  async function readTuning() {
+    const res = await fetch('api/control/tuning', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`tuning ${res.status}`);
+    return res.json();
+  }
+
+  function applyTuning(next) {
+    tuning = (next && next.tuning) || {};
+    Panels.setTuning(tuning);
+  }
+
   /** Production refuses to render the development fixture.
 
       This guard used to run the other way round, because the page only
@@ -187,7 +199,7 @@
     }
     data = next;
     visibility = next._visibility || {};
-    tuning = next._tuning || {};
+    applyTuning({tuning: next._tuning || {}});
     bpm = (next.biometrics && next.biometrics.resting_bpm) || 0;
 
     const b = next.biometrics || {};
@@ -233,6 +245,13 @@
         console.warn('state poll failed, keeping last good data', err);
       }
     }, POLL_MS);
+    // This intentionally carries only rendering controls, not live data.
+    // It lets the Pi control page tune a visible scene in under a quarter
+    // second without adding any Home Assistant/API work.
+    setInterval(async () => {
+      try { applyTuning(await readTuning()); }
+      catch (err) { console.warn('tuning poll failed, keeping last values', err); }
+    }, TUNING_POLL_MS);
 
     started = performance.now();
     requestAnimationFrame(loop);

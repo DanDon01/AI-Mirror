@@ -27,6 +27,11 @@ const HomeTwin = (() => {
       else if(Math.abs(nextCurtain-curtainState.target)>.005){curtainState.target=nextCurtain;curtainState.lastAt=null;curtainState.eventUntil=now+4.5;}
     }
   }
+  function setTuning(tuning) {
+    // Tuning changes deliberately avoid rebuilding the Three renderer. The
+    // control page can therefore steer an already visible house immediately.
+    state=Object.assign({},state,{_tuning:tuning||{}});
+  }
   function quad(a,b,c,d,material) {
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute([...a,...b,...c,...d],3));
@@ -368,5 +373,5 @@ const HomeTwin = (() => {
     frame.dispose=()=>{if(fx){fx.dispose();fx=null;}};
     return frame;
   }
-  return {update,render,mount};
+  return {update,setTuning,render,mount};
 })();

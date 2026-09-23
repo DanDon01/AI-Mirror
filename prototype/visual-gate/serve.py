@@ -50,6 +50,12 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 self._json({"live": True, **self.bridge.control_status()})
             return
+        if self.path.split("?")[0] == "/api/control/tuning":
+            if self.bridge is None:
+                self._json({"tuning": {}})
+            else:
+                self._json({"tuning": self.bridge.tuning.copy()})
+            return
         if self.path.split("?")[0] in ("/api/avatars", "/api/tickers", "/api/modules"):
             if self.bridge is None:
                 self._json({"error": "live bridge unavailable"})

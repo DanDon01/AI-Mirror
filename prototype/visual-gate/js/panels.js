@@ -235,7 +235,7 @@ const Panels = (function () {
   };
 
   function apply(data) {
-    tuning = data._tuning || {};
+    setTuning(data._tuning || {});
     HomeTwin.update(Object.assign({}, data.energy || {}, {
       weather: data.weather || null, _tuning: tuning,
     }));
@@ -299,6 +299,11 @@ const Panels = (function () {
     });
   }
 
+  function setTuning(next) {
+    tuning = next || {};
+    HomeTwin.setTuning(tuning);
+  }
+
   function frame(t, now = performance.now()/1000) {
     // A house focus frame will replace this immediately.  Resetting at the
     // panel scheduler level prevents a completed energy slot from leaving
@@ -331,5 +336,5 @@ const Panels = (function () {
     }
   }
 
-  return { apply, frame };
+  return { apply, setTuning, frame };
 })();
