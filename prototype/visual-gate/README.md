@@ -1,22 +1,71 @@
-# Visual technology gate
+# Visual gate: the mirror's browser front end
 
-An isolated prototype built to answer one question: can Chromium on a
-Raspberry Pi 5 hold the visual quality the revised direction asks for?
+This began as a prototype to answer one question: can Chromium on a
+Raspberry Pi 5 reach the visual quality the revised direction asks for? It
+is now the default boot mode. The Level Up phase (see
+`AI_Mirror_Level_Up_and_Polish_Brief.md`) built it out into:
 
-It contains the visual-gate concepts and a small live-data bridge. The
-browser renderer stays separate from the Pygame app, but the bridge reuses
-the app's configured data modules and exposes only readings that are present.
-
-1. **Biometrics** — one particle object that is an anatomical heart,
-   dissolves, and reforms as a brain. The beat is paced by the resting
-   rate in the fixture; the value beside it crosses over with the form.
-2. **Weather** — a temperature, an atmospheric object that emerges from
-   black with no edge, and the day's temperature curve. When rain
-   approaches the cloud darkens, rain falls and one readout appears.
-3. **One event** — a banner grows out of the right edge of the glass,
-   presents a headline, and folds back into the edge.
+-   **Sky:** the real sun and moon, the moon's phase, measured cloud cover,
+    and a 24-hour temperature curve (`js/sky.js`).
+-   **Biometrics:** one particle object. It is a heart, becomes a brain,
+    then becomes a striding figure when steps are known (`js/biometrics.js`).
+-   **House:** the classic renderer (`js/home-twin.js`, frozen) or the
+    hologram (`js/home-holo.js`) on the shared stage.
+-   **Calendar, news and markets:** the rotating panels (`js/panels.js`,
+    `js/frame.js`).
+-   **Registers:** rest, glance and theatre, driven by presence and dim
+    hours, with real events interrupting the rotation (`js/conductor.js`).
+-   **Resident:** the avatar in a portal, with its clips pushed by the
+    bridge (`js/resident.js`, `resident.py`).
+-   **Moments:** twelve curated pieces of full-glass theatre
+    (`js/moments.js`).
 
 Everything else stays black, because black is the mirror.
+
+## House style
+
+Every element on the glass is held to this.
+
+-   **Black is the mirror.** Empty glass must measure exactly 0. The
+    stage's bloom has a black floor, so glow never turns the mirror milky.
+    Nothing ends in a hard rectangle: stage actors are feathered to black
+    at their rectangle and at the plate edge.
+-   **Palette:** each colour means one thing.
+
+    | Role | Colour |
+    |---|---|
+    | Structure | Cool cyan (`#3fb6e6`) |
+    | Life, occupancy, lit rooms | Warm amber (`#ffae52`) |
+    | Generation and export | Electric blue (`#5cb4ff`) |
+    | Grid import | Restrained amber (`#ffb45a`) |
+    | Heart | Rose red |
+    | Brain and sleep | Violet |
+    | Activity | Kinetic amber |
+    | The resident | Signature violet (`#b98cff`), used by nothing else |
+    | Alerts | True red, for a real alarm only |
+
+-   **Type:** Instrument Serif for large figures and the few words that
+    matter ("Welcome home", "Sunset"). Instrument Sans for the rare small
+    label. No tracked uppercase headings and no `KEY: VALUE` text. A figure
+    appears only when it is real.
+-   **Motion:** eased, never linear, except for tickers.
+
+    | Movement | Duration |
+    |---|---|
+    | Arrival | About 1.2 s |
+    | Departure | About 0.9 s (quicker) |
+    | Wake | 1.8 s |
+    | Settling to rest | Slow, so the change goes unnoticed |
+    | Moments | 2.5 to 14 s, then the glass is clear |
+
+-   **Depth:** the sky sits at the back of the band, the house at
+    mid-depth, the resident and Moments in front, and text on the glass.
+-   **Truth:**
+    -   Numbers and states come from live data only.
+    -   Whimsy may invent spectacle (HAL, a ghost, a wink), but never a
+        measurement.
+    -   Missing data draws nothing.
+    -   Data older than ten minutes withdraws.
 
 ## Data
 

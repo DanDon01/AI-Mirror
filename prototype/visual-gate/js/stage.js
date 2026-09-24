@@ -340,6 +340,8 @@ window.Stage = (function () {
       glow: glowRT && bloomScale() ? [glowRT.width, glowRT.height] : null,
       pixels: [renderer.domElement.width, renderer.domElement.height],
       reach: [Math.round(reach.w), Math.round(reach.h)],
+      memory: { geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
+                programs: (renderer.info.programs || []).length },
     };
     return lastInfo.actors;
   }

@@ -270,15 +270,19 @@ const Moments = (() => {
       make() {
         const s = stage();
         const aur = field(`uniform float uA; uniform float uT; varying vec2 vUv;
-          float n(float x){ return sin(x) * 0.5 + sin(x * 2.3 + 1.7) * 0.3 + sin(x * 5.1 + 0.4) * 0.2; }
+          float fbm(float x){ return 0.5 * sin(x) + 0.25 * sin(2.1 * x + 1.3) + 0.125 * sin(4.3 * x + 0.7); }
           void main(){
-            float x = vUv.x * 6.0;
-            float wave = n(x + uT * 0.25) * 0.08;
-            float band = exp(-pow((vUv.y - 0.62 - wave) * 5.0, 2.0));
-            float rays = 0.6 + 0.4 * sin(x * 2.3 + n(x * 0.7 + uT * 0.6) * 3.0) * sin(x * 0.9 - uT * 0.2);
-            float top = smoothstep(0.25, 0.75, vUv.y) * (1.0 - smoothstep(0.9, 1.0, vUv.y));
-            vec3 c = mix(vec3(0.2, 1.0, 0.55), vec3(0.62, 0.35, 1.0), smoothstep(0.55, 0.9, vUv.y + wave));
-            float a = band * rays * top * uA;
+            float x = vUv.x * 4.0;
+            // The curtain's lower edge wavers; light is brightest along it
+            // and thins upward, cut into fine vertical rays and slow folds.
+            float edge = 0.33 + 0.11 * fbm(x + uT * 0.15);
+            float h = vUv.y - edge;
+            float curtain = smoothstep(-0.015, 0.02, h) * exp(-max(h, 0.0) * 3.2);
+            float rays = 0.55 + 0.45 * sin(x * 15.0 + fbm(x * 2.0 + uT * 0.4) * 6.0);
+            float fold = 0.45 + 0.55 * (0.5 + 0.5 * fbm(x * 1.3 - uT * 0.2));
+            float sides = smoothstep(0.0, 0.14, vUv.x) * smoothstep(1.0, 0.86, vUv.x);
+            vec3 c = mix(vec3(0.15, 1.0, 0.52), vec3(0.62, 0.32, 1.0), smoothstep(0.04, 0.45, h));
+            float a = curtain * mix(0.55, 1.0, rays) * fold * sides * uA;
             gl_FragColor = vec4(c * a, a);
           }`, { uA: { value: 0 }, uT: { value: 0 } }, 0, 0, W, 1100, true);
         s.scene.add(aur);

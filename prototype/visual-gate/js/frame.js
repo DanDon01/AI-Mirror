@@ -76,6 +76,11 @@ const Frame = (function () {
     const time = hh + ':' + mm;
     if (time === shown) return;
     shown = time;
+    // The one always-on element drifts a few pixels over hours, so a panel
+    // left on for months never holds the same bright pixels on the clock.
+    const hours = now.getTime() / 3600000;
+    const stamp = document.querySelector('.stamp');
+    if (stamp) stamp.style.translate = (Math.sin(hours / 3) * 7).toFixed(1) + 'px ' + (Math.cos(hours / 5) * 5).toFixed(1) + 'px';
     document.getElementById('fTime').textContent = time;
     document.getElementById('fDate').textContent =
       DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()];

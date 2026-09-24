@@ -176,6 +176,29 @@ HA_TOKEN=
 - Web panel at `http://<pi-ip>:8780` replaces keyboard controls once wall-mounted
   (no auth - home LAN only; disable via `web_panel.enabled` in config.py).
 
+## Visual gate (browser front end, the default boot mode)
+Current phase: "Level Up and Polish" - see `AI_Mirror_Level_Up_and_Polish_Brief.md`
+(owner decisions, phases, acceptance tests) and the house style in
+`prototype/visual-gate/README.md`.
+- `js/stage.js` - one full-plate WebGL canvas for all new actors (sky, hologram
+  house, resident ring, Moments, wake). Bloom with a black floor (empty glass
+  must measure 0), feathered actor rects, adaptive tiers. Three.js stays r128,
+  vendored in `assets/vendor/` (the classic house depends on it). Never load
+  from a CDN.
+- `js/home-twin.js` is the FROZEN classic house; `js/home-holo.js` is the
+  hologram. The real-home layout is locked by `node test_house_layout.js`
+  (and `--holo`); regenerate the golden file only on owner sign-off.
+- `js/conductor.js` - rest / glance / theatre registers from the entrance PIR
+  (`VISUAL_GATE_ENTRANCE_PIR`), dim hours, event pins. `js/sky.js` - computed
+  sun/moon/phase. `js/moments.js` - curated Moments + director.
+  `js/resident.js` + `resident.py` - AvatarModule in the bridge, clips pushed
+  over `/api/events` (SSE) and played in a portal; unprompted speech is pooled
+  clips only.
+- Headless checks: `render.py`, `validate.py`, `qa_home.py` (all serve the
+  labelled fixture through `serve.fixture_handler()`); captures never inherit
+  automatic Moments. Pi performance: `measure_on_pi.py --scene house --house holo`.
+- No Blender (owner decision). Pygame mode stays supported.
+
 ## Keyboard Controls
 | Key | Action |
 |-----|--------|

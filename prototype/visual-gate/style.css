@@ -616,6 +616,10 @@ body.deep-dim .mirror { opacity: var(--dim-level, 0.35); }
 .moment-caption .big { font-family: var(--ff-display); font-size: 110px; line-height: 1; color: var(--ink); }
 .moment-caption .small { font-family: var(--ff-text); font-size: 30px; margin-top: 14px; color: var(--ink-2, #B8BCC6); }
 
+/* Lost contact with the server for over ten minutes: the sky dims with the
+   data panels; the clock, which is the browser's own, stays. */
+body.stale .sky-alert { opacity: 0 !important; }
+
 /* Shared WebGL stage. Above the modules, below the fixture label and HUD
    by document order; hidden by stage.js whenever no actor is active. */
 .stage {

@@ -194,13 +194,20 @@
   }
 
   let stampEl = null, marketsEl = null, skyAlertEl = null;
+  // Last time the page heard from the server. Past STALE_MS the data panels
+  // withdraw: a number that is no longer being measured must not stay up
+  // looking live. The clock (the browser's own) and the sky remain.
+  let lastGood = Date.now();
+  const STALE_MS = 10 * 60 * 1000;
   function renderAt(t, railT) {
     const have = bioState();
     const timeline = railT === undefined ? t : railT;
     const nowSec = performance.now() / 1000;
     // The register (rest / glance / theatre) scales everything below.
     Conductor.frame(nowSec);
-    const lv = Conductor.level();
+    const fresh = MANUAL || FREEZE || Date.now() - lastGood < STALE_MS;
+    const lv = Conductor.level() * (fresh ? 1 : 0);
+    document.body.classList.toggle('stale', !fresh);
     const bioWindow = t < BIO_WINDOW;
     const showBio = visibility.biometrics !== false && bioWindow &&
       (have.heart || have.sleep) && lv > 0.01;
@@ -353,6 +360,7 @@
     setInterval(async () => {
       try {
         adopt(await readState());
+        lastGood = Date.now();
       } catch (err) {
         console.warn('state poll failed, keeping last good data', err);
       }
@@ -387,6 +395,15 @@
     }
     requestAnimationFrame(loop);
   }
+
+  // A lost WebGL context (driver reset, GPU memory pressure) would leave a
+  // frozen or blank glass on a wall nobody is watching. Reloading is the
+  // most reliable recovery for a kiosk: the page rebuilds every renderer.
+  document.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    console.warn('WebGL context lost; reloading the mirror in 3 s');
+    setTimeout(() => location.reload(), 3000);
+  }, true);
 
   boot().catch((err) => {
     console.error(err);
