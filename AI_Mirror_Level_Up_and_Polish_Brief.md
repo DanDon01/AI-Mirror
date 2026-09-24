@@ -500,7 +500,7 @@ the look through the glass can only be judged on the physical mirror.
 | Phase | Contents | Gate |
 |---|---|---|
 | **0 --- Foundation** | **Built:** Three.js r128 bundled locally; architecture lock (`test_house_layout.js`, 144 objects); shared stage with bloom, black floor, feathering and quality tiers; working per-scene Pi measurement; capture tools repaired. **Remaining:** the owner's Pi measurement run. | Existing visuals unchanged (the stage canvas is hidden when no actor is active) and a per-scene budget measured on the Pi |
-| **1 --- Two heroes** | B (house as hologram), C (real sky), post-processing chain | The house and sky pass the across-the-room test |
+| **1 --- Two heroes** | B (house as hologram), C (real sky), post-processing chain. **Built, under review:** hologram house (`js/home-holo.js`) on the stage, all 112 real-home solids locked in place; switch with Mirror Controls "House: 0 classic, 1 hologram". **Next:** the real-sky actor. | The house and sky pass the across-the-room test |
 | **2 --- The Conductor** | A2 and A3, G (presence, Rest and Wake), retire the 80-second loop | The display visibly changes between an empty and an occupied room |
 | **3 --- The resident** | E (avatar portal, thinking theatre, intent-driven display) | Ask about the weather: the avatar answers while the sky takes the stage |
 | **4 --- Moments** | F, curated set and web panel page | A week of normal life without the same Moment twice in a day |

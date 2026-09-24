@@ -30,6 +30,15 @@ const Panels = (function () {
 
   let entries = [], tuning = {};
 
+  // Which house draws: the frozen classic (default) or the hologram on the
+  // shared stage. Mirror Controls sets home_renderer (0 classic, 1
+  // hologram); ?house=holo|classic overrides it for captures and review.
+  const HOUSE_PARAM = new URLSearchParams(location.search).get('house');
+  function houseKind() {
+    if (HOUSE_PARAM === 'holo' || HOUSE_PARAM === 'classic') return HOUSE_PARAM;
+    return Number(tuning.home_renderer) >= 0.5 ? 'holo' : 'classic';
+  }
+
   function ramp(t, a, b) {
     const x = Math.max(0, Math.min(1, (t - a) / (b - a)));
     return x * x * (3 - 2 * x);
@@ -236,9 +245,12 @@ const Panels = (function () {
 
   function apply(data) {
     setTuning(data._tuning || {});
-    HomeTwin.update(Object.assign({}, data.energy || {}, {
+    const houseState = Object.assign({}, data.energy || {}, {
       weather: data.weather || null, _tuning: tuning,
-    }));
+    });
+    HomeTwin.update(houseState);
+    if (typeof HomeHolo !== 'undefined') HomeHolo.update(houseState);
+    const kind = houseKind();
     const visible = data._visibility || {};
     const available = {
       // The house is still a valuable live digital twin when the meter is
@@ -254,8 +266,10 @@ const Panels = (function () {
       document.querySelector('.slot[data-slot="0"]'),
       document.querySelector('.slot[data-slot="1"]'),
     ];
+    // Retained only while the same renderer is selected; switching between
+    // classic and hologram disposes one and mounts the other.
     const retainedHome = available.energy
-      ? entries.find(function (entry) { return entry.kind === 'energy'; })
+      ? entries.find(function (entry) { return entry.kind === 'energy' && entry.homeKind === kind; })
       : null;
 
     // Keep the actual WebGL canvas alive across the bridge's two-second
@@ -279,6 +293,7 @@ const Panels = (function () {
         return {
           kind: s.kind, el: retainedHome.el, from: s.from, to: s.to,
           tilt: s.slot === 0 ? 2.0 : -2.0, tick: null, home: retainedHome.home,
+          homeKind: kind,
         };
       }
       const made = BUILD[s.kind](data);
@@ -288,13 +303,17 @@ const Panels = (function () {
       slots[s.slot].appendChild(el);
       // Construct the renderer only when its scheduled window actually opens.
       // This avoids creating an invisible WebGL context for every bridge poll.
-      const home = s.kind === 'energy' ? HomeTwin.mount(el.querySelector('.house')) : null;
+      const houseEl = s.kind === 'energy' ? el.querySelector('.house') : null;
+      const home = houseEl ? (kind === 'holo' && typeof HomeHolo !== 'undefined' && window.Stage
+        ? HomeHolo.mount(houseEl) : HomeTwin.mount(houseEl)) : null;
+      // The hologram moves the watt figure off the model (see style.css).
+      if (houseEl) el.classList.toggle('holo-house', kind === 'holo');
       return {
         kind: s.kind, el: el, from: s.from, to: s.to,
         tilt: s.slot === 0 ? 2.0 : -2.0,
         tick: s.kind === 'cal' ? bladeTicker(el, data.calendar) :
           (s.kind === 'news' ? newsTicker(el) : null),
-        home: home,
+        home: home, homeKind: houseEl ? kind : null,
       };
     });
   }
@@ -302,6 +321,7 @@ const Panels = (function () {
   function setTuning(next) {
     tuning = next || {};
     HomeTwin.setTuning(tuning);
+    if (typeof HomeHolo !== 'undefined') HomeHolo.setTuning(tuning);
   }
 
   function frame(t, now = performance.now()/1000) {

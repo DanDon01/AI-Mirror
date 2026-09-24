@@ -102,6 +102,8 @@ class Bridge:
         "heart_x": 0, "heart_y": 0, "heart_scale": 1.0,
         "brain_x": 0, "brain_y": 0, "brain_scale": 1.0,
         "calendar_x": 0, "calendar_y": 0, "news_x": 0, "news_y": 0,
+        # 0 = classic house (default until signed off), 1 = hologram.
+        "home_renderer": 0,
     }
 
     def __init__(self):
@@ -733,7 +735,7 @@ class Bridge:
             "heart_scale": (0.55, 1.45), "brain_x": (-420, 420), "brain_y": (-420, 420),
             "brain_scale": (0.55, 1.45), "calendar_x": (-360, 360),
             "calendar_y": (-360, 360), "news_x": (-360, 360),
-            "news_y": (-360, 360),
+            "news_y": (-360, 360), "home_renderer": (0, 1),
         }
         for key, value in updates.items():
             if key not in limits:

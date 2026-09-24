@@ -28,10 +28,27 @@ window planes, curved tyres and wheel arches rather than box primitives.
 
 Run test_home_twin.py with Python and test_home_twin.js with Node.
 
+## Hologram house (Phase 1, under review)
+
+js/home-holo.js draws the same house on the shared stage (js/stage.js) as
+light. It uses Fresnel glass with lit silhouettes, a build-in from the ground
+up, and a scan pass every 40 s. Lit rooms fill with warm light. Energy flows
+as particles along real routes: roof to house, grid in or out (amber in,
+blue out), and charger to car. Rain, snow and storm lightning use the same
+real thresholds as the classic. Presence shows as an anonymous point figure.
+
+The classic (js/home-twin.js) is frozen and remains the default. Mirror
+Controls "House: 0 classic, 1 hologram" (tuning key home_renderer) switches
+between them live, and ?house=holo|classic overrides it for captures. The
+grid entry point is drawn beside the house at the garage-opposite end; it is
+an approximation until the real meter position is known.
+
 test_house_layout.js (Node) is the real-home architecture lock. It builds the
 renderer's scene with WebGL output stubbed and compares every object's
 position and extent with fixtures/house-layout.golden.json. It fails on a 1 cm
 move. Regenerate the golden file with --update only after owner sign-off.
+With --holo it checks the hologram: every classic solid must be present with
+the same geometry in the same place, and added effect meshes are allowed.
 qa_home.py uses Chrome to capture the production DOM/CSS/panel renderer at
 1440 x 2560, with explicitly isolated synthetic sensor cases. It never modifies
 the live endpoint. Ignored shots/home-*.png include full frames and detail crops.

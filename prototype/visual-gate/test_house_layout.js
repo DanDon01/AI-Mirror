@@ -4,7 +4,9 @@
 // fingerprints every object in the house group, and compares it with the
 // signed-off golden file.
 //
-//   node test_house_layout.js            check against the golden file
+//   node test_house_layout.js            check the classic against the golden file
+//   node test_house_layout.js --holo     check the hologram house: every classic
+//                                        solid present, same geometry, same place
 //   node test_house_layout.js --update   rewrite it (only after owner sign-off)
 const fs = require('fs'), vm = require('vm'), path = require('path');
 
@@ -35,20 +37,28 @@ vm.runInContext(`
   this.__scenes = [];
   THREE.Scene = function () { const s = new RealScene(); __scenes.push(s); return s; };
 `, context);
-vm.runInContext(fs.readFileSync(path.resolve(__dirname, RENDERER), 'utf8') + ';this.twin=HomeTwin;', context);
-
 // A fixed, quiet reference state: car home, door shut, curtains open, no
 // weather effects. Animated parts are therefore at deterministic rest poses.
 const REST = { watts_now: 468, car: { charge_pct: 42 },
   devices: { car_present: true, front_door_open: false },
   rooms: { livingroom: { curtain: 'open' } } };
-context.twin.update(REST, 0);
-const frame = context.twin.mount(element());
-for (let i = 0; i <= 240; i++) frame(i / 24);
-
-const scene = context.__scenes[0];
-if (!scene) throw new Error('renderer did not build a scene');
-const home = scene.children.find((c) => c.type === 'Group');
+const HOLO = process.argv.includes('--holo');
+let home;
+if (HOLO) {
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname, process.env.HOLO_RENDERER || 'js/home-holo.js'), 'utf8') + ';this.holo=HomeHolo;', context);
+  context.holo.update(REST, 0);
+  const built = context.holo.build();
+  for (let i = 0; i <= 240; i++) built.frame(i / 24, 1, { value: 1.6, growH: 1.5 }, {}, 1000);
+  home = built.home;
+} else {
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname, RENDERER), 'utf8') + ';this.twin=HomeTwin;', context);
+  context.twin.update(REST, 0);
+  const frame = context.twin.mount(element());
+  for (let i = 0; i <= 240; i++) frame(i / 24);
+  const scene = context.__scenes[0];
+  if (!scene) throw new Error('renderer did not build a scene');
+  home = scene.children.find((c) => c.type === 'Group');
+}
 home.updateMatrixWorld(true);
 
 const r = (v) => Math.round(v * 1e4) / 1e4;
@@ -78,6 +88,30 @@ if (process.argv.includes('--update')) {
 
 const golden = JSON.parse(fs.readFileSync(GOLDEN, 'utf8')).objects;
 const TOL = 2e-4;
+const same = (g, e) => g.geometry === e.geometry && g.vertices === e.vertices &&
+  [...g.min, ...g.max].every((v, k) => Math.abs(v - [...e.min, ...e.max][k]) <= TOL);
+
+if (HOLO) {
+  // Solids are the architecture. The hologram may add light, particles and
+  // edges, and may restyle anything, but may not move or drop a solid.
+  const solids = golden.filter((g) => g.type === 'Mesh');
+  const pool = entries.filter((e) => e.type === 'Mesh');
+  const used = new Set(), missing = [];
+  for (const g of solids) {
+    const k = pool.findIndex((e, i) => !used.has(i) && same(g, e));
+    if (k < 0) missing.push(`#${g.i} ${g.geometry} [${g.min}]..[${g.max}]`);
+    else used.add(k);
+  }
+  if (missing.length) {
+    console.error(`Hologram house is missing or has moved ${missing.length} real-home solid(s):\n  ` +
+      missing.slice(0, 20).join('\n  '));
+    process.exit(1);
+  }
+  console.log(`Hologram house locked: all ${solids.length} real-home solids present in place ` +
+    `(${pool.length - solids.length} added effect meshes)`);
+  process.exit(0);
+}
+
 const moved = [];
 if (golden.length !== entries.length) {
   moved.push(`object count ${entries.length}, expected ${golden.length}`);

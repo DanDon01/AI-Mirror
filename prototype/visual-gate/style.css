@@ -318,6 +318,9 @@ body {
 
 .p-energy .foot  { position: absolute; z-index: 2; left: 28px; bottom: 24px;
                    display: flex; align-items: flex-end; gap: 27px; }
+/* Hologram house: the reading sits in the black beside the model rather
+   than on top of it. The classic keeps its original placement. */
+.p-energy.holo-house .foot { left: -330px; bottom: 170px; }
 .p-energy .bars  { display: flex; align-items: flex-end; gap: 6px; height: 49px; }
 
 /* Whole load cool, the share the roof covered warm from the bottom. */
