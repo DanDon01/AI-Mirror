@@ -30,6 +30,9 @@
       <img class="layer main" src="assets/sky/cloud-main.webp" alt="">
       <img class="layer near" src="assets/sky/cloud-near.webp" alt="">
     </div>
+
+    <!-- One readout, only when the forecast crosses the rain threshold. -->
+    <div class="sky-alert" id="skyAlert" hidden><span class="l"></span><span class="v"></span></div>
   </header>
 
   <!-- ============ BIOMETRICS: centred upper-stage module ============ -->
@@ -78,6 +81,7 @@
 <script src="js/frame.js"></script>
 <script src="js/home-twin.js"></script>
 <script src="js/home-holo.js"></script>
+<script src="js/sky.js"></script>
 <script src="js/panels.js"></script>
 <script src="js/main.js"></script>
 </body>

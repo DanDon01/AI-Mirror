@@ -232,6 +232,17 @@ class Bridge:
         if snow_mm is not None:
             out['snow_mm_h'] = snow_mm
 
+        # The sky is drawn from where the mirror actually is: the provider's
+        # own coordinates let the page place the real sun and moon. Cloud
+        # cover is the measured percentage, not inferred from a label.
+        coord = data.get('coord') or data.get('coords') or {}
+        lat, lon = _num(coord.get('lat')), _num(coord.get('lon'))
+        if lat is not None and lon is not None:
+            out['location'] = {'lat': round(lat, 3), 'lon': round(lon, 3)}
+        cloud = _num((data.get('clouds') or {}).get('all'))
+        if cloud is not None:
+            out['cloud_pct'] = int(round(max(0, min(100, cloud))))
+
         hourly = data.get("hourly") or {}
         times = hourly.get("time") or []
         temps = hourly.get("temperature_2m") or []
@@ -256,6 +267,16 @@ class Bridge:
             })
         if row:
             out["hourly"] = row[:5]
+
+        # The next 24 hours of forecast temperature, for the sky's horizon
+        # curve. Only hours the provider actually returned are included.
+        curve = []
+        for i in range(start, min(start + 24, len(times))):
+            t = _num(temps[i]) if i < len(temps) else None
+            if t is not None:
+                curve.append({"at": times[i][11:16], "c": round(t, 1)})
+        if len(curve) >= 6:
+            out["curve"] = curve
 
         # A rain alert only when the forecast actually crosses the
         # threshold in the next few hours. No crossing, no alert, and

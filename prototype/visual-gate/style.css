@@ -555,6 +555,18 @@ body {
   color: #2E323B;
 }
 
+/* The rain readout under the sky band: one label, one figure. */
+.sky-alert {
+  position: absolute;
+  right: 70px; top: 372px;
+  display: flex; align-items: baseline; gap: 14px;
+  font-family: var(--ff-text);
+  color: var(--ink);
+}
+.sky-alert[hidden] { display: none; }
+.sky-alert .l { font-size: 20px; color: var(--ink-3); }
+.sky-alert .v { font-family: var(--ff-display); font-size: 54px; line-height: 1; }
+
 /* Shared WebGL stage. Above the modules, below the fixture label and HUD
    by document order; hidden by stage.js whenever no actor is active. */
 .stage {

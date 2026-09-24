@@ -255,6 +255,7 @@
     document.body.dataset.source = isFixture ? 'fixture' : 'live';
 
     Frame.apply(next);
+    if (typeof Sky !== 'undefined') Sky.apply(next.weather, visibility.weather !== false);
     Markets.apply(next.markets, visibility.markets !== false);
     Panels.apply(next);
   }
@@ -271,6 +272,8 @@
     // Captures pin the tier so a still never depends on how fast the host is.
     Stage.init(document.getElementById('stage'), { tier: TIER, pinned: MANUAL || FREEZE });
     if (PROBE) Stage.register(StageProbe.create());
+    // The real sky replaces the static photographic one when the stage runs.
+    if (typeof Sky !== 'undefined' && Sky.mount()) Sky.apply(data.weather, visibility.weather !== false);
 
     window.__setTime = (t) => { renderAt(t, t); return true; };
     window.__gpuInfo = () => Biometrics.stats();
