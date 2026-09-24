@@ -290,9 +290,15 @@ const HomeTwin = (() => {
       // different speed at a lower frame rate (about 2.5s to settle).
       curtainState.open+=(openTarget-curtainState.open)*(1-Math.exp(-curtainDt/.8));
       const closed=1-curtainState.open;
-      curtains[0].position.x=-.60+(.525*closed);
-      curtains[1].position.x=.96-(.525*closed);
-      curtains[0].visible=curtains[1].visible=openTarget<.999||curtainState.open<.992;
+      // Curtains exist only inside the living-room window (glass x -.33..0.69):
+      // each panel is drawn from its outer frame edge toward the centre, and
+      // there is nothing to see when they are open - never a panel outside
+      // the frame reading as an exterior shutter.
+      const drawn=Math.max(closed,.001);
+      curtains[0].scale.x=curtains[1].scale.x=drawn;
+      curtains[0].position.x=-.33+.255*drawn;
+      curtains[1].position.x=.69-.255*drawn;
+      curtains[0].visible=curtains[1].visible=closed>.004;
       const downTemp=rooms.downstairs&&rooms.downstairs.temperature_c,upTemp=upstairs.temperature_c;
       for(const name of ['hallway','livingroom','kitchen'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||downTemp);
       for(const name of ['bedroom1','bedroom2','bedroom3','bathroom'])setThermal(name,(rooms[name]&&rooms[name].temperature_c)||upTemp);
