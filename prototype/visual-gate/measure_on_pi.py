@@ -33,14 +33,12 @@ import subprocess
 import tempfile
 import threading
 import time
-import urllib.request
 from functools import partial
 from http.server import ThreadingHTTPServer
 
 from serve import fixture_handler, free_port
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEBUG_PORT = 9333
 MIRROR_UNITS = ("ai-mirror-visual.service", "ai-mirror.service")
 
 CHROMIUM = os.environ.get("MEASURE_CHROME") or next(
@@ -145,41 +143,55 @@ def mirror_running():
     return active
 
 
-def cdp_target(proc):
-    """Wait for our page in DevTools, or for the browser to die trying."""
-    for _ in range(90):
+class Reports:
+    """Latest frame report posted by the page (?report=1).
+
+    The page posts its own timing to the server that launched it, so the
+    Pi needs no DevTools client and no websocket package - the previous
+    DevTools path failed silently on the Pi and left every figure blank."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.latest = None
+        self.count = 0
+
+    def put(self, payload):
+        with self.lock:
+            self.latest = payload
+            self.count += 1
+
+    def get(self):
+        with self.lock:
+            return self.latest, self.count
+
+
+def reporting_handler(reports):
+    base = fixture_handler()
+
+    def do_POST(self):
+        if self.path.split("?")[0] != "/api/perf":
+            return base.do_POST(self)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            reports.put(json.loads(self.rfile.read(length) or b"{}"))
+            self.send_response(204)
+            self.end_headers()
+        except (ValueError, json.JSONDecodeError):
+            self.send_error(400, "bad report")
+
+    return type("ReportingHandler", (base,), {"do_POST": do_POST})
+
+
+def wait_for_report(proc, reports, seconds=60):
+    """First report from the page, or None if the browser dies first."""
+    deadline = time.time() + seconds
+    while time.time() < deadline:
         if proc.poll() is not None:
             return None
-        try:
-            with urllib.request.urlopen(
-                    f"http://127.0.0.1:{DEBUG_PORT}/json", timeout=2) as r:
-                for t in json.load(r):
-                    if t.get("type") == "page" and "index.html" in t.get("url", ""):
-                        return t["webSocketDebuggerUrl"]
-        except Exception:
-            pass
+        latest, _ = reports.get()
+        if latest is not None:
+            return latest
         time.sleep(0.5)
-    return None
-
-
-def page_eval(ws_url, expression):
-    try:
-        from websockets.sync.client import connect
-    except ImportError:
-        return None
-    payload = {"id": 1, "method": "Runtime.evaluate",
-               "params": {"expression": expression, "returnByValue": True}}
-    try:
-        with connect(ws_url, open_timeout=5, close_timeout=2,
-                     max_size=16 * 1024 * 1024) as ws:
-            ws.send(json.dumps(payload))
-            for _ in range(8):
-                msg = json.loads(ws.recv(timeout=5))
-                if msg.get("id") == 1:
-                    value = msg["result"]["result"].get("value")
-                    return json.loads(value) if value else None
-    except Exception:
-        return None
     return None
 
 
@@ -254,14 +266,15 @@ def main():
     log_path = os.path.join(profile, "chromium.log")
 
     port = free_port()
+    reports = Reports()
     server = ThreadingHTTPServer(("127.0.0.1", port),
-                                 partial(fixture_handler(), directory=HERE))
+                                 partial(reporting_handler(reports), directory=HERE))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     time.sleep(0.4)
 
     # fit=1 is what the mirror runs with (run.sh fits the 1440x2560 plate
     # to the real panel), so measure the same thing.
-    query = "hud=1&fit=1"
+    query = "hud=1&fit=1&report=1"
     if args.probe:
         query += "&probe=1"
     if args.tier:
@@ -269,7 +282,6 @@ def main():
 
     flags = [
         CHROMIUM,
-        f"--remote-debugging-port={DEBUG_PORT}",
         # A private profile. Sharing the mirror's /tmp/visual-gate-profile
         # made Chromium hand the URL to an already-running mirror window
         # and exit, so DevTools never appeared.
@@ -291,11 +303,15 @@ def main():
     print("launching chromium...")
     log = open(log_path, "w")
     proc = subprocess.Popen(flags, stdout=log, stderr=subprocess.STDOUT, env=env)
-    ws_url = cdp_target(proc)
-    if not ws_url:
+    first = wait_for_report(proc, reports)
+    if first is None or first.get("error"):
         # Sampling a browser that is not there would waste the whole run.
-        state = (f"exited with code {proc.returncode}" if proc.poll() is not None
-                 else "is running but never exposed DevTools")
+        if first is not None:
+            state = "loaded the page, but the page failed: " + first["error"]
+        elif proc.poll() is not None:
+            state = f"exited with code {proc.returncode}"
+        else:
+            state = "is running but the page never reported (check DISPLAY and the log)"
         proc.terminate()
         server.shutdown()
         log.close()
@@ -317,7 +333,8 @@ def main():
     try:
         while time.time() - start < args.seconds:
             time.sleep(2.0)
-            perf = page_eval(ws_url, "JSON.stringify(window.__perf||{})") if ws_url else perf
+            latest, _ = reports.get()
+            perf = (latest or {}).get("perf") or perf
             cpu, rss = chromium_usage(proc.pid)
             row = {
                 "t": round(time.time() - start, 1),
@@ -336,9 +353,9 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        stage = page_eval(ws_url, "JSON.stringify(window.__stageInfo ? window.__stageInfo() : {})") if ws_url else None
-        final = page_eval(ws_url, "JSON.stringify(window.__perf||{})") if ws_url else None
-        perf = final or perf
+        latest, _ = reports.get()
+        stage = (latest or {}).get("stage")
+        perf = (latest or {}).get("perf") or perf
         proc.terminate()
         server.shutdown()
         log.close()

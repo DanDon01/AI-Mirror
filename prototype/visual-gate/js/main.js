@@ -32,6 +32,7 @@
   const FIT = Q.get('fit') === '1';
   const PROBE = Q.get('probe') === '1';   // stage load probe, measurement only
   const TIER = Q.get('tier') || '';       // pin a stage quality tier
+  const REPORT = Q.get('report') === '1'; // post frame timing to measure_on_pi.py
 
   // The plate is authored at the mirror's real 1440x2560. On any other
   // display that means you see the top-left corner and nothing else, so
@@ -113,6 +114,21 @@
     lastWall = wall;
   }
   window.__perf = perf;
+
+  // Measurement mode: the page reports its own figures to the server that
+  // launched it, so the Pi needs no DevTools client or extra packages.
+  // Starts before boot, so a page that fails to boot still says why.
+  if (REPORT) {
+    setInterval(() => {
+      const body = JSON.stringify({
+        perf,
+        stage: window.Stage && Stage.info ? Stage.info() : null,
+        error: document.body.dataset.error || '',
+      });
+      fetch('api/perf', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } })
+        .catch(() => {});
+    }, 2000);
+  }
 
   // ---- state ---------------------------------------------------------
   let data = null, bpm = 0, started = 0, visibility = {}, tuning = {};
