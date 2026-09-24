@@ -44,6 +44,9 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/api/state.json":
             self._serve_state()
             return
+        if self.path.split("?")[0] == "/api/events":
+            self._serve_events()
+            return
         if self.path.split("?")[0] == "/api/control/status":
             if self.bridge is None:
                 self._json({"live": False, "modules": {}, "configured_entities": {}})
@@ -70,6 +73,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path == "/api/presence":
+            if self.bridge is None:
+                self.send_error(503, "live bridge unavailable")
+                return
+            self._json({"ok": True, "presence": self.bridge.ping_presence()})
+            return
         if path == "/api/control/calendar-refresh":
             if self.bridge is None:
                 self.send_error(503, "live bridge unavailable")
@@ -139,6 +148,37 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store, max-age=0")
         self.end_headers()
         self.wfile.write(body)
+
+    def _serve_events(self):
+        """Server-sent events: presence, resident and moment cues pushed the
+        moment they happen, instead of waiting for the next two-second poll.
+        One handler thread per open page; a 15 s comment keeps proxies and
+        the browser from treating a quiet stream as dead."""
+        hub = getattr(self.bridge, "events", None)
+        if hub is None:
+            self.send_error(404, "no event stream without the live bridge")
+            return
+        q = hub.subscribe()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            self.wfile.write(b": connected\n\n")
+            self.wfile.flush()
+            import queue
+            while True:
+                try:
+                    event = q.get(timeout=15)
+                    self.wfile.write(("data: " + json.dumps(event, default=str) + "\n\n").encode("utf-8"))
+                except queue.Empty:
+                    self.wfile.write(b": keepalive\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            hub.unsubscribe(q)
 
     def _serve_state(self):
         try:

@@ -292,7 +292,7 @@ const Panels = (function () {
         slots[s.slot].appendChild(retainedHome.el);
         return {
           kind: s.kind, el: retainedHome.el, from: s.from, to: s.to,
-          tilt: s.slot === 0 ? 2.0 : -2.0, tick: null, home: retainedHome.home,
+          slot: s.slot, tilt: s.slot === 0 ? 2.0 : -2.0, tick: null, home: retainedHome.home,
           homeKind: kind,
         };
       }
@@ -310,7 +310,7 @@ const Panels = (function () {
       if (houseEl) el.classList.toggle('holo-house', kind === 'holo');
       return {
         kind: s.kind, el: el, from: s.from, to: s.to,
-        tilt: s.slot === 0 ? 2.0 : -2.0,
+        slot: s.slot, tilt: s.slot === 0 ? 2.0 : -2.0,
         tick: s.kind === 'cal' ? bladeTicker(el, data.calendar) :
           (s.kind === 'news' ? newsTicker(el) : null),
         home: home, homeKind: houseEl ? kind : null,
@@ -324,15 +324,30 @@ const Panels = (function () {
     if (typeof HomeHolo !== 'undefined') HomeHolo.setTuning(tuning);
   }
 
-  function frame(t, now = performance.now()/1000) {
+  // ctx.level scales the rotation by the Conductor's register (0 at rest,
+  // 1 in glance, lower in theatre). ctx.pins are real events holding a
+  // panel on the glass regardless of the rotation; a forced pin (alarm,
+  // someone at the porch) shows even at rest. A pinned panel owns its slot.
+  function frame(t, now = performance.now()/1000, ctx = {}) {
     // A house focus frame will replace this immediately.  Resetting at the
     // panel scheduler level prevents a completed energy slot from leaving
     // another panel faded after the Three.js canvas has been unmounted.
     document.documentElement.style.setProperty('--twin-focus', '0');
+    const level = typeof ctx.level === 'number' ? ctx.level : 1;
+    const pins = ctx.pins || {};
+    const wall = performance.now() / 1000;
+    const pinP = function (pn) {
+      return pn ? ramp(wall, pn.from, pn.from + RISE) * (1 - ramp(wall, pn.until, pn.until + FALL)) : 0;
+    };
+    const slotPinned = {};
+    entries.forEach(function (e) { if (pinP(pins[e.kind]) > 0.002) slotPinned[e.slot] = e.kind; });
     const shown = [];
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
-      const p = ramp(t, e.from, e.from + RISE) - ramp(t, e.to - FALL, e.to);
+      let p = (ramp(t, e.from, e.from + RISE) - ramp(t, e.to - FALL, e.to)) * level;
+      if (slotPinned[e.slot] && slotPinned[e.slot] !== e.kind) p = 0;
+      const pn = pins[e.kind];
+      if (pn) p = Math.max(p, pinP(pn) * (pn.force ? 1 : level));
       const el = e.el;
       if(e.home && p >= 0.002) e.home(now);
       if (p < 0.002) {

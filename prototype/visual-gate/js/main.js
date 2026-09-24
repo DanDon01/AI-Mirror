@@ -181,13 +181,19 @@
     haloEl.classList.toggle('sleep', morph > 0.5);
   }
 
+  let stampEl = null, marketsEl = null, skyAlertEl = null;
   function renderAt(t, railT) {
     const have = bioState();
     const timeline = railT === undefined ? t : railT;
+    const nowSec = performance.now() / 1000;
+    // The register (rest / glance / theatre) scales everything below.
+    Conductor.frame(nowSec);
+    const lv = Conductor.level();
     const bioWindow = t < BIO_WINDOW;
     const showBio = visibility.biometrics !== false && bioWindow &&
-      (have.heart || have.sleep);
+      (have.heart || have.sleep) && lv > 0.01;
     bioEl.hidden = !showBio;
+    if (showBio) bioEl.style.opacity = lv.toFixed(3);
 
     if (showBio) {
       // Hold at whichever end has a reading behind it rather than
@@ -199,11 +205,24 @@
       setBio(morph, have);
     }
 
-    const layers = Panels.frame(t) || [];
+    const layers = Panels.frame(t, nowSec, { level: lv, pins: Conductor.activePins(nowSec) }) || [];
     if (showBio) layers.unshift('bio');
     const onStage = Stage.frame(timeline, performance.now() / 1000, perf.lastDt);
     if (onStage.length) layers.push('stage:' + onStage.join(','));
     Markets.frame(railT === undefined ? t : railT);
+    marketsEl = marketsEl || document.getElementById('markets');
+    marketsEl.style.opacity = lv.toFixed(3);
+    marketsEl.style.visibility = lv < 0.01 ? 'hidden' : '';
+    // At rest the time stays, dimmed, breathing once every four beats of
+    // the wearer's real resting heart rate - a quiet sign the glass is alive.
+    stampEl = stampEl || document.querySelector('.stamp');
+    const rest = Conductor.restLevel(), beats = Conductor.bpm();
+    const breath = beats ? 0.07 * Math.sin(2 * Math.PI * nowSec / (4 * 60 / beats)) : 0;
+    const stampOpacity = (rest + (1 - rest) * (0.62 + breath)).toFixed(3);
+    stampEl.style.opacity = stampOpacity;
+    skyAlertEl = skyAlertEl || document.getElementById('skyAlert');
+    if (skyAlertEl) skyAlertEl.style.opacity = stampOpacity;
+    if (typeof Sky !== 'undefined' && Sky.setLevel) Sky.setLevel(0.45 + 0.55 * rest);
     Frame.tick();
     // Attributed to the frame drawn next, which is the one this state costs.
     perf.scene = layers.length ? layers.join('+') : 'idle';
@@ -254,6 +273,7 @@
     document.querySelector('.fixture-mark').hidden = !isFixture;
     document.body.dataset.source = isFixture ? 'fixture' : 'live';
 
+    Conductor.apply(next);
     Frame.apply(next);
     if (typeof Sky !== 'undefined') Sky.apply(next.weather, visibility.weather !== false);
     Markets.apply(next.markets, visibility.markets !== false);
@@ -274,6 +294,21 @@
     if (PROBE) Stage.register(StageProbe.create());
     // The real sky replaces the static photographic one when the stage runs.
     if (typeof Sky !== 'undefined' && Sky.mount()) Sky.apply(data.weather, visibility.weather !== false);
+    Wake.mount();
+    Greeting.mount();
+
+    // Push channel: presence, resident and moment cues arrive at once rather
+    // than on the next poll. Only the live bridge offers it; the poll stays
+    // as the fallback, and EventSource reconnects by itself.
+    if (data._events && !MANUAL) {
+      const es = new EventSource('api/events');
+      es.onmessage = (msg) => {
+        let ev = null;
+        try { ev = JSON.parse(msg.data); } catch (e) { return; }
+        Conductor.onEvent(ev);
+        window.dispatchEvent(new CustomEvent('mirror-event', { detail: ev }));
+      };
+    }
 
     window.__setTime = (t) => { renderAt(t, t); return true; };
     window.__gpuInfo = () => Biometrics.stats();

@@ -567,6 +567,25 @@ body {
 .sky-alert .l { font-size: 20px; color: var(--ink-3); }
 .sky-alert .v { font-family: var(--ff-display); font-size: 54px; line-height: 1; }
 
+/* Registers. Deep dim (02:00-05:00 by default) lowers the whole glass;
+   the transition is slow enough that nobody sees it happen. */
+.mirror { transition: opacity 4s ease; }
+body.deep-dim .mirror { opacity: var(--dim-level, 0.35); }
+
+.greeting {
+  position: absolute;
+  left: 0; right: 0; top: 520px;
+  margin: 0;
+  text-align: center;
+  font-family: var(--ff-display);
+  font-size: 72px;
+  color: var(--ink);
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+  transition: opacity 1.4s ease, transform 1.6s ease;
+}
+.greeting.on { opacity: 0.92; transform: none; }
+
 /* Shared WebGL stage. Above the modules, below the fixture label and HUD
    by document order; hidden by stage.js whenever no actor is active. */
 .stage {

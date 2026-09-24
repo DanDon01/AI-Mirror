@@ -691,6 +691,9 @@ CONFIG = {
         'doorbell_motion_entity': os.getenv('VISUAL_GATE_DOORBELL_PERSON', os.getenv('VISUAL_GATE_DOORBELL_MOTION_ENTITY', '')),
         'external_motion_entity': os.getenv('VISUAL_GATE_FRONTCAMERA_MOTION', os.getenv('VISUAL_GATE_EXTERNAL_MOTION_ENTITY', '')),
         'rain_probability_pct': int(os.getenv('VISUAL_GATE_RAIN_THRESHOLD', '55')),
+        # Motion sensor in front of the mirror: drives Rest / Glance / wake.
+        'entrance_pir_entity': os.getenv('VISUAL_GATE_ENTRANCE_PIR',
+                                         os.getenv('VISUAL_GATE_ENTRANCE_PIR_ENTITY', '')),
     },
     
     # Debug settings

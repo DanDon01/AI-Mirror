@@ -46,8 +46,44 @@ TWIN_ENTITIES = {
     'car_presence_entity', 'upstairs_occupancy_entity', 'front_door_contact_entity',
     'doorbell_camera_entity', 'external_camera_entity',
     'doorbell_motion_entity', 'external_motion_entity', 'car_charging_entity',
-    'battery_soc_entity', 'battery_charging_entity',
+    'battery_soc_entity', 'battery_charging_entity', 'entrance_pir_entity',
 }
+
+
+class EventHub:
+    """Fan-out of small push events (presence, resident, moments) to every
+    open page. Each subscriber gets its own bounded queue; a page that stops
+    reading loses old events rather than growing memory without limit."""
+
+    def __init__(self):
+        import queue
+        self._queue = queue
+        self._subs = []
+        self._lock = threading.Lock()
+
+    def subscribe(self):
+        q = self._queue.Queue(maxsize=64)
+        with self._lock:
+            self._subs.append(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._lock:
+            if q in self._subs:
+                self._subs.remove(q)
+
+    def publish(self, event):
+        with self._lock:
+            subs = list(self._subs)
+        for q in subs:
+            try:
+                q.put_nowait(event)
+            except self._queue.Full:
+                try:
+                    q.get_nowait()
+                    q.put_nowait(event)
+                except Exception:
+                    pass
 
 # Open-Meteo WMO codes, collapsed to the four glyphs the page draws.
 # Anything unrecognised becomes cloud, which is the honest default for a
@@ -104,6 +140,9 @@ class Bridge:
         "calendar_x": 0, "calendar_y": 0, "news_x": 0, "news_y": 0,
         # 0 = classic house (default until signed off), 1 = hologram.
         "home_renderer": 0,
+        # Registers: minutes without presence before rest, and deep dim.
+        "rest_after_minutes": 10, "dim_start_hour": 2, "dim_end_hour": 5,
+        "dim_level": 0.35,
     }
 
     def __init__(self):
@@ -125,6 +164,9 @@ class Bridge:
                 logger.warning("bridge: %s unavailable (%s)", name, exc)
 
         self.gate = dict(CONFIG.get("visual_gate", {}) or {})
+        self.events = EventHub()
+        # Presence in front of the mirror: None until the sensor has reported.
+        self.presence = {"detected": None, "last_seen": None, "source": None}
         self.tuning = self.TUNING_DEFAULTS.copy()
         self.visibility = {"biometrics": True, "markets": True, "energy": True,
                           "calendar": True, "news": True, "weather": True}
@@ -609,12 +651,59 @@ class Bridge:
 
     # ---- payload ------------------------------------------------------
 
+    # ---- presence --------------------------------------------------------
+
+    def _pir_state(self):
+        """One small GET for the entrance sensor alone, with the smart-home
+        module's own URL and credentials. The full-state poll every 5 s is too
+        slow to wake the mirror as someone walks up to it."""
+        entity = self.gate.get("entrance_pir_entity")
+        home = self.modules.get("smarthome")
+        url = getattr(home, "ha_url", "") if home else ""
+        if not entity or not url:
+            return None
+        import requests
+        try:
+            resp = requests.get(f"{url}/api/states/{entity}", headers=home.headers, timeout=2)
+            if resp.status_code != 200:
+                return None
+            state = str(resp.json().get("state", "")).lower()
+        except Exception:
+            return None
+        if state in ("unknown", "unavailable", ""):
+            return None
+        return state in ("on", "detected", "occupied", "home", "motion")
+
+    def poll_presence(self):
+        detected = self._pir_state()
+        if detected is None:
+            return
+        self._set_presence(detected, "pir")
+
+    def _set_presence(self, detected, source):
+        changed = detected != self.presence.get("detected")
+        self.presence["detected"] = detected
+        self.presence["source"] = source
+        if detected:
+            self.presence["last_seen"] = time.time()
+        if changed or source == "manual":
+            self.events.publish({"type": "presence", "detected": detected,
+                                 "source": source, "at": time.time()})
+
+    def ping_presence(self):
+        """'I'm here' from the web panel: counts as a sighting, then lapses."""
+        self._set_presence(True, "manual")
+        return self.presence.copy()
+
     def snapshot(self):
         """The page payload. Only keys with real data behind them."""
         with self._lock:
-            out = {"_live": True, "generated": int(time.time()),
+            out = {"_live": True, "_events": True, "generated": int(time.time()),
                    "_visibility": self.visibility.copy(),
                    "_tuning": self.tuning.copy()}
+            configured = bool(self.gate.get("entrance_pir_entity"))
+            if configured or self.presence.get("last_seen"):
+                out["presence"] = {"configured": configured, **self.presence}
             for key, fn in (("weather", self._weather),
                             ("biometrics", self._biometrics),
                             ("calendar", self._calendar),
@@ -757,6 +846,8 @@ class Bridge:
             "brain_scale": (0.55, 1.45), "calendar_x": (-360, 360),
             "calendar_y": (-360, 360), "news_x": (-360, 360),
             "news_y": (-360, 360), "home_renderer": (0, 1),
+            "rest_after_minutes": (1, 120), "dim_start_hour": (0, 23),
+            "dim_end_hour": (0, 23), "dim_level": (0.1, 1.0),
         }
         for key, value in updates.items():
             if key not in limits:
@@ -797,6 +888,16 @@ def start(interval=1.0):
             time.sleep(interval)
 
     threading.Thread(target=loop, daemon=True, name="bridge").start()
+
+    def presence_loop():
+        while True:
+            try:
+                bridge.poll_presence()
+            except Exception:
+                logger.exception("presence poll failed")
+            time.sleep(1.0)
+
+    threading.Thread(target=presence_loop, daemon=True, name="presence").start()
     return bridge
 
 

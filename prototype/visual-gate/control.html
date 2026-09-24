@@ -66,7 +66,7 @@
       <a href="#modules-section">Modules</a><a href="#config-section">Mappings</a><a href="#diagnostics">Diagnostics</a>
     </nav>
     <div class="toolbar">
-      <button onclick="refresh()">Refresh data</button><button onclick="pump()">Request feed update</button><button onclick="refreshCalendar()">Refresh calendar</button>
+      <button onclick="refresh()">Refresh data</button><button onclick="pump()">Request feed update</button><button onclick="refreshCalendar()">Refresh calendar</button><button onclick="imHere()" title="Counts as someone standing at the mirror">I'm here</button>
       <span class="meta" id="saveMeta"></span>
     </div>
     <div class="layout">
@@ -90,6 +90,10 @@
     let tuningDirty = false, tuningTimer = null, tuningValues = {};
     const TUNERS = [
       ['home_renderer', 'House: 0 classic, 1 hologram', 0, 1, 1, '', 0],
+      ['rest_after_minutes', 'Rest after no presence', 1, 120, 1, 'min', 10],
+      ['dim_start_hour', 'Deep dim starts', 0, 23, 1, 'h', 2],
+      ['dim_end_hour', 'Deep dim ends', 0, 23, 1, 'h', 5],
+      ['dim_level', 'Deep dim brightness', 0.1, 1, 0.05, '×', 0.35],
       ['home_orbit_seconds', 'Orbit travel', 18, 140, 1, 's', 54],
       ['home_orbit_angle', 'Orbit angle', 15, 75, 1, '°', 45],
       ['home_orbit_pause', 'Orbit end pause', 0, 15, 1, 's', 7],
@@ -192,8 +196,12 @@
       if (r.ok) tuningValues = (await r.json()).tuning || tuningValues;
     }
     function resetTuning() {
-      tuningValues = {home_renderer:0, home_orbit_seconds:54, home_orbit_angle:45, home_orbit_pause:7, home_camera_radius:6, home_camera_height:4.25, home_camera_fov:33, home_target_x:1.25, home_target_y:1.08, home_target_z:.95, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, heart_x:0, heart_y:0, heart_scale:1, brain_x:0, brain_y:0, brain_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
+      tuningValues = {home_renderer:0, rest_after_minutes:10, dim_start_hour:2, dim_end_hour:5, dim_level:0.35, home_orbit_seconds:54, home_orbit_angle:45, home_orbit_pause:7, home_camera_radius:6, home_camera_height:4.25, home_camera_fov:33, home_target_x:1.25, home_target_y:1.08, home_target_z:.95, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, heart_x:0, heart_y:0, heart_scale:1, brain_x:0, brain_y:0, brain_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
       tuningDirty = true; saveTuning().then(() => { tuningDirty = false; renderTuning(tuningValues); });
+    }
+    async function imHere() {
+      const r = await fetch('/api/presence', {method: 'POST'});
+      document.getElementById('saveMeta').textContent = r.ok ? 'Mirror woken' : 'Presence ping failed';
     }
     async function saveConfig() {
       const updates = {}; for (const input of document.querySelectorAll('[id^="cfg-"]')) updates[input.id.slice(4)] = input.value;
