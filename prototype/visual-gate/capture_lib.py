@@ -15,7 +15,7 @@ import threading
 import time
 import urllib.request
 from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -26,16 +26,16 @@ CHROME = next((p for p in (
 ) if os.path.exists(p)), shutil.which("chromium") or shutil.which("google-chrome"))
 
 
-class _Quiet(SimpleHTTPRequestHandler):
-    def log_message(self, *args):
-        pass
-
-
 def start_server():
     """Ephemeral port, verified live before the browser is pointed at it.
     A fixed port can collide with a listener left by an earlier run, and
-    the browser then quietly gets connection refused."""
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(_Quiet, directory=HERE))
+    the browser then quietly gets connection refused.
+
+    Serves the labelled fixture through the real state endpoint: the page
+    refuses unlabelled data, so a plain static server leaves it blank."""
+    from serve import fixture_handler
+    server = ThreadingHTTPServer(("127.0.0.1", 0),
+                                 partial(fixture_handler(), directory=HERE))
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     for _ in range(40):
@@ -50,8 +50,9 @@ def start_server():
 
 
 class Session:
-    def __init__(self, debug_port=9360, profile=".chrome-cap", width=1440, height=2560):
+    def __init__(self, debug_port=9360, profile=".chrome-cap", width=1440, height=2560, query=""):
         self.debug_port = debug_port
+        self.query = query
         self.profile = os.path.join(HERE, profile)
         self.width, self.height = width, height
         self._id = 0
@@ -68,7 +69,7 @@ class Session:
             "--no-first-run", "--disable-extensions",
             f"--remote-debugging-port={self.debug_port}",
             f"--user-data-dir={self.profile}",
-            f"http://127.0.0.1:{port}/index.html?manual=1",
+            f"http://127.0.0.1:{port}/index.html?manual=1{self.query}",
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         ws_url = None

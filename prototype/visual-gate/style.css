@@ -552,6 +552,15 @@ body {
   color: #2E323B;
 }
 
+/* Shared WebGL stage. Above the modules, below the fixture label and HUD
+   by document order; hidden by stage.js whenever no actor is active. */
+.stage {
+  position: absolute;
+  left: 0; top: 0;
+  width: 1440px; height: 2560px;
+  pointer-events: none;
+}
+
 .hud {
   position: absolute;
   top: 18px; left: 18px;

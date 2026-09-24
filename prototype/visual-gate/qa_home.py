@@ -78,7 +78,7 @@ def main():
             # Production layout and panel builder, without live requests.
             html=(HERE/'index.html').read_text(encoding='utf-8')
             html=re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
-            html=html.replace('</body>', '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script src="js/frame.js"></script><script src="js/home-twin.js"></script><script src="js/panels.js"></script></body>')
+            html=html.replace('</body>', '<script src="assets/vendor/three-r128.min.js"></script><script src="js/frame.js"></script><script src="js/home-twin.js"></script><script src="js/panels.js"></script></body>')
             call('Page.setDocumentContent',dict(frameId=call('Page.getFrameTree')['frameTree']['frame']['id'],html=html))
             for _ in range(40):
                 if evaluate("typeof HomeTwin !== 'undefined' && typeof THREE !== 'undefined'"):break

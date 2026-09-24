@@ -309,6 +309,7 @@ const Panels = (function () {
     // panel scheduler level prevents a completed energy slot from leaving
     // another panel faded after the Three.js canvas has been unmounted.
     document.documentElement.style.setProperty('--twin-focus', '0');
+    const shown = [];
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
       const p = ramp(t, e.from, e.from + RISE) - ramp(t, e.to - FALL, e.to);
@@ -321,6 +322,7 @@ const Panels = (function () {
         continue;
       }
       if (el.style.visibility === 'hidden') el.style.visibility = '';
+      shown.push(e.kind === 'energy' ? 'house' : e.kind);
       // Opacity lives on the children, not here: an opacity below 1 is a
       // grouping property, and it would flatten the calendar's blades
       // back into the plane they are supposed to be standing out of.
@@ -334,6 +336,7 @@ const Panels = (function () {
       el.style.setProperty('--content', p.toFixed(3));
       if (e.tick) e.tick(p);
     }
+    return shown;
   }
 
   return { apply, setTuning, frame };

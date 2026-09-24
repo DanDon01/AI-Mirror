@@ -1,0 +1,2310 @@
+{
+ "note": "Real-home architecture lock. Regenerate only after owner sign-off.",
+ "renderer": "js/home-twin.js",
+ "objects": [
+  {
+   "i": 0,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.7565,
+    0,
+    -0.0797
+   ],
+   "max": [
+    2.4681,
+    1.98,
+    2.0272
+   ]
+  },
+  {
+   "i": 1,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    -0.7565,
+    1.98,
+    0.7348
+   ],
+   "max": [
+    2.3366,
+    2.676,
+    2.0272
+   ]
+  },
+  {
+   "i": 2,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    -0.6251,
+    1.98,
+    -0.0797
+   ],
+   "max": [
+    2.4681,
+    2.676,
+    1.2128
+   ]
+  },
+  {
+   "i": 3,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    1.6721,
+    1.98,
+    0.3123
+   ],
+   "max": [
+    2.4681,
+    2.676,
+    2.0272
+   ]
+  },
+  {
+   "i": 4,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    -0.7565,
+    1.98,
+    0.7348
+   ],
+   "max": [
+    2.3366,
+    2.676,
+    2.0272
+   ]
+  },
+  {
+   "i": 5,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    -0.6251,
+    1.98,
+    -0.0797
+   ],
+   "max": [
+    2.4681,
+    2.676,
+    1.2128
+   ]
+  },
+  {
+   "i": 6,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 6,
+   "min": [
+    1.6721,
+    1.98,
+    0.3123
+   ],
+   "max": [
+    2.4681,
+    2.676,
+    2.0272
+   ]
+  },
+  {
+   "i": 7,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.1709,
+    2.544,
+    0.7618
+   ],
+   "max": [
+    0.448,
+    3.096,
+    0.9892
+   ]
+  },
+  {
+   "i": 8,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 24,
+   "min": [
+    0.1709,
+    2.544,
+    0.7618
+   ],
+   "max": [
+    0.448,
+    3.096,
+    0.9892
+   ]
+  },
+  {
+   "i": 9,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    2.1701,
+    0,
+    0.5957
+   ],
+   "max": [
+    3.3104,
+    0.852,
+    2.3855
+   ]
+  },
+  {
+   "i": 10,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    2.1701,
+    0.852,
+    0.5957
+   ],
+   "max": [
+    3.3104,
+    1.068,
+    2.3855
+   ]
+  },
+  {
+   "i": 11,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    2.1701,
+    0.852,
+    0.5957
+   ],
+   "max": [
+    3.3104,
+    1.068,
+    2.3855
+   ]
+  },
+  {
+   "i": 12,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.245,
+    0,
+    1.8805
+   ],
+   "max": [
+    1.989,
+    0.864,
+    2.3082
+   ]
+  },
+  {
+   "i": 13,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    1.1991,
+    0.9,
+    1.8741
+   ],
+   "max": [
+    2.0285,
+    1.008,
+    2.3541
+   ]
+  },
+  {
+   "i": 14,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.8055,
+    1.947,
+    1.533
+   ],
+   "max": [
+    2.2463,
+    2.013,
+    2.0928
+   ]
+  },
+  {
+   "i": 15,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    2.1889,
+    1.947,
+    0.3572
+   ],
+   "max": [
+    2.5337,
+    2.013,
+    2.0763
+   ]
+  },
+  {
+   "i": 16,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.8221,
+    1.947,
+    -0.1287
+   ],
+   "max": [
+    -0.4774,
+    2.013,
+    1.5903
+   ]
+  },
+  {
+   "i": 17,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.7577,
+    2.64,
+    1.0809
+   ],
+   "max": [
+    1.8494,
+    2.712,
+    1.1726
+   ]
+  },
+  {
+   "i": 18,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6344,
+    1.029,
+    0.0218
+   ],
+   "max": [
+    2.3459,
+    1.059,
+    1.9258
+   ]
+  },
+  {
+   "i": 19,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.7114,
+    0.1056,
+    -0.0387
+   ],
+   "max": [
+    2.423,
+    0.1344,
+    1.9863
+   ]
+  },
+  {
+   "i": 20,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 24,
+   "min": [
+    -0.7114,
+    0.1032,
+    -0.0387
+   ],
+   "max": [
+    2.423,
+    0.1368,
+    1.9863
+   ]
+  },
+  {
+   "i": 21,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.406,
+    0.066,
+    0.3318
+   ],
+   "max": [
+    2.3195,
+    0.066,
+    1.9407
+   ]
+  },
+  {
+   "i": 22,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.089,
+    0.066,
+    0.8449
+   ],
+   "max": [
+    1.4868,
+    0.066,
+    1.7915
+   ]
+  },
+  {
+   "i": 23,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    0.0273,
+    0.066,
+    0.1242
+   ],
+   "max": [
+    1.6031,
+    0.066,
+    1.0708
+   ]
+  },
+  {
+   "i": 24,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.5861,
+    0.99,
+    0.7834
+   ],
+   "max": [
+    1.0789,
+    0.99,
+    1.6867
+   ]
+  },
+  {
+   "i": 25,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.0922,
+    0.99,
+    1.0542
+   ],
+   "max": [
+    2.2043,
+    0.99,
+    1.8683
+   ]
+  },
+  {
+   "i": 26,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.473,
+    0.99,
+    0.0825
+   ],
+   "max": [
+    1.192,
+    0.99,
+    0.9857
+   ]
+  },
+  {
+   "i": 27,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.2053,
+    0.99,
+    0.3533
+   ],
+   "max": [
+    2.3174,
+    0.99,
+    1.1674
+   ]
+  },
+  {
+   "i": 28,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    -0.7106,
+    0.072,
+    -0.0338
+   ],
+   "max": [
+    1.6522,
+    0.072,
+    1.8571
+   ]
+  },
+  {
+   "i": 29,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    -0.5976,
+    1.002,
+    0.071
+   ],
+   "max": [
+    2.3091,
+    1.002,
+    1.8766
+   ]
+  },
+  {
+   "i": 30,
+   "type": "Line",
+   "geometry": "BufferGeometry",
+   "vertices": 2,
+   "min": [
+    1.5271,
+    0.06,
+    1.0821
+   ],
+   "max": [
+    1.5271,
+    0.912,
+    1.0821
+   ]
+  },
+  {
+   "i": 31,
+   "type": "Line",
+   "geometry": "BufferGeometry",
+   "vertices": 2,
+   "min": [
+    1.1026,
+    0.996,
+    1.0136
+   ],
+   "max": [
+    1.1026,
+    1.848,
+    1.0136
+   ]
+  },
+  {
+   "i": 32,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.6383,
+    1.2576,
+    1.5704
+   ],
+   "max": [
+    0.3094,
+    1.824,
+    1.7233
+   ]
+  },
+  {
+   "i": 33,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.5826,
+    1.3296,
+    1.6016
+   ],
+   "max": [
+    0.2467,
+    1.752,
+    1.7355
+   ]
+  },
+  {
+   "i": 34,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6274,
+    1.7682,
+    1.5785
+   ],
+   "max": [
+    0.2889,
+    1.7934,
+    1.7744
+   ]
+  },
+  {
+   "i": 35,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6274,
+    1.2882,
+    1.5785
+   ],
+   "max": [
+    0.2889,
+    1.3134,
+    1.7744
+   ]
+  },
+  {
+   "i": 36,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6219,
+    1.2816,
+    1.5794
+   ],
+   "max": [
+    -0.5932,
+    1.8,
+    1.6321
+   ]
+  },
+  {
+   "i": 37,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.2547,
+    1.2816,
+    1.7208
+   ],
+   "max": [
+    0.2834,
+    1.8,
+    1.7735
+   ]
+  },
+  {
+   "i": 38,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.0793,
+    1.2576,
+    1.8486
+   ],
+   "max": [
+    1.8296,
+    1.824,
+    1.9696
+   ]
+  },
+  {
+   "i": 39,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.135,
+    1.3296,
+    1.8798
+   ],
+   "max": [
+    1.7668,
+    1.752,
+    1.9818
+   ]
+  },
+  {
+   "i": 40,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.0903,
+    1.7682,
+    1.8567
+   ],
+   "max": [
+    1.809,
+    1.7934,
+    2.0208
+   ]
+  },
+  {
+   "i": 41,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.0903,
+    1.2882,
+    1.8567
+   ],
+   "max": [
+    1.809,
+    1.3134,
+    2.0208
+   ]
+  },
+  {
+   "i": 42,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.0957,
+    1.2816,
+    1.8576
+   ],
+   "max": [
+    1.1244,
+    1.8,
+    1.9103
+   ]
+  },
+  {
+   "i": 43,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.7749,
+    1.2816,
+    1.9672
+   ],
+   "max": [
+    1.8036,
+    1.8,
+    2.0199
+   ]
+  },
+  {
+   "i": 44,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.6485,
+    0.264,
+    1.5707
+   ],
+   "max": [
+    0.4769,
+    0.912,
+    1.7524
+   ]
+  },
+  {
+   "i": 45,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.5928,
+    0.336,
+    1.602
+   ],
+   "max": [
+    0.4142,
+    0.84,
+    1.7645
+   ]
+  },
+  {
+   "i": 46,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6375,
+    0.8562,
+    1.5789
+   ],
+   "max": [
+    0.4564,
+    0.8814,
+    1.8035
+   ]
+  },
+  {
+   "i": 47,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6375,
+    0.2946,
+    1.5789
+   ],
+   "max": [
+    0.4564,
+    0.3198,
+    1.8035
+   ]
+  },
+  {
+   "i": 48,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6321,
+    0.288,
+    1.5797
+   ],
+   "max": [
+    -0.6034,
+    0.888,
+    1.6324
+   ]
+  },
+  {
+   "i": 49,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.4222,
+    0.288,
+    1.7499
+   ],
+   "max": [
+    0.4509,
+    0.888,
+    1.8026
+   ]
+  },
+  {
+   "i": 50,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.3592,
+    0.036,
+    2.2483
+   ],
+   "max": [
+    1.8133,
+    0.828,
+    2.3215
+   ]
+  },
+  {
+   "i": 51,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.3702,
+    0.7722,
+    2.2564
+   ],
+   "max": [
+    1.7928,
+    0.7974,
+    2.3727
+   ]
+  },
+  {
+   "i": 52,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.3702,
+    0.0666,
+    2.2564
+   ],
+   "max": [
+    1.7928,
+    0.0918,
+    2.3727
+   ]
+  },
+  {
+   "i": 53,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.3756,
+    0.06,
+    2.2573
+   ],
+   "max": [
+    1.4043,
+    0.804,
+    2.31
+   ]
+  },
+  {
+   "i": 54,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.7586,
+    0.06,
+    2.3191
+   ],
+   "max": [
+    1.7873,
+    0.804,
+    2.3718
+   ]
+  },
+  {
+   "i": 55,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.4149,
+    0.108,
+    2.2795
+   ],
+   "max": [
+    1.7506,
+    0.756,
+    2.3337
+   ]
+  },
+  {
+   "i": 56,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.1961,
+    0.366,
+    2.223
+   ],
+   "max": [
+    1.4429,
+    0.834,
+    2.2628
+   ]
+  },
+  {
+   "i": 57,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.2518,
+    0.438,
+    2.2542
+   ],
+   "max": [
+    1.3802,
+    0.762,
+    2.2749
+   ]
+  },
+  {
+   "i": 58,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.2071,
+    0.7782,
+    2.2311
+   ],
+   "max": [
+    1.4224,
+    0.8034,
+    2.3139
+   ]
+  },
+  {
+   "i": 59,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.2071,
+    0.3966,
+    2.2311
+   ],
+   "max": [
+    1.4224,
+    0.4218,
+    2.3139
+   ]
+  },
+  {
+   "i": 60,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.2125,
+    0.39,
+    2.232
+   ],
+   "max": [
+    1.2412,
+    0.81,
+    2.2847
+   ]
+  },
+  {
+   "i": 61,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.3883,
+    0.39,
+    2.2603
+   ],
+   "max": [
+    1.417,
+    0.81,
+    2.313
+   ]
+  },
+  {
+   "i": 62,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.7292,
+    0.366,
+    2.309
+   ],
+   "max": [
+    1.976,
+    0.834,
+    2.3488
+   ]
+  },
+  {
+   "i": 63,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.785,
+    0.438,
+    2.3403
+   ],
+   "max": [
+    1.9133,
+    0.762,
+    2.361
+   ]
+  },
+  {
+   "i": 64,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.7402,
+    0.7782,
+    2.3171
+   ],
+   "max": [
+    1.9555,
+    0.8034,
+    2.3999
+   ]
+  },
+  {
+   "i": 65,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.7402,
+    0.3966,
+    2.3171
+   ],
+   "max": [
+    1.9555,
+    0.4218,
+    2.3999
+   ]
+  },
+  {
+   "i": 66,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.7456,
+    0.39,
+    2.318
+   ],
+   "max": [
+    1.7743,
+    0.81,
+    2.3707
+   ]
+  },
+  {
+   "i": 67,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.9214,
+    0.39,
+    2.3463
+   ],
+   "max": [
+    1.9501,
+    0.81,
+    2.3991
+   ]
+  },
+  {
+   "i": 68,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.4081,
+    0.414,
+    2.2722
+   ],
+   "max": [
+    1.4777,
+    0.618,
+    2.3161
+   ]
+  },
+  {
+   "i": 69,
+   "type": "Mesh",
+   "geometry": "SphereGeometry",
+   "vertices": 99,
+   "min": [
+    1.4173,
+    0.5412,
+    2.298
+   ],
+   "max": [
+    1.4606,
+    0.5868,
+    2.3397
+   ]
+  },
+  {
+   "i": 70,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 64,
+   "min": [
+    1.486,
+    1.1208,
+    2.1829
+   ],
+   "max": [
+    1.5556,
+    1.1832,
+    2.3192
+   ]
+  },
+  {
+   "i": 71,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.4403,
+    1.131,
+    2.258
+   ],
+   "max": [
+    1.5822,
+    1.221,
+    2.3626
+   ]
+  },
+  {
+   "i": 72,
+   "type": "Mesh",
+   "geometry": "SphereGeometry",
+   "vertices": 99,
+   "min": [
+    1.4732,
+    1.1448,
+    2.334
+   ],
+   "max": [
+    1.5324,
+    1.2072,
+    2.3912
+   ]
+  },
+  {
+   "i": 73,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -1.1137,
+    0.33,
+    1.51
+   ],
+   "max": [
+    -0.6063,
+    0.846,
+    1.6159
+   ]
+  },
+  {
+   "i": 74,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.4263,
+    0.33,
+    1.7585
+   ],
+   "max": [
+    0.9338,
+    0.846,
+    1.8645
+   ]
+  },
+  {
+   "i": 75,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    2.2775,
+    0.096,
+    2.2648
+   ],
+   "max": [
+    2.936,
+    0.72,
+    2.371
+   ]
+  },
+  {
+   "i": 76,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    2.2683,
+    0.1452,
+    2.263
+   ],
+   "max": [
+    2.9411,
+    0.1668,
+    2.3985
+   ]
+  },
+  {
+   "i": 77,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    2.2683,
+    0.2532,
+    2.263
+   ],
+   "max": [
+    2.9411,
+    0.2748,
+    2.3985
+   ]
+  },
+  {
+   "i": 78,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    2.2683,
+    0.3612,
+    2.263
+   ],
+   "max": [
+    2.9411,
+    0.3828,
+    2.3985
+   ]
+  },
+  {
+   "i": 79,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    2.2683,
+    0.4692,
+    2.263
+   ],
+   "max": [
+    2.9411,
+    0.4908,
+    2.3985
+   ]
+  },
+  {
+   "i": 80,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    2.2683,
+    0.5772,
+    2.263
+   ],
+   "max": [
+    2.9411,
+    0.5988,
+    2.3985
+   ]
+  },
+  {
+   "i": 81,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    -0.0839,
+    2.0914,
+    1.3286
+   ],
+   "max": [
+    0.2043,
+    2.2584,
+    1.5655
+   ]
+  },
+  {
+   "i": 82,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    -0.0839,
+    2.0914,
+    1.3286
+   ],
+   "max": [
+    0.2043,
+    2.2584,
+    1.5655
+   ]
+  },
+  {
+   "i": 83,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    -0.0839,
+    2.0914,
+    1.3286
+   ],
+   "max": [
+    0.2043,
+    2.2584,
+    1.5655
+   ]
+  },
+  {
+   "i": 84,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.2024,
+    2.0914,
+    1.3748
+   ],
+   "max": [
+    0.4906,
+    2.2584,
+    1.6117
+   ]
+  },
+  {
+   "i": 85,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0.2024,
+    2.0914,
+    1.3748
+   ],
+   "max": [
+    0.4906,
+    2.2584,
+    1.6117
+   ]
+  },
+  {
+   "i": 86,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    0.2024,
+    2.0914,
+    1.3748
+   ],
+   "max": [
+    0.4906,
+    2.2584,
+    1.6117
+   ]
+  },
+  {
+   "i": 87,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.4887,
+    2.0914,
+    1.421
+   ],
+   "max": [
+    0.7769,
+    2.2584,
+    1.6579
+   ]
+  },
+  {
+   "i": 88,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0.4887,
+    2.0914,
+    1.421
+   ],
+   "max": [
+    0.7769,
+    2.2584,
+    1.6579
+   ]
+  },
+  {
+   "i": 89,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    0.4887,
+    2.0914,
+    1.421
+   ],
+   "max": [
+    0.7769,
+    2.2584,
+    1.6579
+   ]
+  },
+  {
+   "i": 90,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.775,
+    2.0914,
+    1.4672
+   ],
+   "max": [
+    1.0632,
+    2.2584,
+    1.7041
+   ]
+  },
+  {
+   "i": 91,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0.775,
+    2.0914,
+    1.4672
+   ],
+   "max": [
+    1.0632,
+    2.2584,
+    1.7041
+   ]
+  },
+  {
+   "i": 92,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    0.775,
+    2.0914,
+    1.4672
+   ],
+   "max": [
+    1.0632,
+    2.2584,
+    1.7041
+   ]
+  },
+  {
+   "i": 93,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    -0.0497,
+    2.2723,
+    1.1169
+   ],
+   "max": [
+    0.2385,
+    2.4394,
+    1.3538
+   ]
+  },
+  {
+   "i": 94,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    -0.0497,
+    2.2723,
+    1.1169
+   ],
+   "max": [
+    0.2385,
+    2.4394,
+    1.3538
+   ]
+  },
+  {
+   "i": 95,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    -0.0497,
+    2.2723,
+    1.1169
+   ],
+   "max": [
+    0.2385,
+    2.4394,
+    1.3538
+   ]
+  },
+  {
+   "i": 96,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.2366,
+    2.2723,
+    1.1631
+   ],
+   "max": [
+    0.5248,
+    2.4394,
+    1.4
+   ]
+  },
+  {
+   "i": 97,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0.2366,
+    2.2723,
+    1.1631
+   ],
+   "max": [
+    0.5248,
+    2.4394,
+    1.4
+   ]
+  },
+  {
+   "i": 98,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    0.2366,
+    2.2723,
+    1.1631
+   ],
+   "max": [
+    0.5248,
+    2.4394,
+    1.4
+   ]
+  },
+  {
+   "i": 99,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.5229,
+    2.2723,
+    1.2093
+   ],
+   "max": [
+    0.8111,
+    2.4394,
+    1.4462
+   ]
+  },
+  {
+   "i": 100,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0.5229,
+    2.2723,
+    1.2093
+   ],
+   "max": [
+    0.8111,
+    2.4394,
+    1.4462
+   ]
+  },
+  {
+   "i": 101,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    0.5229,
+    2.2723,
+    1.2093
+   ],
+   "max": [
+    0.8111,
+    2.4394,
+    1.4462
+   ]
+  },
+  {
+   "i": 102,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.8092,
+    2.2723,
+    1.2555
+   ],
+   "max": [
+    1.0974,
+    2.4394,
+    1.4924
+   ]
+  },
+  {
+   "i": 103,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0.8092,
+    2.2723,
+    1.2555
+   ],
+   "max": [
+    1.0974,
+    2.4394,
+    1.4924
+   ]
+  },
+  {
+   "i": 104,
+   "type": "LineSegments",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    0.8092,
+    2.2723,
+    1.2555
+   ],
+   "max": [
+    1.0974,
+    2.4394,
+    1.4924
+   ]
+  },
+  {
+   "i": 105,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.3225,
+    0.14,
+    2.321
+   ],
+   "max": [
+    1.0405,
+    0.3,
+    3.0217
+   ]
+  },
+  {
+   "i": 106,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.5239,
+    0.3,
+    2.472
+   ],
+   "max": [
+    1.0233,
+    0.38,
+    3.0045
+   ]
+  },
+  {
+   "i": 107,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.3201,
+    0.285,
+    2.3358
+   ],
+   "max": [
+    -0.0281,
+    0.355,
+    2.8348
+   ]
+  },
+  {
+   "i": 108,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 8,
+   "min": [
+    -0.0627,
+    0.31,
+    2.3821
+   ],
+   "max": [
+    0.7214,
+    0.56,
+    2.951
+   ]
+  },
+  {
+   "i": 109,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.0934,
+    0.5475,
+    2.4554
+   ],
+   "max": [
+    0.5654,
+    0.5925,
+    2.8777
+   ]
+  },
+  {
+   "i": 110,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    0.6491,
+    0.3275,
+    2.5327
+   ],
+   "max": [
+    0.7106,
+    0.5725,
+    2.9135
+   ]
+  },
+  {
+   "i": 111,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    -0.0517,
+    0.3341,
+    2.4201
+   ],
+   "max": [
+    0.0096,
+    0.5659,
+    2.7998
+   ]
+  },
+  {
+   "i": 112,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    -0.1548,
+    0.005,
+    2.3218
+   ],
+   "max": [
+    0.097,
+    0.255,
+    2.4297
+   ]
+  },
+  {
+   "i": 113,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    -0.0861,
+    0.078,
+    2.3309
+   ],
+   "max": [
+    0.0284,
+    0.182,
+    2.4206
+   ]
+  },
+  {
+   "i": 114,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    -0.228,
+    0.005,
+    2.7759
+   ],
+   "max": [
+    0.0237,
+    0.255,
+    2.8838
+   ]
+  },
+  {
+   "i": 115,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    -0.1594,
+    0.078,
+    2.7851
+   ],
+   "max": [
+    -0.0449,
+    0.182,
+    2.8747
+   ]
+  },
+  {
+   "i": 116,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    0.6844,
+    0.005,
+    2.4572
+   ],
+   "max": [
+    0.9362,
+    0.255,
+    2.5651
+   ]
+  },
+  {
+   "i": 117,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.753,
+    0.078,
+    2.4664
+   ],
+   "max": [
+    0.8675,
+    0.182,
+    2.556
+   ]
+  },
+  {
+   "i": 118,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    0.6111,
+    0.005,
+    2.9113
+   ],
+   "max": [
+    0.8629,
+    0.255,
+    3.0193
+   ]
+  },
+  {
+   "i": 119,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.6798,
+    0.078,
+    2.9205
+   ],
+   "max": [
+    0.7942,
+    0.182,
+    3.0101
+   ]
+  },
+  {
+   "i": 120,
+   "type": "Mesh",
+   "geometry": "SphereGeometry",
+   "vertices": 99,
+   "min": [
+    -0.3198,
+    0.225,
+    2.782
+   ],
+   "max": [
+    -0.2629,
+    0.275,
+    2.8369
+   ]
+  },
+  {
+   "i": 121,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.1592,
+    0.348,
+    1.9782
+   ],
+   "max": [
+    1.2293,
+    0.612,
+    2.1146
+   ]
+  },
+  {
+   "i": 122,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.159,
+    0.384,
+    1.995
+   ],
+   "max": [
+    1.1741,
+    0.576,
+    2.0888
+   ]
+  },
+  {
+   "i": 123,
+   "type": "Mesh",
+   "geometry": "SphereGeometry",
+   "vertices": 63,
+   "min": [
+    1.1436,
+    0.4992,
+    2.0248
+   ],
+   "max": [
+    1.1757,
+    0.5328,
+    2.0569
+   ]
+  },
+  {
+   "i": 124,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    1.5608,
+    0.786,
+    2.2112
+   ],
+   "max": [
+    1.6318,
+    0.87,
+    2.2342
+   ]
+  },
+  {
+   "i": 125,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    1.828,
+    0.75,
+    1.1198
+   ],
+   "max": [
+    1.8991,
+    0.834,
+    1.1428
+   ]
+  },
+  {
+   "i": 126,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.2109,
+    1.734,
+    1.2235
+   ],
+   "max": [
+    0.2819,
+    1.818,
+    1.2465
+   ]
+  },
+  {
+   "i": 127,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    1.5732,
+    1.734,
+    1.4434
+   ],
+   "max": [
+    1.6443,
+    1.818,
+    1.4664
+   ]
+  },
+  {
+   "i": 128,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.324,
+    1.734,
+    0.5226
+   ],
+   "max": [
+    0.395,
+    1.818,
+    0.5456
+   ]
+  },
+  {
+   "i": 129,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    1.6864,
+    1.734,
+    0.7425
+   ],
+   "max": [
+    1.7574,
+    1.818,
+    0.7655
+   ]
+  },
+  {
+   "i": 130,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.4873,
+    0.762,
+    1.2681
+   ],
+   "max": [
+    0.5583,
+    0.846,
+    1.2911
+   ]
+  },
+  {
+   "i": 131,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    -0.0458,
+    0.762,
+    1.1821
+   ],
+   "max": [
+    0.0252,
+    0.846,
+    1.2051
+   ]
+  },
+  {
+   "i": 132,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.3886,
+    0.762,
+    1.2522
+   ],
+   "max": [
+    0.4596,
+    0.846,
+    1.2752
+   ]
+  },
+  {
+   "i": 133,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.823,
+    0.762,
+    1.3223
+   ],
+   "max": [
+    0.894,
+    0.846,
+    1.3453
+   ]
+  },
+  {
+   "i": 134,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    -0.6905,
+    0.639,
+    0.3062
+   ],
+   "max": [
+    -0.5256,
+    0.681,
+    1.179
+   ]
+  },
+  {
+   "i": 135,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.6053,
+    0.39,
+    0.1186
+   ],
+   "max": [
+    0.7067,
+    0.69,
+    0.5388
+   ]
+  },
+  {
+   "i": 136,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.5726,
+    1.56,
+    1.7809
+   ],
+   "max": [
+    0.707,
+    1.68,
+    1.8392
+   ]
+  },
+  {
+   "i": 137,
+   "type": "Mesh",
+   "geometry": "SphereGeometry",
+   "vertices": 63,
+   "min": [
+    0.6152,
+    1.5984,
+    1.8141
+   ],
+   "max": [
+    0.6565,
+    1.6416,
+    1.8554
+   ]
+  },
+  {
+   "i": 138,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    1.4326,
+    0.156,
+    2.3584
+   ],
+   "max": [
+    1.709,
+    0.636,
+    2.403
+   ]
+  },
+  {
+   "i": 139,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    0.9355,
+    0.156,
+    2.2376
+   ],
+   "max": [
+    1.2119,
+    0.636,
+    2.2822
+   ]
+  },
+  {
+   "i": 140,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    0.3973,
+    0.288,
+    1.1784
+   ],
+   "max": [
+    0.6738,
+    0.768,
+    1.223
+   ]
+  },
+  {
+   "i": 141,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    0.1082,
+    1.104,
+    1.2127
+   ],
+   "max": [
+    0.3846,
+    1.584,
+    1.2573
+   ]
+  },
+  {
+   "i": 142,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    1.5821,
+    1.104,
+    0.7415
+   ],
+   "max": [
+    1.8585,
+    1.584,
+    0.7861
+   ]
+  },
+  {
+   "i": 143,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 42,
+   "min": [
+    -0.0933,
+    0.216,
+    0.1605
+   ],
+   "max": [
+    2.2856,
+    1.7366,
+    1.8071
+   ]
+  }
+ ]
+}

@@ -171,6 +171,19 @@ def fixture_source():
         return json.load(fh)
 
 
+def fixture_handler():
+    """A quiet Handler serving the labelled fixture, for offline tools.
+
+    Capture, validation and Pi measurement load the real page, which
+    refuses unlabelled data, so they need the state endpoint and not a
+    plain static server. The fixture keeps its _fixture flag and the
+    page marks itself as a fixture on screen."""
+    return type("FixtureHandler", (Handler,), {
+        "source": staticmethod(fixture_source),
+        "log_message": lambda self, *args: None,
+    })
+
+
 def free_port():
     """An ephemeral port, verified free. A fixed default can collide
     with a listener left by an earlier run, and the browser then quietly

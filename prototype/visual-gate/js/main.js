@@ -30,6 +30,8 @@
   const MANUAL = Q.get('manual') === '1';
   const SHOW_HUD = Q.get('hud') === '1';
   const FIT = Q.get('fit') === '1';
+  const PROBE = Q.get('probe') === '1';   // stage load probe, measurement only
+  const TIER = Q.get('tier') || '';       // pin a stage quality tier
 
   // The plate is authored at the mirror's real 1440x2560. On any other
   // display that means you see the top-left corner and nothing else, so
@@ -83,7 +85,11 @@
   }
 
   // ---- perf ----------------------------------------------------------
-  const perf = { fps: 0, frame: 0, frames: 0 };
+  // Frame times are also kept per scene: the set of layers on screen when
+  // the frame was drawn ("bio", "house", "cal+stage", ...). A single frame
+  // rate averaged over the whole loop hides which layer costs the Pi.
+  // Histograms use 1 ms bins so measure_on_pi.py can read p50/p95 exactly.
+  const perf = { fps: 0, frame: 0, frames: 0, scene: 'idle', scenes: {} };
   let acc = 0, accFrames = 0, lastWall = 0;
   const hudEl = document.getElementById('hud');
   if (SHOW_HUD) hudEl.classList.add('on');
@@ -91,12 +97,17 @@
   function tickPerf(wall) {
     if (lastWall) {
       const dt = wall - lastWall;
+      perf.lastDt = dt;
       acc += dt; accFrames++; perf.frames++;
+      const s = perf.scenes[perf.scene] ||
+        (perf.scenes[perf.scene] = { frames: 0, ms: 0, worst: 0, bins: new Array(101).fill(0) });
+      s.frames++; s.ms += dt; s.worst = Math.max(s.worst, dt);
+      s.bins[Math.min(100, Math.floor(dt))]++;
       if (acc >= 500) {
         perf.fps = Math.round((accFrames * 1000) / acc);
         perf.frame = +(acc / accFrames).toFixed(2);
         acc = 0; accFrames = 0;
-        if (SHOW_HUD) hudEl.textContent = `${perf.fps} fps   ${perf.frame} ms`;
+        if (SHOW_HUD) hudEl.textContent = `${perf.fps} fps   ${perf.frame} ms   ${perf.scene}`;
       }
     }
     lastWall = wall;
@@ -168,9 +179,14 @@
       setBio(morph, have);
     }
 
-    Panels.frame(t);
+    const layers = Panels.frame(t) || [];
+    if (showBio) layers.unshift('bio');
+    const onStage = Stage.frame(timeline, performance.now() / 1000, perf.lastDt);
+    if (onStage.length) layers.push('stage:' + onStage.join(','));
     Markets.frame(railT === undefined ? t : railT);
     Frame.tick();
+    // Attributed to the frame drawn next, which is the one this state costs.
+    perf.scene = layers.length ? layers.join('+') : 'idle';
   }
 
   // ---- data ----------------------------------------------------------
@@ -232,10 +248,14 @@
 
     adopt(await readState());
     await Biometrics.init(document.getElementById('bioCanvas'), { loop: LOOP });
+    // Captures pin the tier so a still never depends on how fast the host is.
+    Stage.init(document.getElementById('stage'), { tier: TIER, pinned: MANUAL || FREEZE });
+    if (PROBE) Stage.register(StageProbe.create());
 
     window.__setTime = (t) => { renderAt(t, t); return true; };
     window.__gpuInfo = () => Biometrics.stats();
     window.__fillInfo = () => Biometrics.fillEstimate();
+    window.__stageInfo = () => Stage.info();
 
     if (MANUAL) {
       renderAt(SEEK, SEEK);

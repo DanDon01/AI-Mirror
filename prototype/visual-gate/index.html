@@ -60,12 +60,20 @@
     </div>
   </footer>
 
+  <!-- ============ STAGE: shared WebGL canvas for stage actors ============ -->
+  <canvas class="stage" id="stage"></canvas>
+
   <p class="fixture-mark">development fixture &middot; not live data</p>
   <div class="hud" id="hud"></div>
 
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="assets/vendor/three-r128.min.js"></script>
+<script src="assets/vendor/r128-CopyShader.js"></script>
+<script src="assets/vendor/r128-LuminosityHighPassShader.js"></script>
+<script src="assets/vendor/r128-EffectComposer.js"></script>
+<script src="assets/vendor/r128-UnrealBloomPass.js"></script>
+<script src="js/stage.js"></script>
 <script src="js/biometrics.js"></script>
 <script src="js/frame.js"></script>
 <script src="js/home-twin.js"></script>
