@@ -8,7 +8,8 @@
   "biometrics": {
     "resting_bpm": 58,
     "sleep_total_minutes": 434,
-    "sleep_label": "7h 14m"
+    "sleep_label": "7h 14m",
+    "steps": 8432
   },
   "weather": {
     "temperature_c": 14,

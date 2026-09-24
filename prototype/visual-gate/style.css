@@ -243,6 +243,8 @@ body {
 }
 
 #bioSleep .bio-n { font-size: 40px; }
+#bioSteps { left: 380px; top: 420px; }
+#bioSteps .bio-n { font-size: 48px; }
 
 /* ======================= PANELS ===========================
    A single centred upper stage, plus a dedicated lower-right stage for the

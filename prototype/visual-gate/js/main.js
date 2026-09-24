@@ -73,6 +73,14 @@
     return x * x * (3 - 2 * x);
   };
 
+  // With today's steps known, the object goes one step further: heart,
+  // brain, then the striding figure, all inside the same biometric window.
+  const T3 = { toBrain: [3.5, 5.5], toStride: [8.0, 10.0] };
+  function morphs(t, three) {
+    if (!three) return [morphAt(t), 0];
+    return [ramp(t, T3.toBrain[0], T3.toBrain[1]), ramp(t, T3.toStride[0], T3.toStride[1])];
+  }
+
   function morphAt(t) {
     if (t < T.morphOut[0]) return 0;
     if (t < T.morphOut[1]) return ramp(t, T.morphOut[0], T.morphOut[1]);
@@ -136,7 +144,7 @@
 
   // ---- state ---------------------------------------------------------
   let data = null, bpm = 0, started = 0, visibility = {}, tuning = {};
-  let bioEl, heartEl, sleepEl, haloEl;
+  let bioEl, heartEl, sleepEl, stepsEl, haloEl;
 
   /** Which biometric forms have a reading behind them.
 
@@ -149,10 +157,11 @@
     return {
       heart: typeof b.resting_bpm === 'number',
       sleep: typeof b.sleep_label === 'string' && b.sleep_label.length > 0,
+      steps: typeof b.steps === 'number' && b.steps > 0,
     };
   }
 
-  function setBio(morph, have) {
+  function setBio(morph, have, morph2 = 0) {
     // The object travels with the body part it describes, so the whole
     // section moves rather than the canvas being repositioned: the
     // readouts have to arrive with it.
@@ -173,7 +182,10 @@
     // One value leaves before the other arrives. Crossfading them left
     // both legible at once mid-morph, reading as two overlapping labels.
     const out = have.heart ? 1 - ramp(morph, 0.22, 0.40) : 0;
-    const inn = have.sleep ? ramp(morph, 0.60, 0.80) : 0;
+    const inn = have.sleep ? ramp(morph, 0.60, 0.80) * (1 - ramp(morph2, 0.22, 0.40)) : 0;
+    const walk = have.steps ? ramp(morph2, 0.60, 0.80) : 0;
+    stepsEl.style.opacity = walk.toFixed(3);
+    stepsEl.style.transform = `translate3d(0,${((1 - walk) * 16).toFixed(1)}px,0)`;
     heartEl.style.opacity = out.toFixed(3);
     heartEl.style.transform = `translate3d(0,${((1 - out) * 16).toFixed(1)}px,0)`;
     sleepEl.style.opacity = inn.toFixed(3);
@@ -198,11 +210,15 @@
     if (showBio) {
       // Hold at whichever end has a reading behind it rather than
       // morphing into a form with nothing to say.
-      let morph = morphAt(t);
-      if (!have.sleep) morph = 0;
+      let [morph, morph2] = morphs(t, have.steps);
+      if (!have.sleep) morph = have.steps ? morph : 0;
       else if (!have.heart) morph = 1;
-      Biometrics.frame(t, morph, beatAt(t, bpm || 60));
-      setBio(morph, have);
+      // Walk cadence follows the day's real progress toward the step goal.
+      const goal = Number(tuning.steps_goal) || 10000;
+      const steps = (data.biometrics && data.biometrics.steps) || 0;
+      const cadence = 0.55 + 0.9 * Math.min(steps / goal, 1.5) / 1.5;
+      Biometrics.frame(t, morph, beatAt(t, bpm || 60), morph2, t * Math.PI * 2 * cadence);
+      setBio(morph, have, morph2);
     }
 
     const layers = Panels.frame(t, nowSec, { level: lv, pins: Conductor.activePins(nowSec) }) || [];
@@ -270,6 +286,8 @@
     heartEl.querySelector('.bio-n').textContent =
       typeof b.resting_bpm === 'number' ? b.resting_bpm : '--';
     sleepEl.querySelector('.bio-n').textContent = b.sleep_label || '--';
+    stepsEl.querySelector('.bio-n').textContent =
+      typeof b.steps === 'number' ? b.steps.toLocaleString('en-GB') : '--';
 
     document.querySelector('.fixture-mark').hidden = !isFixture;
     document.body.dataset.source = isFixture ? 'fixture' : 'live';
@@ -288,6 +306,7 @@
     bioEl = document.getElementById('bio');
     heartEl = document.getElementById('bioHeart');
     sleepEl = document.getElementById('bioSleep');
+    stepsEl = document.getElementById('bioSteps');
     haloEl = document.querySelector('.bio-halo');
 
     adopt(await readState());

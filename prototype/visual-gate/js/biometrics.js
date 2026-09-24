@@ -122,8 +122,13 @@ window.Biometrics = (function () {
     attribute vec2  aAO;
     attribute vec2  aVessel;
     attribute float aSeed;
+    attribute vec3  aStride;
+    attribute vec3  aStrideN;
+    attribute float aLimb;
 
     uniform float uMorph, uBeat, uTime, uSize, uAlpha, uScatter;
+    uniform float uMorph2, uPhase, uCounterYaw;
+    uniform vec3  uDeepC, uBaseC, uHotC;
     uniform float uHeartScale;
     uniform vec3  uDeepA, uBaseA, uHotA, uVeinA;
     uniform vec3  uDeepB, uBaseB, uHotB, uVeinB;
@@ -131,19 +136,60 @@ window.Biometrics = (function () {
     varying vec3  vCol;
     varying float vA;
 
+    mat3 rotZ(float a) { float c = cos(a), s = sin(a); return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0); }
+    mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+
+    // The striding figure: each point knows its limb and its offset from
+    // that limb's joint, so the walk is a handful of rotations here rather
+    // than 78,000 positions recomputed on the CPU every frame.
+    vec3 stridePos() {
+      float L = aLimb;
+      vec3 p = aStride;
+      if (L > 0.5 && L < 4.5) {
+        float sd = L < 2.5 ? 1.0 : -1.0;
+        float ph = uPhase + (sd > 0.0 ? 0.0 : 3.14159265);
+        vec3 hip = vec3(0.0, -0.02, 0.07 * sd);
+        float swing = 0.42 * sin(ph);
+        float knee = 0.8 * max(0.0, sin(ph - 1.3));
+        bool upper = L < 1.5 || (L > 2.5 && L < 3.5);
+        p = upper ? hip + rotZ(swing) * aStride
+                  : hip + rotZ(swing) * (vec3(0.0, -0.24, 0.0) + rotZ(-knee) * aStride);
+      } else if (L > 4.5) {
+        float sd = L < 6.5 ? 1.0 : -1.0;
+        float ph = uPhase + (sd > 0.0 ? 3.14159265 : 0.0);
+        vec3 sh = vec3(0.0, 0.29, 0.17 * sd);
+        float swing = 0.36 * sin(ph);
+        float elbow = 0.35 + 0.3 * max(0.0, sin(ph + 0.6));
+        bool upper = L < 5.5 || (L > 6.5 && L < 7.5);
+        p = upper ? sh + rotZ(swing) * aStride
+                  : sh + rotZ(swing) * (vec3(0.0, -0.17, 0.0) + rotZ(elbow) * aStride);
+      }
+      p.y += 0.02 * abs(cos(uPhase));
+      return rotY(uCounterYaw) * p;
+    }
+
     void main() {
       float delay = aSeed * 0.45;
       float m = clamp((uMorph - delay) / 0.55, 0.0, 1.0);
       m = m * m * (3.0 - 2.0 * m);
 
+      float m2 = clamp((uMorph2 - delay) / 0.55, 0.0, 1.0);
+      m2 = m2 * m2 * (3.0 - 2.0 * m2);
+
       vec3 pos = mix(position * uHeartScale, aBrainPos, m);
       vec3 nrm = normalize(mix(aNormal, aBrainNormal, m));
       float ao = mix(aAO.x, aAO.y, m);
       float ves = mix(aVessel.x, aVessel.y, m);
+      if (uMorph2 > 0.0) {
+        pos = mix(pos, stridePos(), m2);
+        nrm = normalize(mix(nrm, rotY(uCounterYaw) * aStrideN, m2));
+        ao = mix(ao, 0.82, m2);
+        ves *= 1.0 - m2;
+      }
 
       // Contraction, matched to the mesh so the two stay registered.
       float vent = smoothstep(0.18, -0.12, position.y);
-      float sq = uBeat * vent * (1.0 - m);
+      float sq = uBeat * vent * (1.0 - m) * (1.0 - m2);
       pos -= nrm * sq * 0.050 * uHeartScale;
       pos.y -= position.y * uHeartScale * sq * 0.12;
       float tw = sq * 0.19 * position.y;
@@ -151,7 +197,7 @@ window.Biometrics = (function () {
       pos.xz = mat2(c, -s, s, c) * pos.xz;
 
       // Detach from the surface through the middle of the change.
-      float mid = sin(m * 3.14159265);
+      float mid = max(sin(m * 3.14159265), sin(m2 * 3.14159265));
       pos += nrm * mid * uScatter * (0.35 + aSeed * 1.25);
       pos += vec3(sin(aSeed * 31.7 + uTime * 0.9),
                   cos(aSeed * 17.3 + uTime * 1.1),
@@ -160,10 +206,10 @@ window.Biometrics = (function () {
       vec4 mv = modelViewMatrix * vec4(pos, 1.0);
       float depth = -mv.z;
 
-      vec3 deep = mix(uDeepA, uDeepB, m);
-      vec3 base = mix(uBaseA, uBaseB, m);
-      vec3 hot  = mix(uHotA,  uHotB,  m);
-      vec3 vein = mix(uVeinA, uVeinB, m);
+      vec3 deep = mix(mix(uDeepA, uDeepB, m), uDeepC, m2);
+      vec3 base = mix(mix(uBaseA, uBaseB, m), uBaseC, m2);
+      vec3 hot  = mix(mix(uHotA,  uHotB,  m), uHotC, m2);
+      vec3 vein = mix(mix(uVeinA, uVeinB, m), uBaseC, m2);
 
       // Recessed points sit at the dark end of the ramp, lit faces at
       // the bright end. This is what lets topology read in a cloud.
@@ -180,14 +226,20 @@ window.Biometrics = (function () {
 
       // Neural pulses travelling through the brain form, kept sparse.
       float travel = sin(pos.z * 5.2 - uTime * 1.7 + aSeed * 6.28);
-      col += uHotB * m * smoothstep(0.974, 1.0, travel) * 0.85;
+      col += uHotB * m * (1.0 - m2) * smoothstep(0.974, 1.0, travel) * 0.85;
+      // Energy running up through the moving figure.
+      float run = sin(pos.y * 9.0 - uTime * 3.0 + aSeed * 6.28);
+      col += uHotC * m2 * smoothstep(0.96, 1.0, run) * 0.9;
 
       float fade = smoothstep(4.4, 2.1, depth);
 
       vCol = col;
       vA = uAlpha * fade * (0.42 + 0.58 * ao) * (1.0 + mid * 0.30);
+      // The figure is far denser than the heart or brain (same particle
+      // count in a slimmer form), so each particle carries less light.
+      vA *= mix(1.0, 0.30, m2);
 
-      float size = uSize * (0.72 + 0.56 * fract(aSeed * 13.1)) * (1.0 + mid * 0.38);
+      float size = uSize * (0.72 + 0.56 * fract(aSeed * 13.1)) * (1.0 + mid * 0.38) * mix(1.0, 0.72, m2);
       gl_PointSize = size / depth;
       gl_Position = projectionMatrix * mv;
     }`;
@@ -276,6 +328,66 @@ window.Biometrics = (function () {
     };
   }
 
+  /* The striding figure, sampled on capsule limbs in its rest pose.
+     Limb codes: 0 torso and head (absolute), 1/2 left thigh/shin,
+     3/4 right thigh/shin, 5/6 left upper arm/forearm, 7/8 right.
+     Limb points are stored relative to their joint so the shader can
+     swing them. About one unit tall, feet at -0.5, like the other forms. */
+  function strideFigure(count) {
+    const rnd = (i, k) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
+    // limb, from, to, radius at 'from', radius at 'to', waist dip, share.
+    // Tapered capsules with rounded ends: shoulders, knees and elbows read
+    // as joints, and the torso narrows at the waist.
+    const parts = [
+      [0, [0, -0.03, 0], [0, 0.29, 0], 0.100, 0.118, 0.030, 3.4],   // torso
+      [0, [0.01, 0.31, 0], [0.02, 0.36, 0], 0.040, 0.036, 0, 0.25],  // neck
+      [0, [0.02, 0.43, 0], [0.02, 0.43, 0], 0.080, 0.080, 0, 1.1],   // head
+      [1, [0, 0, 0], [0, -0.24, 0], 0.066, 0.046, 0, 1.3],
+      [2, [0, 0, 0], [0, -0.24, 0], 0.046, 0.030, 0, 1.0],
+      [3, [0, 0, 0], [0, -0.24, 0], 0.066, 0.046, 0, 1.3],
+      [4, [0, 0, 0], [0, -0.24, 0], 0.046, 0.030, 0, 1.0],
+      [5, [0, 0, 0], [0, -0.17, 0], 0.044, 0.034, 0, 0.6],
+      [6, [0, 0, 0], [0, -0.16, 0], 0.034, 0.025, 0, 0.5],
+      [7, [0, 0, 0], [0, -0.17, 0], 0.044, 0.034, 0, 0.6],
+      [8, [0, 0, 0], [0, -0.16, 0], 0.034, 0.025, 0, 0.5],
+    ];
+    const total = parts.reduce((acc, part) => acc + part[6], 0);
+    const pos = new Float32Array(count * 3), nrm = new Float32Array(count * 3), limb = new Float32Array(count);
+    let i = 0;
+    parts.forEach((part, pi) => {
+      const [code, a, b, r0, r1, waist, w] = part;
+      const n = pi === parts.length - 1 ? count - i : Math.round(count * w / total);
+      const sphere = a[0] === b[0] && a[1] === b[1];
+      for (let k = 0; k < n && i < count; k++, i++) {
+        const t = rnd(i, 1), th = rnd(i, 2) * Math.PI * 2, u = rnd(i, 3);
+        let cx, cy, cz, r, nx, ny, nz;
+        const cap = !sphere && u < 0.16;
+        if (sphere || cap) {
+          // Whole sphere (head) or a rounded end cap on either joint.
+          const end = sphere ? a : (t < 0.5 ? a : b);
+          r = sphere ? r0 : (t < 0.5 ? r0 : r1);
+          const c = 2 * rnd(i, 6) - 1, sz = Math.sqrt(1 - c * c);
+          nx = sz * Math.cos(th); ny = c; nz = sz * Math.sin(th);
+          [cx, cy, cz] = end;
+        } else {
+          r = r0 + (r1 - r0) * t - waist * Math.sin(Math.PI * Math.min(1, t * 1.15));
+          nx = Math.cos(th); ny = 0; nz = Math.sin(th);
+          cx = a[0] + (b[0] - a[0]) * t; cy = a[1] + (b[1] - a[1]) * t; cz = a[2] + (b[2] - a[2]) * t;
+        }
+        // A fifth of the points sit inside the surface, so the form has
+        // body rather than reading as a hollow shell.
+        const depth = rnd(i, 4) < 0.2 ? 0.55 + 0.4 * rnd(i, 5) : 1;
+        const zScale = code === 0 && pi === 0 ? 1.45 : 1;   // chest wider than deep
+        pos[i * 3] = cx + nx * r * depth;
+        pos[i * 3 + 1] = cy + ny * r * depth;
+        pos[i * 3 + 2] = cz + nz * r * depth * zScale;
+        nrm[i * 3] = nx; nrm[i * 3 + 1] = ny; nrm[i * 3 + 2] = nz;
+        limb[i] = code;
+      }
+    });
+    return { pos, nrm, limb };
+  }
+
   let loopSeconds = 48;
 
   // How much smaller the brain is carried than the heart, at morph = 1.
@@ -322,7 +434,12 @@ window.Biometrics = (function () {
       }
     }
 
+    const stride = strideFigure(count);
+
     const geo = new THREE.BufferGeometry();
+    geo.setAttribute('aStride', new THREE.BufferAttribute(stride.pos, 3));
+    geo.setAttribute('aStrideN', new THREE.BufferAttribute(stride.nrm, 3));
+    geo.setAttribute('aLimb', new THREE.BufferAttribute(stride.limb, 1));
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('aBrainPos', new THREE.BufferAttribute(bpos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
@@ -348,6 +465,13 @@ window.Biometrics = (function () {
       uBaseB: { value: new THREE.Color(0x5c40aa) },
       uHotB: { value: new THREE.Color(0x7fe4ff) },
       uVeinB: { value: new THREE.Color(0xab8fff) },
+      // Activity: warm, kinetic amber.
+      uMorph2: { value: 0 },
+      uPhase: { value: 0 },
+      uCounterYaw: { value: 0 },
+      uDeepC: { value: new THREE.Color(0x2a1604) },
+      uBaseC: { value: new THREE.Color(0xc27a1c) },
+      uHotC: { value: new THREE.Color(0xffd27a) },
     };
     const halo = Object.assign({}, uniforms, {
       uSize: { value: 27.0 },
@@ -389,7 +513,8 @@ window.Biometrics = (function () {
     // vertex memory.
     const haloGeo = new THREE.BufferGeometry();
     for (const name of ['position', 'aBrainPos', 'normal', 'aNormal',
-                        'aBrainNormal', 'aAO', 'aVessel', 'aSeed']) {
+                        'aBrainNormal', 'aAO', 'aVessel', 'aSeed',
+                        'aStride', 'aStrideN', 'aLimb']) {
       haloGeo.setAttribute(name, geo.getAttribute(name));
     }
     const HALO_STRIDE = 2;
@@ -492,19 +617,24 @@ window.Biometrics = (function () {
     return v * v * (3 - 2 * v);
   };
 
-  function frame(t, morph, beat) {
+  // morph2 carries the brain into the striding figure; phase is the walk
+  // cycle in radians. Both default to zero, which is the original object.
+  function frame(t, morph, beat, morph2 = 0, phase = 0) {
     if (!ready) return;
 
     for (const u of [uniforms, uniforms._halo]) {
       u.uMorph.value = morph;
       u.uBeat.value = beat;
       u.uTime.value = t;
+      u.uMorph2.value = morph2;
+      u.uPhase.value = phase;
     }
 
     // The solid destabilises and lets go early; the destination resolves
     // late. Between the two, only the particles carry the change.
-    const heartOpacity = 1 - ramp(morph, 0.04, 0.30);
-    const brainOpacity = ramp(morph, 0.70, 0.96);
+    const away = 1 - ramp(morph2, 0.04, 0.30);
+    const heartOpacity = (1 - ramp(morph, 0.04, 0.30)) * away;
+    const brainOpacity = ramp(morph, 0.70, 0.96) * away;
     meshHeart.uOpacity.value = heartOpacity;
     meshBrain.uOpacity.value = brainOpacity;
     meshHeart.uBeat.value = beat;
@@ -514,7 +644,7 @@ window.Biometrics = (function () {
     // Tracts thread themselves back together as the brain resolves.
     // Skipped entirely while the heart is showing: drawing 20,500 line
     // vertices at zero opacity for most of the loop is pure waste.
-    const tractOpacity = ramp(morph, 0.52, 0.92);
+    const tractOpacity = ramp(morph, 0.52, 0.92) * (1 - ramp(morph2, 0.0, 0.25));
     fibUniforms.uTime.value = t;
     fibUniforms.uOpacity.value = tractOpacity;
     fibres.visible = tractOpacity > 0.01;
@@ -531,6 +661,9 @@ window.Biometrics = (function () {
     // the heart, so the difference between the two endpoints has to
     // live here - interpolated, so the morph stays continuous.
     group.scale.setScalar(1 - BRAIN_TRIM * morph);
+    // The figure walks in a steady three-quarter view while the object's
+    // slow turn continues underneath it.
+    for (const u of [uniforms, uniforms._halo]) u.uCounterYaw.value = -group.rotation.y - 0.7;
 
     renderer.render(scene, camera);
   }
