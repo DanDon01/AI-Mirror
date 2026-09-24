@@ -47,6 +47,9 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/api/events":
             self._serve_events()
             return
+        if self.path.split("?")[0] == "/api/resident/media":
+            self._serve_resident_media()
+            return
         if self.path.split("?")[0] == "/api/control/status":
             if self.bridge is None:
                 self._json({"live": False, "modules": {}, "configured_entities": {}})
@@ -73,6 +76,24 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path in ("/api/resident/talk", "/api/resident/done", "/api/resident/unprompted"):
+            if self.bridge is None or getattr(self.bridge, "resident", None) is None:
+                self.send_error(503, "resident unavailable")
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                if path == "/api/resident/talk":
+                    self._json({"ok": True, **self.bridge.resident_talk()})
+                elif path == "/api/resident/done":
+                    self.bridge.resident_finished(str(payload.get("clip", "")))
+                    self._json({"ok": True})
+                else:
+                    self._json({"ok": True, **self.bridge.resident_unprompted_now()})
+            except Exception as exc:
+                logger.exception("resident action failed")
+                self.send_error(409, str(exc))
+            return
         if path == "/api/presence":
             if self.bridge is None:
                 self.send_error(503, "live bridge unavailable")
@@ -179,6 +200,50 @@ class Handler(SimpleHTTPRequestHandler):
             pass
         finally:
             hub.unsubscribe(q)
+
+    def _serve_resident_media(self):
+        """A resident clip by opaque token, with byte ranges for <video>."""
+        from urllib.parse import parse_qs, urlsplit
+        token = (parse_qs(urlsplit(self.path).query).get("t") or [""])[0]
+        path = self.bridge.resident_media(token) if self.bridge is not None else None
+        if not path or not os.path.isfile(path):
+            self.send_error(404, "no such clip")
+            return
+        size = os.path.getsize(path)
+        start, end = 0, size - 1
+        rng = self.headers.get("Range", "")
+        if rng.startswith("bytes="):
+            first, _, last = rng[6:].partition("-")
+            try:
+                start = int(first) if first else max(0, size - int(last))
+                end = int(last) if first and last else size - 1
+            except ValueError:
+                start, end = 0, size - 1
+            end = min(end, size - 1)
+            if start > end:
+                self.send_error(416, "range not satisfiable")
+                return
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        else:
+            self.send_response(200)
+        self.send_header("Content-Type", "video/mp4")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            with open(path, "rb") as fh:
+                fh.seek(start)
+                remaining = end - start + 1
+                while remaining > 0:
+                    chunk = fh.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _serve_state(self):
         try:

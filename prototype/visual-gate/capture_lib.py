@@ -67,6 +67,8 @@ class Session:
             "--use-gl=angle", "--use-angle=swiftshader",
             "--enable-unsafe-swiftshader", "--disable-gpu-sandbox",
             "--no-first-run", "--disable-extensions",
+            # As run.sh: the resident's clips play with sound, unprompted.
+            "--autoplay-policy=no-user-gesture-required",
             f"--remote-debugging-port={self.debug_port}",
             f"--user-data-dir={self.profile}",
             f"http://127.0.0.1:{port}/index.html?manual=1{self.query}",

@@ -182,7 +182,7 @@ const Sky = (() => {
     const beadMat = new THREE.SpriteMaterial({ map: glowTex, color: 0xdfeaff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
     const bead = new THREE.Sprite(beadMat); bead.scale.set(26, 26, 1); bead.position.z = 5; bead.layers.enable(GLOW); scene.add(bead);
 
-    let weather = {}, fade = 0, levelTarget = 1;
+    let weather = {}, fade = 0, levelTarget = 1, highlightUntil = 0;
     function setWeather(w) { weather = w || {}; }
 
     function frame(now, date) {
@@ -190,7 +190,8 @@ const Sky = (() => {
       const loc = w.location;
       const cloud = num(w.cloud_pct) ? w.cloud_pct / 100 : null;
       const rainSoon = typeof w.alert_label === 'string' && w.alert_label.length > 0;
-      fade += (levelTarget - fade) * 0.05;
+      const lift = now < highlightUntil ? 1.35 : 1;
+      fade += (levelTarget * lift - fade) * 0.05;
 
       // --- sun and moon (only with a real location) ---
       let sunAlt = -90, moonAlt = -90;
@@ -279,7 +280,8 @@ const Sky = (() => {
         curveMat.opacity = beadMat.opacity = 0;
       }
     }
-    return { scene, camera, frame, setWeather, setLevel: (v) => { levelTarget = v; } };
+    return { scene, camera, frame, setWeather, setLevel: (v) => { levelTarget = v; },
+      highlight: (s) => { highlightUntil = performance.now() / 1000 + s; } };
   }
 
   // ?skytime=ISO pins the sky's clock, for review stills at any hour.
@@ -321,5 +323,8 @@ const Sky = (() => {
   // Rest dims the sky; it never disappears (it is the mirror's weather window).
   const setLevel = (v) => { if (built) built.setLevel(v); };
 
-  return { mount, apply, setLevel, sun, moon, build };
+  // The resident was asked about the weather: the sky comes forward.
+  const highlight = (s) => { if (built) built.highlight(s); };
+
+  return { mount, apply, setLevel, highlight, sun, moon, build };
 })();

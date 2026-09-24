@@ -23,6 +23,9 @@ const Panels = (function () {
     { slot: 0, kind: 'cal',    from: 18.0, to: 30.0 },
     { slot: 0, kind: 'news',   from: 34.0, to: 46.0 },
     { slot: 1, kind: 'energy', from: 50.0, to: 80.0 },
+    // Weather detail never rotates; it appears only when pinned (the
+    // resident was asked about the weather).
+    { slot: 0, kind: 'wx',     from: 1e6,  to: 1e6 + 1 },
   ];
 
   const RISE = 1.25;   // seconds of arrival

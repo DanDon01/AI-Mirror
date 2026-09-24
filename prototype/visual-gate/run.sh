@@ -91,6 +91,7 @@ echo "serving on $PORT"
 echo "opening  $URL"
 "$BROWSER" $KIOSK \
   --noerrdialogs --disable-infobars --no-first-run \
+  --autoplay-policy=no-user-gesture-required \
   --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy \
   --user-data-dir=/tmp/visual-gate-profile \
   "$URL"

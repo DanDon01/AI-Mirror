@@ -65,6 +65,9 @@
 
   <p class="greeting" id="greeting" hidden></p>
 
+  <!-- ============ RESIDENT: the avatar's portal, only while it is here ============ -->
+  <div class="portal" id="portal"><video id="portalVideo" playsinline preload="auto"></video></div>
+
   <!-- ============ STAGE: shared WebGL canvas for stage actors ============ -->
   <canvas class="stage" id="stage"></canvas>
 
@@ -86,6 +89,7 @@
 <script src="js/home-holo.js"></script>
 <script src="js/sky.js"></script>
 <script src="js/conductor.js"></script>
+<script src="js/resident.js"></script>
 <script src="js/panels.js"></script>
 <script src="js/main.js"></script>
 </body>

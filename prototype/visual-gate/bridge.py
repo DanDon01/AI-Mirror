@@ -143,6 +143,9 @@ class Bridge:
         # Registers: minutes without presence before rest, and deep dim.
         "rest_after_minutes": 10, "dim_start_hour": 2, "dim_end_hour": 5,
         "dim_level": 0.35,
+        # Resident: may speak unprompted (pooled clips only) after this
+        # many minutes with nobody at the mirror. 0 turns it off.
+        "resident_unprompted": 1, "resident_idle_minutes": 20,
     }
 
     def __init__(self):
@@ -680,8 +683,27 @@ class Bridge:
             return
         self._set_presence(detected, "pir")
 
+    def _in_dim_hours(self):
+        start, end = self.tuning.get("dim_start_hour", 2), self.tuning.get("dim_end_hour", 5)
+        now = datetime.now()
+        h = now.hour + now.minute / 60
+        return (start <= h < end) if start <= end else (h >= start or h < end)
+
+    def _maybe_unprompted(self, absent_seconds):
+        """Someone arrived after a long absence: perhaps a pooled line.
+        Never a new API call, never in the dim hours, never mid-turn."""
+        resident = getattr(self, "resident", None)
+        if resident is None or not self.tuning.get("resident_unprompted", 1):
+            return
+        if absent_seconds < self.tuning.get("resident_idle_minutes", 20) * 60 or self._in_dim_hours():
+            return
+        # Let the wake play first; the resident arrives into a woken glass.
+        threading.Timer(2.5, resident.speak_unprompted).start()
+
     def _set_presence(self, detected, source):
         changed = detected != self.presence.get("detected")
+        if detected and (changed or source == "manual"):
+            self._maybe_unprompted(time.time() - (self.presence.get("last_seen") or 0))
         self.presence["detected"] = detected
         self.presence["source"] = source
         if detected:
@@ -701,6 +723,8 @@ class Bridge:
             out = {"_live": True, "_events": True, "generated": int(time.time()),
                    "_visibility": self.visibility.copy(),
                    "_tuning": self.tuning.copy()}
+            if getattr(self, "resident", None) is not None:
+                out["resident"] = {"available": True, "character": self.resident.profile.name}
             configured = bool(self.gate.get("entrance_pir_entity"))
             if configured or self.presence.get("last_seen"):
                 out["presence"] = {"configured": configured, **self.presence}
@@ -751,7 +775,36 @@ class Bridge:
             "avatars": self._avatars(),
             "tickers": self._tickers(),
             "calendar": calendar_status,
+            "resident": self.resident_status(),
         }
+
+    # ---- resident ------------------------------------------------------
+
+    def resident_talk(self):
+        if getattr(self, "resident", None) is None:
+            raise RuntimeError("resident unavailable")
+        self.resident.on_button_press()
+        return {"recording": self.resident.recording}
+
+    def resident_finished(self, token):
+        if getattr(self, "resident", None) is not None:
+            self.resident.player.finished(token)
+
+    def resident_media(self, token):
+        resident = getattr(self, "resident", None)
+        return resident.media_path(token) if resident is not None else None
+
+    def resident_unprompted_now(self):
+        if getattr(self, "resident", None) is None:
+            raise RuntimeError("resident unavailable")
+        self.resident._last_unprompted = 0
+        return {"clip": self.resident.speak_unprompted()}
+
+    def resident_status(self):
+        resident = getattr(self, "resident", None)
+        if resident is None:
+            return {"available": False}
+        return {"available": True, "status": resident.status, "pool": resident.pool_summary()}
 
     def refresh_calendar(self):
         mod = self.modules.get("calendar")
@@ -769,6 +822,10 @@ class Bridge:
             return []
 
     def select_avatar(self, key):
+        # The running resident switches at once (and refuses mid-turn);
+        # without one, the choice is persisted for the next start.
+        if getattr(self, "resident", None) is not None:
+            return self.resident.select_avatar(key).key
         from avatar_profiles import AvatarProfiles
         return AvatarProfiles().select(key).key
 
@@ -848,6 +905,7 @@ class Bridge:
             "news_y": (-360, 360), "home_renderer": (0, 1),
             "rest_after_minutes": (1, 120), "dim_start_hour": (0, 23),
             "dim_end_hour": (0, 23), "dim_level": (0.1, 1.0),
+            "resident_unprompted": (0, 1), "resident_idle_minutes": (2, 240),
         }
         for key, value in updates.items():
             if key not in limits:
@@ -898,6 +956,12 @@ def start(interval=1.0):
             time.sleep(1.0)
 
     threading.Thread(target=presence_loop, daemon=True, name="presence").start()
+
+    import resident
+    bridge.resident = resident.start(bridge.events.publish, bridge.tuning)
+    if bridge.resident is not None:
+        bridge.resident.set_context_sources(bridge.modules)
+        logger.info("resident ready: %s", bridge.resident.profile.name)
     return bridge
 
 

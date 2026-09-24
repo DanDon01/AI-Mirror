@@ -274,6 +274,7 @@
     document.body.dataset.source = isFixture ? 'fixture' : 'live';
 
     Conductor.apply(next);
+    if (typeof Resident !== 'undefined') Resident.apply(next);
     Frame.apply(next);
     if (typeof Sky !== 'undefined') Sky.apply(next.weather, visibility.weather !== false);
     Markets.apply(next.markets, visibility.markets !== false);
@@ -296,6 +297,7 @@
     if (typeof Sky !== 'undefined' && Sky.mount()) Sky.apply(data.weather, visibility.weather !== false);
     Wake.mount();
     Greeting.mount();
+    Resident.mount(data);
 
     // Push channel: presence, resident and moment cues arrive at once rather
     // than on the next poll. Only the live bridge offers it; the poll stays
