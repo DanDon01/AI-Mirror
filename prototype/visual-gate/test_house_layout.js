@@ -47,7 +47,7 @@ let home;
 if (HOLO) {
   vm.runInContext(fs.readFileSync(path.resolve(__dirname, process.env.HOLO_RENDERER || 'js/home-holo.js'), 'utf8') + ';this.holo=HomeHolo;', context);
   context.holo.update(REST, 0);
-  const built = context.holo.build();
+  const built = context.holo.build({ merge: false });
   for (let i = 0; i <= 240; i++) built.frame(i / 24, 1, { value: 1.6, growH: 1.5 }, {}, 1000);
   home = built.home;
 } else {

@@ -155,7 +155,7 @@ const HomeHolo = (() => {
 
   // ------------------------------------------------------------ scene
 
-  function build() {
+  function build(opts={}) {
     const scene=new THREE.Scene();
     const camera=new THREE.PerspectiveCamera(33,1100/680,.1,30);camera.position.set(-5.1,4.25,6.5);camera.lookAt(1.25,1.08,.95);
     const home=new THREE.Group();scene.add(home);scene.userData.home=home;
@@ -168,7 +168,9 @@ const HomeHolo = (() => {
     const edgeMat=new THREE.LineBasicMaterial({color:0x7fd6ff,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false});
     const solar=holo(0x1f5cff,{base:.10,rim:.35,scan:0,shell:0,lit:0x6fc0ff});
     const dark=holo(0x2a6f8f,{base:.03,rim:.4,scan:0});
-    const deviceMat=()=>holo(0x57c3ea,{base:.05,rim:.45,scan:0,shell:0});
+    // One shared material for the small fixed housings, so they merge.
+    const deviceShared=holo(0x57c3ea,{base:.05,rim:.45,scan:0,shell:0});
+    const deviceMat=()=>deviceShared;
 
     // Silhouette and major creases only - never an edge on every box.
     function silhouette(mesh,angle=35){const l=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry,angle),edgeMat);l.position.copy(mesh.position);l.rotation.copy(mesh.rotation);l.layers.enable(GLOW);home.add(l);return l;}
@@ -203,7 +205,8 @@ const HomeHolo = (() => {
     function roomZone(name,w,d,x,y,z){const mat=new THREE.MeshBasicMaterial({color:0x0b5270,transparent:true,opacity:.035,depthWrite:false,side:THREE.DoubleSide});const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat);m.rotation.x=-Math.PI/2;m.position.set(x,y,z);m.name='zone-'+name;home.add(m);roomZones[name]=m;}
     roomZone('hallway',.68,1.52,2.02,.055,.825);roomZone('livingroom',1.48,.72,.90,.055,1.19);roomZone('kitchen',1.48,.72,.90,.055,.46);
     roomZone('bedroom1',1.58,.66,.44,.825,1.18);roomZone('bedroom2',1.02,.66,1.86,.825,1.18);roomZone('bedroom3',1.58,.66,.44,.825,.47);roomZone('bathroom',1.02,.66,1.86,.825,.47);
-    function planBoundaries(y,segments){const v=[];segments.forEach(s=>v.push(s[0],y,s[1],s[2],y,s[3]));const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));home.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x52b7dc,transparent:true,opacity:.42,depthWrite:false,blending:THREE.AdditiveBlending})));}
+    const planMat=new THREE.LineBasicMaterial({color:0x52b7dc,transparent:true,opacity:.42,depthWrite:false,blending:THREE.AdditiveBlending});
+    function planBoundaries(y,segments){const v=[];segments.forEach(s=>v.push(s[0],y,s[1],s[2],y,s[3]));const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));home.add(new THREE.LineSegments(g,planMat));}
     planBoundaries(.06,[[1.68,.04,1.68,1.61],[-.46,.825,1.68,.825]]);
     planBoundaries(.835,[[1.25,.13,1.25,1.52],[-.36,.825,2.36,.825]]);
 
@@ -521,7 +524,39 @@ const HomeHolo = (() => {
 
       home.rotation.y=-.16;home.position.y=0;
     }
+    // Parts that never move and share a material are submitted as one
+    // mesh: the same geometry, far fewer draw calls (the Pi's CPU cost).
+    // The architecture lock builds with merge:false and checks every solid.
+    const before=countDraws(home);
+    if(opts.merge!==false&&THREE.BufferGeometryUtils)mergeStatic(home,[steel,wallInset,roofMat,fascia,frameMat,slatMat,deviceShared,solar,edgeMat,cellMat,planMat]);
+    home.userData.draws={before,after:countDraws(home)};
     return {scene,camera,home,frame};
+  }
+
+  function countDraws(root){let n=0;root.traverse(o=>{if((o.isMesh||o.isLine||o.isPoints||o.isSprite)&&o.visible)n++;});return n;}
+
+  function mergeStatic(root,materials){
+    root.updateMatrixWorld(true);
+    const inv=new THREE.Matrix4().copy(root.matrixWorld).invert();
+    for(const mat of materials){
+      const parts=root.children.filter(o=>o.material===mat&&(o.isMesh||o.isLineSegments));
+      if(parts.length<2)continue;
+      const lines=!!parts[0].isLineSegments;
+      if(parts.some(o=>!!o.isLineSegments!==lines))continue;
+      const geoms=parts.map(o=>{
+        let g=o.geometry.clone();
+        g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv,o.matrixWorld));
+        for(const k of Object.keys(g.attributes))if(k!=='position'&&(lines||k!=='normal'))g.deleteAttribute(k);
+        if(g.index)g=g.toNonIndexed();
+        return g;
+      });
+      const merged=THREE.BufferGeometryUtils.mergeBufferGeometries(geoms);
+      if(!merged)continue;
+      const obj=lines?new THREE.LineSegments(merged,mat):new THREE.Mesh(merged,mat);
+      obj.layers.mask=parts[0].layers.mask;obj.name='merged';
+      parts.forEach(o=>root.remove(o));
+      root.add(obj);
+    }
   }
 
   // ------------------------------------------------------------ mounting
