@@ -346,6 +346,7 @@ window.Stage = (function () {
 
   return {
     init, register, unregister, frame, setTier,
+    compile: (scene, camera) => warm({ scene, camera }),
     info: () => Object.assign({ pinned, visible }, lastInfo),
     GLOW, W, H,
   };

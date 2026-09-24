@@ -76,6 +76,28 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path in ("/api/moments/catalogue", "/api/moments/enabled", "/api/moments/play",
+                    "/api/moments/played"):
+            if self.bridge is None:
+                self.send_error(503, "live bridge unavailable")
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                if path == "/api/moments/catalogue":
+                    self.bridge.moments_catalogue(payload if isinstance(payload, list) else [])
+                    self._json({"ok": True})
+                elif path == "/api/moments/enabled":
+                    self._json({"ok": True, "enabled": self.bridge.moments_set_enabled(payload)})
+                elif path == "/api/moments/play":
+                    self.bridge.moments_play(payload.get("name", ""))
+                    self._json({"ok": True})
+                else:
+                    self.bridge.moments_played(payload.get("name", ""), payload.get("reason", ""))
+                    self._json({"ok": True})
+            except (TypeError, ValueError, json.JSONDecodeError):
+                self.send_error(400, "invalid moments request")
+            return
         if path in ("/api/resident/talk", "/api/resident/done", "/api/resident/unprompted"):
             if self.bridge is None or getattr(self.bridge, "resident", None) is None:
                 self.send_error(503, "resident unavailable")

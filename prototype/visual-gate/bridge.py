@@ -146,6 +146,9 @@ class Bridge:
         # Resident: may speak unprompted (pooled clips only) after this
         # many minutes with nobody at the mirror. 0 turns it off.
         "resident_unprompted": 1, "resident_idle_minutes": 20,
+        # Moments: ambient on/off, pacing, and real-data trigger thresholds.
+        "moments_ambient": 1, "ambient_gap_minutes": 12, "ambient_daily_cap": 10,
+        "steps_goal": 10000, "market_surge_pct": 7, "space_rocket_pct": 5,
     }
 
     def __init__(self):
@@ -168,6 +171,9 @@ class Bridge:
 
         self.gate = dict(CONFIG.get("visual_gate", {}) or {})
         self.events = EventHub()
+        # Moments are played by the page; the bridge keeps the owner's
+        # on/off choices and a short log of what played and why.
+        self.moments = {"catalogue": [], "enabled": {}, "log": []}
         # Presence in front of the mirror: None until the sensor has reported.
         self.presence = {"detected": None, "last_seen": None, "source": None}
         self.tuning = self.TUNING_DEFAULTS.copy()
@@ -179,6 +185,7 @@ class Bridge:
             if isinstance(saved, dict):
                 self.gate.update(saved)
                 self.visibility.update(saved.get("visibility", {}))
+                self.moments["enabled"].update(saved.get("moments_enabled", {}) or {})
                 saved_tuning = saved.get("tuning", {}) or {}
                 self.tuning.update({key: value for key, value in saved_tuning.items()
                                     if key in self.TUNING_DEFAULTS})
@@ -722,7 +729,8 @@ class Bridge:
         with self._lock:
             out = {"_live": True, "_events": True, "generated": int(time.time()),
                    "_visibility": self.visibility.copy(),
-                   "_tuning": self.tuning.copy()}
+                   "_tuning": self.tuning.copy(),
+                   "_moments": {"enabled": dict(self.moments["enabled"])}}
             if getattr(self, "resident", None) is not None:
                 out["resident"] = {"available": True, "character": self.resident.profile.name}
             configured = bool(self.gate.get("entrance_pir_entity"))
@@ -776,7 +784,33 @@ class Bridge:
             "tickers": self._tickers(),
             "calendar": calendar_status,
             "resident": self.resident_status(),
+            "moments": {"catalogue": self.moments["catalogue"],
+                        "enabled": dict(self.moments["enabled"]),
+                        "log": list(self.moments["log"])},
         }
+
+    # ---- moments -------------------------------------------------------
+
+    def moments_catalogue(self, items):
+        clean = [{"name": str(i.get("name", ""))[:40], "label": str(i.get("label", ""))[:60],
+                  "ambient": bool(i.get("ambient"))} for i in items if isinstance(i, dict) and i.get("name")]
+        self.moments["catalogue"] = clean[:40]
+
+    def moments_set_enabled(self, updates):
+        names = {m["name"] for m in self.moments["catalogue"]}
+        for key, value in updates.items():
+            if key in names:
+                self.moments["enabled"][key] = bool(value)
+        self._persist_settings()
+        return dict(self.moments["enabled"])
+
+    def moments_play(self, name):
+        self.events.publish({"type": "moment", "name": str(name)[:40]})
+
+    def moments_played(self, name, reason):
+        self.moments["log"].insert(0, {"name": str(name)[:40], "reason": str(reason)[:40],
+                                       "at": datetime.now().strftime("%a %H:%M")})
+        del self.moments["log"][30:]
 
     # ---- resident ------------------------------------------------------
 
@@ -854,6 +888,7 @@ class Bridge:
             "livingroom_occupancy_entity", "livingroom_curtain_entity",
         } | TWIN_ENTITIES}
         payload["visibility"] = self.visibility
+        payload["moments_enabled"] = self.moments["enabled"]
         payload["tuning"] = self.tuning
         try:
             with open(SETTINGS_PATH, "w", encoding="utf-8") as fh:
@@ -906,6 +941,9 @@ class Bridge:
             "rest_after_minutes": (1, 120), "dim_start_hour": (0, 23),
             "dim_end_hour": (0, 23), "dim_level": (0.1, 1.0),
             "resident_unprompted": (0, 1), "resident_idle_minutes": (2, 240),
+            "moments_ambient": (0, 1), "ambient_gap_minutes": (2, 240),
+            "ambient_daily_cap": (0, 50), "steps_goal": (1000, 50000),
+            "market_surge_pct": (2, 50), "space_rocket_pct": (2, 50),
         }
         for key, value in updates.items():
             if key not in limits:

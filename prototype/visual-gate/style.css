@@ -604,6 +604,16 @@ body.deep-dim .mirror { opacity: var(--dim-level, 0.35); }
 .portal.on { opacity: 1; transform: none; }
 .portal video { width: 100%; height: 100%; object-fit: cover; background: #000; }
 
+.moment-caption {
+  position: absolute;
+  left: 0; right: 0; top: 1150px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+}
+.moment-caption .big { font-family: var(--ff-display); font-size: 110px; line-height: 1; color: var(--ink); }
+.moment-caption .small { font-family: var(--ff-text); font-size: 30px; margin-top: 14px; color: var(--ink-2, #B8BCC6); }
+
 /* Shared WebGL stage. Above the modules, below the fixture label and HUD
    by document order; hidden by stage.js whenever no actor is active. */
 .stage {

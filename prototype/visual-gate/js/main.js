@@ -207,6 +207,7 @@
 
     const layers = Panels.frame(t, nowSec, { level: lv, pins: Conductor.activePins(nowSec) }) || [];
     if (showBio) layers.unshift('bio');
+    Moments.frame(nowSec);
     const onStage = Stage.frame(timeline, performance.now() / 1000, perf.lastDt);
     if (onStage.length) layers.push('stage:' + onStage.join(','));
     Markets.frame(railT === undefined ? t : railT);
@@ -275,6 +276,7 @@
 
     Conductor.apply(next);
     if (typeof Resident !== 'undefined') Resident.apply(next);
+    if (typeof Moments !== 'undefined' && Stage.info) Moments.observe(next);
     Frame.apply(next);
     if (typeof Sky !== 'undefined') Sky.apply(next.weather, visibility.weather !== false);
     Markets.apply(next.markets, visibility.markets !== false);
@@ -298,6 +300,9 @@
     Wake.mount();
     Greeting.mount();
     Resident.mount(data);
+    Moments.mount({ auto: !(MANUAL || FREEZE) || Q.get('moments') === '1' });
+    Moments.observe(data);
+    if (data._live) Moments.announce();
 
     // Push channel: presence, resident and moment cues arrive at once rather
     // than on the next poll. Only the live bridge offers it; the poll stays

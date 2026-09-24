@@ -63,7 +63,7 @@
     </header>
     <nav aria-label="Control sections">
       <a href="#overview">Overview</a><a href="#tuning">Live tuning</a><a href="#avatars-section">Avatar</a><a href="#stocks">Stocks</a>
-      <a href="#modules-section">Modules</a><a href="#config-section">Mappings</a><a href="#diagnostics">Diagnostics</a>
+      <a href="#moments-section">Moments</a><a href="#modules-section">Modules</a><a href="#config-section">Mappings</a><a href="#diagnostics">Diagnostics</a>
     </nav>
     <div class="toolbar">
       <button onclick="refresh()">Refresh data</button><button onclick="pump()">Request feed update</button><button onclick="refreshCalendar()">Refresh calendar</button><button onclick="imHere()" title="Counts as someone standing at the mirror">I'm here</button>
@@ -71,7 +71,12 @@
     </div>
     <div class="layout">
       <section class="section wide" id="overview"><h2>Live feeds</h2><div class="grid" id="feeds"></div></section>
-      <section class="section" id="avatars-section"><h2>Avatar selection</h2><div class="grid" id="avatars"></div><p class="meta" id="avatarMeta">Avatar selection is persisted for the avatar/Pygame mode.</p></section>
+      <section class="section" id="avatars-section"><h2>Avatar selection</h2><div class="grid" id="avatars"></div><p class="meta" id="avatarMeta">The chosen character is the mirror's resident (and the Pygame avatar).</p>
+        <p><button onclick="residentTalk()">Talk (same as Space)</button><button onclick="residentSay()" title="Plays a pooled clip; never a new API call">Say something from the pool</button></p>
+        <p class="meta" id="residentMeta"></p></section>
+      <section class="section wide" id="moments-section"><h2>Moments</h2><div class="grid" id="moments"></div>
+        <p class="meta">Tick to allow; Play shows it now. Triggered moments answer real events; ambient ones are rare whimsy. The 'm' key on the mirror plays one at random.</p>
+        <details><summary>Recently played</summary><pre id="momentLog">Nothing yet.</pre></details></section>
       <section class="section" id="modules-section"><h2>Visual modules</h2><div class="grid" id="modules"></div><p class="meta">Choose which live modules can appear in the mirror rotation.</p></section>
       <section class="section wide" id="tuning"><h2>Live visual tuning</h2><p class="meta">Changes reach the mirror through its normal live poll, usually within two seconds. They are saved on the Pi; reset restores the authored defaults.</p><div class="tuning-grid" id="tuningRows"></div><div class="tuning-actions"><button onclick="resetTuning()">Reset visual defaults</button><span class="meta" id="tuningMeta"></span></div></section>
       <section class="section wide" id="stocks"><h2>Stock watchlist</h2><div id="tickerRows"></div>
@@ -91,6 +96,14 @@
     const TUNERS = [
       ['home_renderer', 'House: 0 classic, 1 hologram', 0, 1, 1, '', 0],
       ['rest_after_minutes', 'Rest after no presence', 1, 120, 1, 'min', 10],
+      ['resident_unprompted', 'Resident may speak unprompted (0/1)', 0, 1, 1, '', 1],
+      ['resident_idle_minutes', 'Unprompted after an absence of', 2, 240, 1, 'min', 20],
+      ['moments_ambient', 'Ambient Moments (0/1)', 0, 1, 1, '', 1],
+      ['ambient_gap_minutes', 'Minimum gap between Moments', 2, 240, 1, 'min', 12],
+      ['ambient_daily_cap', 'Ambient Moments per day', 0, 50, 1, '', 10],
+      ['steps_goal', 'Step goal (catherine wheel)', 1000, 50000, 500, '', 10000],
+      ['market_surge_pct', 'Market surge at', 2, 50, 0.5, '%', 7],
+      ['space_rocket_pct', 'Space-stock rocket at', 2, 50, 0.5, '%', 5],
       ['dim_start_hour', 'Deep dim starts', 0, 23, 1, 'h', 2],
       ['dim_end_hour', 'Deep dim ends', 0, 23, 1, 'h', 5],
       ['dim_level', 'Deep dim brightness', 0.1, 1, 0.05, '×', 0.35],
@@ -165,7 +178,47 @@
         const b = document.createElement('button'); b.textContent = key + ': ' + (on ? 'ON' : 'OFF');
         b.className = on ? 'active' : ''; b.onclick = () => toggleModule(key, !on); modules.appendChild(b);
       }
+      renderMoments(status.moments || {});
+      const res = status.resident || {};
+      document.getElementById('residentMeta').textContent = res.available
+        ? 'Resident: ' + (res.status || '') + ' - pool ' + ((res.pool && res.pool.total) || 0) + ' clips'
+        : 'Resident unavailable on this mirror (check the avatar stack and VOSK_MODEL_PATH).';
       document.getElementById('payload').textContent = JSON.stringify(data, null, 2);
+    }
+    function renderMoments(m) {
+      const box = document.getElementById('moments'); box.innerHTML = '';
+      for (const item of (m.catalogue || [])) {
+        const on = (m.enabled || {})[item.name] !== false;
+        const card = document.createElement('div'); card.className = 'card';
+        const toggle = document.createElement('button'); toggle.textContent = (on ? 'ON' : 'OFF');
+        toggle.className = on ? 'active' : ''; toggle.onclick = () => momentToggle(item.name, !on);
+        const play = document.createElement('button'); play.textContent = 'Play';
+        play.onclick = () => momentPlay(item.name);
+        card.innerHTML = '<div class="label">' + item.label + (item.ambient ? ' (ambient)' : '') + '</div>';
+        card.appendChild(toggle); card.appendChild(play); box.appendChild(card);
+      }
+      if (!box.children.length) box.innerHTML = '<div class="meta">The mirror page has not reported its Moments yet.</div>';
+      const log = m.log || [];
+      document.getElementById('momentLog').textContent = log.length
+        ? log.map((e) => e.at + '  ' + e.name + (e.reason ? '  (' + e.reason + ')' : '')).join(String.fromCharCode(10))
+        : 'Nothing yet.';
+    }
+    async function momentToggle(name, on) {
+      await fetch('/api/moments/enabled', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({[name]: on})});
+      refresh();
+    }
+    async function momentPlay(name) {
+      await fetch('/api/moments/play', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
+      document.getElementById('saveMeta').textContent = 'Playing ' + name;
+    }
+    async function residentTalk() {
+      const r = await fetch('/api/resident/talk', {method: 'POST'});
+      document.getElementById('saveMeta').textContent = r.ok ? 'Resident listening - press again to finish' : 'Resident unavailable';
+    }
+    async function residentSay() {
+      const r = await fetch('/api/resident/unprompted', {method: 'POST'});
+      const j = r.ok ? await r.json() : {};
+      document.getElementById('saveMeta').textContent = r.ok ? (j.clip ? 'Playing a pooled clip' : 'No eligible pooled clip right now') : 'Resident unavailable';
     }
     function tuneLabel(value, unit) { return Number(value).toFixed(unit === '×' ? 2 : 0) + unit; }
     function renderTuning(values) {
@@ -196,7 +249,7 @@
       if (r.ok) tuningValues = (await r.json()).tuning || tuningValues;
     }
     function resetTuning() {
-      tuningValues = {home_renderer:0, rest_after_minutes:10, dim_start_hour:2, dim_end_hour:5, dim_level:0.35, home_orbit_seconds:54, home_orbit_angle:45, home_orbit_pause:7, home_camera_radius:6, home_camera_height:4.25, home_camera_fov:33, home_target_x:1.25, home_target_y:1.08, home_target_z:.95, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, heart_x:0, heart_y:0, heart_scale:1, brain_x:0, brain_y:0, brain_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
+      tuningValues = {home_renderer:0, rest_after_minutes:10, resident_unprompted:1, resident_idle_minutes:20, moments_ambient:1, ambient_gap_minutes:12, ambient_daily_cap:10, steps_goal:10000, market_surge_pct:7, space_rocket_pct:5, dim_start_hour:2, dim_end_hour:5, dim_level:0.35, home_orbit_seconds:54, home_orbit_angle:45, home_orbit_pause:7, home_camera_radius:6, home_camera_height:4.25, home_camera_fov:33, home_target_x:1.25, home_target_y:1.08, home_target_z:.95, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, heart_x:0, heart_y:0, heart_scale:1, brain_x:0, brain_y:0, brain_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
       tuningDirty = true; saveTuning().then(() => { tuningDirty = false; renderTuning(tuningValues); });
     }
     async function imHere() {
