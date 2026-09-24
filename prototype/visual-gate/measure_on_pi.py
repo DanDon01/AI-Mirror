@@ -82,22 +82,54 @@ def throttled():
     return vcgencmd("get_throttled") or "?"
 
 
-def chromium_usage():
-    """Aggregate CPU% and RSS across the Chromium process tree."""
+_procs = {}
+
+
+def _tree(root_pid):
+    """The Chromium we launched and its children, never any other browser."""
+    import psutil
+    try:
+        root = psutil.Process(root_pid)
+        return [root] + root.children(recursive=True)
+    except psutil.Error:
+        return []
+
+
+def chromium_usage(root_pid):
+    """CPU% and RSS summed over our own Chromium process tree.
+
+    Process objects are kept between calls: psutil's cpu_percent() is
+    measured since the previous call on the same object, so a fresh
+    object every sample would always read 0.0."""
     try:
         import psutil
     except ImportError:
         return float("nan"), float("nan")
     cpu = 0.0
     rss = 0
-    for proc in psutil.process_iter(["name", "cpu_percent", "memory_info"]):
-        name = (proc.info.get("name") or "").lower()
-        if "chrom" in name:
-            cpu += proc.info.get("cpu_percent") or 0.0
-            mem = proc.info.get("memory_info")
-            if mem:
-                rss += mem.rss
+    for p in _tree(root_pid):
+        p = _procs.setdefault(p.pid, p)
+        try:
+            cpu += p.cpu_percent(None)
+            rss += p.memory_info().rss
+        except psutil.Error:
+            pass
     return cpu, rss / (1024 ** 2)
+
+
+def other_chromium():
+    """Chromium already running before we start: (process count, RSS MB)."""
+    try:
+        import psutil
+    except ImportError:
+        return 0, 0.0
+    n, rss = 0, 0
+    for proc in psutil.process_iter(["name", "memory_info"]):
+        if "chrom" in (proc.info.get("name") or "").lower():
+            n += 1
+            mem = proc.info.get("memory_info")
+            rss += mem.rss if mem else 0
+    return n, rss / (1024 ** 2)
 
 
 def mirror_running():
@@ -113,8 +145,11 @@ def mirror_running():
     return active
 
 
-def cdp_target():
-    for _ in range(60):
+def cdp_target(proc):
+    """Wait for our page in DevTools, or for the browser to die trying."""
+    for _ in range(90):
+        if proc.poll() is not None:
+            return None
         try:
             with urllib.request.urlopen(
                     f"http://127.0.0.1:{DEBUG_PORT}/json", timeout=2) as r:
@@ -202,6 +237,21 @@ def main():
         print("warning: " + ", ".join(running) + " is running; two Chromiums share the GPU "
               "and the figures will be pessimistic.\n  stop it first: sudo systemctl stop "
               + running[0] + "\n")
+    n, rss = other_chromium()
+    if n:
+        print(f"warning: {n} Chromium process(es) already running ({rss:.0f} MB). They share "
+              "the GPU with the measurement.\n  list them: pgrep -a chromium   "
+              "stop them: pkill chromium\n")
+
+    # Over SSH there is no display in the environment; the mirror's own
+    # unit uses :0, so default to the same rather than failing silently.
+    env = os.environ.copy()
+    if not args.headless and not env.get("DISPLAY") and not env.get("WAYLAND_DISPLAY"):
+        env["DISPLAY"] = ":0"
+        print("note: no DISPLAY set (SSH?); using DISPLAY=:0 like the mirror service\n")
+
+    profile = tempfile.mkdtemp(prefix="visual-gate-measure-")
+    log_path = os.path.join(profile, "chromium.log")
 
     port = free_port()
     server = ThreadingHTTPServer(("127.0.0.1", port),
@@ -209,7 +259,9 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     time.sleep(0.4)
 
-    query = "hud=1"
+    # fit=1 is what the mirror runs with (run.sh fits the 1440x2560 plate
+    # to the real panel), so measure the same thing.
+    query = "hud=1&fit=1"
     if args.probe:
         query += "&probe=1"
     if args.tier:
@@ -218,7 +270,10 @@ def main():
     flags = [
         CHROMIUM,
         f"--remote-debugging-port={DEBUG_PORT}",
-        "--user-data-dir=" + os.path.join(tempfile.gettempdir(), "visual-gate-profile"),
+        # A private profile. Sharing the mirror's /tmp/visual-gate-profile
+        # made Chromium hand the URL to an already-running mirror window
+        # and exit, so DevTools never appeared.
+        "--user-data-dir=" + profile,
         "--noerrdialogs", "--disable-infobars", "--no-first-run",
         "--autoplay-policy=no-user-gesture-required",
         # GPU path: this is the whole point of the exercise.
@@ -234,15 +289,23 @@ def main():
         flags.insert(1, "--window-size=1440,2560" if args.windowed else "--kiosk")
 
     print("launching chromium...")
-    proc = subprocess.Popen(flags, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
-    ws_url = cdp_target()
+    log = open(log_path, "w")
+    proc = subprocess.Popen(flags, stdout=log, stderr=subprocess.STDOUT, env=env)
+    ws_url = cdp_target(proc)
     if not ws_url:
-        print("warning: could not reach DevTools; frame figures will be unavailable")
+        # Sampling a browser that is not there would waste the whole run.
+        state = (f"exited with code {proc.returncode}" if proc.poll() is not None
+                 else "is running but never exposed DevTools")
+        proc.terminate()
+        server.shutdown()
+        log.close()
+        tail = open(log_path, errors="replace").read().strip().splitlines()[-15:]
+        raise SystemExit(f"Chromium {state}. Last lines of its log ({log_path}):\n  "
+                         + "\n  ".join(tail or ["(empty)"]))
 
     # Prime psutil. The first cpu_percent() reading for any process is
     # always 0.0, so without a discarded pass the first sample lies.
-    chromium_usage()
+    chromium_usage(proc.pid)
     time.sleep(1.0)
 
     rows = []
@@ -255,7 +318,7 @@ def main():
         while time.time() - start < args.seconds:
             time.sleep(2.0)
             perf = page_eval(ws_url, "JSON.stringify(window.__perf||{})") if ws_url else perf
-            cpu, rss = chromium_usage()
+            cpu, rss = chromium_usage(proc.pid)
             row = {
                 "t": round(time.time() - start, 1),
                 "fps": (perf or {}).get("fps", ""),
@@ -278,6 +341,12 @@ def main():
         perf = final or perf
         proc.terminate()
         server.shutdown()
+        log.close()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)
 
     if not rows:
         return
