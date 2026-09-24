@@ -33,7 +33,10 @@
      4. a black falloff along the plate edge, so nothing can end in a
         hard line at the frame of the glass
 
-   Quality tiers only change the bloom resolution (or drop it). ?tier=
+   The canvas renders at the display's real resolution (never more pixels
+   than the fitted panel shows), without MSAA, and the full-plate passes
+   are scissored to where actors actually are. Quality tiers lower the
+   render resolution and the bloom resolution (or drop bloom). ?tier=
    pins one; otherwise the tier follows measured frame time. Captures
    (?manual=1) are pinned, so stills never depend on host speed. */
 
@@ -42,16 +45,23 @@ window.Stage = (function () {
 
   const W = 1440, H = 2560;
   const GLOW = 1;
+  // bloom: glow-target size relative to the plate. res: render resolution
+  // relative to what the display can actually show. Resolution is the big
+  // lever on the Pi's tile GPU, so the lower tiers trade sharpness first.
   const TIERS = [
-    { name: 'high', bloom: 0.50 },
-    { name: 'mid',  bloom: 0.35 },
-    { name: 'low',  bloom: 0.25 },
-    { name: 'off',  bloom: 0 },
+    { name: 'high', bloom: 0.50, res: 1.00 },
+    { name: 'mid',  bloom: 0.35, res: 0.85 },
+    { name: 'low',  bloom: 0.25, res: 0.70 },
+    { name: 'off',  bloom: 0,    res: 0.60 },
   ];
   const EDGE_PX = 28;
 
   let renderer, canvas, glowRT, bloom, bloomQuad, edgeQuad, ortho;
   let actors = [], tier = 1, pinned = false, visible = false, lastInfo = {};
+  // Display scale: device pixels per plate pixel, never above 1. With the
+  // plate fitted to a smaller panel, rendering all 1440x2560 would only be
+  // thrown away by the downscale.
+  let ds = 1;
   // Adaptive tier: frame time EMA; drop fast, recover slowly.
   let ema = 16.7, slowFor = 0, fastFor = 0;
 
@@ -107,12 +117,14 @@ window.Stage = (function () {
   function init(el, opts = {}) {
     canvas = el;
     canvas.width = W; canvas.height = H;
+    // No MSAA: on a full-plate canvas it multiplies the Pi's memory
+    // traffic, and bloom already softens every glowing edge.
     renderer = new THREE.WebGLRenderer({
-      canvas, alpha: true, antialias: true, premultipliedAlpha: true,
+      canvas, alpha: true, antialias: false, premultipliedAlpha: true,
       powerPreference: 'high-performance',
     });
-    renderer.setPixelRatio(1);
-    renderer.setSize(W, H, false);
+    measureDisplay();
+    addEventListener('resize', () => { measureDisplay(); applyResolution(); buildBloom(); });
     renderer.setClearColor(0x000000, 0);
     renderer.autoClear = false;
     renderer.outputEncoding = THREE.sRGBEncoding;
@@ -144,16 +156,30 @@ window.Stage = (function () {
     const forced = TIERS.findIndex((x) => x.name === opts.tier);
     if (forced >= 0) { tier = forced; pinned = true; }
     if (opts.pinned) pinned = true;
+    applyResolution();
     buildBloom();
     visible = true;   // force the first hide through setVisible's guard
     setVisible(false);
   }
 
+  function measureDisplay() {
+    const plate = canvas.parentElement;
+    const shown = plate ? plate.getBoundingClientRect().width : W;
+    ds = Math.max(0.25, Math.min(1, (shown / W) * (devicePixelRatio || 1)));
+  }
+
+  function applyResolution() {
+    renderer.setPixelRatio(ds * TIERS[tier].res);
+    renderer.setSize(W, H, false);
+  }
+
+  function bloomScale() { return TIERS[tier].bloom * ds; }
+
   function buildBloom() {
     if (glowRT) glowRT.dispose();
     if (bloom) bloom.dispose();
     glowRT = bloom = null;
-    const scale = TIERS[tier].bloom;
+    const scale = bloomScale();
     if (!scale) return;
     const w = Math.round(W * scale), h = Math.round(H * scale);
     glowRT = new THREE.WebGLRenderTarget(w, h, {
@@ -168,6 +194,7 @@ window.Stage = (function () {
     i = Math.max(0, Math.min(TIERS.length - 1, i));
     if (i === tier) return;
     tier = i;
+    applyResolution();
     buildBloom();
   }
 
@@ -237,9 +264,20 @@ window.Stage = (function () {
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, W, H);
 
+    // Region the full-plate passes need: every live rect plus the bloom's
+    // spread, clamped to the plate.
+    const SPREAD = 220;
+    let x0 = W, y0 = H, x1 = 0, y1 = 0;
+    for (const a of live) {
+      x0 = Math.min(x0, a.rect.x - SPREAD); y0 = Math.min(y0, a.rect.y - SPREAD);
+      x1 = Math.max(x1, a.rect.x + a.rect.w + SPREAD); y1 = Math.max(y1, a.rect.y + a.rect.h + SPREAD);
+    }
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W, x1); y1 = Math.min(H, y1);
+    const reach = { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+
     // 2. glow layer into the reduced target, then blur
     if (bloom) {
-      const s = TIERS[tier].bloom;
+      const s = bloomScale();
       renderer.setRenderTarget(glowRT);
       renderer.clear();
       for (const a of live) {
@@ -255,26 +293,34 @@ window.Stage = (function () {
       glowRT.scissorTest = false;
       bloom.render(renderer, null, glowRT, 0, false);
 
-      // 3. bloom + dither onto the canvas
+      // 3. bloom + dither onto the canvas, only where actors are (plus
+      //    the bloom's reach) - never a full-plate pass for a corner house
       renderer.setRenderTarget(null);
+      renderer.setScissor(...glRect(reach, 1));
+      renderer.setScissorTest(true);
       bloomQuad.children[0].material.uniforms.tBloom.value = bloom.renderTargetsHorizontal[0].texture;
       renderer.render(bloomQuad, ortho);
     }
 
-    // 4. edge falloff of the whole plate, catching bloom that spills
-    //    past the glass frame
+    // 4. edge falloff of the whole plate, catching bloom that spills past
+    //    the glass frame; scissored to the same region
     renderer.setRenderTarget(null);
     renderer.setViewport(0, 0, W, H);
+    renderer.setScissor(...glRect(reach, 1));
+    renderer.setScissorTest(true);
     const eu = edgeQuad.children[0].material.uniforms;
     eu.uSize.value.set(W, H);
     eu.uEdge.value = EDGE_PX;
     renderer.render(edgeQuad, ortho);
+    renderer.setScissorTest(false);
 
     const r = renderer.info.render;
     lastInfo = {
       tier: info.tier, actors: live.map((a) => a.name),
       calls: r.calls, triangles: r.triangles, points: r.points, lines: r.lines,
       glow: glowRT ? [glowRT.width, glowRT.height] : null,
+      pixels: [renderer.domElement.width, renderer.domElement.height],
+      reach: [Math.round(reach.w), Math.round(reach.h)],
     };
     return lastInfo.actors;
   }

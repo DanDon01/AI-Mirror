@@ -15,6 +15,8 @@ with software WebGL say nothing about the real device.
     python3 measure_on_pi.py --seconds 480            full loop, ~6 passes
     python3 measure_on_pi.py --seconds 240 --probe    add the stage load probe
     python3 measure_on_pi.py --tier low --probe       pin a stage quality tier
+    python3 measure_on_pi.py --seconds 90 --scene house --house holo
+                                                      one scene, one house
 
 Stop the mirror first so two Chromiums are not sharing the GPU:
 
@@ -40,6 +42,9 @@ from serve import fixture_handler, free_port
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MIRROR_UNITS = ("ai-mirror-visual.service", "ai-mirror.service")
+# Timeline windows (seconds of the 80 s loop) for measuring one scene alone.
+SCENES = {"all": "", "bio": "0.5,13.5", "cal": "19.5,29", "news": "35.5,45",
+          "house": "51.5,79"}
 
 CHROMIUM = os.environ.get("MEASURE_CHROME") or next(
     (p for p in ("/usr/bin/chromium-browser", "/usr/bin/chromium",
@@ -237,6 +242,10 @@ def main():
                     help="add the stage load probe (?probe=1)")
     ap.add_argument("--tier", choices=("high", "mid", "low", "off"),
                     help="pin the stage quality tier instead of adapting")
+    ap.add_argument("--scene", choices=sorted(SCENES), default="all",
+                    help="loop one scene of the timeline instead of the whole 80 s")
+    ap.add_argument("--house", choices=("classic", "holo"),
+                    help="force the classic or hologram house")
     args = ap.parse_args()
 
     if not CHROMIUM:
@@ -279,6 +288,10 @@ def main():
         query += "&probe=1"
     if args.tier:
         query += "&tier=" + args.tier
+    if SCENES[args.scene]:
+        query += "&window=" + SCENES[args.scene]
+    if args.house:
+        query += "&house=" + args.house
 
     flags = [
         CHROMIUM,

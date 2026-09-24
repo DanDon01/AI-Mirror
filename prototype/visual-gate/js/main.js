@@ -33,6 +33,10 @@
   const PROBE = Q.get('probe') === '1';   // stage load probe, measurement only
   const TIER = Q.get('tier') || '';       // pin a stage quality tier
   const REPORT = Q.get('report') === '1'; // post frame timing to measure_on_pi.py
+  // ?window=a,b loops the timeline inside [a, b) so one scene can be
+  // measured on its own (measure_on_pi.py --scene). Animation still runs.
+  const WIN = (Q.get('window') || '').split(',').map(Number);
+  const HAS_WIN = WIN.length === 2 && WIN.every(Number.isFinite) && WIN[1] > WIN[0];
 
   // The plate is authored at the mirror's real 1440x2560. On any other
   // display that means you see the top-left corner and nothing else, so
@@ -304,7 +308,8 @@
   function loop(wall) {
     tickPerf(wall);
     const elapsed = SEEK + (wall - started) / 1000;
-    renderAt(FREEZE ? SEEK : elapsed % LOOP, FREEZE ? SEEK : elapsed);
+    const looped = HAS_WIN ? WIN[0] + (elapsed % (WIN[1] - WIN[0])) : elapsed % LOOP;
+    renderAt(FREEZE ? SEEK : looped, FREEZE ? SEEK : elapsed);
 
     if (!document.body.dataset.ready && perf.frames > 3) {
       document.body.dataset.ready = '1';
