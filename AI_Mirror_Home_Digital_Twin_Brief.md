@@ -19,6 +19,43 @@ Keep the shell transparent/smoked and the surrounding screen true black.
 The house should look like a futuristic holographic building model
 floating inside the mirror.
 
+## Current implementation status — 24 September 2026
+
+### Completed and verified
+
+-   The retained Three.js renderer now survives the live bridge's refreshes;
+    the house does not recreate its WebGL canvas on each state poll.
+-   The enlarged lower-right home stage and closer idle framing make the
+    model roughly twice as prominent while retaining its architecture.
+-   Idle camera movement is a real front-side ±45° orbit with eased end
+    pauses, independent of the 80-second panel rotation. Event focus still
+    overrides it using the Three.js camera.
+-   Mirror Controls (`:8780`) persist and apply live tuning in roughly a
+    quarter second: house position/size/brightness, full idle camera
+    composition, independent calendar/news offsets, and separate heart and
+    brain positions/scales. During the morph, the biometric object travels
+    smoothly from the heart settings to the brain settings.
+-   Real mapped lights, TV, curtains, alarm, occupancy/motion cues, car,
+    solar and energy states are represented as physical scene changes.
+-   Ground and first-floor thermal planes use separate real HA readings.
+    The 16–26°C scale is light blue at 18°C, warm red at 22°C, and deep red
+    at 26°C; the planes remain translucent. This requires
+    `downstairs_temp_entity` and `upstairs_temp_entity` to be configured in
+    Mirror Controls.
+-   Visual QA covers the retained renderer, full live rotation, curtain
+    state, energy/weather/presence scenarios, and an explicit 18°C upstairs
+    / 22°C downstairs thermal contrast.
+
+### Still to improve
+
+-   Tune the real Pi composition with Mirror Controls, then record chosen
+    values as the new defaults if they should become the authored view.
+-   Complete the remaining cinematic-focus priorities and event interruption
+    behaviour against real HA activity.
+-   Continue restrained polish: weather particles, bloom/transitions and
+    Raspberry Pi performance measurement. Do not add decorative data merely
+    because an HA entity exists.
+
 ## Visual language
 
 -   Exterior shell: smoked blue-grey/cyan, transparent.
