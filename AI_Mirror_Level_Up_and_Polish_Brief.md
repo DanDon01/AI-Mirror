@@ -220,6 +220,17 @@ The test for each register:
         throttling.
     -   Flags: `--probe`, `--tier`, and `--headless` (a plumbing check off the
         Pi only).
+-   **First Pi figures (24 September 2026, house scene alone):**
+    -   the classic house runs at **8.3 fps** (100% of frames under 30 fps,
+        with the CPU nearly idle). It is GPU-bound on physically-based
+        materials, ten point lights and MSAA;
+    -   the hologram house on the stage runs at **53 fps** (p50 16.5 ms,
+        2.2% of frames under 30 fps; the adaptive tier settled on "low").
+    -   The hologram is therefore also the performance fix for the house.
+    -   Remaining costs: about 190% Chromium CPU, where merging static
+        meshes (about 240 draw calls) is the lever, and a single multi-second
+        stall, since fixed by resizing on tier change instead of rebuilding
+        and by precompiling actor shaders.
 -   **Owner action:** on the Pi, run `sudo systemctl stop
     ai-mirror-visual.service`, then `python3 measure_on_pi.py --seconds 480
     --probe`. The per-scene table sets the real budget for Phase 1. The dev

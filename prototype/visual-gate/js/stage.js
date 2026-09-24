@@ -158,6 +158,7 @@ window.Stage = (function () {
     if (opts.pinned) pinned = true;
     applyResolution();
     buildBloom();
+    actors.forEach(warm);   // actors registered before the renderer existed
     visible = true;   // force the first hide through setVisible's guard
     setVisible(false);
   }
@@ -179,8 +180,9 @@ window.Stage = (function () {
     if (glowRT) glowRT.dispose();
     if (bloom) bloom.dispose();
     glowRT = bloom = null;
-    const scale = bloomScale();
-    if (!scale) return;
+    // Built once at the richest bloom scale the display allows; lower
+    // tiers resize these targets rather than rebuilding them.
+    const scale = bloomScale() || TIERS[TIERS.length - 2].bloom * ds;
     const w = Math.round(W * scale), h = Math.round(H * scale);
     glowRT = new THREE.WebGLRenderTarget(w, h, {
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat,
@@ -190,12 +192,21 @@ window.Stage = (function () {
     bloom = new THREE.UnrealBloomPass(new THREE.Vector2(w, h), 1.1, 0.55, 0.08);
   }
 
+  // A tier change resizes; it never rebuilds. Building a new bloom pass
+  // compiles its shaders again, which stalled the Pi for seconds.
   function setTier(i) {
     i = Math.max(0, Math.min(TIERS.length - 1, i));
     if (i === tier) return;
     tier = i;
     applyResolution();
-    buildBloom();
+    const scale = bloomScale();
+    if (scale && bloom) {
+      const w = Math.round(W * scale), h = Math.round(H * scale);
+      glowRT.setSize(w, h);
+      bloom.setSize(w, h);
+    } else if (scale && !bloom) {
+      buildBloom();
+    }
   }
 
   function setVisible(v) {
@@ -210,6 +221,14 @@ window.Stage = (function () {
   function register(actor) {
     actors = actors.filter((a) => a.name !== actor.name);
     actors.push(actor);
+    warm(actor);
+  }
+
+  // Compile an actor's shaders when it registers, not on its first visible
+  // frame, so the house arriving on the glass does not stall the mirror.
+  function warm(actor) {
+    if (!renderer) return;
+    try { renderer.compile(actor.scene, actor.camera); } catch (e) { /* compile lazily */ }
   }
 
   function unregister(name) {
@@ -276,7 +295,7 @@ window.Stage = (function () {
     const reach = { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
 
     // 2. glow layer into the reduced target, then blur
-    if (bloom) {
+    if (bloom && bloomScale()) {
       const s = bloomScale();
       renderer.setRenderTarget(glowRT);
       renderer.clear();
@@ -318,7 +337,7 @@ window.Stage = (function () {
     lastInfo = {
       tier: info.tier, actors: live.map((a) => a.name),
       calls: r.calls, triangles: r.triangles, points: r.points, lines: r.lines,
-      glow: glowRT ? [glowRT.width, glowRT.height] : null,
+      glow: glowRT && bloomScale() ? [glowRT.width, glowRT.height] : null,
       pixels: [renderer.domElement.width, renderer.domElement.height],
       reach: [Math.round(reach.w), Math.round(reach.h)],
     };
