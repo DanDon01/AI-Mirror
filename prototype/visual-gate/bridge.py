@@ -855,6 +855,36 @@ class Bridge:
             logger.warning("avatar options unavailable: %s", exc)
             return []
 
+    @staticmethod
+    def avatar_thumb(key):
+        """A small cached thumbnail of a character's reference image, for the
+        control page. Looked up by catalogue key only - never by path - and
+        made once with pygame (already loaded here); if that fails the
+        original image is served instead."""
+        from avatar_profiles import AvatarProfiles
+        try:
+            profile = AvatarProfiles().get(str(key))
+        except Exception:
+            return None
+        source = profile.reference_image
+        if not source.is_file():
+            return None
+        thumbs = os.path.join(PROJECT, "data", "avatar", "thumbs")
+        target = os.path.join(thumbs, f"{profile.key}.png")
+        try:
+            if not os.path.isfile(target) or os.path.getmtime(target) < os.path.getmtime(source):
+                import pygame
+                os.makedirs(thumbs, exist_ok=True)
+                image = pygame.image.load(str(source))
+                w, h = image.get_size()
+                scale = 320 / max(w, h)
+                small = pygame.transform.smoothscale(image, (max(1, int(w * scale)), max(1, int(h * scale))))
+                pygame.image.save(small, target)
+            return target
+        except Exception as exc:
+            logger.warning("avatar thumbnail failed for %s: %s", key, exc)
+            return str(source)
+
     def select_avatar(self, key):
         # The running resident switches at once (and refuses mid-turn);
         # without one, the choice is persisted for the next start.

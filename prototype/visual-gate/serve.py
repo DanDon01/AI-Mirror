@@ -57,6 +57,22 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/api/events":
             self._serve_events()
             return
+        if self.path.split("?")[0] == "/api/avatar/thumb":
+            from urllib.parse import parse_qs, urlsplit
+            key = (parse_qs(urlsplit(self.path).query).get("key") or [""])[0]
+            path = self.bridge.avatar_thumb(key) if self.bridge is not None else None
+            if not path:
+                self.send_error(404, "no such avatar")
+                return
+            with open(path, "rb") as fh:
+                body = fh.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "max-age=86400")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path.split("?")[0] == "/api/resident/media":
             self._serve_resident_media()
             return

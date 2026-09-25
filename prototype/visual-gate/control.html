@@ -1,318 +1,712 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI-Mirror controls</title>
-  <style>
-    :root { color-scheme:dark; --bg:#080b10; --card:#101722; --line:#27384d;
-      --ink:#edf5ff; --muted:#8a9bad; --blue:#8fd4ff; --green:#8ee5b5; }
-    * { box-sizing:border-box; }
-    body { margin:0; padding:18px; color:var(--ink); font:15px system-ui,sans-serif;
-      background:radial-gradient(900px 500px at 50% -170px,#173653 0%,var(--bg) 60%); }
-    .shell { max-width:980px; margin:auto; }
-    .topbar { display:flex; align-items:center; gap:14px; margin:2px 0 12px; }
-    h1 { color:var(--ink); font-weight:500; font-size:1.45rem; margin:0; }
-    .live { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:.78rem; margin-top:4px; }
-    .live::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 11px rgba(142,229,181,.7); }
-    .display-link { margin-left:auto; color:var(--blue); font-size:.84rem; text-decoration:none; }
-    nav { display:flex; gap:7px; overflow:auto; padding:6px 0 14px; }
-    nav a { color:var(--muted); text-decoration:none; border:1px solid transparent; border-radius:999px; padding:7px 10px; white-space:nowrap; font-size:.78rem; }
-    nav a:hover { color:var(--ink); border-color:var(--line); background:rgba(143,212,255,.07); }
-    .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:13px; }
-    .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-    .section { background:linear-gradient(145deg,rgba(20,29,43,.96),rgba(10,15,23,.98)); border:1px solid var(--line); border-radius:14px; padding:15px; box-shadow:0 12px 28px rgba(0,0,0,.14); }
-    .section.wide { grid-column:1/-1; }
-    h2 { color:#b9d9f0; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; margin:0 0 12px; font-weight:700; }
-    .meta { color:var(--muted); font-size:.78rem; line-height:1.4; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; }
-    .card { background:#0c131d; border:1px solid #26384e; border-radius:10px; padding:11px; }
-    .label { color:#93a9bf; font-size:.68rem; text-transform:uppercase; letter-spacing:.09em; }
-    .value { margin-top:5px; font-size:1.12rem; color:var(--ink); }
-    button { cursor:pointer; background:#16263a; border:1px solid #3c6286; color:#d9edff; border-radius:9px; padding:9px 12px; font:inherit; transition:.15s ease; }
-    button:hover:not(:disabled) { background:#1d3047; border-color:#86b9df; }
-    button.active { border-color:#62c995; color:#9ee8c1; background:rgba(50,132,87,.16); }
-    button:disabled { opacity:.45; cursor:not-allowed; }
-    input { min-width:0; background:#0a1018; color:var(--ink); border:1px solid #304b67; border-radius:8px; padding:9px; font:inherit; }
-    .ticker-controls { display:flex; gap:8px; margin-top:10px; }
-    .ticker-controls input { flex:1; }
-    #tickerRows { display:flex; flex-wrap:wrap; gap:7px; min-height:34px; }
-    .ticker-row { display:inline-flex; align-items:center; gap:7px; padding:5px 5px 5px 9px; background:#0d1825; border:1px solid #314a66; border-radius:999px; }
-    .ticker-row label { white-space:nowrap; }
-    .ticker-row input { width:15px; height:15px; accent-color:#8fd4ff; margin:0 4px 0 0; padding:0; }
-    .ticker-row button { padding:0; min-width:23px; width:23px; height:23px; border:0; background:transparent; color:#b5c6d6; font-size:18px; line-height:1; }
-    .ticker-row button:hover { color:#ff9aa5; background:rgba(255,105,120,.12); }
-    details summary { cursor:pointer; color:#c4e3f8; font-size:.84rem; }
-    details[open] summary { margin-bottom:12px; }
-    pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; background:#090e15; border:1px solid #223348; border-radius:9px; padding:12px; max-height:420px; overflow:auto; font-size:12px; }
-    .saved { color:var(--green); }
-    .tuning-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; }
-    .tune { display:grid; grid-template-columns:minmax(105px,1fr) minmax(110px,1.4fr) 58px; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid rgba(57,82,109,.45); }
-    .tune label { color:#b9c9d8; font-size:.78rem; }
-    .tune input[type=range] { width:100%; padding:0; accent-color:#8fd4ff; }
-    .tune output { color:var(--blue); font-variant-numeric:tabular-nums; text-align:right; font-size:.78rem; }
-    .tuning-actions { display:flex; align-items:center; gap:10px; margin-top:12px; }
-    @media (max-width:680px) { body { padding:12px; } .layout { grid-template-columns:1fr; } .section.wide { grid-column:auto; } .display-link { font-size:.76rem; } }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<title>Mirror controls</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07090d; --surface: #10151d; --surface-2: #161d28; --line: #242e3b;
+    --ink: #eef3f8; --muted: #95a2b2; --faint: #5d6a7a;
+    --accent: #7cc4ff; --accent-ink: #06121d;
+    --on: #4ade80; --off: #3a4452; --warn: #fbbf24; --bad: #ff7a85;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* ---- top bar and tabs ---- */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(7, 9, 13, 0.92); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .bar { max-width: 1120px; margin: auto; display: flex; align-items: center; gap: 12px; padding: 12px 16px 8px; }
+  .bar h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .conn { width: 10px; height: 10px; border-radius: 50%; background: var(--on); box-shadow: 0 0 10px rgba(74, 222, 128, .6); }
+  .conn.down { background: var(--bad); box-shadow: 0 0 10px rgba(255, 122, 133, .6); }
+  .bar .spacer { flex: 1; }
+  nav.tabs { max-width: 1120px; margin: auto; display: flex; gap: 4px; overflow-x: auto; padding: 0 12px 10px; scrollbar-width: none; }
+  nav.tabs::-webkit-scrollbar { display: none; }
+  nav.tabs button {
+    flex: none; background: none; border: 0; color: var(--muted); font: inherit; font-size: 15px;
+    padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  }
+  nav.tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+
+  main { max-width: 1120px; margin: auto; padding: 18px 16px 90px; }
+  section.tab { display: none; }
+  section.tab.on { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 860px) { section.tab.on { grid-template-columns: 1fr 1fr; } .span { grid-column: 1 / -1; } }
+
+  /* ---- cards ---- */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; }
+  .card h2 { font-size: 17px; font-weight: 650; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  details.card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary h2 { margin: 0; }
+  details.card > summary::after { content: ""; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s; margin-right: 4px; }
+  details.card[open] > summary::after { transform: rotate(-135deg); }
+  details.card[open] > summary { margin-bottom: 14px; }
+
+  /* ---- buttons: clearly buttons ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; text-decoration: none;
+    padding: 10px 16px; min-height: 44px; border-radius: 12px;
+    background: var(--surface-2); color: var(--ink); border: 1px solid #34414f;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.quiet { background: none; border-color: transparent; color: var(--accent); padding: 10px 8px; }
+  .btn.danger { color: var(--bad); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+  /* ---- switch: two states shown by colour and position ---- */
+  .row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .grow { flex: 1; min-width: 0; }
+  .row .sub { color: var(--muted); font-size: 14px; }
+  .switch {
+    flex: none; width: 52px; height: 30px; border-radius: 999px; border: 0; padding: 0; cursor: pointer;
+    background: var(--off); position: relative; transition: background .2s;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+    background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  .switch[aria-checked="true"] { background: var(--on); }
+  .switch[aria-checked="true"]::after { transform: translateX(22px); }
+
+  /* ---- segmented control for two named states ---- */
+  .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+  .seg button { font: inherit; font-size: 15px; font-weight: 600; border: 0; background: none; color: var(--muted); padding: 8px 16px; border-radius: 9px; cursor: pointer; min-height: 38px; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  /* ---- sliders: label and value above a full-width track ---- */
+  .slider { padding: 12px 0; border-top: 1px solid var(--line); }
+  .slider:first-of-type { border-top: 0; }
+  .slider .top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .slider output { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+  input[type=range] { width: 100%; height: 28px; margin: 0; accent-color: var(--accent); background: none; }
+  select, input[type=text] {
+    font: inherit; color: var(--ink); background: var(--bg); border: 1px solid #34414f; border-radius: 10px;
+    padding: 10px 12px; min-height: 44px; width: 100%;
+  }
+  select { width: auto; }
+  input[type=text]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+
+  /* ---- indicators ---- */
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--off); flex: none; }
+  .dot.on { background: var(--on); box-shadow: 0 0 8px rgba(74, 222, 128, .55); }
+  .dot.warn { background: var(--warn); }
+  .dot.bad { background: var(--bad); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .tile { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+  .tile span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+
+  /* ---- avatars ---- */
+  .avatars { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .avatar {
+    font: inherit; color: var(--ink); text-align: left; cursor: pointer; padding: 0; overflow: hidden;
+    background: var(--surface-2); border: 2px solid transparent; border-radius: 14px;
+  }
+  .avatar img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #000; }
+  .avatar .name { display: flex; align-items: center; gap: 8px; padding: 10px 12px 2px; font-weight: 650; }
+  .avatar .desc { padding: 0 12px 12px; color: var(--muted); font-size: 13px; }
+  .avatar[aria-pressed="true"] { border-color: var(--accent); }
+  .avatar:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ---- chips (stocks) ---- */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 4px 4px 12px; font-weight: 600; }
+  .chip button { border: 0; background: none; color: var(--muted); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; line-height: 1; }
+  .chip button:hover { color: var(--bad); background: rgba(255,122,133,.12); }
+  .add { display: flex; gap: 10px; }
+
+  /* ---- fields (HA mappings) ---- */
+  .field { padding: 10px 0; }
+  .field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+  .savebar { position: sticky; bottom: 12px; display: none; justify-content: flex-end; gap: 10px; z-index: 5; }
+  .savebar.on { display: flex; }
+
+  pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px; max-height: 460px; overflow: auto; font-size: 13px; color: #c9d3de; }
+  .log { list-style: none; margin: 0; padding: 0; }
+  .log li { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .log li:first-child { border-top: 0; }
+  .log time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 84px; }
+  .empty { color: var(--muted); font-size: 14px; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translate(-50%, 30px);
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); padding: 12px 18px; border-radius: 12px;
+    opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 50; max-width: 92vw;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+  #toast.bad { border-color: var(--bad); }
+</style>
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
-      <div><h1>AI-Mirror controls</h1><div class="live">Visual Gate live</div></div>
-      <a class="display-link" href="http://" id="display">Open mirror display ↗</a>
-    </header>
-    <nav aria-label="Control sections">
-      <a href="#overview">Overview</a><a href="#tuning">Live tuning</a><a href="#avatars-section">Avatar</a><a href="#stocks">Stocks</a>
-      <a href="#moments-section">Moments</a><a href="#modules-section">Modules</a><a href="#config-section">Mappings</a><a href="#diagnostics">Diagnostics</a>
-    </nav>
-    <div class="toolbar">
-      <button onclick="refresh()">Refresh data</button><button onclick="pump()">Request feed update</button><button onclick="refreshCalendar()">Refresh calendar</button><button onclick="imHere()" title="Counts as someone standing at the mirror">I'm here</button>
-      <span class="meta" id="saveMeta"></span>
+<header>
+  <div class="bar">
+    <span class="conn" id="conn" title="Connection to the mirror"></span>
+    <h1>Mirror</h1>
+    <span class="spacer"></span>
+    <button class="btn primary" id="imHere">I'm here</button>
+    <a class="btn" id="display" target="_blank" rel="noopener">Open display</a>
+  </div>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+</header>
+
+<main>
+  <!-- ================= OVERVIEW ================= -->
+  <section class="tab" data-tab="overview" data-title="Overview">
+    <div class="card span">
+      <h2>Live data</h2>
+      <p class="hint">Green means the mirror is receiving that feed right now.</p>
+      <div class="tiles" id="feeds"></div>
     </div>
-    <div class="layout">
-      <section class="section wide" id="overview"><h2>Live feeds</h2><div class="grid" id="feeds"></div></section>
-      <section class="section" id="avatars-section"><h2>Avatar selection</h2><div class="grid" id="avatars"></div><p class="meta" id="avatarMeta">The chosen character is the mirror's resident (and the Pygame avatar).</p>
-        <p><button onclick="residentTalk()">Talk (same as Space)</button><button onclick="residentSay()" title="Plays a pooled clip; never a new API call">Say something from the pool</button></p>
-        <p class="meta" id="residentMeta"></p></section>
-      <section class="section wide" id="moments-section"><h2>Moments</h2><div class="grid" id="moments"></div>
-        <p class="meta">Tick to allow; Play shows it now. Triggered moments answer real events; ambient ones are rare whimsy. The 'm' key on the mirror plays one at random.</p>
-        <details><summary>Recently played</summary><pre id="momentLog">Nothing yet.</pre></details></section>
-      <section class="section" id="modules-section"><h2>Visual modules</h2><div class="grid" id="modules"></div><p class="meta">Choose which live modules can appear in the mirror rotation.</p></section>
-      <section class="section wide" id="tuning"><h2>Live visual tuning</h2><p class="meta">Changes reach the mirror through its normal live poll, usually within two seconds. They are saved on the Pi; reset restores the authored defaults.</p><div class="tuning-grid" id="tuningRows"></div><div class="tuning-actions"><button onclick="resetTuning()">Reset visual defaults</button><span class="meta" id="tuningMeta"></span></div></section>
-      <section class="section wide" id="stocks"><h2>Stock watchlist</h2><div id="tickerRows"></div>
-        <div class="ticker-controls"><input id="newTicker" placeholder="Add ticker, e.g. RR.L"><button onclick="addTicker()">Add ticker</button></div>
-        <p class="meta" id="tickerMeta">Tick a symbol to display it; × removes it from the watchlist.</p></section>
-      <section class="section wide" id="config-section"><h2>Home Assistant mappings</h2><div class="grid" id="config"></div>
-        <p><button onclick="saveConfig()">Save mappings</button></p><p class="meta">Entity IDs are stored locally on the Pi and are never returned here as credentials.</p></section>
-      <section class="section wide" id="diagnostics"><h2>Diagnostics</h2><details><summary>Raw visual data</summary><pre id="payload">Loading...</pre></details></section>
+    <div class="card">
+      <h2>At the mirror</h2>
+      <div class="row"><span class="dot" id="presenceDot"></span><div class="grow" id="presenceText">-</div></div>
+      <div class="row"><span class="dot" id="residentDot"></span><div class="grow" id="residentText">-</div></div>
     </div>
-  </main>
-  <script>
-    const display = document.getElementById('display');
-    display.href = location.protocol + '//' + location.hostname + ':8795/';
-    let mappingsDirty = false;
-    let tickersDirty = false;
-    let tuningDirty = false, tuningTimer = null, tuningValues = {};
-    const TUNERS = [
-      ['home_renderer', 'House: 0 classic, 1 hologram', 0, 1, 1, '', 0],
-      ['rest_after_minutes', 'Rest after no presence', 1, 120, 1, 'min', 10],
-      ['resident_unprompted', 'Resident may speak unprompted (0/1)', 0, 1, 1, '', 1],
-      ['resident_idle_minutes', 'Unprompted after an absence of', 2, 240, 1, 'min', 20],
-      ['moments_ambient', 'Ambient Moments (0/1)', 0, 1, 1, '', 1],
-      ['ambient_gap_minutes', 'Minimum gap between Moments', 2, 240, 1, 'min', 12],
-      ['ambient_daily_cap', 'Ambient Moments per day', 0, 50, 1, '', 10],
-      ['steps_goal', 'Step goal (catherine wheel)', 1000, 50000, 500, '', 10000],
-      ['market_surge_pct', 'Market surge at', 2, 50, 0.5, '%', 7],
-      ['space_rocket_pct', 'Space-stock rocket at', 2, 50, 0.5, '%', 5],
-      ['dim_start_hour', 'Deep dim starts', 0, 23, 1, 'h', 2],
-      ['dim_end_hour', 'Deep dim ends', 0, 23, 1, 'h', 5],
-      ['dim_level', 'Deep dim brightness', 0.1, 1, 0.05, '×', 0.35],
-      ['home_orbit_seconds', 'Orbit travel', 18, 140, 1, 's', 54],
-      ['home_orbit_angle', 'Orbit angle', 15, 75, 1, '°', 45],
-      ['home_orbit_pause', 'Orbit end pause', 0, 15, 1, 's', 7],
-      ['home_camera_radius', 'View distance', 4.2, 9, 0.1, '', 6],
-      ['home_camera_height', 'Camera height', 2.4, 6.5, 0.1, '', 4.25],
-      ['home_camera_fov', 'Camera field of view', 20, 50, 1, '°', 33],
-      ['home_target_x', 'Camera aim horizontal', -1, 3.5, 0.05, '', 1.25],
-      ['home_target_y', 'Camera aim height', 0.25, 2.2, 0.05, '', 1.08],
-      ['home_target_z', 'Camera aim depth', -0.5, 2.5, 0.05, '', 0.95],
-      ['home_brightness', 'House brightness', 0.4, 1.8, 0.05, '×', 1],
-      ['home_stage_scale', 'House stage size', 0.6, 1.4, 0.05, '×', 1],
-      ['home_x', 'House horizontal', -360, 360, 5, 'px', 0],
-      ['home_y', 'House vertical', -360, 360, 5, 'px', 0],
-      ['heart_x', 'Heart horizontal', -420, 420, 5, 'px', 0],
-      ['heart_y', 'Heart vertical', -420, 420, 5, 'px', 0],
-      ['heart_scale', 'Heart size', 0.55, 1.45, 0.05, '×', 1],
-      ['brain_x', 'Brain horizontal', -420, 420, 5, 'px', 0],
-      ['brain_y', 'Brain vertical', -420, 420, 5, 'px', 0],
-      ['brain_scale', 'Brain size', 0.55, 1.45, 0.05, '×', 1],
-      ['calendar_x', 'Calendar horizontal', -360, 360, 5, 'px', 0],
-      ['calendar_y', 'Calendar vertical', -360, 360, 5, 'px', 0],
-      ['news_x', 'News horizontal', -360, 360, 5, 'px', 0],
-      ['news_y', 'News vertical', -360, 360, 5, 'px', 0],
-    ];
-    async function refresh() {
-      const r = await fetch('/api/state.json', {cache: 'no-store'});
-      const data = await r.json();
-      const feeds = document.getElementById('feeds'); feeds.innerHTML = '';
-      for (const [key, value] of Object.entries(data)) {
-        if (key.startsWith('_') || key === 'generated') continue;
-        const card = document.createElement('div'); card.className = 'card';
-        card.innerHTML = '<div class="label">' + key + '</div><div class="value">available</div>';
-        feeds.appendChild(card);
+    <div class="card">
+      <h2>Quick actions</h2>
+      <p class="hint">Talk works like Space on the mirror: press once to start, again to finish.</p>
+      <div class="actions">
+        <button class="btn primary" data-act="talk">Talk to the resident</button>
+        <button class="btn" data-act="pump">Update feeds</button>
+        <button class="btn" data-act="calendar">Refresh calendar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RESIDENT ================= -->
+  <section class="tab" data-tab="resident" data-title="Resident">
+    <div class="card span">
+      <h2>Character</h2>
+      <p class="hint">The resident on the mirror. Changes apply straight away unless it is mid-conversation.</p>
+      <div class="avatars" id="avatars"></div>
+    </div>
+    <div class="card">
+      <h2>Conversation</h2>
+      <p class="hint" id="poolText">-</p>
+      <div class="actions">
+        <button class="btn primary" data-act="talk">Talk</button>
+        <button class="btn" data-act="say">Say something from the pool</button>
+      </div>
+    </div>
+    <div class="card" id="residentSettings">
+      <h2>Unprompted speech</h2>
+      <p class="hint">Only stored clips, never a new request. Greetings and similar lines, never between the night-dim hours.</p>
+    </div>
+  </section>
+
+  <!-- ================= MOMENTS ================= -->
+  <section class="tab" data-tab="moments" data-title="Moments">
+    <div class="card span">
+      <h2>Moments</h2>
+      <p class="hint">Real-event moments answer real data; ambient ones are rare whimsy. Play shows one now.</p>
+      <div id="moments"></div>
+    </div>
+    <div class="card" id="momentPacing">
+      <h2>Pacing</h2>
+    </div>
+    <div class="card" id="momentTriggers">
+      <h2>Real-data triggers</h2>
+    </div>
+    <div class="card span">
+      <h2>Recently played</h2>
+      <ul class="log" id="momentLog"></ul>
+    </div>
+  </section>
+
+  <!-- ================= DISPLAY ================= -->
+  <section class="tab" data-tab="display" data-title="Display">
+    <div class="card" id="modulesCard">
+      <h2>What is shown</h2>
+      <p class="hint">Hidden modules never enter the rotation.</p>
+    </div>
+    <div class="card" id="houseCard">
+      <h2>House</h2>
+    </div>
+    <div class="card span">
+      <h2>Stock ticker</h2>
+      <div class="chips" id="tickers"></div>
+      <div class="add">
+        <input type="text" id="newTicker" placeholder="Add a symbol, e.g. RR.L" autocapitalize="characters" autocomplete="off">
+        <button class="btn" id="addTicker">Add</button>
+      </div>
+    </div>
+    <details class="card" id="cameraCard"><summary><h2>House camera</h2></summary></details>
+    <details class="card" id="bioCard"><summary><h2>Biometrics position</h2></summary></details>
+    <details class="card span" id="panelCard"><summary><h2>Calendar and news position</h2></summary></details>
+    <div class="card span">
+      <div class="actions"><button class="btn danger" data-act="reset">Reset display settings to defaults</button></div>
+    </div>
+  </section>
+
+  <!-- ================= BEHAVIOUR ================= -->
+  <section class="tab" data-tab="behaviour" data-title="Behaviour">
+    <div class="card" id="restCard">
+      <h2>Rest</h2>
+      <p class="hint">With nobody at the mirror for this long it settles to just the time and a dim sky.</p>
+    </div>
+    <div class="card" id="dimCard">
+      <h2>Night dim</h2>
+      <p class="hint">Between these hours the mirror stays at rest and dims. Alarms still show.</p>
+    </div>
+  </section>
+
+  <!-- ================= HOME ASSISTANT ================= -->
+  <section class="tab" data-tab="ha" data-title="Home Assistant">
+    <div id="mappings" class="span" style="display:contents"></div>
+    <div class="savebar span" id="savebar">
+      <button class="btn" data-act="discard">Discard</button>
+      <button class="btn primary" data-act="saveMappings">Save mappings</button>
+    </div>
+  </section>
+
+  <!-- ================= SYSTEM ================= -->
+  <section class="tab" data-tab="system" data-title="System">
+    <div class="card">
+      <h2>Calendar</h2>
+      <div id="calendarInfo" class="empty">-</div>
+      <div class="actions" style="margin-top:12px"><button class="btn" data-act="calendar">Refresh calendar</button></div>
+    </div>
+    <div class="card">
+      <h2>Feeds</h2>
+      <p class="hint">Ask every module to fetch now rather than on its schedule.</p>
+      <div class="actions"><button class="btn" data-act="pump">Update feeds</button></div>
+    </div>
+    <details class="card span"><summary><h2>Raw mirror data</h2></summary><pre id="payload">-</pre></details>
+  </section>
+</main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s, root = document) => root.querySelector(s);
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+
+  // ---------------------------------------------------------------- api
+  async function getJSON(url) {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(url + ' ' + r.status);
+    return r.json();
+  }
+  async function post(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    let json = null;
+    try { json = await r.json(); } catch (e) { /* empty */ }
+    return { ok: r.ok, json };
+  }
+  let toastTimer = null;
+  function toast(msg, bad) {
+    const t = $('#toast'); t.textContent = msg; t.classList.toggle('bad', !!bad); t.classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2600);
+  }
+
+  // ---------------------------------------------------------------- tabs
+  const tabs = [...document.querySelectorAll('section.tab')];
+  function showTab(name) {
+    tabs.forEach((s) => s.classList.toggle('on', s.dataset.tab === name));
+    document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    try { localStorage.setItem('mirror.tab', name); } catch (e) { /* per-device nicety only */ }
+    history.replaceState(null, '', '#' + name);
+  }
+  tabs.forEach((s) => {
+    const b = el('button', '', s.dataset.title); b.dataset.tab = s.dataset.tab; b.setAttribute('role', 'tab');
+    b.onclick = () => showTab(s.dataset.tab); $('#tabs').appendChild(b);
+  });
+  let first = location.hash.slice(1);
+  if (!tabs.some((s) => s.dataset.tab === first)) { try { first = localStorage.getItem('mirror.tab'); } catch (e) { first = null; } }
+  showTab(tabs.some((s) => s.dataset.tab === first) ? first : 'overview');
+  addEventListener('hashchange', () => { const h = location.hash.slice(1); if (tabs.some((s) => s.dataset.tab === h)) showTab(h); });
+
+  $('#display').href = location.protocol + '//' + location.hostname + ':8795/';
+
+  // ---------------------------------------------------------------- tuning
+  // Each tuning key is sent alone when it changes, so two open pages cannot
+  // overwrite each other's unrelated settings.
+  let tuning = {};
+  const busy = new Set();          // keys the user is currently dragging
+  const timers = {};
+  function sendTuning(key, value) {
+    tuning[key] = value;
+    clearTimeout(timers[key]);
+    timers[key] = setTimeout(async () => {
+      const r = await post('/api/control/tuning', { [key]: value });
+      if (!r.ok) toast('Could not save that setting', true);
+      busy.delete(key);
+    }, 180);
+  }
+
+  const controls = [];             // { key, set(value) } for refreshing values
+
+  function slider(parent, key, label, min, max, step, unit, fallback) {
+    const box = el('div', 'slider');
+    const top = el('div', 'top'); const name = el('label', '', label); const out = el('output');
+    const input = el('input'); input.type = 'range'; input.min = min; input.max = max; input.step = step;
+    input.setAttribute('aria-label', label);
+    const fmt = (v) => {
+      v = Number(v);
+      if (unit === '%') return v.toFixed(step < 1 ? 1 : 0) + '%';
+      if (unit === 'x') return v.toFixed(2) + 'x';
+      if (unit === 'steps') return v.toLocaleString('en-GB');
+      return (step < 1 ? v.toFixed(2) : v.toFixed(0)) + (unit ? ' ' + unit : '');
+    };
+    input.oninput = () => { busy.add(key); out.textContent = fmt(input.value); sendTuning(key, Number(input.value)); };
+    top.append(name, out); box.append(top, input); parent.appendChild(box);
+    controls.push({ key, set: (v) => {
+      if (busy.has(key)) return;
+      const val = Number.isFinite(Number(v)) ? v : fallback;
+      input.value = val; out.textContent = fmt(val);
+    } });
+  }
+
+  function toggleRow(parent, label, sub, get, set) {
+    const row = el('div', 'row'); const text = el('div', 'grow'); text.appendChild(el('div', '', label));
+    if (sub) text.appendChild(el('div', 'sub', sub));
+    const sw = el('button', 'switch'); sw.setAttribute('role', 'switch'); sw.setAttribute('aria-label', label);
+    sw.onclick = () => { const next = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', String(next)); set(next); };
+    row.append(text, sw); parent.appendChild(row);
+    return (v) => sw.setAttribute('aria-checked', String(!!v));
+  }
+
+  function tuningSwitch(parent, key, label, sub, fallback) {
+    const setView = toggleRow(parent, label, sub, null, (on) => sendTuning(key, on ? 1 : 0));
+    controls.push({ key, set: (v) => setView(Number.isFinite(Number(v)) ? Number(v) >= 0.5 : fallback) });
+  }
+
+  function segmented(parent, key, label, options, fallback) {
+    const row = el('div', 'row'); const text = el('div', 'grow', label);
+    const seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', label);
+    const buttons = options.map(([value, name]) => {
+      const b = el('button', '', name);
+      b.onclick = () => { buttons.forEach((x) => x.setAttribute('aria-pressed', String(x === b))); sendTuning(key, value); };
+      seg.appendChild(b); return [value, b];
+    }).map(([value, b]) => { b.dataset.value = value; return b; });
+    row.append(text, seg); parent.appendChild(row);
+    controls.push({ key, set: (v) => {
+      const val = Number.isFinite(Number(v)) ? Number(v) : fallback;
+      buttons.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.value) === val)));
+    } });
+  }
+
+  function hourPicker(parent, key, label, fallback) {
+    const row = el('div', 'row'); const text = el('div', 'grow', label);
+    const sel = el('select'); sel.setAttribute('aria-label', label);
+    for (let h = 0; h < 24; h++) { const o = el('option', '', String(h).padStart(2, '0') + ':00'); o.value = h; sel.appendChild(o); }
+    sel.onchange = () => sendTuning(key, Number(sel.value));
+    row.append(text, sel); parent.appendChild(row);
+    controls.push({ key, set: (v) => { if (document.activeElement !== sel) sel.value = Number.isFinite(Number(v)) ? v : fallback; } });
+  }
+
+  // House
+  const house = $('#houseCard');
+  segmented(house, 'home_renderer', 'Style', [[0, 'Classic'], [1, 'Hologram']], 0);
+  slider(house, 'home_brightness', 'Brightness', 0.4, 1.8, 0.05, 'x', 1);
+  slider(house, 'home_stage_scale', 'Size', 0.6, 1.4, 0.05, 'x', 1);
+  slider(house, 'home_x', 'Left / right', -360, 360, 5, 'px', 0);
+  slider(house, 'home_y', 'Up / down', -360, 360, 5, 'px', 0);
+
+  const cam = $('#cameraCard');
+  cam.appendChild(el('p', 'hint', 'The slow side-to-side orbit and where the camera looks.'));
+  slider(cam, 'home_orbit_seconds', 'Orbit travel time', 18, 140, 1, 's', 54);
+  slider(cam, 'home_orbit_angle', 'Orbit angle', 15, 75, 1, 'deg', 45);
+  slider(cam, 'home_orbit_pause', 'Pause at each end', 0, 15, 1, 's', 7);
+  slider(cam, 'home_camera_radius', 'Distance', 4.2, 9, 0.1, '', 6);
+  slider(cam, 'home_camera_height', 'Height', 2.4, 6.5, 0.1, '', 4.25);
+  slider(cam, 'home_camera_fov', 'Field of view', 20, 50, 1, 'deg', 33);
+  slider(cam, 'home_target_x', 'Aim left / right', -1, 3.5, 0.05, '', 1.25);
+  slider(cam, 'home_target_y', 'Aim height', 0.25, 2.2, 0.05, '', 1.08);
+  slider(cam, 'home_target_z', 'Aim depth', -0.5, 2.5, 0.05, '', 0.95);
+
+  const bio = $('#bioCard');
+  bio.appendChild(el('p', 'hint', 'The heart, and the brain and walking figure that follow it.'));
+  slider(bio, 'heart_x', 'Heart left / right', -420, 420, 5, 'px', 0);
+  slider(bio, 'heart_y', 'Heart up / down', -420, 420, 5, 'px', 0);
+  slider(bio, 'heart_scale', 'Heart size', 0.55, 1.45, 0.05, 'x', 1);
+  slider(bio, 'brain_x', 'Brain left / right', -420, 420, 5, 'px', 0);
+  slider(bio, 'brain_y', 'Brain up / down', -420, 420, 5, 'px', 0);
+  slider(bio, 'brain_scale', 'Brain size', 0.55, 1.45, 0.05, 'x', 1);
+
+  const pan = $('#panelCard');
+  slider(pan, 'calendar_x', 'Calendar left / right', -360, 360, 5, 'px', 0);
+  slider(pan, 'calendar_y', 'Calendar up / down', -360, 360, 5, 'px', 0);
+  slider(pan, 'news_x', 'News left / right', -360, 360, 5, 'px', 0);
+  slider(pan, 'news_y', 'News up / down', -360, 360, 5, 'px', 0);
+
+  slider($('#restCard'), 'rest_after_minutes', 'Rest after', 1, 120, 1, 'min', 10);
+  hourPicker($('#dimCard'), 'dim_start_hour', 'Starts', 2);
+  hourPicker($('#dimCard'), 'dim_end_hour', 'Ends', 5);
+  slider($('#dimCard'), 'dim_level', 'Brightness while dimmed', 0.1, 1, 0.05, 'x', 0.35);
+
+  tuningSwitch($('#residentSettings'), 'resident_unprompted', 'May speak unprompted', 'When someone arrives after a long absence', true);
+  slider($('#residentSettings'), 'resident_idle_minutes', 'Absence before it may speak', 2, 240, 1, 'min', 20);
+
+  tuningSwitch($('#momentPacing'), 'moments_ambient', 'Ambient moments', 'Aurora, shooting star, HAL and friends', true);
+  slider($('#momentPacing'), 'ambient_gap_minutes', 'Minimum gap between moments', 2, 240, 1, 'min', 12);
+  slider($('#momentPacing'), 'ambient_daily_cap', 'Ambient moments per day', 0, 50, 1, '', 10);
+  slider($('#momentTriggers'), 'steps_goal', 'Step goal', 1000, 50000, 500, 'steps', 10000);
+  slider($('#momentTriggers'), 'market_surge_pct', 'Market surge at', 2, 50, 0.5, '%', 7);
+  slider($('#momentTriggers'), 'space_rocket_pct', 'Space-stock rocket at', 2, 50, 0.5, '%', 5);
+
+  const DEFAULTS = { home_renderer: 0, home_brightness: 1, home_stage_scale: 1, home_x: 0, home_y: 0,
+    home_orbit_seconds: 54, home_orbit_angle: 45, home_orbit_pause: 7, home_camera_radius: 6,
+    home_camera_height: 4.25, home_camera_fov: 33, home_target_x: 1.25, home_target_y: 1.08, home_target_z: 0.95,
+    heart_x: 0, heart_y: 0, heart_scale: 1, brain_x: 0, brain_y: 0, brain_scale: 1,
+    calendar_x: 0, calendar_y: 0, news_x: 0, news_y: 0 };
+
+  // ---------------------------------------------------------------- modules
+  const MODULE_NAMES = { biometrics: 'Biometrics', markets: 'Stock ticker', energy: 'House and energy',
+    calendar: 'Calendar', news: 'News', weather: 'Weather' };
+  const moduleSetters = {};
+  function renderModules(visibility) {
+    const card = $('#modulesCard');
+    for (const [key, on] of Object.entries(visibility || {})) {
+      if (!moduleSetters[key]) {
+        moduleSetters[key] = toggleRow(card, MODULE_NAMES[key] || key, null, null, async (next) => {
+          const r = await post('/api/modules', { [key]: next });
+          if (!r.ok) toast('Could not change that module', true);
+        });
       }
-      if (!feeds.children.length) feeds.innerHTML = '<div class="meta">No live feeds have returned data yet.</div>';
-      const status = await (await fetch('/api/control/status', {cache: 'no-store'})).json();
-      renderTuning(status.tuning || {});
-      const cal = status.calendar || {};
-      const calCard = document.createElement('div'); calCard.className = 'card';
-      calCard.innerHTML = '<div class="label">calendar</div><div class="value">' +
-        (cal.available ? (cal.parsed_events || 0) + ' events' : 'unavailable') + '</div>' +
-        '<div class="meta">credentials: ' + (cal.credentials_configured ? 'configured' : 'missing') +
-        (cal.last_error ? '<br>error: ' + cal.last_error : '') + '</div>';
-      feeds.appendChild(calCard);
-      const config = document.getElementById('config');
-      if (!mappingsDirty) {
-        config.innerHTML = '';
-        for (const [key, set] of Object.entries(status.configured_entities || {})) {
-          const card = document.createElement('div'); card.className = 'card';
-          const input = document.createElement('input'); input.id = 'cfg-' + key;
-          input.value = status.entity_values && status.entity_values[key] || '';
-          input.placeholder = key === 'light_entities' ? 'comma-separated entity ids' : 'entity id';
-          input.style.marginTop = '7px'; input.style.width = '100%';
-          input.oninput = () => { mappingsDirty = true; document.getElementById('saveMeta').textContent = 'Unsaved mapping changes'; };
-          card.innerHTML = '<div class="label">' + key.replaceAll('_', ' ') + '</div>';
-          card.appendChild(input);
-          config.appendChild(card);
-        }
-      }
-      const avatars = document.getElementById('avatars'); avatars.innerHTML = '';
-      for (const avatar of (status.avatars || [])) {
-        const b = document.createElement('button'); b.textContent = avatar.name;
-        b.className = avatar.selected ? 'active' : ''; b.disabled = !avatar.reference_available;
-        b.onclick = () => selectAvatar(avatar.key); avatars.appendChild(b);
-      }
-      if (!tickersDirty && !document.getElementById('tickerRows').contains(document.activeElement)) renderTickers(status.tickers || []);
-      const modules = document.getElementById('modules'); modules.innerHTML = '';
-      for (const [key, on] of Object.entries(status.visibility || {})) {
-        const b = document.createElement('button'); b.textContent = key + ': ' + (on ? 'ON' : 'OFF');
-        b.className = on ? 'active' : ''; b.onclick = () => toggleModule(key, !on); modules.appendChild(b);
-      }
-      renderMoments(status.moments || {});
-      const res = status.resident || {};
-      document.getElementById('residentMeta').textContent = res.available
-        ? 'Resident: ' + (res.status || '') + ' - pool ' + ((res.pool && res.pool.total) || 0) + ' clips'
-        : 'Resident unavailable on this mirror (check the avatar stack and VOSK_MODEL_PATH).';
-      document.getElementById('payload').textContent = JSON.stringify(data, null, 2);
+      moduleSetters[key](on);
     }
-    function renderMoments(m) {
-      const box = document.getElementById('moments'); box.innerHTML = '';
-      for (const item of (m.catalogue || [])) {
-        const on = (m.enabled || {})[item.name] !== false;
-        const card = document.createElement('div'); card.className = 'card';
-        const toggle = document.createElement('button'); toggle.textContent = (on ? 'ON' : 'OFF');
-        toggle.className = on ? 'active' : ''; toggle.onclick = () => momentToggle(item.name, !on);
-        const play = document.createElement('button'); play.textContent = 'Play';
-        play.onclick = () => momentPlay(item.name);
-        card.innerHTML = '<div class="label">' + item.label + (item.ambient ? ' (ambient)' : '') + '</div>';
-        card.appendChild(toggle); card.appendChild(play); box.appendChild(card);
-      }
-      if (!box.children.length) box.innerHTML = '<div class="meta">The mirror page has not reported its Moments yet.</div>';
-      const log = m.log || [];
-      document.getElementById('momentLog').textContent = log.length
-        ? log.map((e) => e.at + '  ' + e.name + (e.reason ? '  (' + e.reason + ')' : '')).join(String.fromCharCode(10))
-        : 'Nothing yet.';
+  }
+
+  // ---------------------------------------------------------------- avatars
+  let avatarKeys = '';
+  function renderAvatars(list) {
+    const box = $('#avatars');
+    const sig = list.map((a) => a.key + a.selected).join('|');
+    if (sig === avatarKeys) return;
+    avatarKeys = sig; box.innerHTML = '';
+    for (const a of list) {
+      const b = el('button', 'avatar'); b.setAttribute('aria-pressed', String(!!a.selected));
+      b.disabled = !a.reference_available;
+      const img = el('img'); img.alt = ''; img.loading = 'lazy'; img.src = '/api/avatar/thumb?key=' + encodeURIComponent(a.key);
+      img.onerror = () => { img.style.visibility = 'hidden'; };
+      const name = el('div', 'name'); const d = el('span', 'dot' + (a.selected ? ' on' : '')); name.append(d, el('span', '', a.name));
+      b.append(img, name, el('div', 'desc', a.description || ''));
+      b.onclick = async () => {
+        const r = await post('/api/avatar', { value: a.key });
+        toast(r.ok ? a.name + ' is now the resident' : 'Cannot change character mid-conversation', !r.ok);
+        refresh();
+      };
+      box.appendChild(b);
     }
-    async function momentToggle(name, on) {
-      await fetch('/api/moments/enabled', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({[name]: on})});
-      refresh();
-    }
-    async function momentPlay(name) {
-      await fetch('/api/moments/play', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
-      document.getElementById('saveMeta').textContent = 'Playing ' + name;
-    }
-    async function residentTalk() {
-      const r = await fetch('/api/resident/talk', {method: 'POST'});
-      document.getElementById('saveMeta').textContent = r.ok ? 'Resident listening - press again to finish' : 'Resident unavailable';
-    }
-    async function residentSay() {
-      const r = await fetch('/api/resident/unprompted', {method: 'POST'});
-      const j = r.ok ? await r.json() : {};
-      document.getElementById('saveMeta').textContent = r.ok ? (j.clip ? 'Playing a pooled clip' : 'No eligible pooled clip right now') : 'Resident unavailable';
-    }
-    function tuneLabel(value, unit) { return Number(value).toFixed(unit === '×' ? 2 : 0) + unit; }
-    function renderTuning(values) {
-      const box = document.getElementById('tuningRows');
-      if (tuningDirty || box.contains(document.activeElement)) return;
-      tuningValues = Object.assign({}, values);
-      box.innerHTML = '';
-      for (const [key, label, min, max, step, unit, fallback] of TUNERS) {
-        const row = document.createElement('div'); row.className = 'tune';
-        const input = document.createElement('input'); input.type = 'range';
-        input.min = min; input.max = max; input.step = step;
-        input.value = Number.isFinite(Number(values[key])) ? values[key] : fallback;
-        const output = document.createElement('output'); output.textContent = tuneLabel(input.value, unit);
-        input.oninput = () => { output.textContent = tuneLabel(input.value, unit); queueTuning(key, input.value); };
-        row.innerHTML = '<label for="' + input.id + '">' + label + '</label>';
-        row.appendChild(input); row.appendChild(output); box.appendChild(row);
-      }
-    }
-    function queueTuning(key, value) {
-      tuningValues[key] = Number(value); tuningDirty = true;
-      document.getElementById('tuningMeta').textContent = 'Applying…';
-      clearTimeout(tuningTimer); tuningTimer = setTimeout(saveTuning, 140);
-    }
-    async function saveTuning() {
-      const r = await fetch('/api/control/tuning', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(tuningValues)});
-      tuningDirty = !r.ok;
-      document.getElementById('tuningMeta').textContent = r.ok ? 'Saved — mirror updates within two seconds.' : 'Could not save tuning.';
-      if (r.ok) tuningValues = (await r.json()).tuning || tuningValues;
-    }
-    function resetTuning() {
-      tuningValues = {home_renderer:0, rest_after_minutes:10, resident_unprompted:1, resident_idle_minutes:20, moments_ambient:1, ambient_gap_minutes:12, ambient_daily_cap:10, steps_goal:10000, market_surge_pct:7, space_rocket_pct:5, dim_start_hour:2, dim_end_hour:5, dim_level:0.35, home_orbit_seconds:54, home_orbit_angle:45, home_orbit_pause:7, home_camera_radius:6, home_camera_height:4.25, home_camera_fov:33, home_target_x:1.25, home_target_y:1.08, home_target_z:.95, home_brightness:1, home_stage_scale:1, home_x:0, home_y:0, heart_x:0, heart_y:0, heart_scale:1, brain_x:0, brain_y:0, brain_scale:1, calendar_x:0, calendar_y:0, news_x:0, news_y:0};
-      tuningDirty = true; saveTuning().then(() => { tuningDirty = false; renderTuning(tuningValues); });
-    }
-    async function imHere() {
-      const r = await fetch('/api/presence', {method: 'POST'});
-      document.getElementById('saveMeta').textContent = r.ok ? 'Mirror woken' : 'Presence ping failed';
-    }
-    async function saveConfig() {
-      const updates = {}; for (const input of document.querySelectorAll('[id^="cfg-"]')) updates[input.id.slice(4)] = input.value;
-      const r = await fetch('/api/control/config', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updates)});
-      mappingsDirty = !r.ok;
-      document.getElementById('saveMeta').textContent = r.ok ? 'Saved and applied.' : 'Save failed.';
-      refresh();
-    }
-    async function selectAvatar(key) {
-      const r = await fetch('/api/avatar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:key})});
-      document.getElementById('avatarMeta').textContent = r.ok ? 'Avatar selection saved.' : 'Avatar selection failed.';
-      refresh();
-    }
-    function renderTickers(tickers) {
-      const box = document.getElementById('tickerRows'); box.innerHTML = '';
-      if (!tickers.length) { box.innerHTML = '<div class="meta">No tickers selected.</div>'; return; }
-      for (const ticker of tickers) {
-        const row = document.createElement('div'); row.className = 'ticker-row';
-        row.innerHTML = '<label><input type="checkbox" checked> ' + ticker + '</label>' +
-          '<button title="Remove ' + ticker + '" aria-label="Remove ' + ticker + '">×</button>';
-        row.querySelector('input').onchange = () => { tickersDirty = true; saveTickers(); };
-        row.querySelector('button').onclick = () => { row.remove(); tickersDirty = true; saveTickers(); };
+  }
+
+  // ---------------------------------------------------------------- moments
+  const momentRows = {};
+  function renderMoments(m) {
+    const box = $('#moments');
+    const cat = m.catalogue || [];
+    if (!cat.length) { box.innerHTML = '<p class="empty">The mirror page has not reported its moments yet.</p>'; return; }
+    for (const item of cat) {
+      if (!momentRows[item.name]) {
+        const row = el('div', 'row');
+        const text = el('div', 'grow');
+        text.append(el('div', '', item.label), el('span', 'tag', item.ambient ? 'Ambient' : 'Real event'));
+        const play = el('button', 'btn', 'Play');
+        play.onclick = async () => { const r = await post('/api/moments/play', { name: item.name }); toast(r.ok ? 'Playing ' + item.label : 'Could not play', !r.ok); };
+        const sw = el('button', 'switch'); sw.setAttribute('role', 'switch'); sw.setAttribute('aria-label', 'Allow ' + item.label);
+        sw.onclick = async () => {
+          const next = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', String(next));
+          const r = await post('/api/moments/enabled', { [item.name]: next });
+          if (!r.ok) toast('Could not change that moment', true);
+        };
+        row.append(text, play, sw);
+        if (box.querySelector('.empty')) box.innerHTML = '';
         box.appendChild(row);
+        momentRows[item.name] = sw;
+      }
+      momentRows[item.name].setAttribute('aria-checked', String((m.enabled || {})[item.name] !== false));
+    }
+    const log = $('#momentLog'); log.innerHTML = '';
+    const entries = m.log || [];
+    if (!entries.length) log.innerHTML = '<li class="empty">Nothing yet.</li>';
+    for (const e of entries.slice(0, 12)) {
+      const li = el('li'); li.append(el('time', '', e.at), el('span', '', (cat.find((c) => c.name === e.name) || {}).label || e.name));
+      if (e.reason) li.appendChild(el('span', 'tag', e.reason === 'ambient' ? 'Ambient' : e.reason === 'manual' ? 'From the panel' : 'Real event'));
+      log.appendChild(li);
+    }
+  }
+
+  // ---------------------------------------------------------------- stocks
+  let tickerSig = '';
+  function renderTickers(list) {
+    const sig = list.join(',');
+    if (sig === tickerSig) return;
+    tickerSig = sig;
+    const box = $('#tickers'); box.innerHTML = '';
+    if (!list.length) box.innerHTML = '<span class="empty">No symbols yet.</span>';
+    for (const t of list) {
+      const chip = el('span', 'chip'); chip.appendChild(el('span', '', t));
+      const x = el('button', '', '×'); x.setAttribute('aria-label', 'Remove ' + t);
+      x.onclick = () => saveTickers(list.filter((s) => s !== t), t + ' removed');
+      chip.appendChild(x); box.appendChild(chip);
+    }
+  }
+  async function saveTickers(list, msg) {
+    const r = await post('/api/tickers', { tickers: list });
+    if (r.ok) { tickerSig = ''; renderTickers((r.json && r.json.tickers) || list); toast(msg); }
+    else toast('Could not save the watchlist', true);
+  }
+  function addTicker() {
+    const input = $('#newTicker'); const v = input.value.trim().toUpperCase();
+    if (!v) return;
+    const list = tickerSig ? tickerSig.split(',') : [];
+    if (!list.includes(v)) list.push(v);
+    input.value = '';
+    saveTickers(list, v + ' added');
+  }
+  $('#addTicker').onclick = addTicker;
+  $('#newTicker').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTicker(); } });
+
+  // ---------------------------------------------------------------- mappings
+  const GROUPS = [
+    ['Mirror', /^entrance_pir/],
+    ['Energy', /^(power|solar|car_soc|car_charging|battery)/],
+    ['Climate', /(temp|humidity)_entity$/],
+    ['Presence and security', /(occupancy|motion|camera|alarm|front_door|car_presence)/],
+    ['Lights and devices', /(light|spotlights|led|tv|curtain)/],
+  ];
+  const LABELS = { entrance_pir_entity: 'Motion sensor in front of the mirror', light_entities: 'All lights (comma-separated)',
+    power_entity: 'Home power (W)', solar_entity: 'Solar generation (W)', car_soc_entity: 'Car battery (%)' };
+  const nice = (k) => LABELS[k] || (k.replace(/_entity$/, '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()));
+  let mappingsDirty = false, mappingKeys = '';
+  function renderMappings(values, configured) {
+    if (mappingsDirty) return;
+    const keys = Object.keys(configured || {}).sort();
+    const box = $('#mappings');
+    if (keys.join() !== mappingKeys) {
+      mappingKeys = keys.join(); box.innerHTML = '';
+      const buckets = {};
+      for (const k of keys) {
+        const g = (GROUPS.find(([, re]) => re.test(k)) || ['Other'])[0];
+        (buckets[g] = buckets[g] || []).push(k);
+      }
+      for (const [g] of [...GROUPS, ['Other']]) {
+        if (!buckets[g]) continue;
+        const card = el('details', 'card'); if (g === 'Mirror' || g === 'Energy') card.open = true;
+        const sum = el('summary'); const h = el('h2'); h.append(el('span', '', g + ' '));
+        const count = buckets[g].filter((k) => configured[k]).length;
+        h.appendChild(el('span', 'tag', count + ' of ' + buckets[g].length + ' set'));
+        sum.appendChild(h); card.appendChild(sum);
+        for (const k of buckets[g]) {
+          const f = el('div', 'field'); const id = 'map-' + k;
+          const lab = el('label', '', nice(k)); lab.htmlFor = id;
+          const input = el('input'); input.type = 'text'; input.id = id; input.dataset.key = k;
+          input.placeholder = k === 'light_entities' ? 'light.hall, light.kitchen' : 'e.g. binary_sensor.hall_motion';
+          input.autocomplete = 'off'; input.spellcheck = false;
+          input.oninput = () => { mappingsDirty = true; $('#savebar').classList.add('on'); };
+          f.append(lab, input); card.appendChild(f);
+        }
+        box.appendChild(card);
       }
     }
-    async function saveTickers() {
-      const tickers = [...document.querySelectorAll('#tickerRows input[type=checkbox]:checked')]
-        .map(box => box.parentElement.textContent.trim());
-      const r = await fetch('/api/tickers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tickers})});
-      document.getElementById('tickerMeta').textContent = r.ok ? 'Watchlist saved.' : 'Watchlist save failed.';
-      if (r.ok) { tickersDirty = false; renderTickers((await r.json()).tickers || tickers); }
+    for (const input of box.querySelectorAll('input[data-key]')) {
+      const v = values[input.dataset.key];
+      input.value = Array.isArray(v) ? v.join(', ') : (v || '');
     }
-    async function addTicker() {
-      const input = document.getElementById('newTicker'); const value = input.value.trim();
-      if (!value) return;
-      const current = [...document.querySelectorAll('#tickerRows input[type=checkbox]')].map(box => box.parentElement.textContent.trim());
-      if (!current.includes(value)) current.push(value);
-      input.value = '';
-      tickersDirty = true;
-      const r = await fetch('/api/tickers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tickers:current})});
-      document.getElementById('tickerMeta').textContent = r.ok ? 'Ticker added.' : 'Ticker add failed.';
-      if (r.ok) { tickersDirty = false; renderTickers((await r.json()).tickers || current); }
+  }
+
+  // ---------------------------------------------------------------- overview
+  const FEEDS = [['weather', 'Weather'], ['biometrics', 'Biometrics'], ['calendar', 'Calendar'],
+    ['event', 'News'], ['markets', 'Markets'], ['energy', 'House']];
+  function renderOverview(data, status) {
+    const box = $('#feeds'); box.innerHTML = '';
+    for (const [key, name] of FEEDS) {
+      const t = el('div', 'tile'); t.append(el('span', 'dot' + (data[key] ? ' on' : '')), el('span', '', name));
+      box.appendChild(t);
     }
-    async function toggleModule(key, value) {
-      await fetch('/api/modules', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[key]:value})});
-      refresh();
+    const p = data.presence;
+    const pd = $('#presenceDot'), pt = $('#presenceText');
+    if (!p || !p.configured) { pd.className = 'dot'; pt.textContent = 'No motion sensor mapped'; }
+    else if (p.detected) { pd.className = 'dot on'; pt.textContent = 'Someone is at the mirror'; }
+    else { pd.className = 'dot'; pt.textContent = 'Nobody at the mirror'; }
+    const r = status.resident || {};
+    $('#residentDot').className = 'dot' + (r.available ? ' on' : ' bad');
+    $('#residentText').textContent = r.available
+      ? (r.pool ? r.pool.character + ' - ' + (r.status || 'ready') : 'Resident ready')
+      : 'Resident unavailable (avatar stack or VOSK_MODEL_PATH)';
+    $('#poolText').textContent = r.available
+      ? (r.pool ? r.pool.total + ' clips in ' + r.pool.character + "'s pool" : '')
+      : 'The resident is not running on this mirror.';
+    const cal = status.calendar || {};
+    $('#calendarInfo').textContent = !cal.available ? 'Calendar module unavailable.' :
+      (cal.parsed_events || 0) + ' upcoming events. Credentials ' + (cal.credentials_configured ? 'configured' : 'missing') +
+      (cal.last_error ? '. Last error: ' + cal.last_error : '.');
+    $('#payload').textContent = JSON.stringify(data, null, 2);
+  }
+
+  // ---------------------------------------------------------------- actions
+  const ACTIONS = {
+    talk: async () => { const r = await post('/api/resident/talk'); toast(r.ok ? (r.json && r.json.recording ? 'Listening - press Talk again to finish' : 'Finishing') : 'Resident unavailable', !r.ok); },
+    say: async () => { const r = await post('/api/resident/unprompted'); toast(!r.ok ? 'Resident unavailable' : (r.json && r.json.clip ? 'Playing a stored clip' : 'No suitable stored clip right now'), !r.ok); },
+    pump: async () => { const r = await post('/api/control/pump'); toast(r.ok ? 'Feeds asked to update' : 'Update failed', !r.ok); setTimeout(refresh, 1500); },
+    calendar: async () => { const r = await post('/api/control/calendar-refresh'); toast(r.ok ? 'Calendar refresh queued' : 'Calendar refresh failed', !r.ok); setTimeout(refresh, 1500); },
+    reset: async () => {
+      const r = await post('/api/control/tuning', DEFAULTS);
+      toast(r.ok ? 'Display settings reset' : 'Reset failed', !r.ok);
+      busy.clear(); refresh();
+    },
+    saveMappings: async () => {
+      const updates = {};
+      for (const input of document.querySelectorAll('#mappings input[data-key]')) updates[input.dataset.key] = input.value;
+      const r = await post('/api/control/config', updates);
+      if (r.ok) { mappingsDirty = false; $('#savebar').classList.remove('on'); mappingKeys = ''; toast('Mappings saved'); refresh(); }
+      else toast('Could not save mappings', true);
+    },
+    discard: () => { mappingsDirty = false; $('#savebar').classList.remove('on'); mappingKeys = ''; refresh(); },
+  };
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (b && ACTIONS[b.dataset.act]) ACTIONS[b.dataset.act]();
+  });
+  $('#imHere').onclick = async () => { const r = await post('/api/presence'); toast(r.ok ? 'Mirror woken' : 'Could not reach the mirror', !r.ok); };
+
+  // ---------------------------------------------------------------- refresh
+  async function refresh() {
+    try {
+      const [data, status] = await Promise.all([getJSON('/api/state.json'), getJSON('/api/control/status')]);
+      $('#conn').classList.remove('down');
+      tuning = Object.assign({}, status.tuning || {});
+      for (const c of controls) c.set(tuning[c.key]);
+      renderModules(status.visibility);
+      renderAvatars(status.avatars || []);
+      renderMoments(status.moments || {});
+      renderTickers(status.tickers || []);
+      renderMappings(status.entity_values || {}, status.configured_entities || {});
+      renderOverview(data, status);
+    } catch (e) {
+      $('#conn').classList.add('down');
     }
-    async function pump() { await fetch('/api/control/pump', {method: 'POST'}); refresh(); }
-    async function refreshCalendar() {
-      const r = await fetch('/api/control/calendar-refresh', {method: 'POST'});
-      document.getElementById('saveMeta').textContent = r.ok ? 'Calendar refresh queued.' : 'Calendar refresh failed.';
-      setTimeout(refresh, 1500);
-    }
-    document.getElementById('newTicker').addEventListener('keydown', event => {
-      if (event.key === 'Enter') { event.preventDefault(); addTicker(); }
-    });
-    refresh().catch(e => document.getElementById('payload').textContent = String(e));
-    setInterval(() => refresh().catch(() => {}), 10000);
-  </script>
+  }
+  refresh();
+  setInterval(refresh, 8000);
+})();
+</script>
 </body>
 </html>
