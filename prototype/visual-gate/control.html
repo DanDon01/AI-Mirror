@@ -125,6 +125,8 @@
     background: var(--surface-2); border: 2px solid transparent; border-radius: 14px;
   }
   .avatar img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #000; }
+  .avatar .ph { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 1;
+    background: radial-gradient(circle at 50% 40%, #1d2a3b, #0b1119); font-size: 56px; font-weight: 650; color: var(--muted); }
   .avatar .name { display: flex; align-items: center; gap: 8px; padding: 10px 12px 2px; font-weight: 650; }
   .avatar .desc { padding: 0 12px 12px; color: var(--muted); font-size: 13px; }
   .avatar[aria-pressed="true"] { border-color: var(--accent); }
@@ -495,7 +497,7 @@
   }
 
   // ---------------------------------------------------------------- avatars
-  let avatarKeys = '';
+  let avatarKeys = '', thumbWarned = false;
   function renderAvatars(list) {
     const box = $('#avatars');
     const sig = list.map((a) => a.key + a.selected).join('|');
@@ -505,7 +507,13 @@
       const b = el('button', 'avatar'); b.setAttribute('aria-pressed', String(!!a.selected));
       b.disabled = !a.reference_available;
       const img = el('img'); img.alt = ''; img.loading = 'lazy'; img.src = '/api/avatar/thumb?key=' + encodeURIComponent(a.key);
-      img.onerror = () => { img.style.visibility = 'hidden'; };
+      // No thumbnail (e.g. the server has not been restarted since an
+      // update): show the character's initial rather than a blank box.
+      img.onerror = () => {
+        const ph = el('div', 'ph', a.name.slice(0, 1));
+        img.replaceWith(ph);
+        if (!thumbWarned) { thumbWarned = true; toast('Thumbnails unavailable - restart the mirror service', true); }
+      };
       const name = el('div', 'name'); const d = el('span', 'dot' + (a.selected ? ' on' : '')); name.append(d, el('span', '', a.name));
       b.append(img, name, el('div', 'desc', a.description || ''));
       b.onclick = async () => {

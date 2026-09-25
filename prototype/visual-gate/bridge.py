@@ -878,7 +878,13 @@ class Bridge:
                 image = pygame.image.load(str(source))
                 w, h = image.get_size()
                 scale = 320 / max(w, h)
-                small = pygame.transform.smoothscale(image, (max(1, int(w * scale)), max(1, int(h * scale))))
+                size = (max(1, int(w * scale)), max(1, int(h * scale)))
+                try:
+                    small = pygame.transform.smoothscale(image, size)
+                except (ValueError, pygame.error):
+                    # smoothscale needs a 24/32-bit image; a palette PNG
+                    # still gets a thumbnail, just without the filtering.
+                    small = pygame.transform.scale(image, size)
                 pygame.image.save(small, target)
             return target
         except Exception as exc:
