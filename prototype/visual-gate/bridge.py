@@ -732,7 +732,8 @@ class Bridge:
                    "_tuning": self.tuning.copy(),
                    "_moments": {"enabled": dict(self.moments["enabled"])}}
             if getattr(self, "resident", None) is not None:
-                out["resident"] = {"available": True, "character": self.resident.profile.name}
+                out["resident"] = {"available": True, "character": self.resident.profile.name,
+                                   "key": self.resident.profile.key}
             configured = bool(self.gate.get("entrance_pir_entity"))
             if configured or self.presence.get("last_seen"):
                 out["presence"] = {"configured": configured, **self.presence}
@@ -838,7 +839,8 @@ class Bridge:
         resident = getattr(self, "resident", None)
         if resident is None:
             return {"available": False}
-        return {"available": True, "status": resident.status, "pool": resident.pool_summary()}
+        return {"available": True, "status": resident.status, "pool": resident.pool_summary(),
+                "last_turn": resident.last_turn_summary(), "debug": resident.debug_snapshot()}
 
     def refresh_calendar(self):
         mod = self.modules.get("calendar")
@@ -854,6 +856,16 @@ class Bridge:
         except Exception as exc:
             logger.warning("avatar options unavailable: %s", exc)
             return []
+
+    @staticmethod
+    def avatar_reference(key):
+        """The full reference portrait, by catalogue key only."""
+        from avatar_profiles import AvatarProfiles
+        try:
+            path = AvatarProfiles().get(str(key)).reference_image
+        except Exception:
+            return None
+        return str(path) if path.is_file() else None
 
     @staticmethod
     def avatar_thumb(key):

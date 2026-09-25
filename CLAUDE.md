@@ -192,7 +192,9 @@ Current phase: "Level Up and Polish" - see `AI_Mirror_Level_Up_and_Polish_Brief.
   (`VISUAL_GATE_ENTRANCE_PIR`), dim hours, event pins. `js/sky.js` - computed
   sun/moon/phase. `js/moments.js` - curated Moments + director.
   `js/resident.js` + `resident.py` - AvatarModule in the bridge, clips pushed
-  over `/api/events` (SSE) and played in a portal; unprompted speech is pooled
+  over `/api/events` (SSE) and played unframed (NO portal - owner decision); audio
+  via ffmpeg->aplay in the bridge, browser video muted; AVATAR DEBUG panel on
+  the glass (AVATAR_DEBUG_OVERLAY=0 hides it); unprompted speech is pooled
   clips only.
 - Headless checks: `render.py`, `validate.py`, `qa_home.py` (all serve the
   labelled fixture through `serve.fixture_handler()`); captures never inherit

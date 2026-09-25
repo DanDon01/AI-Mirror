@@ -57,10 +57,13 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/api/events":
             self._serve_events()
             return
-        if self.path.split("?")[0] == "/api/avatar/thumb":
+        if self.path.split("?")[0] in ("/api/avatar/thumb", "/api/avatar/reference"):
             from urllib.parse import parse_qs, urlsplit
             key = (parse_qs(urlsplit(self.path).query).get("key") or [""])[0]
-            path = self.bridge.avatar_thumb(key) if self.bridge is not None else None
+            full = self.path.split("?")[0].endswith("reference")
+            path = None
+            if self.bridge is not None:
+                path = self.bridge.avatar_reference(key) if full else self.bridge.avatar_thumb(key)
             if not path:
                 self.send_error(404, "no such avatar")
                 return

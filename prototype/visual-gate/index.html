@@ -71,8 +71,12 @@
   <!-- One caption for whichever Moment is playing; real figures only. -->
   <div class="moment-caption" id="momentCaption"><div class="big"></div><div class="small"></div></div>
 
-  <!-- ============ RESIDENT: the avatar's portal, only while it is here ============ -->
-  <div class="portal" id="portal"><video id="portalVideo" playsinline preload="auto"></video></div>
+  <!-- ============ RESIDENT: the avatar itself, only while it is here ============ -->
+  <div class="resident" id="resident">
+    <img class="resident-portrait" id="residentPortrait" alt="">
+    <video class="resident-video" id="residentVideo" playsinline muted preload="auto"></video>
+  </div>
+  <pre class="resident-debug" id="residentDebug" hidden></pre>
 
   <!-- ============ STAGE: shared WebGL canvas for stage actors ============ -->
   <canvas class="stage" id="stage"></canvas>

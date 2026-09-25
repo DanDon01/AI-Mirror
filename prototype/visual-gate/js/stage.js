@@ -1,5 +1,5 @@
 /* The stage: one full-plate WebGL canvas that every new visual actor
-   draws into (sky, hologram house, Moments, the resident's portal,
+   draws into (sky, hologram house, Moments, the wake,
    presence). One context, one bloom, one finish, instead of a canvas per
    module that can neither share light nor fade into the glass together.
 

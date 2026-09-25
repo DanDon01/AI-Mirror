@@ -15,7 +15,8 @@ is now the default boot mode. The Level Up phase (see
     `js/frame.js`).
 -   **Registers:** rest, glance and theatre, driven by presence and dim
     hours, with real events interrupting the rotation (`js/conductor.js`).
--   **Resident:** the avatar in a portal, with its clips pushed by the
+-   **Resident:** the avatar itself (no portal), sound through aplay on
+    the bridge, with its clips pushed by the
     bridge (`js/resident.js`, `resident.py`).
 -   **Moments:** twelve curated pieces of full-glass theatre
     (`js/moments.js`).

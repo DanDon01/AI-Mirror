@@ -159,7 +159,7 @@ The test for each register:
     r128's lighting, and r128 has everything the stage needs. Upgrade only if
     a needed feature is genuinely missing.
 -   **One full-plate stage canvas.** Every *new* actor (sky, hologram house,
-    Moments, the resident's portal, presence) registers with the stage. Each
+    Moments, the wake, presence) registers with the stage. Each
     actor has its own scene, camera and plate rectangle.
     -   The heart/brain object and the classic house keep their own canvases
         until stage-native versions replace them. Porting them to the stage
@@ -352,19 +352,20 @@ theatre, together.
 -   **Port the avatar to the browser.** The Python side keeps speech-to-text,
     the language model, the Fal video generation and the cache. The browser
     plays the resulting video.
-    -   Present it in a **portal**: an oval or circular aperture with a
-        feathered edge and a particle rim, never a rectangular video frame.
-    -   The selected avatar profile carries through, so the control-panel
-        selection finally works in visual mode.
--   **Theatre while it thinks.** Use the staged states from
-    `PRINCESS_FUTURE_IMPROVEMENTS.md` item 3 as visuals:
-    -   *listening*: the glass ripples in time with the microphone level;
-    -   *thinking*: light gathers toward the centre;
-    -   *conjuring*: the portal forms from particles;
-    -   *speaking*: the video plays, and the portal rim reacts to the speech
-        audio through a Web Audio analyser.
-    -   Cold-start latency should feel deliberate, like the mirror is waking
-        up.
+    -   **No portal (owner decision, 25 September 2026).** The character
+        appears as itself, the way the Pygame avatar did: its reference
+        portrait fades in at the video's position while it listens and
+        thinks, then the video plays there on black, with softly faded box
+        edges.
+    -   **Sound comes from the bridge, not the browser:** ffmpeg piped into
+        aplay (honouring `VOICE_SPEAKER`), the path proven on the Pi. The
+        browser video is muted.
+    -   **The Pygame AVATAR DEBUG overlay is kept on the glass:** stage,
+        mic, Vosk, OpenAI, source, audio process state and per-step
+        timings. Turn it off with `AVATAR_DEBUG_OVERLAY=0`. The web panel's
+        Resident tab also shows the last turn.
+-   **Stages:** listening, thinking and conjuring show the breathing
+    portrait; speaking shows the video.
 -   **The AI directs the display.** Each reply carries an intent it already
     resolves (weather, calendar, smart home, news, and so on). That intent
     becomes a Conductor cue:
@@ -513,7 +514,7 @@ the look through the glass can only be judged on the physical mirror.
 | **0 --- Foundation** | **Built:** Three.js r128 bundled locally; architecture lock (`test_house_layout.js`, 144 objects); shared stage with bloom, black floor, feathering and quality tiers; working per-scene Pi measurement; capture tools repaired. **Remaining:** the owner's Pi measurement run. | Existing visuals unchanged (the stage canvas is hidden when no actor is active) and a per-scene budget measured on the Pi |
 | **1 --- Two heroes** | B (house as hologram), C (real sky), post-processing chain. **Built, under review:** hologram house (`js/home-holo.js`) on the stage, all 112 real-home solids locked in place; switch with Mirror Controls "House: 0 classic, 1 hologram". **Next:** the real-sky actor. | The house and sky pass the across-the-room test |
 | **2 --- The Conductor** | **Built:** entrance PIR presence (1 s poll plus server-sent events), rest, glance and theatre registers, wake band and greeting, 02:00--05:00 dim, breathing clock at the real resting heart rate, real events pinning panels (alarm, porch, door, car, imminent appointment), and the web "I'm here" button. The 80-second rotation remains as the glance content; events now interrupt it. | The display visibly changes between an empty and an occupied room |
-| **3 --- The resident** | **Built:** AvatarModule runs in the bridge with a browser player; a feathered portal with a voice-reactive violet ring; listening, thinking, conjuring and speaking stages; intent cues pin weather, calendar, house or news; unprompted speech from the pool only; a journal of every turn. **Needs the Pi:** microphone, Vosk, OpenAI and Fal. | Ask about the weather: the avatar answers while the sky takes the stage |
+| **3 --- The resident** | **Built:** AvatarModule runs in the bridge with a browser player; no portal (the character appears as itself; portrait while waiting, video when speaking); audio through aplay on the bridge; the on-mirror AVATAR DEBUG panel; intent cues pin weather, calendar, house or news; unprompted speech from the pool only; a journal of every turn. **Needs the Pi:** microphone, Vosk, OpenAI and Fal. | Ask about the weather: the avatar answers while the sky takes the stage |
 | **4 --- Moments** | **Built:** twelve moments (seven triggered by real data, five ambient), a director with cooldowns, gap, daily cap and recent-history discount, web panel toggles, play-now and log, and the 'm' key. | A week of normal life without the same Moment twice in a day |
 | **5 --- Biometrics and style** | **Built:** heart to brain to striding figure (cadence from steps against the goal); the mirror's pulse (the rest clock breathes at the resting heart rate); the house style is written up in `prototype/visual-gate/README.md`. | Heart, brain and stride form one continuous object |
 | **6 --- Polish** | **Built:** WebGL context-loss recovery, stale data withdrawn after 10 minutes, clock burn-in drift, per-moment GPU resource release, and GPU memory counters. **Remaining (on the Pi):** a one-hour soak with `measure_on_pi.py`, reading the glass from 3 metres, black level through the two-way glass, and a new transitions capture. | All acceptance tests pass |

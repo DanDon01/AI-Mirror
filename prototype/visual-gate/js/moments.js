@@ -354,23 +354,25 @@ const Moments = (() => {
       },
     },
     {
-      name: 'fourth_wall_wink', label: 'Wink', duration: 4.5, cooldown: 86400, weight: 0.8, ambient: true,
-      when: (ctx) => ctx.residentIdle,
-      make() {
+      name: 'fourth_wall_wink', label: 'Wink', duration: 5, cooldown: 86400, weight: 0.8, ambient: true,
+      when: (ctx) => ctx.residentIdle && !!ctx.residentKey,
+      make(ctx) {
+        // The resident leans in from the edge of the glass, has a look, and
+        // goes again. Its own reference portrait, softly faded at the edges.
         const s = stage();
-        const ring = sparks(420, 0xb98cff); s.scene.add(ring.obj);
+        const tex = new THREE.TextureLoader().load('api/avatar/reference?key=' + encodeURIComponent(ctx.residentKey || ''));
+        const peek = field(`uniform sampler2D uTex; uniform float uA; varying vec2 vUv;
+          void main(){ vec4 c = texture2D(uTex, vUv);
+            vec2 d = abs(vUv - 0.5) * 2.0; float edge = (1.0 - smoothstep(0.55, 1.0, d.x)) * (1.0 - smoothstep(0.6, 1.0, d.y));
+            float a = edge * uA; gl_FragColor = vec4(c.rgb * a, a); }`,
+          { uTex: { value: tex }, uA: { value: 0 } }, 0, 0, 620, 620);
+        s.scene.add(peek);
         return Object.assign(s, {
-          update(p, t) {
+          update(p) {
             const inOut = p < 0.25 ? ease(p / 0.25) : p > 0.75 ? 1 - ease((p - 0.75) / 0.25) : 1;
-            const cx = W + 260 - inOut * 380, cy = 1250, R = 260;
-            // Two blinks: the ring squashes flat and opens again.
-            const blink = (b) => Math.max(0, 1 - Math.abs(p - b) / 0.04);
-            const sy = 1 - 0.92 * Math.max(blink(0.45), blink(0.55));
-            for (let i = 0; i < ring.n; i++) {
-              const th = i / ring.n * Math.PI * 2;
-              ring.set(i, cx + Math.cos(th) * R, cy + Math.sin(th) * R * sy, 0.55 * inOut * (0.6 + 0.4 * hash(i)), 6);
-            }
-            ring.commit();
+            at(peek, W + 200 - inOut * 330, 1250 + Math.sin(p * Math.PI * 2) * 12);
+            peek.rotation.z = 0.12 * (1 - inOut) + 0.04 * Math.sin(p * Math.PI * 3);
+            peek.material.uniforms.uA.value = 0.9 * inOut;
           },
         });
       },
@@ -533,6 +535,7 @@ const Moments = (() => {
     }
     prev = s;
     Moments._weather = w;
+    Moments._residentKey = (data.resident && data.resident.key) || '';
   }
 
   function context() {
@@ -548,7 +551,8 @@ const Moments = (() => {
       }
       sunPrevAlt = sun.alt;
     }
-    return { darkClear, residentIdle: typeof Resident === 'undefined' || Resident.state() === 'idle' };
+    return { darkClear, residentIdle: typeof Resident === 'undefined' || Resident.state() === 'idle',
+             residentKey: Moments._residentKey || '' };
   }
 
   function frame(now) {
@@ -581,6 +585,7 @@ const Moments = (() => {
     if (!m || current) return false;
     const ctx = name === 'rocket_launch' || name === 'market_surge' ? { quote: { sym: 'TEST', pct: 0 } } : {};
     if (m.name === 'sun_curtain') ctx.kind = new Date().getHours() < 12 ? 'sunrise' : 'sunset';
+    if (m.name === 'fourth_wall_wink') ctx.residentKey = Moments._residentKey || '';
     // A play-now from the panel is a demonstration: the caption says so
     // rather than showing a figure nobody measured.
     if (ctx.quote) ctx.quote = null;

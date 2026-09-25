@@ -33,6 +33,8 @@ import logging
 import os
 import re
 import secrets
+import shutil
+import subprocess
 import threading
 import time
 from datetime import datetime
@@ -46,7 +48,12 @@ CUE_INTENTS = {"weather", "calendar", "smarthome", "news"}
 
 
 class BrowserPlayer:
-    """Duck-types AvatarPlayer: 'playing' until the page says it finished."""
+    """Duck-types AvatarPlayer. The page shows the video (muted); the sound
+    is played here exactly as the Pygame avatar did - ffmpeg decoding the
+    same clip into aplay, on VOICE_SPEAKER if set - because that path is
+    proven on the Pi, whereas Chromium's own audio output under a systemd
+    service may go to another device or nowhere. 'playing' until the page
+    says the clip finished (or a safety timeout)."""
 
     def __init__(self, publish, media_url, max_seconds=45):
         self._publish = publish
@@ -54,6 +61,9 @@ class BrowserPlayer:
         self._max = max_seconds
         self._playing = False
         self._since = 0.0
+        self._decoder = None
+        self._audio = None
+        self.audio_note = "idle"
         self.token = None
         self.label = "none"
 
@@ -66,32 +76,86 @@ class BrowserPlayer:
         return self._playing
 
     def play(self, path, size=None, kind="reply"):
-        src = str(path)
-        if not src.startswith(("http://", "https://")):
-            src = self._media_url(Path(path))
-        if "apparition" in str(path):
+        raw = str(path)
+        local = not raw.startswith(("http://", "https://"))
+        src = self._media_url(Path(path)) if local else raw
+        if "apparition" in raw:
             kind = "apparition"
         self.token = secrets.token_hex(6)
         self._playing = True
         self._since = time.monotonic()
-        self.label = kind
+        self.label = kind + (" (local clip)" if local else " (Fal stream)")
+        self._start_audio(str(Path(path).resolve()) if local else raw)
         self._publish({"type": "resident", "state": "speaking", "src": src,
                        "clip": self.token, "kind": kind})
+
+    def _start_audio(self, source):
+        self._stop_audio()
+        ffmpeg, aplay = shutil.which("ffmpeg"), shutil.which("aplay")
+        if not ffmpeg or not aplay:
+            self.audio_note = "silent: ffmpeg or aplay not installed"
+            return
+        speaker = os.getenv("VOICE_SPEAKER", "").strip()
+        command = [aplay, "-q"] + (["-D", speaker] if speaker else [])
+        try:
+            self._decoder = subprocess.Popen(
+                [ffmpeg, "-re", "-loglevel", "error", "-i", source, "-vn", "-f", "wav", "-"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self._audio = subprocess.Popen(command, stdin=self._decoder.stdout,
+                                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            self._decoder.stdout.close()
+            self.audio_note = "playing via aplay " + (speaker or "(ALSA default)")
+        except Exception as exc:
+            self.audio_note = f"audio failed to start: {exc}"
+            logger.exception("resident audio failed to start")
+
+    def _stop_audio(self):
+        for proc in (self._audio, self._decoder):
+            if proc is not None and proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=0.4)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        self._audio = self._decoder = None
+
+    def _audio_state(self):
+        """Report how the audio ended: an aplay/ffmpeg error is exactly what
+        someone standing at a silent mirror needs to read."""
+        for name, proc in (("aplay", self._audio), ("ffmpeg", self._decoder)):
+            if proc is None or proc.poll() is None:
+                continue
+            if proc.returncode not in (0, None):
+                err = b""
+                try:
+                    err = proc.stderr.read() if proc.stderr else b""
+                except Exception:
+                    pass
+                line = err.decode("utf-8", "replace").strip().splitlines()
+                self.audio_note = f"{name} exited {proc.returncode}: " + (line[-1][:120] if line else "no message")
+        if self._audio is not None and self._audio.poll() == 0 and "playing" in self.audio_note:
+            self.audio_note = "finished cleanly"
+        return self.audio_note
 
     def finished(self, token):
         # An apparition ending late must not end the reply that replaced it.
         if token == self.token:
             self._playing = False
+            self._audio_state()
+            self._stop_audio()
 
     def update(self, _pygame=None):
+        self._audio_state()
         if self._playing and time.monotonic() - self._since > self._max:
             logger.warning("resident clip never reported finished; releasing it")
             self._playing = False
+            self._stop_audio()
 
     def stop(self):
         if self._playing:
             self._publish({"type": "resident", "state": "stop"})
         self._playing = False
+        self._stop_audio()
 
     def draw(self, *args, **kwargs):
         pass
@@ -100,7 +164,8 @@ class BrowserPlayer:
         self.stop()
 
     def diagnostic(self):
-        return f"browser clip={self.label} playing={self._playing}"
+        age = f"{time.monotonic() - self._since:.1f}s" if self._playing else "-"
+        return f"clip={self.label} playing={self._playing} age={age}"
 
 
 def _make_resident_class():
@@ -116,8 +181,20 @@ def _make_resident_class():
             self._turn = {}
             self._last_state = None
             self._last_unprompted = 0.0
+            self._marks = {}
+            self._last_debug = None
+            self._last_debug_at = 0.0
+            self.last_turn = {}
             super().__init__(size=480)
             self.player = BrowserPlayer(self._publish, self.media_url)
+            original_play = self.player.play
+
+            def play(path, size=None, kind="reply"):
+                if "apparition" not in str(path):
+                    self._mark("play")
+                return original_play(path, size, kind)
+
+            self.player.play = play
 
         # ---- events --------------------------------------------------
         def _publish(self, event):
@@ -153,8 +230,44 @@ def _make_resident_class():
                 return "error"
             return "idle"
 
+        # ---- the on-mirror debug panel (as the Pygame AVATAR DEBUG overlay)
+        def _mark(self, name):
+            self._marks[name] = time.monotonic()
+
+        def debug_snapshot(self):
+            m = self._marks
+            base = m.get("stop") or m.get("start")
+            def since(key):
+                return f"{m[key] - base:.1f}s" if base and key in m and m[key] >= base else "-"
+            return {
+                "character": self.profile.name,
+                "stage": self.status,
+                "mic": ("streaming " if self._streaming_capture else "per-turn ") + str(self.device),
+                "vosk": "loaded" if self._vosk_model is not None else "not loaded (VOSK_MODEL_PATH?)",
+                "openai": "ready" if self.openai_client is not None else "not ready",
+                "source": self.player.label,
+                "audio": self.player.audio_note,
+                "player": self.player.diagnostic(),
+                "timings": f"heard {since('transcript')}  reply {since('reply')}  video {since('video')}  playing {since('play')}",
+            }
+
+        def _start_recording(self):
+            self._marks = {}
+            self._mark("start")
+            super()._start_recording()
+
+        def _stop_recording(self):
+            self._mark("stop")
+            super()._stop_recording()
+
         def tick(self):
             self.update()
+            snap = self.debug_snapshot()
+            now = time.monotonic()
+            if snap != self._last_debug and now - self._last_debug_at > 0.25:
+                self._last_debug, self._last_debug_at = snap, now
+                show = os.getenv("AVATAR_DEBUG_OVERLAY", "1").lower() in ("1", "true", "yes", "on")
+                self._publish({"type": "resident", "debug": snap, "show": show})
             state = self._state_for(self.status)
             if state == "speaking" and not self.player.playing and not self._turn_active:
                 state = "idle"
@@ -167,6 +280,7 @@ def _make_resident_class():
 
         # ---- turn hooks ----------------------------------------------
         def _on_transcript(self, text):
+            self._mark("transcript")
             self._turn["transcript"] = text
             intent = _intent_for(text or "")
             self._turn["intent"] = intent
@@ -187,8 +301,15 @@ def _make_resident_class():
             original = self.fal.generate_from_text
 
             def spy(reference, text, *args, **kwargs):
+                self._mark("reply")
                 self._turn["reply"] = text
                 self._turn["source"] = "generated"
+                ready = kwargs.get("on_video_ready")
+                if ready is not None:
+                    def on_ready(url):
+                        self._mark("video")
+                        return ready(url)
+                    kwargs["on_video_ready"] = on_ready
                 return original(reference, text, *args, **kwargs)
 
             self.fal.generate_from_text = spy
@@ -196,6 +317,10 @@ def _make_resident_class():
                 super()._make_video(context_snapshot, transcript, profile)
             finally:
                 self.fal.generate_from_text = original
+                if "video" not in self._marks:
+                    self._mark("video")
+                self.last_turn = dict(self._turn, timings=self.debug_snapshot()["timings"],
+                                      outcome=self.status)
                 self._journal()
 
         def _journal(self):
@@ -262,6 +387,10 @@ def _make_resident_class():
                           "character": self.profile.key, "source": "pool-unprompted",
                           "reply": clip["spoken_text"], "intent": clip["intent"], "clip": clip["id"]}
             self._journal()
+
+        def last_turn_summary(self):
+            t = self.last_turn or {}
+            return {k: t.get(k) for k in ("at", "transcript", "reply", "intent", "source", "timings", "outcome")}
 
         def pool_summary(self):
             health = self.cache.health()

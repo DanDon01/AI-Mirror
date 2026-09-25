@@ -149,6 +149,7 @@
   .log { list-style: none; margin: 0; padding: 0; }
   .log li { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
   .log li:first-child { border-top: 0; }
+  #lastTurn .row .sub { min-width: 72px; }
   .log time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 84px; }
   .empty { color: var(--muted); font-size: 14px; }
 
@@ -212,6 +213,12 @@
         <button class="btn primary" data-act="talk">Talk</button>
         <button class="btn" data-act="say">Say something from the pool</button>
       </div>
+    </div>
+    <div class="card span">
+      <h2>Last turn</h2>
+      <p class="hint">What the resident heard and said, and how long each step took.</p>
+      <div id="lastTurn" class="empty">No conversation yet.</div>
+      <details style="margin-top:12px"><summary class="hint" style="cursor:pointer;margin:0">Live diagnostics</summary><pre id="residentDiag">-</pre></details>
     </div>
     <div class="card" id="residentSettings">
       <h2>Unprompted speech</h2>
@@ -662,6 +669,16 @@
     $('#poolText').textContent = r.available
       ? (r.pool ? r.pool.total + ' clips in ' + r.pool.character + "'s pool" : '')
       : 'The resident is not running on this mirror.';
+    const lt = r.last_turn || {};
+    const turnBox = $('#lastTurn');
+    if (lt.at) {
+      turnBox.className = ''; turnBox.innerHTML = '';
+      const rows = [['When', lt.at.replace('T', ' ')], ['Heard', lt.transcript || '(nothing recognised)'],
+        ['Replied', lt.reply || (lt.source === 'cache' ? '(stored clip)' : '-')], ['Intent', lt.intent || '-'],
+        ['Timings', lt.timings || '-'], ['Outcome', lt.outcome || '-']];
+      for (const [k, v] of rows) { const row = el('div', 'row'); row.append(el('div', 'sub', k), el('div', 'grow', v)); turnBox.appendChild(row); }
+    }
+    $('#residentDiag').textContent = r.debug ? Object.entries(r.debug).map(([k, v]) => k.padEnd(9) + v).join(String.fromCharCode(10)) : 'Resident not running.';
     const cal = status.calendar || {};
     $('#calendarInfo').textContent = !cal.available ? 'Calendar module unavailable.' :
       (cal.parsed_events || 0) + ' upcoming events. Credentials ' + (cal.credentials_configured ? 'configured' : 'missing') +
