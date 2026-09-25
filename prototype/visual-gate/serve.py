@@ -34,6 +34,16 @@ logger = logging.getLogger("serve")
 class Handler(SimpleHTTPRequestHandler):
     """Static files, plus the state endpoint."""
 
+    def end_headers(self):
+        # Page code must never be served from a browser cache: after a
+        # git pull the kiosk and the control page would otherwise keep
+        # running the old HTML/JS against the new server. Revalidation is
+        # cheap on the LAN (unchanged files answer 304).
+        path = self.path.split("?")[0]
+        if path == "/" or path.endswith((".html", ".js", ".css")):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     source = None          # callable returning the payload dict
     bridge = None          # optional live bridge for control actions
     control_root = False
