@@ -45,6 +45,7 @@ logger = logging.getLogger("resident")
 UNPROMPTED_INTENTS = {"greeting", "greeting_morning", "greeting_afternoon",
                       "greeting_evening", "wellbeing", "night", "plans"}
 CUE_INTENTS = {"weather", "calendar", "smarthome", "news"}
+THEATRE_ROOT = Path(__file__).resolve().parents[2] / "data" / "avatar" / "theatre"
 
 
 class BrowserPlayer:
@@ -63,6 +64,7 @@ class BrowserPlayer:
         self._since = 0.0
         self._decoder = None
         self._audio = None
+        self._pending_audio = None
         self.audio_note = "idle"
         self.token = None
         self.label = "none"
@@ -79,15 +81,23 @@ class BrowserPlayer:
         raw = str(path)
         local = not raw.startswith(("http://", "https://"))
         src = self._media_url(Path(path)) if local else raw
-        if "apparition" in raw:
-            kind = "apparition"
         self.token = secrets.token_hex(6)
         self._playing = True
         self._since = time.monotonic()
         self.label = kind + (" (local clip)" if local else " (Fal stream)")
-        self._start_audio(str(Path(path).resolve()) if local else raw)
+        # The page may hold the reply until the current theatre clip reaches
+        # its reference frame, so the sound starts when the page says the
+        # reply video has actually started - not now - to stay in sync.
+        self._pending_audio = str(Path(path).resolve()) if local else raw
+        self.audio_note = "waiting for the video to start"
         self._publish({"type": "resident", "state": "speaking", "src": src,
                        "clip": self.token, "kind": kind})
+
+    def started(self, token):
+        if token == self.token and self._pending_audio:
+            source, self._pending_audio = self._pending_audio, None
+            self._since = time.monotonic()
+            self._start_audio(source)
 
     def _start_audio(self, source):
         self._stop_audio()
@@ -146,7 +156,9 @@ class BrowserPlayer:
 
     def update(self, _pygame=None):
         self._audio_state()
-        if self._playing and time.monotonic() - self._since > self._max:
+        # Waiting for the page to start the clip gets its own, shorter limit.
+        limit = 30 if self._pending_audio else self._max
+        if self._playing and time.monotonic() - self._since > limit:
             logger.warning("resident clip never reported finished; releasing it")
             self._playing = False
             self._stop_audio()
@@ -155,6 +167,7 @@ class BrowserPlayer:
         if self._playing:
             self._publish({"type": "resident", "state": "stop"})
         self._playing = False
+        self._pending_audio = None
         self._stop_audio()
 
     def draw(self, *args, **kwargs):
@@ -200,16 +213,35 @@ def _make_resident_class():
         def _publish(self, event):
             self._publish_event(event)
 
+        def _play_apparition(self):
+            # The page plays the appear clip from the theatre pool itself,
+            # so it can chain appear -> listening -> thinking seamlessly.
+            return
+
+        def theatre_pool(self):
+            """This character's appear / think / idle clips, as media tokens.
+            Made offline by avatar_theatre.py; older apparition clips count as
+            appear clips when no new ones exist."""
+            root = THEATRE_ROOT / self.profile.key
+            pool = {}
+            for kind in ("appear", "think", "idle"):
+                clips = sorted((root / kind).glob("*.mp4"))
+                if kind == "appear" and not clips:
+                    clips = sorted(self.profile.apparition_dir.glob("*.mp4"))
+                pool[kind] = [self.media_url(c) for c in clips]
+            pool["character"] = self.profile.key
+            return pool
+
         def media_url(self, path: Path):
             path = Path(path).resolve()
             allowed = [self.cache.root.resolve(), self.profile.apparition_dir.resolve(),
-                       Path(__file__).resolve().parents[2] / "assets"]
+                       THEATRE_ROOT.resolve(), Path(__file__).resolve().parents[2] / "assets"]
             if not any(str(path).startswith(str(root)) for root in allowed) or not path.is_file():
                 raise ValueError("clip is outside the avatar library")
             token = secrets.token_urlsafe(12)
             self._media[token] = path
-            if len(self._media) > 64:
-                for old in list(self._media)[:-64]:
+            if len(self._media) > 256:
+                for old in list(self._media)[:-256]:
                     self._media.pop(old, None)
             return "api/resident/media?t=" + token
 

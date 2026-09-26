@@ -76,6 +76,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if self.path.split("?")[0] == "/api/resident/pool":
+            self._json(self.bridge.resident_pool() if self.bridge is not None else {})
+            return
         if self.path.split("?")[0] == "/api/resident/media":
             self._serve_resident_media()
             return
@@ -127,7 +130,8 @@ class Handler(SimpleHTTPRequestHandler):
             except (TypeError, ValueError, json.JSONDecodeError):
                 self.send_error(400, "invalid moments request")
             return
-        if path in ("/api/resident/talk", "/api/resident/done", "/api/resident/unprompted"):
+        if path in ("/api/resident/talk", "/api/resident/done", "/api/resident/unprompted",
+                    "/api/resident/started"):
             if self.bridge is None or getattr(self.bridge, "resident", None) is None:
                 self.send_error(503, "resident unavailable")
                 return
@@ -136,6 +140,9 @@ class Handler(SimpleHTTPRequestHandler):
                 payload = json.loads(self.rfile.read(length) or b"{}") if length else {}
                 if path == "/api/resident/talk":
                     self._json({"ok": True, **self.bridge.resident_talk()})
+                elif path == "/api/resident/started":
+                    self.bridge.resident_started(str(payload.get("clip", "")))
+                    self._json({"ok": True})
                 elif path == "/api/resident/done":
                     self.bridge.resident_finished(str(payload.get("clip", "")))
                     self._json({"ok": True})

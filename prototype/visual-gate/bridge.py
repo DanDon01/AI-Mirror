@@ -146,6 +146,8 @@ class Bridge:
         # Resident: may speak unprompted (pooled clips only) after this
         # many minutes with nobody at the mirror. 0 turns it off.
         "resident_unprompted": 1, "resident_idle_minutes": 20,
+        # After replying the resident idles this long, then fades away.
+        "resident_linger_seconds": 15,
         # Moments: ambient on/off, pacing, and real-data trigger thresholds.
         "moments_ambient": 1, "ambient_gap_minutes": 12, "ambient_daily_cap": 10,
         "steps_goal": 10000, "market_surge_pct": 7, "space_rocket_pct": 5,
@@ -821,6 +823,14 @@ class Bridge:
         self.resident.on_button_press()
         return {"recording": self.resident.recording}
 
+    def resident_started(self, token):
+        if getattr(self, "resident", None) is not None:
+            self.resident.player.started(token)
+
+    def resident_pool(self):
+        resident = getattr(self, "resident", None)
+        return resident.theatre_pool() if resident is not None else {}
+
     def resident_finished(self, token):
         if getattr(self, "resident", None) is not None:
             self.resident.player.finished(token)
@@ -989,6 +999,7 @@ class Bridge:
             "rest_after_minutes": (1, 120), "dim_start_hour": (0, 23),
             "dim_end_hour": (0, 23), "dim_level": (0.1, 1.0),
             "resident_unprompted": (0, 1), "resident_idle_minutes": (2, 240),
+            "resident_linger_seconds": (3, 120),
             "moments_ambient": (0, 1), "ambient_gap_minutes": (2, 240),
             "ambient_daily_cap": (0, 50), "steps_goal": (1000, 50000),
             "market_surge_pct": (2, 50), "space_rocket_pct": (2, 50),

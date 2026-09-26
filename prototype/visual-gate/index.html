@@ -74,7 +74,10 @@
   <!-- ============ RESIDENT: the avatar itself, only while it is here ============ -->
   <div class="resident" id="resident">
     <img class="resident-portrait" id="residentPortrait" alt="">
-    <video class="resident-video" id="residentVideo" playsinline muted preload="auto"></video>
+    <!-- Two stacked layers: the next clip loads behind the current one and
+         takes over on the shared reference frame. -->
+    <video class="resident-video" id="residentVideoA" playsinline muted preload="auto"></video>
+    <video class="resident-video" id="residentVideoB" playsinline muted preload="auto"></video>
   </div>
   <pre class="resident-debug" id="residentDebug" hidden></pre>
 

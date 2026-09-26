@@ -364,8 +364,22 @@ theatre, together.
         mic, Vosk, OpenAI, source, audio process state and per-step
         timings. Turn it off with `AVATAR_DEBUG_OVERLAY=0`. The web panel's
         Resident tab also shows the last turn.
--   **Stages:** listening, thinking and conjuring show the breathing
-    portrait; speaking shows the video.
+-   **Theatre clips hide the pauses (26 September 2026).** Each character
+    has pools of short, silent, in-character clips made offline with
+    `avatar_theatre.py` (Kling 2.6 Pro, first and last frame both set to the
+    reference, about $0.35 a clip). There are three kinds: *appear* (it
+    arrives), *think* (checking and retrieving while the reply and its video
+    are made), and *idle* (subtle life afterwards). Every clip starts and
+    ends on the flattened reference frame, and the tool stamps that frame on
+    to guarantee it, so two stacked video layers hand over invisibly.
+    -   The sequence is appear, then idle while you speak, then think while
+        it works, then the fresh reply, then idle for
+        `resident_linger_seconds`, then it fades away.
+    -   A reply that arrives mid-clip dissolves in quickly rather than
+        waiting. Reply to idle is a short dissolve.
+    -   Reply audio starts when the page reports that the reply video has
+        started, so it stays in sync.
+    -   Without clips, the breathing portrait covers the waits.
 -   **The AI directs the display.** Each reply carries an intent it already
     resolves (weather, calendar, smart home, news, and so on). That intent
     becomes a Conductor cue:

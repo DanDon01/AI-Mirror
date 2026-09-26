@@ -221,8 +221,8 @@
       <details style="margin-top:12px"><summary class="hint" style="cursor:pointer;margin:0">Live diagnostics</summary><pre id="residentDiag">-</pre></details>
     </div>
     <div class="card" id="residentSettings">
-      <h2>Unprompted speech</h2>
-      <p class="hint">Only stored clips, never a new request. Greetings and similar lines, never between the night-dim hours.</p>
+      <h2>Presence</h2>
+      <p class="hint">How long it stays after answering, and whether it may speak first. Unprompted lines are stored clips only, never a new request, and never during night dim.</p>
     </div>
   </section>
 
@@ -470,6 +470,7 @@
   hourPicker($('#dimCard'), 'dim_end_hour', 'Ends', 5);
   slider($('#dimCard'), 'dim_level', 'Brightness while dimmed', 0.1, 1, 0.05, 'x', 0.35);
 
+  slider($('#residentSettings'), 'resident_linger_seconds', 'Stays after answering', 3, 120, 1, 's', 15);
   tuningSwitch($('#residentSettings'), 'resident_unprompted', 'May speak unprompted', 'When someone arrives after a long absence', true);
   slider($('#residentSettings'), 'resident_idle_minutes', 'Absence before it may speak', 2, 240, 1, 'min', 20);
 

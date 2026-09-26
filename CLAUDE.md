@@ -194,7 +194,9 @@ Current phase: "Level Up and Polish" - see `AI_Mirror_Level_Up_and_Polish_Brief.
   `js/resident.js` + `resident.py` - AvatarModule in the bridge, clips pushed
   over `/api/events` (SSE) and played unframed (NO portal - owner decision); audio
   via ffmpeg->aplay in the bridge, browser video muted; AVATAR DEBUG panel on
-  the glass (AVATAR_DEBUG_OVERLAY=0 hides it); unprompted speech is pooled
+  the glass (AVATAR_DEBUG_OVERLAY=0 hides it). Pauses are covered by theatre
+  clips (appear/think/idle) from `avatar_theatre.py` into data/avatar/theatre/,
+  all starting and ending on the flattened reference frame; unprompted speech is pooled
   clips only.
 - Headless checks: `render.py`, `validate.py`, `qa_home.py` (all serve the
   labelled fixture through `serve.fixture_handler()`); captures never inherit
