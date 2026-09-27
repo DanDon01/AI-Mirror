@@ -195,7 +195,8 @@ Current phase: "Level Up and Polish" - see `AI_Mirror_Level_Up_and_Polish_Brief.
   over `/api/events` (SSE) and played unframed (NO portal - owner decision); audio
   via ffmpeg->aplay in the bridge, browser video muted; AVATAR DEBUG panel on
   the glass (AVATAR_DEBUG_OVERLAY=0 hides it). Pauses are covered by theatre
-  clips (appear/think/idle) from `avatar_theatre.py` into data/avatar/theatre/,
+  clips (appear/think/idle) from `avatar_theatre.py` into assets/theatre/ (tracked;
+  paid calls capped by api_tracker 'fal-theatre': 6/h, 12/day, $4.20/day),
   all starting and ending on the flattened reference frame; unprompted speech is pooled
   clips only.
 - Headless checks: `render.py`, `validate.py`, `qa_home.py` (all serve the

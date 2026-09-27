@@ -39,6 +39,10 @@ DEFAULT_LIMITS = {
     # Talking-avatar generation. The model is currently $0.02/s;
     # keep the proof and future explicit prewarming inside a hard daily cap.
     'fal-avatar': {'hourly': 10, 'daily': 50, 'daily_cost': 2.00},
+    # Offline theatre clips (avatar_theatre.py): ~$0.35 each on Kling 2.6
+    # Pro via fal. Kept separate from fal-avatar so testing the pool can
+    # never block live conversations, and small so a mistake costs little.
+    'fal-theatre': {'hourly': 6, 'daily': 12, 'daily_cost': 4.20},
     'elevenlabs': {'hourly': 30, 'daily': 200, 'daily_cost': 2.00},
     'openweathermap': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
     'open-meteo': {'hourly': 20, 'daily': 500, 'daily_cost': 0},
@@ -137,11 +141,18 @@ class APITracker:
             now = time.time()
             cutoff = now - 86400
             with self._lock:
-                # Only save records from last 24h
-                records = [
-                    list(rec) for rec in self._calls
-                    if rec[0] > cutoff
-                ]
+                mine = {tuple(rec) for rec in self._calls if rec[0] > cutoff}
+            # Merge with what is on disk: the bridge and a one-off tool
+            # (avatar_theatre.py) share this file, and a plain overwrite
+            # would erase the other's calls - and so weaken the limits.
+            try:
+                with open(_STATE_FILE, 'r') as f:
+                    for rec in json.load(f).get('calls', []):
+                        if rec and rec[0] > cutoff:
+                            mine.add(tuple(rec))
+            except (OSError, ValueError):
+                pass
+            records = sorted([list(rec) for rec in mine], key=lambda r: r[0])
             data = {'calls': records, 'saved_at': now}
             # Write atomically: write to temp file then rename
             tmp = _STATE_FILE + '.tmp'
@@ -228,13 +239,19 @@ class APITracker:
                     )
                 return False
 
-            # Check daily cost cap for paid services
+            # Check this service's own daily cost cap. (It used to compare
+            # against the total for every service, so one service's spend
+            # could block another's.)
             max_cost = limits.get('daily_cost', 0)
-            if max_cost > 0 and self._daily_cost >= max_cost:
+            service_cost = sum(
+                c for ts, m, s, c in self._calls
+                if s == service and ts > day_ago
+            )
+            if max_cost > 0 and service_cost >= max_cost:
                 self._blocked[service] += 1
                 if self._blocked[service] % 10 == 1:
                     logger.warning(
-                        f"Cost limit: {service} blocked (${self._daily_cost:.2f}/${max_cost:.2f}) "
+                        f"Cost limit: {service} blocked (${service_cost:.2f}/${max_cost:.2f}) "
                         f"from {module}"
                     )
                 return False
@@ -270,8 +287,13 @@ class APITracker:
             + (f" (${estimated_cost:.4f})" if estimated_cost > 0 else "")
         )
 
-        # Periodic persist to disk
-        self._maybe_persist()
+        # Paid calls are written through at once: a crash or a short-lived
+        # tool must never lose a charged call from the count.
+        if estimated_cost > 0 or self._limits.get(service, {}).get('daily_cost', 0) > 0:
+            self._save_state()
+            self._last_persist = now
+        else:
+            self._maybe_persist()
 
         # Periodic summary
         if now - self._last_summary > self._summary_interval:

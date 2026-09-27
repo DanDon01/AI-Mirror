@@ -1,0 +1,10 @@
+{
+  "character": "bert",
+  "kind": "think",
+  "model": "fal-ai/kling-video/v2.6/pro/image-to-video",
+  "prompt": "Use the supplied character portrait as the exact identity, pose, crop and framing. Pure black seamless background. No speech, no talking, no lip movement, no text, no logos, no mirror, no frame, no hands entering the frame, no camera movement, no cuts. The character briefly looks away as if checking or retrieving information, then returns exactly to the supplied portrait pose, looking at the viewer, for the final second. His head whirrs slightly aside as dials spin, then back.",
+  "seconds": 5,
+  "generated_in_s": 124.0,
+  "reference": "Bert.png",
+  "created": "2026-09-27T13:08:27"
+}

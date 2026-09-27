@@ -18,10 +18,11 @@ black, so only their last frames), strips any audio, and normalises every
 clip to the reply videos' 480x704 framing.
 
 This is an offline tool. The live mirror only plays clips that already
-exist in data/avatar/theatre/<character>/<kind>/ and never calls it.
+exist in assets/theatre/<character>/<kind>/ and never calls it. Every paid
+call goes through api_tracker's 'fal-theatre' hourly/daily/cost limits.
 
     python avatar_theatre.py --check                      what would be made, and the cost
-    python avatar_theatre.py --run                        the current character, missing clips only
+    python avatar_theatre.py --run                        the current character: 1 appear, 1 think, 1 idle
     python avatar_theatre.py --run --character bert       one character
     python avatar_theatre.py --run --all                  every character
     python avatar_theatre.py --run --kind idle --count 2  just two more idle clips
@@ -40,13 +41,17 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "data" / "avatar" / "theatre"
+# Tracked in git so a pool made on one machine reaches the mirror by pull.
+OUT = ROOT / "assets" / "theatre"
 DEFAULT_MODEL = "fal-ai/kling-video/v2.6/pro/image-to-video"
 PRICE_PER_SECOND_USD = 0.07          # Kling 2.6 Pro, audio off (fal pricing, Sep 2026)
 CLIP_SECONDS = 5
 SIZE = (480, 704)                    # the reply videos' framing
 EDGE_SECONDS = 0.08                  # reference stamped over this much at each end
-COUNTS = {"appear": 3, "think": 5, "idle": 4}
+# Start with one of each: enough to test the whole flow on the glass before
+# spending more. Grow a kind with --kind think --count 2 once it looks right.
+COUNTS = {"appear": 1, "think": 1, "idle": 1}
+TRACKER_MODULE, TRACKER_SERVICE = "avatar_theatre", "fal-theatre"
 
 COMMON = (
     "Use the supplied character portrait as the exact identity, pose, crop and framing. "
@@ -183,7 +188,7 @@ def finish(raw: Path, reference: Path, destination: Path, kind: str) -> None:
     os.replace(partial, destination)
 
 
-def generate(profile, kind: str, flavour: str, model: str) -> Path:
+def generate(profile, kind: str, flavour: str, model: str, charged=lambda: None) -> Path:
     import fal_client
     prompt = COMMON + KIND[kind] + flavour
     with tempfile.TemporaryDirectory() as tmp:
@@ -197,6 +202,7 @@ def generate(profile, kind: str, flavour: str, model: str) -> Path:
             "duration": str(CLIP_SECONDS), "generate_audio": False,
             "negative_prompt": "blur, distortion, low quality, talking, mouth moving, text, frame, border",
         })
+        charged()                      # fal has billed the clip, whatever happens next
         url = (result.get("video") or {}).get("url")
         if not url:
             raise RuntimeError(f"Fal returned no video: {json.dumps(result)[:300]}")
@@ -243,13 +249,26 @@ def main() -> int:
         raise SystemExit("FAL_KEY is not set (Variables.env)")
     ffmpeg_bin()
     failures = 0
+    sys.path.insert(0, str(ROOT))
+    from api_tracker import api_tracker
+    made = 0
     for i, (profile, kind, flavour) in enumerate(jobs, 1):
+        # Hard hourly / daily / cost limits (api_tracker 'fal-theatre'),
+        # checked before every paid call and shared with any other process.
+        if not api_tracker.allow(TRACKER_MODULE, TRACKER_SERVICE):
+            print(f"STOPPED: the fal-theatre limit is reached "
+                  f"(see api_tracker.py). {made} made, {len(jobs) - i + 1} not attempted.")
+            return 2
         print(f"[{i}/{len(jobs)}] {profile.name} {kind} ...", flush=True)
         try:
-            path = generate(profile, kind, flavour, args.model)
+            path = generate(profile, kind, flavour, args.model,
+                            charged=lambda: api_tracker.record(TRACKER_MODULE, TRACKER_SERVICE,
+                                                               estimated_cost=CLIP_SECONDS * PRICE_PER_SECOND_USD))
+            made += 1
             print(f"   saved {path.relative_to(ROOT)}")
         except Exception as exc:
             failures += 1
+            api_tracker.failure(TRACKER_MODULE, TRACKER_SERVICE)
             print(f"   FAILED: {exc}")
     print(f"\ndone: {len(jobs) - failures} made, {failures} failed")
     return 1 if failures else 0

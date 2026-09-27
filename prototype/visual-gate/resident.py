@@ -45,7 +45,7 @@ logger = logging.getLogger("resident")
 UNPROMPTED_INTENTS = {"greeting", "greeting_morning", "greeting_afternoon",
                       "greeting_evening", "wellbeing", "night", "plans"}
 CUE_INTENTS = {"weather", "calendar", "smarthome", "news"}
-THEATRE_ROOT = Path(__file__).resolve().parents[2] / "data" / "avatar" / "theatre"
+THEATRE_ROOT = Path(__file__).resolve().parents[2] / "assets" / "theatre"
 
 
 class BrowserPlayer:

@@ -1,0 +1,10 @@
+{
+  "character": "bert",
+  "kind": "idle",
+  "model": "fal-ai/kling-video/v2.6/pro/image-to-video",
+  "prompt": "Use the supplied character portrait as the exact identity, pose, crop and framing. Pure black seamless background. No speech, no talking, no lip movement, no text, no logos, no mirror, no frame, no hands entering the frame, no camera movement, no cuts. Only very small, subtle movements: breathing, a blink, a slight change of expression. The character stays in the supplied portrait pose throughout and ends exactly in it. Lights blink slowly, a gentle mechanical sway.",
+  "seconds": 5,
+  "generated_in_s": 101.4,
+  "reference": "Bert.png",
+  "created": "2026-09-27T13:10:08"
+}
