@@ -46,6 +46,23 @@ const Resident = (() => {
   const last = {};
 
   const now = () => performance.now() / 1000;
+
+  // Trace: every step the page takes, sent to the bridge once a second and
+  // written to the service log (journalctl -u ai-mirror-visual) as
+  // "resident.page". Times are seconds since SPACE was pressed.
+  let traceBuf = [], traceT0 = 0;
+  const base = (src) => String(src || '').split('/').pop().split('?')[0].slice(0, 40) || '-';
+  function trace(msg) {
+    const at = traceT0 ? '+' + (now() - traceT0).toFixed(2) + 's ' : '';
+    traceBuf.push(at + msg);
+    if (traceBuf.length > 300) traceBuf.splice(0, traceBuf.length - 300);
+  }
+  setInterval(() => {
+    if (!traceBuf.length) return;
+    const lines = traceBuf; traceBuf = [];
+    fetch('api/resident/log', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines }) }).catch(() => {});
+  }, 1000);
   function post(path, body) {
     return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}) }).catch(() => {});
@@ -81,14 +98,21 @@ const Resident = (() => {
     if (cutting) return;
     cutting = newRole;
     const next = vids[1 - front], cur = vids[front];
+    trace('clip load ' + newRole + ' ' + base(clip || src) + (fade ? ' dissolve ' + fade + 'ms' : ' cut'));
+    const asked = now();
     load(next, src);
     try { next.currentTime = 0; } catch (e) { /* not loaded yet */ }
     next.muted = true;
-    next.onended = () => clipEnded(newRole, clip);
-    next.onerror = () => clipEnded(newRole, clip);
+    next.onended = () => { trace('clip ended ' + newRole); clipEnded(newRole, clip); };
+    next.onerror = () => {
+      trace('clip ERROR ' + newRole + ' code ' + (next.error ? next.error.code : '?') + ' ' + base(src));
+      clipEnded(newRole, clip);
+    };
     const swap = () => {
       next.removeEventListener('playing', swap);
       cutting = null;
+      trace('clip playing ' + newRole + ' after ' + ((now() - asked) * 1000).toFixed(0) + 'ms' +
+        (Number.isFinite(next.duration) ? ' (' + next.duration.toFixed(1) + 's long)' : ''));
       next.style.transition = fade ? `opacity ${fade}ms linear` : 'none';
       cur.style.transition = fade ? `opacity ${fade}ms linear` : 'none';
       next.style.zIndex = 2; cur.style.zIndex = 1;
@@ -103,7 +127,10 @@ const Resident = (() => {
     };
     next.addEventListener('playing', swap);
     const p = next.play();
-    if (p && p.catch) p.catch(() => { next.removeEventListener('playing', swap); cutting = null; clipEnded(newRole, clip); });
+    if (p && p.catch) p.catch((err) => {
+      trace('clip play() refused ' + newRole + ': ' + (err && err.message));
+      next.removeEventListener('playing', swap); cutting = null; clipEnded(newRole, clip);
+    });
   }
 
   // What kind of clip should follow the one now playing.
@@ -156,6 +183,7 @@ const Resident = (() => {
   // No theatre clips for this moment: the reference portrait, breathing,
   // at exactly the place the videos play.
   function holdPortrait() {
+    trace('holding the reference portrait (no clip)');
     vids.forEach((v) => { v.classList.remove('on'); v.pause(); });
     role = 'portrait';
     portrait.classList.add('on');
@@ -177,6 +205,7 @@ const Resident = (() => {
       if (session === 'hidden' || session === 'leaving') { clearing = false; return; }
       if (Conductor.level() > 0.02 && now() - t0 < CLEAR_WAIT_S) { setTimeout(go, 60); return; }
       clearing = false;
+      trace('glass clear after ' + (now() - t0).toFixed(2) + 's, character shown');
       box.classList.add('on');
       if (reply) { const r = reply; cutTo(r.src, 'reply', 0, r.clip); return; }
       const s = pick('appear') || pick('idle');
@@ -187,6 +216,7 @@ const Resident = (() => {
   }
 
   function leave() {
+    trace('leaving');
     session = 'leaving';
     box.classList.remove('on');
     setTimeout(() => {
@@ -200,6 +230,7 @@ const Resident = (() => {
   }
 
   function receiveReply(ev) {
+    trace('reply video arrived (' + (ev.kind || 'reply') + ') while ' + session + ' / ' + (role || '-'));
     reply = { src: ev.src, clip: ev.clip, kind: ev.kind };
     if (session === 'hidden' || session === 'leaving') {
       // Unprompted, or a reply after it had gone: arrive first if we can.
@@ -233,6 +264,7 @@ const Resident = (() => {
     if (ev.state === 'speaking' && ev.src) { if (reply && reply.clip === ev.clip) return; receiveReply(ev); return; }
     if (ev.state === 'stop') { reply = null; leave(); return; }
     if (!ev.state) return;
+    if (ev.state !== server) trace('bridge stage -> ' + ev.state + (ev.detail ? ' (' + ev.detail + ')' : ''));
     server = ev.state === 'error' ? 'idle' : ev.state;
     if (server === 'listening') {
       loadPool();
@@ -268,13 +300,18 @@ const Resident = (() => {
   }
 
   function pressed() {
+    traceT0 = now();
+    trace('SPACE pressed (turn ' + (turn && !turn.finishedAt ? 'in progress' : 'new') + ')');
     turn = { pressAt: now(), press: 'sent', error: '', replyDone: false, finishedAt: 0 };
     stepIdx = -1;
     if (typeof Moments !== 'undefined' && Moments.cancel) Moments.cancel();
     fetch('api/resident/talk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('status ' + r.status))))
-      .then((j) => { if (j && j.ignored && turn) turn.press = 'ignored'; })
-      .catch(() => { if (turn) turn.press = 'failed'; })
+      .then((j) => {
+        trace('bridge answered SPACE: recording=' + (j && j.recording) + (j && j.ignored ? ' IGNORED (turn still finishing)' : ''));
+        if (j && j.ignored && turn) turn.press = 'ignored';
+      })
+      .catch((err) => { trace('SPACE did not reach the bridge: ' + (err && err.message)); if (turn) turn.press = 'failed'; })
       .then(showDebug);
     showDebug();
   }
@@ -353,7 +390,7 @@ const Resident = (() => {
   }
 
   function finishTurn() {
-    if (turn && !turn.finishedAt) { turn.finishedAt = Date.now(); showDebug(); }
+    if (turn && !turn.finishedAt) { trace('turn finished'); turn.finishedAt = Date.now(); showDebug(); }
   }
 
   // ---------------------------------------------------------------- mount

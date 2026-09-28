@@ -115,6 +115,7 @@ class BrowserPlayer:
                                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             self._decoder.stdout.close()
             self.audio_note = "playing via aplay " + (speaker or "(ALSA default)")
+            logger.info("resident audio started: aplay %s", speaker or "(ALSA default)")
         except Exception as exc:
             self.audio_note = f"audio failed to start: {exc}"
             logger.exception("resident audio failed to start")
@@ -304,6 +305,11 @@ def _make_resident_class():
             self.update()
             snap = self.debug_snapshot()
             now = time.monotonic()
+            # One log line per change of stage or audio, for journalctl.
+            said = (snap["stage"], snap["audio"])
+            if said != getattr(self, "_last_logged", None):
+                self._last_logged = said
+                logger.info("resident stage: %s | audio: %s | %s", snap["stage"], snap["audio"], snap["timings"])
             # Changes go out at once; an unchanged panel is re-sent every few
             # seconds so a page that has just loaded still gets one.
             if (snap != self._last_debug and now - self._last_debug_at > 0.25) or now - self._last_debug_at > 4:

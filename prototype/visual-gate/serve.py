@@ -130,6 +130,18 @@ class Handler(SimpleHTTPRequestHandler):
             except (TypeError, ValueError, json.JSONDecodeError):
                 self.send_error(400, "invalid moments request")
             return
+        if path == "/api/resident/log":
+            # The page's resident trace, written into the same journal as the
+            # bridge's own lines so one log shows a whole turn in order.
+            try:
+                length = min(int(self.headers.get("Content-Length", "0")), 65536)
+                payload = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                for line in (payload.get("lines") or [])[:200]:
+                    logging.getLogger("resident.page").info("%s", str(line)[:400])
+                self._json({"ok": True})
+            except (TypeError, ValueError, json.JSONDecodeError):
+                self.send_error(400, "invalid log")
+            return
         if path in ("/api/resident/talk", "/api/resident/done", "/api/resident/unprompted",
                     "/api/resident/started"):
             if self.bridge is None or getattr(self.bridge, "resident", None) is None:
