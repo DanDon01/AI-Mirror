@@ -282,7 +282,7 @@ body {
 .slot[data-slot="0"] .panel { transform: rotateY(0deg); }
 .slot[data-slot="1"] .panel { transform: rotateY(-2deg); }
 
-.panel > * { opacity: var(--content, 1); }
+.panel > * { opacity: var(--content, 0); }
 
 /* During a real house event the Three.js twin becomes the sole emphasis.
    This is a fade, not a new card or overlay; it resets with every schedule

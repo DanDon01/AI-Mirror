@@ -9,8 +9,9 @@
 
    Presence comes from the entrance PIR (pushed over /api/events and
    carried in the state payload) or the web panel's "I'm here". Without a
-   configured sensor the mirror stays in glance all day - it cannot know
-   the room is empty, so it does not pretend to.
+   configured sensor, or one that has not reported since the bridge started,
+   the mirror stays in glance - it cannot know the room is empty, so it
+   does not pretend to.
 
    Real events pin a panel on the glass regardless of the rotation:
      alarm triggered, someone at the porch   house, even at rest
@@ -28,6 +29,7 @@ const Conductor = (() => {
   const pins = {};
   let prev = null, bpm = 0;
   const wakeListeners = [];
+  const bootAt = Date.now() / 1000;
 
   const tune = (k, f) => Number.isFinite(Number(tuning[k])) ? Number(tuning[k]) : f;
 
@@ -89,8 +91,11 @@ const Conductor = (() => {
     const dim = inDimHours(date);
     let want = 'glance';
     if (dim) want = 'rest';
-    else if (presence.configured || presence.lastSeen) {
-      const idle = Date.now() / 1000 - (presence.lastSeen || 0);
+    else if (presence.detected !== null || presence.lastSeen) {
+      // A sensor that has never reported says nothing about the room, so it
+      // keeps glance. Loading the page counts as a sighting: someone has
+      // usually just restarted it, and the glass must not blank under them.
+      const idle = Date.now() / 1000 - Math.max(presence.lastSeen || 0, bootAt);
       want = presence.detected || idle < tune('rest_after_minutes', 10) * 60 ? 'glance' : 'rest';
     }
     if (want === 'glance' && wasRest) { wakeAt = nowSec; wakeListeners.forEach((f) => f(nowSec)); }

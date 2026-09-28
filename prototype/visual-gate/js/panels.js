@@ -303,6 +303,10 @@ const Panels = (function () {
       const el = document.createElement('div');
       el.className = 'panel ' + made[0];
       el.innerHTML = made[1];
+      // Hidden until frame() says otherwise. Boot on the Pi takes seconds
+      // before the loop starts, and a panel visible by default meant the
+      // calendar and news stood on top of each other until then.
+      el.style.visibility = 'hidden';
       slots[s.slot].appendChild(el);
       // Construct the renderer only when its scheduled window actually opens.
       // This avoids creating an invisible WebGL context for every bridge poll.

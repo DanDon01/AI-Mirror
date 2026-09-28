@@ -10,8 +10,6 @@
      moon phase     real illuminated fraction and waxing/waning side
      clouds         density from the measured cloud-cover percentage
      stars          only on a clear night
-     curve          the next 24 h of forecast temperature as a line of light
-                    across the band, the current hour a bright bead
      rain           when the forecast crosses the rain threshold the clouds
                     darken, a rain curtain hangs from them, and one readout
                     appears (DOM, #skyAlert)
@@ -173,15 +171,6 @@ const Sky = (() => {
     const rainMat = new THREE.LineBasicMaterial({ color: 0x9fcaf0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
     const rain = new THREE.LineSegments(rainGeo, rainMat); rain.frustumCulled = false; rain.position.z = 3; scene.add(rain);
 
-    // The 24 h curve: a line of light, the current hour a bright bead.
-    const CURVE_N = 24;
-    const curveGeo = new THREE.BufferGeometry();
-    curveGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(CURVE_N * 3), 3));
-    const curveMat = new THREE.LineBasicMaterial({ color: 0x9fc4ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    const curveLine = new THREE.Line(curveGeo, curveMat); curveLine.frustumCulled = false; curveLine.position.z = 4; curveLine.layers.enable(GLOW); scene.add(curveLine);
-    const beadMat = new THREE.SpriteMaterial({ map: glowTex, color: 0xdfeaff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    const bead = new THREE.Sprite(beadMat); bead.scale.set(26, 26, 1); bead.position.z = 5; bead.layers.enable(GLOW); scene.add(bead);
-
     let weather = {}, fade = 0, levelTarget = 1, highlightUntil = 0;
     function setWeather(w) { weather = w || {}; }
 
@@ -257,27 +246,6 @@ const Sky = (() => {
           a[i * 6 + 3] = x - 3; a[i * 6 + 4] = -(y + 14); a[i * 6 + 5] = 0;
         }
         rainGeo.attributes.position.needsUpdate = true;
-      }
-
-      // --- 24 h temperature curve along the horizon ---
-      const curve = Array.isArray(w.curve) ? w.curve.filter((p) => num(p.c)).slice(0, CURVE_N) : [];
-      if (curve.length >= 6) {
-        const lo = Math.min(...curve.map((p) => p.c)), hi = Math.max(...curve.map((p) => p.c));
-        const span = Math.max(hi - lo, 3);
-        const pos = curveGeo.attributes.position.array;
-        for (let i = 0; i < CURVE_N; i++) {
-          const p = curve[Math.min(i, curve.length - 1)];
-          pos[i * 3] = 60 + (i / (CURVE_N - 1)) * (RECT.w - 120);
-          pos[i * 3 + 1] = -(HORIZON + 34 - ((p.c - lo) / span) * 46);
-          pos[i * 3 + 2] = 0;
-        }
-        curveGeo.attributes.position.needsUpdate = true;
-        curveGeo.setDrawRange(0, Math.min(CURVE_N, curve.length));
-        curveMat.opacity = 0.42 * fade;
-        bead.position.set(pos[0], pos[1], 5);
-        beadMat.opacity = (0.75 + 0.2 * Math.sin(now * 1.8)) * fade;
-      } else {
-        curveMat.opacity = beadMat.opacity = 0;
       }
     }
     return { scene, camera, frame, setWeather, setLevel: (v) => { levelTarget = v; },

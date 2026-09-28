@@ -377,11 +377,20 @@
     requestAnimationFrame(loop);
   }
 
+  let loopError = '';
   function loop(wall) {
     tickPerf(wall);
     const elapsed = SEEK + (wall - started) / 1000;
     const looped = HAS_WIN ? WIN[0] + (elapsed % (WIN[1] - WIN[0])) : elapsed % LOOP;
-    renderAt(FREEZE ? SEEK : looped, FREEZE ? SEEK : elapsed);
+    // One failing layer must not stop the loop: a dead loop leaves every
+    // panel frozen wherever it was, which is worse than one missing layer.
+    try {
+      renderAt(FREEZE ? SEEK : looped, FREEZE ? SEEK : elapsed);
+    } catch (err) {
+      if (!loopError) console.error('frame failed; the loop carries on', err);
+      loopError = String(err);
+      document.body.dataset.error = loopError;
+    }
 
     if (!document.body.dataset.ready && perf.frames > 3) {
       document.body.dataset.ready = '1';
