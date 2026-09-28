@@ -106,6 +106,10 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def _is_glass(self):
+        """True for the mirror's own Chromium, which runs on this machine."""
+        return str(self.client_address[0]) in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
     def do_POST(self):
         path = self.path.split("?")[0]
         if path in ("/api/moments/catalogue", "/api/moments/enabled", "/api/moments/play",
@@ -136,8 +140,11 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 length = min(int(self.headers.get("Content-Length", "0")), 65536)
                 payload = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                # Which page said it: the mirror's own browser is local; any
+                # other address is a second copy open on a PC or phone.
+                who = "" if self._is_glass() else f"[other viewer {self.client_address[0]}] "
                 for line in (payload.get("lines") or [])[:200]:
-                    logging.getLogger("resident.page").info("%s", str(line)[:400])
+                    logging.getLogger("resident.page").info("%s%s", who, str(line)[:400])
                 self._json({"ok": True})
             except (TypeError, ValueError, json.JSONDecodeError):
                 self.send_error(400, "invalid log")
@@ -152,6 +159,14 @@ class Handler(SimpleHTTPRequestHandler):
                 payload = json.loads(self.rfile.read(length) or b"{}") if length else {}
                 if path == "/api/resident/talk":
                     self._json({"ok": True, **self.bridge.resident_talk()})
+                elif path in ("/api/resident/started", "/api/resident/done") and not self._is_glass():
+                    # Only the mirror's own browser drives the sound. A copy
+                    # of the page open elsewhere plays the same reply on its
+                    # own clock; its "started"/"done" would start the audio
+                    # early or end the turn before the glass had played it.
+                    logger.info("ignored resident %s from other viewer %s",
+                                path.rsplit("/", 1)[-1], self.client_address[0])
+                    self._json({"ok": True, "ignored": True})
                 elif path == "/api/resident/started":
                     self.bridge.resident_started(str(payload.get("clip", "")))
                     self._json({"ok": True})

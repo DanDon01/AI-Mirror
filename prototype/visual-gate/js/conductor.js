@@ -114,7 +114,8 @@ const Conductor = (() => {
     // The resident gets an empty glass: everything else goes. A Moment
     // leaves a trace of the rest behind it.
     const clearTo = holders.has('resident') ? 1 : (holders.size ? 0.85 : 0);
-    theatre += (clearTo - theatre) * ease(0.3);
+    // The resident clears it fast: it appears the moment SPACE is pressed.
+    theatre += (clearTo - theatre) * ease(holders.has('resident') ? 0.15 : 0.3);
     document.body.classList.toggle('deep-dim', dim);
     document.documentElement.style.setProperty('--dim-level', tune('dim_level', 0.35).toFixed(2));
     document.body.dataset.register = holders.size ? 'theatre' : register;

@@ -116,6 +116,9 @@ class AvatarModule:
         # word is lost ("good morning" was heard as "the morning").
         self._preroll = collections.deque(maxlen=6)
         self._stream_parts = []
+        # A recogniser built ahead of the next SPACE: building one takes a
+        # noticeable fraction of a second on the Pi, spent after the press.
+        self._spare_recognizer = None
         self._streaming_capture = False; self._last_apparition = None; self._apparition_pending = False
         self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
         self._playback_label = "none"
@@ -182,11 +185,21 @@ class AvatarModule:
             model_path = os.getenv("VOSK_MODEL_PATH", "")
             if model_path:
                 self._vosk_model = Model(model_path)
+                self._prepare_recognizer()
                 self._start_warmed_microphone()
             self.fal.warm_reference(self.profile.reference_image)
             self.logger.info("Avatar local STT and text client warmed; streaming_mic=%s", self._streaming_capture)
         except Exception as exc:
             self.logger.warning("Avatar warm-up deferred: %s", exc)
+
+    def _prepare_recognizer(self):
+        """Build the next turn's recogniser now, off the SPACE path."""
+        try:
+            from vosk import KaldiRecognizer
+            if self._vosk_model is not None and self._spare_recognizer is None:
+                self._spare_recognizer = KaldiRecognizer(self._vosk_model, 16000)
+        except Exception:
+            self.logger.exception("Avatar spare recogniser could not be built")
 
     def _start_warmed_microphone(self):
         """Keep one raw ALSA stream open; discard PCM until a Avatar turn starts."""
@@ -289,7 +302,8 @@ class AvatarModule:
                 with self._stream_lock:
                     self._capture = wave.open(str(path), "wb")
                     self._capture.setnchannels(1); self._capture.setsampwidth(2); self._capture.setframerate(16000)
-                    self._stream_recognizer = KaldiRecognizer(self._vosk_model, 16000)
+                    spare, self._spare_recognizer = self._spare_recognizer, None
+                    self._stream_recognizer = spare or KaldiRecognizer(self._vosk_model, 16000)
                     self._stream_parts = []
                     for chunk in self._preroll:
                         self._capture.writeframesraw(chunk)
@@ -301,6 +315,7 @@ class AvatarModule:
                     self.recording = True
                 self.status = "Listening - press SPACE when finished"
                 self.logger.info("Avatar streaming recording started: device=%s", self.device)
+                threading.Thread(target=self._prepare_recognizer, daemon=True, name="avatar-vosk-spare").start()
                 return
             except Exception:
                 with self._stream_lock:

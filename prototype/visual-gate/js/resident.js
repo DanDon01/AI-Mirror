@@ -93,6 +93,30 @@ const Resident = (() => {
     if (v.dataset.src !== src) { v.dataset.src = src; v.src = src; v.load(); }
   }
 
+  // Every clip shows the character at the same size and place. The theatre
+  // clips are 480x704 with the reference framing letterboxed inside; Fal's
+  // replies are the reference framing edge to edge (480x576 for a 5:6
+  // portrait). Fitting each video to the box made the reply 20% bigger - a
+  // visible jump at the handover. Instead the reference-shaped area inside
+  // each video is mapped onto the same rectangle the portrait fills.
+  function fitVideo(v) {
+    const vw = v.videoWidth, vh = v.videoHeight;
+    const rw = portrait.naturalWidth, rh = portrait.naturalHeight;
+    if (!vw || !vh || !box) return;
+    const ref = rw && rh ? rw / rh : vw / vh;
+    const bw = box.clientWidth, bh = box.clientHeight;
+    // Where the portrait sits in the box (object-fit: contain).
+    const tw = Math.min(bw, bh * ref);
+    // The reference-shaped content inside this video.
+    const cw = Math.min(vw, vh * ref);
+    const s = tw / cw;
+    const w = vw * s, h = vh * s;
+    v.style.width = w.toFixed(1) + 'px';
+    v.style.height = h.toFixed(1) + 'px';
+    v.style.left = ((bw - w) / 2).toFixed(1) + 'px';
+    v.style.top = ((bh - h) / 2).toFixed(1) + 'px';
+  }
+
   // Put `src` on the back layer and hand over to it. fade 0 = a cut on the
   // shared reference frame; otherwise a dissolve of that many ms.
   let cutting = null;            // a handover waiting for its clip to start playing
@@ -194,9 +218,9 @@ const Resident = (() => {
   }
 
   // ---------------------------------------------------------------- session
-  // The glass clears first (the Conductor fades everything else out once
-  // the resident holds it); the character appears into an empty mirror.
-  const CLEAR_WAIT_S = 2.5;
+  // The Conductor fades everything else out once the resident holds the
+  // glass; the character starts arriving as soon as that is under way.
+  const CLEAR_WAIT_S = 0.35;
   let clearing = false;
   function arrive() {
     session = 'active';
@@ -207,7 +231,9 @@ const Resident = (() => {
     const t0 = now();
     const go = () => {
       if (session === 'hidden' || session === 'leaving') { clearing = false; return; }
-      if (Conductor.level() > 0.02 && now() - t0 < CLEAR_WAIT_S) { setTimeout(go, 60); return; }
+      // The appear clip fades up from black, so it can start while the rest
+      // of the glass is still going; only a brief head start for the clear.
+      if (Conductor.level() > 0.6 && now() - t0 < CLEAR_WAIT_S) { setTimeout(go, 30); return; }
       clearing = false;
       trace('glass clear after ' + (now() - t0).toFixed(2) + 's, character shown');
       box.classList.add('on');
@@ -309,13 +335,22 @@ const Resident = (() => {
     turn = { pressAt: now(), press: 'sent', error: '', replyDone: false, finishedAt: 0 };
     stepIdx = -1;
     if (typeof Moments !== 'undefined' && Moments.cancel) Moments.cancel();
+    // Appear on the key press itself, not when the bridge answers: waiting
+    // for it (and for the glass to clear) left two seconds of talking to an
+    // empty mirror.
+    if (session === 'hidden' || session === 'leaving') arrive();
     fetch('api/resident/talk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('status ' + r.status))))
       .then((j) => {
         trace('bridge answered SPACE: recording=' + (j && j.recording) + (j && j.ignored ? ' IGNORED (turn still finishing)' : ''));
         if (j && j.ignored && turn) turn.press = 'ignored';
       })
-      .catch((err) => { trace('SPACE did not reach the bridge: ' + (err && err.message)); if (turn) turn.press = 'failed'; })
+      .catch((err) => {
+        trace('SPACE did not reach the bridge: ' + (err && err.message));
+        if (turn) turn.press = 'failed';
+        // It appeared on the key press; with no turn behind it, let it go.
+        if (session === 'active') { session = 'lingering'; lingerUntil = now() + 3; }
+      })
       .then(showDebug);
     showDebug();
   }
@@ -402,6 +437,8 @@ const Resident = (() => {
     box = document.getElementById('resident');
     portrait = document.getElementById('residentPortrait');
     vids = [document.getElementById('residentVideoA'), document.getElementById('residentVideoB')];
+    vids.forEach((v) => v && v.addEventListener('loadedmetadata', () => fitVideo(v)));
+    if (portrait) portrait.addEventListener('load', () => vids.forEach((v) => v && fitVideo(v)));
     debugEl = document.getElementById('residentDebug');
     if (!box || !vids[0] || !vids[1]) return;
     setInterval(() => {
