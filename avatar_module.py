@@ -1,6 +1,6 @@
 """Avatar-only Pi pipeline: local STT -> OpenAI text -> fal video/audio."""
 from __future__ import annotations
-import json, logging, os, random, re, shutil, subprocess, threading, time, wave
+import collections, json, logging, os, random, re, shutil, subprocess, threading, time, wave
 from pathlib import Path
 from queue import Queue
 
@@ -111,6 +111,10 @@ class AvatarModule:
         self.proc = None; self.ready = Queue(); self.status = "Ready: SPACE to talk"
         self._mic_proc = None; self._mic_thread = None; self._mic_stop = threading.Event()
         self._stream_lock = threading.RLock(); self._stream_recognizer = None; self._capture = None
+        # The last ~0.75 s of warm-mic audio before SPACE (6 x 125 ms chunks).
+        # People start talking as they press the key; without this the first
+        # word is lost ("good morning" was heard as "the morning").
+        self._preroll = collections.deque(maxlen=6)
         self._streaming_capture = False; self._last_apparition = None; self._apparition_pending = False
         self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
         self._playback_label = "none"
@@ -212,6 +216,7 @@ class AvatarModule:
                     break
                 with self._stream_lock:
                     if not self.recording or self._stream_recognizer is None:
+                        self._preroll.append(pcm)
                         continue
                     if self._capture is not None:
                         self._capture.writeframesraw(pcm)
@@ -277,6 +282,10 @@ class AvatarModule:
                     self._capture = wave.open(str(path), "wb")
                     self._capture.setnchannels(1); self._capture.setsampwidth(2); self._capture.setframerate(16000)
                     self._stream_recognizer = KaldiRecognizer(self._vosk_model, 16000)
+                    for chunk in self._preroll:
+                        self._capture.writeframesraw(chunk)
+                        self._stream_recognizer.AcceptWaveform(chunk)
+                    self._preroll.clear()
                     self.recording = True
                 self.status = "Listening - press SPACE when finished"
                 self.logger.info("Avatar streaming recording started: device=%s", self.device)
@@ -296,6 +305,14 @@ class AvatarModule:
 
     def _stop_recording(self):
         if self._stream_recognizer is not None:
+            # Keep listening a moment after SPACE: the last word is often
+            # still being said as the key goes down.
+            try:
+                tail = float(os.getenv("AVATAR_STT_TAIL", "0.4"))
+            except ValueError:
+                tail = 0.4
+            if tail > 0:
+                time.sleep(min(tail, 1.5))
             try:
                 with self._stream_lock:
                     self.recording = False
