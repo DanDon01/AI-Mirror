@@ -30,6 +30,7 @@ const Conductor = (() => {
   let prev = null, bpm = 0;
   const wakeListeners = [];
   const bootAt = Date.now() / 1000;
+  let lastFrame = null;
 
   const tune = (k, f) => Number.isFinite(Number(tuning[k])) ? Number(tuning[k]) : f;
 
@@ -101,18 +102,26 @@ const Conductor = (() => {
     if (want === 'glance' && wasRest) { wakeAt = nowSec; wakeListeners.forEach((f) => f(nowSec)); }
     wasRest = want === 'rest';
     register = want;
+    // Eased by elapsed time, not per frame, so the fades take as long on
+    // the Pi at 8 fps as on a desktop at 60.
+    const dt = lastFrame === null ? 0 : clamp(nowSec - lastFrame, 0, 0.25);
+    lastFrame = nowSec;
+    const ease = (tau) => 1 - Math.exp(-dt / tau);
     // Waking is quick (the person is already standing there); settling to
     // rest is slow, so a brief step out of range never snaps the glass.
     const target = register === 'rest' ? 0 : 1;
-    level += (target - level) * (target > level ? 0.08 : 0.015);
-    theatre += ((holders.size ? 1 : 0) - theatre) * 0.07;
+    level += (target - level) * ease(target > level ? 0.35 : 2.5);
+    // The resident gets an empty glass: everything else goes. A Moment
+    // leaves a trace of the rest behind it.
+    const clearTo = holders.has('resident') ? 1 : (holders.size ? 0.85 : 0);
+    theatre += (clearTo - theatre) * ease(0.3);
     document.body.classList.toggle('deep-dim', dim);
     document.documentElement.style.setProperty('--dim-level', tune('dim_level', 0.35).toFixed(2));
     document.body.dataset.register = holders.size ? 'theatre' : register;
   }
 
   // Normal content is scaled by this; forced pins bypass it.
-  const uiLevel = () => clamp(level, 0, 1) * (1 - 0.85 * theatre);
+  const uiLevel = () => clamp(level, 0, 1) * clamp(1 - theatre, 0, 1);
 
   function activePins(nowSec) {
     const out = {};

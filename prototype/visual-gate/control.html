@@ -272,6 +272,10 @@
 
   <!-- ================= BEHAVIOUR ================= -->
   <section class="tab" data-tab="behaviour" data-title="Behaviour">
+    <div class="card" id="paceCard">
+      <h2>Pace</h2>
+      <p class="hint">How long each panel stays up, the gaps between them and how slowly they arrive and leave. 1x is the original 80 s rotation.</p>
+    </div>
     <div class="card" id="restCard">
       <h2>Rest</h2>
       <p class="hint">With nobody at the mirror for this long it settles to just the time and a dim sky.</p>
@@ -466,6 +470,7 @@
   slider(pan, 'news_y', 'News up / down', -360, 360, 5, 'px', 0);
 
   slider($('#restCard'), 'rest_after_minutes', 'Rest after', 1, 120, 1, 'min', 10);
+  slider($('#paceCard'), 'rotation_pace', 'Slower rotation', 1, 4, 0.25, 'x', 2);
   hourPicker($('#dimCard'), 'dim_start_hour', 'Starts', 2);
   hourPicker($('#dimCard'), 'dim_end_hour', 'Ends', 5);
   slider($('#dimCard'), 'dim_level', 'Brightness while dimmed', 0.1, 1, 0.05, 'x', 0.35);

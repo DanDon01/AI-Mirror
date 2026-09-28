@@ -143,6 +143,9 @@ class Bridge:
         # Registers: minutes without presence before rest, and deep dim.
         "rest_after_minutes": 10, "dim_start_hour": 2, "dim_end_hour": 5,
         "dim_level": 0.35,
+        # How slowly the panel rotation runs: 1 = as authored (an 80 s loop),
+        # 2 = twice as long for every gap, hold, rise and fall.
+        "rotation_pace": 2.0,
         # Resident: may speak unprompted (pooled clips only) after this
         # many minutes with nobody at the mirror. 0 turns it off.
         "resident_unprompted": 1, "resident_idle_minutes": 20,
@@ -820,8 +823,10 @@ class Bridge:
     def resident_talk(self):
         if getattr(self, "resident", None) is None:
             raise RuntimeError("resident unavailable")
+        # Space mid-turn is ignored by the avatar; say so, so the glass can.
+        ignored = bool(self.resident._turn_active and not self.resident.recording)
         self.resident.on_button_press()
-        return {"recording": self.resident.recording}
+        return {"recording": self.resident.recording, "ignored": ignored}
 
     def resident_started(self, token):
         if getattr(self, "resident", None) is not None:
@@ -997,6 +1002,7 @@ class Bridge:
             "calendar_y": (-360, 360), "news_x": (-360, 360),
             "news_y": (-360, 360), "home_renderer": (0, 1),
             "rest_after_minutes": (1, 120), "dim_start_hour": (0, 23),
+            "rotation_pace": (1.0, 4.0),
             "dim_end_hour": (0, 23), "dim_level": (0.1, 1.0),
             "resident_unprompted": (0, 1), "resident_idle_minutes": (2, 240),
             "resident_linger_seconds": (3, 120),

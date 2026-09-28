@@ -136,6 +136,7 @@ const Resident = (() => {
   function clipEnded(endedRole, clip) {
     if (endedRole === 'reply') {
       if (clip) post('api/resident/done', { clip });
+      if (turn) turn.replyDone = true;
       reply = null;
       session = 'lingering';
       lingerUntil = now() + lingerSeconds;
@@ -161,13 +162,28 @@ const Resident = (() => {
   }
 
   // ---------------------------------------------------------------- session
+  // The glass clears first (the Conductor fades everything else out once
+  // the resident holds it); the character appears into an empty mirror.
+  const CLEAR_WAIT_S = 2.5;
+  let clearing = false;
   function arrive() {
     session = 'active';
     Conductor.enter('resident');
-    box.classList.add('on');
-    const s = pick('appear') || pick('idle');
-    if (s) cutTo(s, pool.appear && pool.appear.length ? 'appear' : 'idle', 0);
-    else holdPortrait();
+    if (typeof Moments !== 'undefined' && Moments.cancel) Moments.cancel();
+    if (clearing) return;
+    clearing = true;
+    const t0 = now();
+    const go = () => {
+      if (session === 'hidden' || session === 'leaving') { clearing = false; return; }
+      if (Conductor.level() > 0.02 && now() - t0 < CLEAR_WAIT_S) { setTimeout(go, 60); return; }
+      clearing = false;
+      box.classList.add('on');
+      if (reply) { const r = reply; cutTo(r.src, 'reply', 0, r.clip); return; }
+      const s = pick('appear') || pick('idle');
+      if (s) cutTo(s, pool.appear && pool.appear.length ? 'appear' : 'idle', 0);
+      else holdPortrait();
+    };
+    go();
   }
 
   function leave() {
@@ -179,6 +195,7 @@ const Resident = (() => {
       portrait.classList.remove('on');
       session = 'hidden'; role = null;
       Conductor.exit('resident');
+      finishTurn();
     }, 1300);
   }
 
@@ -186,11 +203,10 @@ const Resident = (() => {
     reply = { src: ev.src, clip: ev.clip, kind: ev.kind };
     if (session === 'hidden' || session === 'leaving') {
       // Unprompted, or a reply after it had gone: arrive first if we can.
-      if (pool.appear && pool.appear.length) { arrive(); return; }
-      session = 'active'; Conductor.enter('resident'); box.classList.add('on');
-      const r = reply; cutTo(r.src, 'reply', 0, r.clip); return;
+      arrive(); return;
     }
     session = 'active';
+    if (clearing) return;        // arrive() plays it once the glass is clear
     const cur = vids[front];
     const remaining = cur && Number.isFinite(cur.duration) ? cur.duration - cur.currentTime : 0;
     if (role === 'portrait' || role === null || remaining > EARLY_CUT_S) {
@@ -224,36 +240,120 @@ const Resident = (() => {
       else session = 'active';
     }
     if ((server === 'thinking' || server === 'conjuring') && role === 'portrait') portrait.classList.add('on');
-    if (ev.state === 'error' && session !== 'hidden') { session = 'lingering'; lingerUntil = now() + 4; }
+    // The bridge went back to idle with no answer (nothing heard, a
+    // cancelled turn): do not idle on the glass forever, fade away.
+    if (server === 'idle' && session === 'active' && !reply && role !== 'reply' &&
+        !(lastDebug && lastDebug.busy)) { session = 'lingering'; lingerUntil = now() + 5; }
+    if (ev.state === 'error') {
+      if (turn) turn.error = (lastDebug && lastDebug.stage) || 'unknown error';
+      if (session !== 'hidden') { session = 'lingering'; lingerUntil = now() + 4; }
+      else finishTurn();
+    }
     showDebug();
   }
 
   // ---------------------------------------------------------------- debug
+  // The step list: what the mirror is doing right now, what to do next, and
+  // how long each step took. It stays up after the turn, until the next
+  // SPACE, so the whole turn can be read at leisure.
   let lastDebug = null;
+  let turn = null;               // { pressAt, press, error, replyDone, finishedAt }
+  let stepIdx = -1, stepSince = 0, charName = '';
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   function videoState(v) {
     if (!v || !v.dataset.src) return 'none';
     const rs = ['nothing', 'metadata', 'current', 'future', 'enough'][v.readyState] || v.readyState;
     const dur = Number.isFinite(v.duration) ? v.duration.toFixed(1) : '?';
     return rs + ' ' + (v.currentTime || 0).toFixed(1) + '/' + dur + 's' + (v.error ? ' error ' + v.error.code : '');
   }
+
+  function pressed() {
+    turn = { pressAt: now(), press: 'sent', error: '', replyDone: false, finishedAt: 0 };
+    stepIdx = -1;
+    if (typeof Moments !== 'undefined' && Moments.cancel) Moments.cancel();
+    fetch('api/resident/talk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('status ' + r.status))))
+      .then((j) => { if (j && j.ignored && turn) turn.press = 'ignored'; })
+      .catch(() => { if (turn) turn.press = 'failed'; })
+      .then(showDebug);
+    showDebug();
+  }
+
+  function steps() {
+    const d = lastDebug || {}, m = d.marks || {}, busy = !!d.busy;
+    const has = (k) => typeof m[k] === 'number';
+    const took = (a, b) => (has(a) && has(b) ? (m[b] - m[a]).toFixed(1) + ' s' : '');
+    const cache = has('video') && !has('reply') && has('transcript');
+    const list = [
+      { name: 'SPACE received', done: has('start') || server === 'listening',
+        note: turn && turn.press === 'failed' ? 'the mirror service did not answer' : '' },
+      { name: 'Listening', done: has('stop'), note: took('start', 'stop') ? 'you spoke for ' + took('start', 'stop') : '' },
+      { name: 'Heard you', done: has('transcript'),
+        note: has('transcript') ? (d.heard ? '"' + d.heard + '"' : 'nothing recognised') + '   ' + took('stop', 'transcript') : '' },
+      { name: 'Writing the reply (OpenAI)', done: has('reply') || cache,
+        note: cache ? 'answer found in the cache' : took('transcript', 'reply') },
+      { name: 'Making the video (Fal)', done: has('video') && (has('reply') || cache),
+        note: cache ? 'cached video' : took('reply', 'video') },
+      { name: 'Playing the answer', done: !!(turn && turn.replyDone), note: '' },
+    ];
+    const cur = list.findIndex((x) => !x.done);
+    const live = turn && !turn.finishedAt;
+    list.forEach((x, i) => {
+      x.state = x.done ? 'done' : (i === cur && turn && (turn.error || turn.press === 'failed') ? 'fail' :
+        (i === cur && live ? 'now' : 'todo'));
+    });
+    if (cur !== stepIdx) { stepIdx = cur; stepSince = now(); }
+    return list;
+  }
+
+  function instruction() {
+    const name = (lastDebug && lastDebug.character) || charName || 'the resident';
+    const t = turn;
+    if (!t) return ['ready', 'Press SPACE to talk to ' + name];
+    if (t.press === 'failed') return ['fail', 'SPACE did not reach the mirror service. Is it running?'];
+    if (t.error) return ['fail', 'That did not work: ' + t.error + '. Press SPACE to try again'];
+    if (t.press === 'ignored' && now() - t.pressAt < 5) return ['wait', 'Still working on the last answer - SPACE ignored, please wait'];
+    if (t.finishedAt) return ['ready', 'Finished. Press SPACE to talk to ' + name + ' again'];
+    const secs = Math.max(0, now() - stepSince).toFixed(0) + ' s';
+    if (server === 'listening') return ['go', 'Speak now. Press SPACE when you have finished'];
+    if (server === 'thinking') return ['wait', 'Got it. Writing a reply - nothing to press (' + secs + ')'];
+    if (server === 'conjuring') return ['wait', 'Making the video on Fal - nothing to press (' + secs + ')'];
+    if (role === 'reply') return ['go', 'Playing the answer'];
+    if (session === 'lingering') return ['go', 'Press SPACE to ask something else (' + Math.max(0, lingerUntil - now()).toFixed(0) + ' s)'];
+    return ['wait', 'SPACE received - opening the microphone (' + secs + ')'];
+  }
+
   function showDebug() {
     if (!debugEl) return;
-    debugEl.hidden = !debugOn || session === 'hidden';
-    if (debugEl.hidden || !lastDebug) return;
-    const d = lastDebug;
-    debugEl.textContent = [
-      'AVATAR DEBUG - ' + (d.character || ''),
-      'stage:   ' + (d.stage || ''),
-      'mic:     ' + (d.mic || ''),
-      'vosk:    ' + (d.vosk || ''),
-      'openai:  ' + (d.openai || ''),
-      'source:  ' + (d.source || ''),
-      'audio:   ' + (d.audio || ''),
-      'time:    ' + (d.timings || ''),
-      'theatre: ' + session + ' / ' + (role || '-') + (reply ? ' / reply waiting' : '') +
-        '   pool appear ' + (pool.appear || []).length + ' think ' + (pool.think || []).length + ' idle ' + (pool.idle || []).length,
-      'video:   ' + videoState(vids[front]),
-    ].join('\n');
+    debugEl.hidden = !debugOn || !available;
+    if (debugEl.hidden) return;
+    const d = lastDebug || {};
+    const list = steps();
+    const [tone, text] = instruction();
+    let html = '<div class="rd-now rd-' + tone + '">' + esc(text) + '</div>';
+    if (turn) {
+      const mark = { done: '&#10003;', now: '&#9654;', fail: '&#10007;', todo: '&#183;' };
+      html += '<div class="rd-head">' + (turn.finishedAt ? 'LAST TURN - finished ' +
+        new Date(turn.finishedAt).toLocaleTimeString('en-GB') : 'THIS TURN') + '</div>';
+      html += list.map((x) => '<div class="rd-step rd-' + x.state + '"><b>' + mark[x.state] + '</b> ' +
+        esc(x.name) + (x.state === 'now' ? ' <i>' + (now() - stepSince).toFixed(0) + ' s</i>' : '') +
+        (x.note ? ' <i>' + esc(x.note) + '</i>' : '') + '</div>').join('');
+      if (d.said) html += '<div class="rd-said">Reply: "' + esc(d.said) + '"</div>';
+      html += '<pre class="rd-detail">' + esc([
+        'status   ' + (d.stage || ''),
+        'mic      ' + (d.mic || '') + '     vosk ' + (d.vosk || '') + '     openai ' + (d.openai || ''),
+        'source   ' + (d.source || ''),
+        'audio    ' + (d.audio || ''),
+        'theatre  ' + session + ' / ' + (role || '-') + (reply ? ' / reply waiting' : '') +
+          '   pool appear ' + (pool.appear || []).length + ' think ' + (pool.think || []).length + ' idle ' + (pool.idle || []).length,
+        'video    ' + videoState(vids[front]),
+      ].join('\n')) + '</pre>';
+    }
+    debugEl.innerHTML = html;
+  }
+
+  function finishTurn() {
+    if (turn && !turn.finishedAt) { turn.finishedAt = Date.now(); showDebug(); }
   }
 
   // ---------------------------------------------------------------- mount
@@ -263,10 +363,16 @@ const Resident = (() => {
     vids = [document.getElementById('residentVideoA'), document.getElementById('residentVideoB')];
     debugEl = document.getElementById('residentDebug');
     if (!box || !vids[0] || !vids[1]) return;
-    setInterval(showDebug, 500);
+    setInterval(() => {
+      // Clips hand over to the exit when they end; a held portrait has no
+      // clip to end, and a stalled clip must not hold the glass forever.
+      if (session === 'lingering' && !cutting &&
+          ((now() > lingerUntil && (role === 'portrait' || role === null)) || now() > lingerUntil + 8)) leave();
+      showDebug();
+    }, 500);
     window.addEventListener('mirror-event', (e) => onEvent(e.detail));
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && available) { e.preventDefault(); post('api/resident/talk'); }
+      if (e.code === 'Space' && available && !e.repeat) { e.preventDefault(); pressed(); }
     });
     apply(payload);
   }
@@ -274,6 +380,7 @@ const Resident = (() => {
   function apply(payload) {
     const r = payload && payload.resident;
     available = !!(r && r.available);
+    if (r && r.character) charName = r.character;
     const t = payload && payload._tuning;
     if (t && Number.isFinite(Number(t.resident_linger_seconds))) lingerSeconds = Number(t.resident_linger_seconds);
     if (r && r.key && r.key !== key) {
@@ -283,6 +390,10 @@ const Resident = (() => {
     }
   }
 
-  return { mount, apply, onEvent, state: () => (session === 'hidden' ? 'idle' : session),
+  // 'calling': SPACE was just pressed and the bridge has not answered yet;
+  // nothing else may take the glass in that gap.
+  const state = () => (session !== 'hidden' ? session :
+    (turn && !turn.finishedAt && now() - turn.pressAt < 6 ? 'calling' : 'idle'));
+  return { mount, apply, onEvent, state,
            _debug: () => ({ session, role, server, reply: !!reply, front, pool, cutting }) };
 })();

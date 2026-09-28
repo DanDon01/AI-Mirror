@@ -281,10 +281,18 @@ def _make_resident_class():
                 "audio": self.player.audio_note,
                 "player": self.player.diagnostic(),
                 "timings": f"heard {since('transcript')}  reply {since('reply')}  video {since('video')}  playing {since('play')}",
+                # For the step list on the glass: what was heard and said,
+                # and whether the bridge is mid-turn.
+                "heard": str(self._turn.get("transcript") or "")[:120],
+                "said": str(self._turn.get("reply") or "")[:160],
+                "recording": bool(self.recording),
+                "busy": bool(self._turn_active),
+                "marks": {k: round(v - m["start"], 1) for k, v in m.items() if "start" in m},
             }
 
         def _start_recording(self):
             self._marks = {}
+            self._turn = {}
             self._mark("start")
             super()._start_recording()
 
@@ -296,7 +304,9 @@ def _make_resident_class():
             self.update()
             snap = self.debug_snapshot()
             now = time.monotonic()
-            if snap != self._last_debug and now - self._last_debug_at > 0.25:
+            # Changes go out at once; an unchanged panel is re-sent every few
+            # seconds so a page that has just loaded still gets one.
+            if (snap != self._last_debug and now - self._last_debug_at > 0.25) or now - self._last_debug_at > 4:
                 self._last_debug, self._last_debug_at = snap, now
                 show = os.getenv("AVATAR_DEBUG_OVERLAY", "1").lower() in ("1", "true", "yes", "on")
                 self._publish({"type": "resident", "debug": snap, "show": show})

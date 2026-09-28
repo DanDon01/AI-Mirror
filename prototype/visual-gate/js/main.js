@@ -224,7 +224,9 @@
       const goal = Number(tuning.steps_goal) || 10000;
       const steps = (data.biometrics && data.biometrics.steps) || 0;
       const cadence = 0.55 + 0.9 * Math.min(steps / goal, 1.5) / 1.5;
-      Biometrics.frame(t, morph, beatAt(t, bpm || 60), morph2, t * Math.PI * 2 * cadence);
+      // The heartbeat and the stride keep real time; only the rotation slows.
+      const live = MANUAL || FREEZE ? t : nowSec;
+      Biometrics.frame(t, morph, beatAt(live, bpm || 60), morph2, live * Math.PI * 2 * cadence);
       setBio(morph, have, morph2);
     }
 
@@ -378,10 +380,17 @@
   }
 
   let loopError = '';
+  // The rotation runs on its own clock, slowed by rotation_pace, so every
+  // gap, hold and transition stretches together. Accumulated per frame, so
+  // changing the pace from the control page never jumps the rotation.
+  let schedClock = SEEK, lastLoopWall = 0;
   function loop(wall) {
     tickPerf(wall);
     const elapsed = SEEK + (wall - started) / 1000;
-    const looped = HAS_WIN ? WIN[0] + (elapsed % (WIN[1] - WIN[0])) : elapsed % LOOP;
+    const pace = Math.max(1, Math.min(4, Number(tuning.rotation_pace) || 2));
+    if (lastLoopWall) schedClock += Math.min(0.25, (wall - lastLoopWall) / 1000) / pace;
+    lastLoopWall = wall;
+    const looped = HAS_WIN ? WIN[0] + (elapsed % (WIN[1] - WIN[0])) : schedClock % LOOP;
     // One failing layer must not stop the loop: a dead loop leaves every
     // panel frozen wherever it was, which is worse than one missing layer.
     try {

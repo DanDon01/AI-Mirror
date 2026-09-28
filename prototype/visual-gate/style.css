@@ -616,17 +616,37 @@ body.deep-dim .mirror { opacity: var(--dim-level, 0.35); }
 @keyframes resident-breathe { 0%, 100% { opacity: 0.42; } 50% { opacity: 0.62; } }
 .resident-video.on { opacity: 1; }
 
-/* The Pygame app's AVATAR DEBUG overlay, kept for tuning on the Pi. */
+/* The avatar debug panel: a plain instruction, the turn's steps with their
+   timings, then the raw detail. Large enough to read from arm's length; it
+   stays up after the turn until the next SPACE. AVATAR_DEBUG_OVERLAY=0
+   hides it. */
 .resident-debug {
   position: absolute;
-  left: 40px; top: 1660px;
-  margin: 0; padding: 14px 18px;
-  font: 19px/1.45 "DejaVu Sans Mono", Consolas, monospace;
-  color: #b4e6ff;
-  background: rgba(0, 0, 0, 0.6);
-  border-left: 3px solid #4a9ee0;
-  white-space: pre;
-  max-width: 1360px; overflow: hidden;
+  left: 40px; right: 40px; top: 1660px;
+  margin: 0; padding: 22px 28px;
+  font: 30px/1.4 var(--ff-text, "DejaVu Sans"), sans-serif;
+  color: #d8ecff;
+  background: rgba(0, 0, 0, 0.72);
+  border-left: 5px solid #4a9ee0;
+  z-index: 40;
+}
+.resident-debug .rd-now { font-size: 42px; line-height: 1.25; margin-bottom: 14px; }
+.resident-debug .rd-ready { color: #d8ecff; }
+.resident-debug .rd-go { color: #7dffa8; }
+.resident-debug .rd-wait { color: #ffd479; }
+.resident-debug .rd-fail { color: #ff7a7a; }
+.resident-debug .rd-head { font-size: 22px; letter-spacing: 0.14em; color: #8fb3d6; margin: 6px 0 6px; }
+.resident-debug .rd-step { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.resident-debug .rd-step b { display: inline-block; width: 38px; }
+.resident-debug .rd-step i { font-style: normal; color: #9fb4c8; margin-left: 12px; }
+.resident-debug .rd-step.rd-done b { color: #7dffa8; }
+.resident-debug .rd-step.rd-now { color: #ffd479; }
+.resident-debug .rd-step.rd-fail { color: #ff7a7a; }
+.resident-debug .rd-step.rd-todo { color: #6d7c8c; }
+.resident-debug .rd-said { margin-top: 10px; font-size: 26px; color: #c9d6e3; }
+.resident-debug .rd-detail {
+  margin: 14px 0 0; font: 21px/1.45 "DejaVu Sans Mono", Consolas, monospace;
+  color: #9fc4e6; white-space: pre-wrap; word-break: break-all;
 }
 .resident-debug[hidden] { display: none; }
 

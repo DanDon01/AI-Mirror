@@ -455,6 +455,13 @@ const Moments = (() => {
     Stage.compile(instance.scene, instance.camera);
     current = { m, start: now, instance, ctx: ctx || {} };
     lastPlayed[m.name] = now;
+    // Cooldowns survive a reload: a restarted mirror must not replay the
+    // same market Moment it showed a minute ago.
+    try {
+      const wall = JSON.parse(localStorage.getItem('moments.played') || '{}');
+      wall[m.name] = Date.now();
+      localStorage.setItem('moments.played', JSON.stringify(wall));
+    } catch (e) { /* per-viewer only */ }
     lastAny = now;
     recent.unshift(m.name); recent.length = Math.min(recent.length, 5);
     Conductor.enter('moment');
@@ -580,9 +587,21 @@ const Moments = (() => {
     });
   }
 
+  // The resident is taking the glass: jump a playing Moment to its closing
+  // fade (the last few percent of every Moment is its fade-out) and drop
+  // anything queued behind it.
+  function cancel() {
+    pending = null;
+    if (!current) return;
+    const now = performance.now() / 1000;
+    const p = (now - current.start) / current.m.duration;
+    if (p < 0.94) current.start = now - current.m.duration * 0.94;
+  }
+
   function playNow(name) {
     const m = name ? byName(name) : CATALOGUE[Math.floor(Math.random() * CATALOGUE.length)];
     if (!m || current) return false;
+    if (typeof Resident !== 'undefined' && Resident.state() !== 'idle') return false;
     const ctx = name === 'rocket_launch' || name === 'market_surge' ? { quote: { sym: 'TEST', pct: 0 } } : {};
     if (m.name === 'sun_curtain') ctx.kind = new Date().getHours() < 12 ? 'sunrise' : 'sunset';
     if (m.name === 'fourth_wall_wink') ctx.residentKey = Moments._residentKey || '';
@@ -599,6 +618,11 @@ const Moments = (() => {
     if (!window.Stage) return;
     captionEl = document.getElementById('momentCaption');
     try { Object.assign(onceToday, JSON.parse(localStorage.getItem('moments.once') || '{}')); } catch (e) { /* none */ }
+    try {
+      const wall = JSON.parse(localStorage.getItem('moments.played') || '{}');
+      const nowS = performance.now() / 1000;
+      for (const [name, at] of Object.entries(wall)) lastPlayed[name] = nowS - (Date.now() - Number(at)) / 1000;
+    } catch (e) { /* none */ }
     const actor = {
       name: 'moment', rect: { x: 0, y: 0, w: W, h: H }, feather: 0,
       get scene() { return current ? current.instance.scene : null; },
@@ -625,5 +649,5 @@ const Moments = (() => {
       body: JSON.stringify(catalogue()) }).catch(() => {});
   }
 
-  return { mount, observe, frame, playNow, catalogue, announce, playing: () => current && current.m.name };
+  return { mount, observe, frame, playNow, cancel, catalogue, announce, playing: () => current && current.m.name };
 })();
