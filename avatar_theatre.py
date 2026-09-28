@@ -53,21 +53,29 @@ EDGE_SECONDS = 0.08                  # reference stamped over this much at each 
 COUNTS = {"appear": 1, "think": 1, "idle": 1}
 TRACKER_MODULE, TRACKER_SERVICE = "avatar_theatre", "fal-theatre"
 
+# The mouth rule leads the prompt. These clips play with no sound, so any
+# mouth movement reads as speech with the audio missing (Bert's first idle
+# clip talked). "Change of expression" invites the model to move the mouth,
+# so expression is carried by the eyes, head and lights instead.
 COMMON = (
+    "The mouth stays closed and completely still for the whole clip: lips together, no speaking, "
+    "no talking, no lip movement, no jaw movement, no mouthing words. "
     "Use the supplied character portrait as the exact identity, pose, crop and framing. "
-    "Pure black seamless background. No speech, no talking, no lip movement, no text, no logos, "
+    "Pure black seamless background. No text, no logos, "
     "no mirror, no frame, no hands entering the frame, no camera movement, no cuts. "
 )
+NEGATIVE = ("talking, speaking, lip sync, mouthing words, mouth moving, mouth opening, lips moving, "
+            "jaw moving, chewing, blur, distortion, low quality, text, frame, border")
 KIND = {
     "appear": "The character materialises out of the black, then settles exactly into the supplied portrait pose and holds it still for the final second. ",
     "think": "The character briefly looks away as if checking or retrieving information, then returns exactly to the supplied portrait pose, looking at the viewer, for the final second. ",
-    "idle": "Only very small, subtle movements: breathing, a blink, a slight change of expression. The character stays in the supplied portrait pose throughout and ends exactly in it. ",
+    "idle": "Only very small, subtle movements: breathing, a blink, a slight movement of the eyes or head. The mouth does not move. The character stays in the supplied portrait pose throughout and ends exactly in it. ",
 }
 # In-character colour for each kind. Unknown characters get the generic lines.
 FLAVOUR = {
     "mechanic": {
         "appear": ["Sparks and a puff of engine smoke clear to reveal her.", "A shower of welding sparks fades as she appears.", "A flicker of a garage work-light reveals her."],
-        "think": ["She glances down at a wrist tablet and frowns, reading.", "She squints sideways as if listening to an engine.", "She taps an earpiece and mutters silently, thinking.", "She wipes her hands on a rag, eyes narrowed, working it out.", "She chews her lip and glances up, recalling a spec."],
+        "think": ["She glances down at a wrist tablet and frowns, reading.", "She squints sideways as if listening to an engine.", "She taps an earpiece and listens, eyes narrowed.", "She wipes her hands on a rag, eyes narrowed, working it out.", "She glances up, recalling a spec."],
         "idle": ["A cheeky half smile.", "She rolls her shoulders and blinks.", "A raised eyebrow, amused.", "A slow, confident blink."],
     },
     "officer": {
@@ -200,7 +208,7 @@ def generate(profile, kind: str, flavour: str, model: str, charged=lambda: None)
         result = fal_client.subscribe(model, arguments={
             "prompt": prompt, "start_image_url": start_url, "end_image_url": end_url,
             "duration": str(CLIP_SECONDS), "generate_audio": False,
-            "negative_prompt": "blur, distortion, low quality, talking, mouth moving, text, frame, border",
+            "negative_prompt": NEGATIVE,
         })
         charged()                      # fal has billed the clip, whatever happens next
         url = (result.get("video") or {}).get("url")
