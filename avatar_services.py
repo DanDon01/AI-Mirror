@@ -29,6 +29,31 @@ FLASHTALK_PRICE_PER_SECOND_USD = 0.02
 TEXT_AVATAR_PRICE_PER_SECOND_USD = 0.20
 
 
+def _poll_interval() -> float:
+    """Seconds between Fal status checks. Every check is a round trip, and
+    the video is only picked up on the next one after it finishes, so a
+    shorter interval shaves up to that long off every turn."""
+    try:
+        return max(0.1, float(os.getenv("AVATAR_FAL_POLL_SECONDS", "0.25")))
+    except ValueError:
+        return 0.25
+
+
+def _fetch_result(handle: Any) -> Any:
+    """The finished request's output, in one GET.
+
+    handle.get() polls the status once more before fetching, an extra round
+    trip after iter_events has already seen the request complete. Fall back
+    to it if this fal_client does not expose the pieces."""
+    try:
+        from fal_client.client import QUEUE_POLL_TIMEOUT, _maybe_retry_request, _raise_for_status
+        response = _maybe_retry_request(handle.client, "GET", handle.response_url, timeout=QUEUE_POLL_TIMEOUT)
+        _raise_for_status(response)
+        return response.json()
+    except (ImportError, AttributeError):
+        return handle.get()
+
+
 class AvatarServiceError(RuntimeError):
     """A provider, download, or media-validation step failed safely."""
 
@@ -264,11 +289,11 @@ class FlashTalkService:
             request_id = str(handle.request_id)
             submit_done = time.monotonic()
             last_status: Any = None
-            for status in handle.iter_events(with_logs=True, interval=0.5):
+            for status in handle.iter_events(with_logs=False, interval=_poll_interval()):
                 last_status = status
                 if status.__class__.__name__ == "InProgress" and first_progress_at is None:
                     first_progress_at = time.monotonic()
-            result = handle.get()
+            result = _fetch_result(handle)
             generation_done = time.monotonic()
 
             video = result.get("video") if isinstance(result, dict) else None
@@ -431,11 +456,11 @@ class FlashTalkService:
             request_id = str(handle.request_id)
             submit_done = time.monotonic()
             last_status: Any = None
-            for status in handle.iter_events(with_logs=True, interval=0.5):
+            for status in handle.iter_events(with_logs=False, interval=_poll_interval()):
                 last_status = status
                 if status.__class__.__name__ == "InProgress" and first_progress_at is None:
                     first_progress_at = time.monotonic()
-            result = handle.get()
+            result = _fetch_result(handle)
             generation_done = time.monotonic()
             video = result.get("video") if isinstance(result, dict) else None
             video_url = video.get("url") if isinstance(video, dict) else None

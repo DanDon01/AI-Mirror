@@ -115,6 +115,7 @@ class AvatarModule:
         # People start talking as they press the key; without this the first
         # word is lost ("good morning" was heard as "the morning").
         self._preroll = collections.deque(maxlen=6)
+        self._stream_parts = []
         self._streaming_capture = False; self._last_apparition = None; self._apparition_pending = False
         self._deferred_cache = None; self._cache_downloading = False; self._hold_background_for_playback = False
         self._playback_label = "none"
@@ -220,7 +221,14 @@ class AvatarModule:
                         continue
                     if self._capture is not None:
                         self._capture.writeframesraw(pcm)
-                    self._stream_recognizer.AcceptWaveform(pcm)
+                    if self._stream_recognizer.AcceptWaveform(pcm):
+                        # Vosk closes a segment at each pause. Its text is
+                        # only returned by Result() now; FinalResult() at the
+                        # end holds the last segment alone, so without this a
+                        # sentence with a pause in it lost its first half.
+                        part = json.loads(self._stream_recognizer.Result()).get("text", "").strip()
+                        if part:
+                            self._stream_parts.append(part)
         except Exception:
             if not self._mic_stop.is_set():
                 self.logger.exception("Avatar warm microphone stream failed")
@@ -282,9 +290,13 @@ class AvatarModule:
                     self._capture = wave.open(str(path), "wb")
                     self._capture.setnchannels(1); self._capture.setsampwidth(2); self._capture.setframerate(16000)
                     self._stream_recognizer = KaldiRecognizer(self._vosk_model, 16000)
+                    self._stream_parts = []
                     for chunk in self._preroll:
                         self._capture.writeframesraw(chunk)
-                        self._stream_recognizer.AcceptWaveform(chunk)
+                        if self._stream_recognizer.AcceptWaveform(chunk):
+                            part = json.loads(self._stream_recognizer.Result()).get("text", "").strip()
+                            if part:
+                                self._stream_parts.append(part)
                     self._preroll.clear()
                     self.recording = True
                 self.status = "Listening - press SPACE when finished"
@@ -319,7 +331,9 @@ class AvatarModule:
                     recognizer = self._stream_recognizer; self._stream_recognizer = None
                     if self._capture is not None:
                         self._capture.close(); self._capture = None
-                    transcript = json.loads(recognizer.FinalResult()).get("text", "").strip()
+                    last = json.loads(recognizer.FinalResult()).get("text", "").strip()
+                    transcript = " ".join(self._stream_parts + ([last] if last else [])).strip()
+                    self._stream_parts = []
                 self.status = "Conjuring your answer..."
                 background_network.set_paused(True, "Avatar turn")
                 snapshot = self.context.snapshot()
@@ -413,7 +427,10 @@ class AvatarModule:
             request = {"model": llm_model, "max_output_tokens": int(os.getenv("AVATAR_LLM_MAX_OUTPUT_TOKENS", "160")), "input": [{"role":"system","content":system}, {"role":"user","content":transcript}]}
             if llm_model.startswith("gpt-5"):
                 request["reasoning"] = {"effort": os.getenv("AVATAR_LLM_REASONING_EFFORT", "minimal")}
+            asked = time.monotonic()
             response = self.openai_client.responses.create(**request)
+            self.logger.info("Avatar OpenAI %s answered in %.2fs (prompt %d chars, intent %s)",
+                             llm_model, time.monotonic() - asked, len(system), local_intent)
             raw_text = _response_text(response)
             if not raw_text:
                 status = getattr(response, "status", "unknown")
