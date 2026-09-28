@@ -93,5 +93,6 @@ echo "opening  $URL"
   --noerrdialogs --disable-infobars --no-first-run \
   --autoplay-policy=no-user-gesture-required \
   --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy \
+  --disable-gpu-memory-buffer-video-frames \
   --user-data-dir=/tmp/visual-gate-profile \
   "$URL"

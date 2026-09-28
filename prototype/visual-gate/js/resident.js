@@ -53,8 +53,12 @@ const Resident = (() => {
   let traceBuf = [], traceT0 = 0;
   const base = (src) => String(src || '').split('/').pop().split('?')[0].slice(0, 40) || '-';
   function trace(msg) {
-    const at = traceT0 ? '+' + (now() - traceT0).toFixed(2) + 's ' : '';
-    traceBuf.push(at + msg);
+    // Wall-clock time of the event itself: lines reach the journal up to a
+    // second late (batched), so the journal's own timestamp is not the event's.
+    const d = new Date();
+    const wall = d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+    const at = traceT0 ? ' +' + (now() - traceT0).toFixed(2) + 's' : '';
+    traceBuf.push('[' + wall + at + '] ' + msg);
     if (traceBuf.length > 300) traceBuf.splice(0, traceBuf.length - 300);
   }
   setInterval(() => {
@@ -431,6 +435,6 @@ const Resident = (() => {
   // nothing else may take the glass in that gap.
   const state = () => (session !== 'hidden' ? session :
     (turn && !turn.finishedAt && now() - turn.pressAt < 6 ? 'calling' : 'idle'));
-  return { mount, apply, onEvent, state,
+  return { mount, apply, onEvent, state, trace,
            _debug: () => ({ session, role, server, reply: !!reply, front, pool, cutting }) };
 })();

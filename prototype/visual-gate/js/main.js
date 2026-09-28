@@ -417,8 +417,22 @@
   // A lost WebGL context (driver reset, GPU memory pressure) would leave a
   // frozen or blank glass on a wall nobody is watching. Reloading is the
   // most reliable recovery for a kiosk: the page rebuilds every renderer.
+  // Page-level events go straight to the service log (not batched), so a
+  // crash or reload shows up in journalctl next to the resident's trace.
+  function logNow(msg) {
+    try {
+      fetch('api/resident/log', { method: 'POST', keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: ['[' + new Date().toTimeString().slice(0, 8) + '] PAGE ' + msg] }) })
+        .catch(() => {});
+    } catch (e) { /* nothing to report to */ }
+  }
+  logNow('loaded');
+  addEventListener('error', (e) => logNow('script error: ' + e.message + ' at ' +
+    String(e.filename || '').split('/').pop() + ':' + e.lineno));
   document.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
+    logNow('WebGL context lost (GPU reset) - reloading in 3 s');
     console.warn('WebGL context lost; reloading the mirror in 3 s');
     setTimeout(() => location.reload(), 3000);
   }, true);
