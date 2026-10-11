@@ -174,7 +174,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_error(400, "invalid log")
             return
         if path in ("/api/resident/talk", "/api/resident/done", "/api/resident/unprompted",
-                    "/api/resident/started"):
+                    "/api/resident/started", "/api/resident/audiotest"):
             if self.bridge is None or getattr(self.bridge, "resident", None) is None:
                 self.send_error(503, "resident unavailable")
                 return
@@ -197,6 +197,8 @@ class Handler(SimpleHTTPRequestHandler):
                 elif path == "/api/resident/done":
                     self.bridge.resident_finished(str(payload.get("clip", "")))
                     self._json({"ok": True})
+                elif path == "/api/resident/audiotest":
+                    self._json({"ok": True, **self.bridge.resident_audio_test()})
                 else:
                     self._json({"ok": True, **self.bridge.resident_unprompted_now()})
             except Exception as exc:

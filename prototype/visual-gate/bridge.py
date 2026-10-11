@@ -844,6 +844,11 @@ class Bridge:
         resident = getattr(self, "resident", None)
         return resident.media_path(token) if resident is not None else None
 
+    def resident_audio_test(self):
+        if getattr(self, "resident", None) is None:
+            raise RuntimeError("resident unavailable")
+        return self.resident.audio_test_clip()
+
     def resident_unprompted_now(self):
         if getattr(self, "resident", None) is None:
             raise RuntimeError("resident unavailable")

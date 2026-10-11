@@ -432,6 +432,41 @@ const Resident = (() => {
     if (turn && !turn.finishedAt) { trace('turn finished'); turn.finishedAt = Date.now(); showDebug(); }
   }
 
+  // ------------------------------------------------------- sound test
+  // 'a': play the newest saved reply with the browser's own sound and no
+  // aplay, to find out whether Chromium reaches the speakers when run by the
+  // service. Diagnostic only - real turns still use the bridge's aplay. The
+  // trace says whether the browser decoded any audio at all.
+  let testing = null;
+  function audioTest() {
+    if (testing || session !== 'hidden') return;
+    testing = true;
+    fetch('api/resident/audiotest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then((r) => (r.ok ? r.json() : r.text().then((t) => { throw new Error(t || r.status); })))
+      .then((res) => {
+        const v = document.createElement('video');
+        testing = v;
+        v.src = res.src; v.muted = false; v.volume = 1; v.playsInline = true;
+        v.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:38vw;z-index:50;background:#000';
+        document.body.appendChild(v);
+        trace('SOUND TEST: browser sound on, aplay off: "' + res.text + '"');
+        if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+          navigator.mediaDevices.enumerateDevices().then((d) =>
+            trace('SOUND TEST: browser sees ' + d.filter((x) => x.kind === 'audiooutput').length + ' audio output(s)')).catch(() => {});
+        }
+        const done = (why) => {
+          const bytes = v.webkitAudioDecodedByteCount;
+          trace('SOUND TEST ' + why + ': browser decoded ' + (bytes === undefined ? '?' : bytes) + ' audio bytes');
+          v.remove(); testing = null;
+        };
+        v.onended = () => done('ended');
+        v.onerror = () => done('ERROR code ' + (v.error ? v.error.code : '?'));
+        const p = v.play();
+        if (p && p.catch) p.catch((err) => { trace('SOUND TEST play() refused: ' + (err && err.message)); done('refused'); });
+      })
+      .catch((err) => { testing = null; trace('SOUND TEST unavailable: ' + (err && err.message)); });
+  }
+
   // ---------------------------------------------------------------- mount
   function mount(payload) {
     box = document.getElementById('resident');
@@ -451,6 +486,7 @@ const Resident = (() => {
     window.addEventListener('mirror-event', (e) => onEvent(e.detail));
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && available && !e.repeat) { e.preventDefault(); pressed(); }
+      if (e.key === 'a' && available && !e.repeat) audioTest();
     });
     apply(payload);
   }

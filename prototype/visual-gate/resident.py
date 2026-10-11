@@ -347,6 +347,19 @@ def _make_resident_class():
         def media_path(self, token):
             return self._media.get(token)
 
+        def audio_test_clip(self):
+            """The newest saved reply for this character, for the page's 'a'
+            key: a browser-sound test that never makes a new clip."""
+            if self._turn_active or self.recording or self.player.playing:
+                raise RuntimeError("busy - try again when the character is idle")
+            rows = [r for r in self.cache.inspect() if r["status"] == "approved"
+                    and r["model"].endswith("::" + self.profile.key)
+                    and (self.cache.root / r["media_path"]).is_file()]
+            if not rows:
+                raise RuntimeError(f"no saved reply clip for {self.profile.name}")
+            row = max(rows, key=lambda r: r["created_at"])
+            return {"src": self.media_url(self.cache.root / row["media_path"]), "text": row["spoken_text"]}
+
         def _state_for(self, status):
             s = (status or "").lower()
             if s.startswith("listening"):

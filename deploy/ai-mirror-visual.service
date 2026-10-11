@@ -39,6 +39,9 @@ RestartSec=5
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=__HOME__/.Xauthority
 Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+# The desktop session's bus, so Chromium can reach PipeWire for sound
+# (without it every start logs 'Failed to connect to the bus').
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/__UID__/bus
 
 [Install]
 WantedBy=graphical.target
