@@ -507,7 +507,7 @@ class AvatarModule:
                 "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video."
             )
             if profile.voice:
-                video_prompt += f" The character speaks in {profile.voice}, the same voice every time."
+                video_prompt += f" The character speaks in {profile.voice}."
             self.logger.info('Avatar Fal prompt: %s The subject says exactly: "%s"', video_prompt, text)
             # Download first by default: the page and aplay then play the same
             # local file and stay in sync. Streaming the Fal URL starts the
