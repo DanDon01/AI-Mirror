@@ -193,6 +193,9 @@ class AvatarServiceTests(unittest.TestCase):
             )
             self.assertEqual(fal.arguments["duration"], 5)
             self.assertIn('says exactly: "Well hello there."', fal.arguments["prompt"])
+            self.assertEqual(fal.arguments["prompt"].count("says exactly"), 1)
+            # The reply must end on the reference so it hands back seamlessly.
+            self.assertEqual(fal.arguments["end_image_url"], fal.arguments["image_url"])
             self.assertNotIn("audio_url", fal.arguments)
             self.assertEqual(result.duration_seconds, 5.0)
             self.assertEqual(len(fal.uploaded), 1)

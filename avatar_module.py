@@ -497,6 +497,7 @@ class AvatarModule:
             # voices, a cut-off second take, and lips that did not match.
             video_prompt = (
                 "The uploaded character is the only subject, speaking naturally and directly to camera with subtle facial expressions. "
+                "Static camera with no zoom, pan or reframing; the character stays the same size and place and ends in the starting pose. "
                 "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video."
             )
             self.logger.info('Avatar Fal prompt: %s The subject says exactly: "%s"', video_prompt, text)

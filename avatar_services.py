@@ -449,6 +449,12 @@ class FlashTalkService:
                     "resolution": resolution.upper(),
                     "prompt_expansion_mode": "balanced",
                 }
+                if "minimax/" in model:
+                    # End on the reference too. Without it the last frame
+                    # scored 0.4 SSIM against the portrait (start 0.8), so
+                    # the character visibly jumped when the reply handed back
+                    # to the theatre clips, which start and end on it.
+                    arguments["end_image_url"] = image_url
             if seed is not None:
                 arguments["seed"] = seed
             submitted_at = time.monotonic()
