@@ -15,10 +15,7 @@ env_path = os.path.join(current_dir, '..', 'Variables.env')
 
 # Load the .env file
 load_dotenv(env_path)
-# ENABLE_PRINCESS remains a one-release migration fallback for existing Pi setups.
-AVATAR_ENABLED = os.getenv(
-    'ENABLE_AVATAR', os.getenv('ENABLE_PRINCESS', '')
-).lower() in ('1', 'true', 'yes', 'on')
+AVATAR_ENABLED = os.getenv('ENABLE_AVATAR', '').lower() in ('1', 'true', 'yes', 'on')
 
 #########################################
 # GLOBAL CONSTANTS

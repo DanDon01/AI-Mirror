@@ -241,7 +241,6 @@ AI-Mirror/
   visual_effects.py         Shared visual utils
   voice_commands.py         Command parser
   weather_animations.py     Weather effects
-  whispertest.py            Whisper test utility
   MagicMirror.__init__      Package marker
   fallback_responses.json   Offline AI responses
   requirements.txt          Python dependencies
@@ -255,5 +254,5 @@ AI-Mirror/
     weather_icons/          9 PNG weather animations
     sound_effects/          4 MP3 audio files
   documentation/
-    code_structure.md       Basic structure diagram
+    openclaw_integration.md OpenClaw Gateway design notes
 ```
