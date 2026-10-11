@@ -73,6 +73,18 @@ KIND = {
     "think": "The character briefly looks away as if checking or retrieving information, then returns exactly to the supplied portrait pose, looking at the viewer, for the final second. ",
     "idle": "Only very small, subtle movements: breathing, a blink, a slight movement of the eyes or head. The mouth does not move. The character stays in the supplied portrait pose throughout and ends exactly in it. ",
 }
+# Idle clips describe only what the character does. Listing what the mouth
+# must not do (the rule above) still produced idle clips that talked: naming
+# the mouth seems to draw the model's attention to it. So idle has its own
+# plain, positive prompt, no flavour line (they add movement) and no mouth
+# terms in the negative prompt either.
+IDLE_PROMPT = (
+    "Use the supplied character portrait as the exact identity, pose, crop and framing, "
+    "on a pure black seamless background, with the camera locked off. "
+    "The character stares directly at the camera, concentrating, waiting for instructions, "
+    "holding the supplied portrait pose throughout and ending exactly in it."
+)
+IDLE_NEGATIVE = "blur, distortion, low quality, text, frame, border"
 # In-character colour for each kind lives with the characters, in the house
 # pack (avatars/theatre_flavour.json: {key: {appear: [...], think: [...],
 # idle: [...]}}). Characters without an entry get the generic lines. Keep the
@@ -184,7 +196,8 @@ def finish(raw: Path, reference: Path, destination: Path, kind: str) -> None:
 
 def generate(profile, kind: str, flavour: str, model: str, charged=lambda: None) -> Path:
     import fal_client
-    prompt = COMMON + KIND[kind] + flavour
+    prompt = IDLE_PROMPT if kind == "idle" else COMMON + KIND[kind] + flavour
+    negative = IDLE_NEGATIVE if kind == "idle" else NEGATIVE
     with tempfile.TemporaryDirectory() as tmp:
         flat = flatten(profile.reference_image, Path(tmp) / "reference.png")
         start = black_frame(Path(tmp) / "black.png") if kind == "appear" else flat
@@ -194,7 +207,7 @@ def generate(profile, kind: str, flavour: str, model: str, charged=lambda: None)
         result = fal_client.subscribe(model, arguments={
             "prompt": prompt, "start_image_url": start_url, "end_image_url": end_url,
             "duration": str(CLIP_SECONDS), "generate_audio": False,
-            "negative_prompt": NEGATIVE,
+            "negative_prompt": negative,
         })
         charged()                      # fal has billed the clip, whatever happens next
         url = (result.get("video") or {}).get("url")
