@@ -439,8 +439,12 @@ const Resident = (() => {
   // trace says whether the browser decoded any audio at all.
   let testing = null;
   function audioTest() {
-    if (testing || session !== 'hidden') return;
+    if (!available || testing || session !== 'hidden') {
+      trace('SOUND TEST ignored: ' + (!available ? 'resident unavailable' : testing ? 'already running' : 'character on the glass (' + session + ')'));
+      return;
+    }
     testing = true;
+    trace('SOUND TEST: key pressed');
     fetch('api/resident/audiotest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then((r) => (r.ok ? r.json() : r.text().then((t) => { throw new Error(t || r.status); })))
       .then((res) => {
@@ -486,7 +490,7 @@ const Resident = (() => {
     window.addEventListener('mirror-event', (e) => onEvent(e.detail));
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && available && !e.repeat) { e.preventDefault(); pressed(); }
-      if (e.key === 'a' && available && !e.repeat) audioTest();
+      if (e.key === 'a' && !e.repeat) audioTest();
     });
     apply(payload);
   }

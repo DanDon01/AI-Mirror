@@ -91,6 +91,7 @@ echo "serving on $PORT"
 echo "opening  $URL"
 "$BROWSER" $KIOSK \
   --noerrdialogs --disable-infobars --no-first-run \
+  --password-store=basic \
   --autoplay-policy=no-user-gesture-required \
   --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy \
   --disable-gpu-memory-buffer-video-frames \
