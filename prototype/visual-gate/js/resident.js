@@ -502,6 +502,7 @@ const Resident = (() => {
     // Space and 'a' only work while the kiosk window has the keyboard.
     window.addEventListener('blur', () => trace('page lost keyboard focus'));
     window.addEventListener('focus', () => trace('page has keyboard focus'));
+    trace('keyboard focus at start: ' + (document.hasFocus() ? 'yes' : 'NO - Space and keys will not reach the page'));
     debugEl = document.getElementById('residentDebug');
     if (!box || !vids[0] || !vids[1]) return;
     setInterval(() => {
