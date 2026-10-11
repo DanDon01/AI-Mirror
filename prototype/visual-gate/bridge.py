@@ -1103,6 +1103,10 @@ def start(interval=1.0):
     if bridge.resident is not None:
         bridge.resident.set_context_sources(bridge.modules)
         logger.info("resident ready: %s", bridge.resident.profile.name)
+        # Space and 'a' straight from the keyboard: the kiosk window does not
+        # always get the keys from the compositor (see keyboard_input.py).
+        import keyboard_input
+        keyboard_input.start(lambda key: bridge.events.publish({"type": "resident", "key": key}))
     return bridge
 
 

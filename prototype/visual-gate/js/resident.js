@@ -295,6 +295,9 @@ const Resident = (() => {
   const CUES = { weather: 'wx', calendar: 'cal', smarthome: 'energy' };
   function onEvent(ev) {
     if (!ev || ev.type !== 'resident') return;
+    // Keys read by the bridge reach every open copy of the page; only the
+    // mirror's own browser (loaded from the Pi itself) may act on them.
+    if (ev.key) { if (/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname)) keyPressed(ev.key, 'keyboard'); return; }
     if (ev.debug) {
       lastDebug = ev.debug;
       if (typeof ev.show === 'boolean') debugOn = ev.show;
@@ -447,6 +450,18 @@ const Resident = (() => {
     if (turn && !turn.finishedAt) { trace('turn finished'); turn.finishedAt = Date.now(); showDebug(); }
   }
 
+  // A key arrives twice when the window has the focus: from the page and
+  // from the bridge, which reads the keyboard itself. Act on the first.
+  const lastKey = {};
+  function keyPressed(name, via) {
+    const t = now();
+    if (t - (lastKey[name] || 0) < 0.4) return;
+    lastKey[name] = t;
+    if (via === 'keyboard' && name === 'space') trace('SPACE from the keyboard reader');
+    if (name === 'space' && available) pressed();
+    if (name === 'a') audioTest();
+  }
+
   // ------------------------------------------------------- sound test
   // 'a': play the newest saved reply with the browser's own sound and no
   // aplay, to find out whether Chromium reaches the speakers when run by the
@@ -514,8 +529,8 @@ const Resident = (() => {
     }, 500);
     window.addEventListener('mirror-event', (e) => onEvent(e.detail));
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && available && !e.repeat) { e.preventDefault(); pressed(); }
-      if (e.key === 'a' && !e.repeat) audioTest();
+      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); keyPressed('space', 'page'); }
+      if (e.key === 'a' && !e.repeat) keyPressed('a', 'page');
     });
     apply(payload);
   }
