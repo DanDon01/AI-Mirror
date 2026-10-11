@@ -7,7 +7,6 @@ import json
 
 
 MAX_AGE = {
-    "news": timedelta(minutes=30),
     "weather": timedelta(minutes=45),
     "calendar": timedelta(hours=2),
     "smarthome": timedelta(minutes=5),
@@ -56,21 +55,13 @@ class AvatarContext:
 
     def snapshot(self, now=None):
         now = now or datetime.now()
+        # News is deliberately left out: the avatar is never asked about it,
+        # and headlines in the prompt only invite unrequested chatter.
         return {
-            "news": self._news(now),
             "weather": self._weather(now),
             "calendar": self._calendar(now),
             "smarthome": self._smarthome(now),
         }
-
-    def _news(self, now):
-        module = self.sources.get("news")
-        headlines = list(getattr(module, "headlines", []) or []) if module else []
-        payload = [
-            {"title": str(item.get("title", ""))[:300], "source": str(item.get("source", ""))[:80]}
-            for item in headlines[:3] if isinstance(item, dict) and item.get("title")
-        ]
-        return _record(bool(payload), "news", getattr(module, "last_fetch", None), now, {"headlines": payload})
 
     def _weather(self, now):
         module = self.sources.get("weather")

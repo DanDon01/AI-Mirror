@@ -35,7 +35,6 @@ def _load_system_prompt(profile: AvatarProfile | None = None) -> str:
 
 def _intent_for(text: str) -> str:
     words = text.casefold()
-    if any(term in words for term in ("news", "headlines", "what's happening", "whats happening")): return "news"
     if any(term in words for term in ("weather", "temperature", "forecast", "rain", "wind")): return "weather"
     if any(term in words for term in ("calendar", "schedule", "appointments", "what have i got", "what do i have")): return "calendar"
     if any(term in words for term in ("smart home", "lights", "light", "heating", "thermostat", "front door", "house status")): return "smarthome"
@@ -77,7 +76,7 @@ def _response_intent_and_text(raw: str, fallback_intent: str) -> tuple[str, str]
         key, separator, value = line.partition(":")
         if separator and key.strip().casefold() == "intent":
             candidate = value.strip().casefold()
-            if candidate in {"general", "news", "weather", "calendar", "smarthome"}:
+            if candidate in {"general", "weather", "calendar", "smarthome"}:
                 intent = candidate
         elif separator and key.strip().casefold() == "reply":
             reply_lines.append(value.strip())
@@ -447,7 +446,7 @@ class AvatarModule:
                 for name, value in live_context.items()
             }
             system += (
-                " Category: general, news, weather, calendar or smarthome. Use only that category's data;"
+                " Category: general, weather, calendar or smarthome. Use only that category's data;"
                 " if it is unavailable, say so and invent nothing."
                 " Return two lines: INTENT: <category> then REPLY: <reply>. "
                 f"Current mirror data: {json.dumps(compact_context, ensure_ascii=False, separators=(',', ':'))}"

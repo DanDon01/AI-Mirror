@@ -278,7 +278,7 @@ const Resident = (() => {
   }
 
   // ---------------------------------------------------------------- events
-  const CUES = { weather: 'wx', calendar: 'cal', smarthome: 'energy', news: 'news' };
+  const CUES = { weather: 'wx', calendar: 'cal', smarthome: 'energy' };
   function onEvent(ev) {
     if (!ev || ev.type !== 'resident') return;
     if (ev.debug) {

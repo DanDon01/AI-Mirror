@@ -12,7 +12,7 @@ What this adds on top of AvatarModule:
   - stage events (listening, thinking, conjuring, speaking, idle, error)
     so the glass can stage the unavoidable wait as theatre;
   - an intent cue as soon as the question is understood (weather,
-    calendar, smarthome, news), so the relevant part of the mirror comes
+    calendar, smarthome), so the relevant part of the mirror comes
     forward while the resident is still answering;
   - a journal of every turn (data/avatar/journal.jsonl): time, character,
     what was asked, what was said, whether it came from the pool or was
@@ -46,7 +46,7 @@ logger = logging.getLogger("resident")
 
 UNPROMPTED_INTENTS = {"greeting", "greeting_morning", "greeting_afternoon",
                       "greeting_evening", "wellbeing", "night", "plans"}
-CUE_INTENTS = {"weather", "calendar", "smarthome", "news"}
+CUE_INTENTS = {"weather", "calendar", "smarthome"}
 PROJECT = Path(__file__).resolve().parents[2]
 if str(PROJECT) not in sys.path:
     sys.path.insert(0, str(PROJECT))
