@@ -96,6 +96,10 @@ def _spoken_reply(text: str, max_words: int = 12) -> str:
     """Make model output safe, concise, and literal before it reaches Fal."""
     clean = re.sub(r"[`*_#]+", "", str(text or ""))
     clean = clean.replace('"', "").replace("\\", "")
+    # Backstop for symbols the model still emits: the video model has to
+    # pronounce whatever it is given, and "12.4°C" or "%" comes out garbled.
+    for symbol, spoken in (("°C", " degrees"), ("°F", " degrees"), ("°", " degrees"), ("%", " percent"), ("&", " and "), (";", ",")):
+        clean = clean.replace(symbol, spoken)
     clean = " ".join(clean.split())
     return " ".join(clean.split()[:max(1, max_words)]).strip()
 
@@ -420,7 +424,10 @@ class AvatarModule:
                     self.ready.put(self.cache.root / cached["media_path"]); return
             self.status = f"Cold start - asking {profile.name}..."
             system = _load_system_prompt(profile)
-            system += " Reply with exactly one natural short sentence, at most 12 words. No markdown."
+            system += (" Reply with exactly one natural short sentence, at most 12 words. No markdown."
+                       " It will be spoken aloud in a five second clip: write dates, times and numbers as"
+                       " a person would say them (Sunday the eleventh, about twelve degrees),"
+                       " never as digits, symbols, units or ISO dates.")
             if intent == "general":
                 live_context = context_snapshot or {}
             else:
@@ -463,12 +470,14 @@ class AvatarModule:
                 self.logger.info("Avatar cache hit")
                 self.ready.put(self.cache.root / cached["media_path"]); return
             staging = self.cache.root / "staging" / f"turn-{time.time_ns()}.mp4"
+            # The spoken line is appended once, by generate_from_text. Adding
+            # it here as well made Minimax say it twice in a 5 s clip: two
+            # voices, a cut-off second take, and lips that did not match.
             video_prompt = (
                 "The uploaded character is the only subject, speaking naturally and directly to camera with subtle facial expressions. "
-                "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video. "
-                f'Say exactly: "{text}"'
+                "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video."
             )
-            self.logger.info("Avatar Fal prompt: %s", video_prompt)
+            self.logger.info('Avatar Fal prompt: %s The subject says exactly: "%s"', video_prompt, text)
             stream_first = os.getenv("AVATAR_STREAM_FIRST", "1").lower() in ("1", "true", "yes", "on")
             streamed = threading.Event()
             stream_url = None

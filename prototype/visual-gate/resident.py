@@ -140,8 +140,13 @@ class BrowserPlayer:
     def _audio_state(self):
         """Report how the audio ended: an aplay/ffmpeg error is exactly what
         someone standing at a silent mirror needs to read."""
+        # Once aplay has played everything and exited 0, ffmpeg losing its
+        # reader (exit 255) is not a fault and must not overwrite the result.
+        aplay_ok = self._audio is not None and self._audio.poll() == 0
         for name, proc in (("aplay", self._audio), ("ffmpeg", self._decoder)):
             if proc is None or proc.poll() is None:
+                continue
+            if name == "ffmpeg" and aplay_ok:
                 continue
             if proc.returncode not in (0, None):
                 err = b""

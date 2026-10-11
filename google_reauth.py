@@ -55,6 +55,11 @@ def _try_open_browser(url):
 
 def _extract_code(pasted):
     """Pull the auth code from a pasted redirect URL, or accept a raw code."""
+    # Terminals with bracketed paste wrap the paste in ESC[200~ ... ESC[201~
+    # (shown as ^[[200~); over SSH the markers can arrive as plain text.
+    for marker in ("\x1b[200~", "\x1b[201~", "^[[200~", "^[[201~", "[200~", "[201~"):
+        pasted = pasted.replace(marker, "")
+    pasted = pasted.replace("\x1b", "")
     pasted = pasted.strip().strip('"').strip("'")
     if pasted.lower().startswith("http"):
         qs = parse_qs(urlparse(pasted).query)
@@ -191,7 +196,7 @@ def main():
     _write_env(creds.token, creds.refresh_token)
     print()
     print(f"Updated GOOGLE_ACCESS_TOKEN and GOOGLE_REFRESH_TOKEN in {_ENV}")
-    print("Restart the mirror:  sudo systemctl restart ai-mirror")
+    print("Restart the mirror:  sudo systemctl restart ai-mirror-visual  (or ai-mirror in pygame mode)")
     return 0
 
 

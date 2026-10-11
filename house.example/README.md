@@ -21,7 +21,7 @@ git repo if you want it versioned; `deploy/deploy.sh` pulls it too.
 | `avatars/theatre_flavour.json` | optional in-character lines for `avatar_theatre.py` clips |
 | `theatre/<key>/<appear,think,idle>/` | generated theatre clips (made by `avatar_theatre.py`) |
 | `visual-gate/...` | any file here replaces the same path in `prototype/visual-gate`, e.g. your own `js/home-twin.js` house model and its `fixtures/house-layout.golden.json` lock |
-| `CLAUDE.md` | your private notes for Claude Code; copy to `../CLAUDE.local.md` |
+| `CLAUDE.md` | your private notes for Claude Code; copy to `CLAUDE.local.md` in the checkout root (next to `house/`) |
 
 ## Adding a character
 
