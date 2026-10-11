@@ -437,7 +437,7 @@ class AvatarModule:
             # Short and plain: the line is spoken in a five second clip, and
             # anything longer is rushed, garbled or cut off by the video model.
             system += (f" Answer in one short sentence of at most {max_words} words, giving only the one fact asked for."
-                       " Round numbers and write them as words (about twelve degrees). No digits, symbols, lists or markdown.")
+                       " Round numbers and write them as words. No digits, symbols, lists or markdown.")
             if intent == "general":
                 live_context = context_snapshot or {}
             else:
