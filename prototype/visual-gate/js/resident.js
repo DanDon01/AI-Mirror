@@ -272,7 +272,21 @@ const Resident = (() => {
     }, 1300);
   }
 
+  // A streamed reply comes from Fal's CDN; opening that connection while the
+  // reply is still being made saves the TLS handshake when it arrives.
+  // The host of the last reply is remembered; the usual ones cover the first.
+  const videoHosts = new Set(['https://v3.fal.media', 'https://v3b.fal.media']);
+  function warmVideoHost() {
+    videoHosts.forEach((origin) => {
+      const link = document.createElement('link');
+      link.rel = 'preconnect'; link.href = origin;   // no crossorigin: <video> loads without CORS
+      document.head.appendChild(link);
+      setTimeout(() => link.remove(), 30000);
+    });
+  }
+
   function receiveReply(ev) {
+    try { if (/^https?:/.test(ev.src)) videoHosts.add(new URL(ev.src).origin); } catch (e) { /* not a URL */ }
     trace('reply video arrived (' + (ev.kind || 'reply') + ') while ' + session + ' / ' + (role || '-'));
     reply = { src: ev.src, clip: ev.clip, kind: ev.kind };
     if (ev.clip) replySound[ev.clip] = ev.sound || 'bridge';
@@ -312,6 +326,7 @@ const Resident = (() => {
     if (ev.state === 'stop') { reply = null; leave(); return; }
     if (!ev.state) return;
     if (ev.state !== server) trace('bridge stage -> ' + ev.state + (ev.detail ? ' (' + ev.detail + ')' : ''));
+    if (ev.state === 'thinking' && server !== 'thinking') warmVideoHost();
     server = ev.state === 'error' ? 'idle' : ev.state;
     if (server === 'listening') {
       loadPool();
