@@ -192,9 +192,13 @@ House style and architecture: `prototype/visual-gate/README.md`.
   sun/moon/phase. `js/moments.js` - curated Moments + director.
 - The resident: `js/resident.js` + `resident.py` - the AvatarModule in the
   bridge, clips pushed over `/api/events` (SSE) and played as the character
-  itself, no frame. Audio is ffmpeg -> aplay in the bridge (VOICE_SPEAKER);
-  the browser video is muted, and only the mirror's own (loopback) browser
-  may report a clip started/finished. AVATAR DEBUG panel on the glass
+  itself, no frame. The browser plays the reply's own soundtrack, so voice
+  and lips come from one file (the visual unit must pass Chromium
+  DBUS_SESSION_BUS_ADDRESS, and run.sh uses --password-store=basic, or it is
+  silent / slow to start). VISUAL_GATE_BROWSER_SOUND=0 falls back to ffmpeg
+  -> aplay in the bridge (VOICE_SPEAKER). Replies are downloaded before they
+  play (AVATAR_STREAM_FIRST=0). Only the mirror's own (loopback) browser
+  may report a clip started/finished; 'a' on the glass is a sound test. AVATAR DEBUG panel on the glass
   (AVATAR_DEBUG_OVERLAY=0 hides it), and the page traces each turn to the
   journal as `resident.page`. Pauses are covered by theatre clips
   (appear/think/idle) from `avatar_theatre.py` into the house pack, all

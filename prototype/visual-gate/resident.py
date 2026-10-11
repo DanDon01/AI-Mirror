@@ -68,6 +68,12 @@ class BrowserPlayer:
         self._publish = publish
         self._media_url = media_url
         self._max = max_seconds
+        # The browser plays the reply's own soundtrack, so picture and voice
+        # come from one file and cannot drift. That needs the service to pass
+        # Chromium the session bus (DBUS_SESSION_BUS_ADDRESS); without it
+        # Chromium was silent, so VISUAL_GATE_BROWSER_SOUND=0 brings back the
+        # ffmpeg -> aplay path below.
+        self.browser_sound = os.getenv("VISUAL_GATE_BROWSER_SOUND", "1").strip().lower() not in ("0", "false", "no", "off")
         self._playing = False
         self._since = 0.0
         self._decoder = None
@@ -103,12 +109,16 @@ class BrowserPlayer:
         # The page may hold the reply until the current theatre clip reaches
         # its reference frame, so the sound starts when the page says the
         # reply video has actually started - not now - to stay in sync.
-        self._pending_audio = str(Path(path).resolve()) if local else raw
-        self.audio_note = "waiting for the video to start"
-        if not local:
-            self._predecode(self.token, raw)
-        self._publish({"type": "resident", "state": "speaking", "src": src,
-                       "clip": self.token, "kind": kind})
+        if self.browser_sound:
+            self._pending_audio = None
+            self.audio_note = "played by the browser with the video"
+        else:
+            self._pending_audio = str(Path(path).resolve()) if local else raw
+            self.audio_note = "waiting for the video to start"
+            if not local:
+                self._predecode(self.token, raw)
+        self._publish({"type": "resident", "state": "speaking", "src": src, "clip": self.token,
+                       "kind": kind, "sound": "browser" if self.browser_sound else "bridge"})
 
     def _predecode(self, token, url):
         """Decode a streamed reply's sound to a local WAV while the page is

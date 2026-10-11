@@ -23,9 +23,11 @@
    Without generated clips it still works: the reference portrait breathes
    while waiting, the reply plays, and it lingers on the portrait.
 
-   The video is muted. The reply's sound is played by the bridge through
-   aplay, started when this page reports the reply video has begun, so it
-   stays in sync even when the reply waited for a clip to finish.
+   Theatre clips are silent and always muted. A reply plays its own
+   soundtrack here (the bridge marks it sound: 'browser'), so voice and lips
+   come from one file. With VISUAL_GATE_BROWSER_SOUND=0 the reply is muted
+   too and the bridge plays its sound through aplay, started when this page
+   reports the reply video has begun.
 
    The AVATAR DEBUG panel sits beside the character (AVATAR_DEBUG_OVERLAY=0
    hides it). Space starts and ends a turn. */
@@ -39,6 +41,7 @@ const Resident = (() => {
   let session = 'hidden';        // hidden | active | lingering | leaving
   let role = null;               // role of the clip on the front layer
   let reply = null;              // { src, clip, kind } waiting to play
+  const replySound = {};         // clip token -> 'browser' | 'bridge' (who plays its sound)
   let pool = { appear: [], think: [], idle: [] };
   let poolKey = '';
   let available = false, lingerSeconds = 15, lingerUntil = 0, key = '';
@@ -130,7 +133,9 @@ const Resident = (() => {
     const asked = now();
     load(next, src);
     try { next.currentTime = 0; } catch (e) { /* not loaded yet */ }
-    next.muted = true;
+    // Only a reply the bridge left to the browser is heard here.
+    next.muted = !(clip && replySound[clip] === 'browser');
+    next.volume = 1;
     next.onended = () => { trace('clip ended ' + newRole); clipEnded(newRole, clip); };
     next.onerror = () => {
       trace('clip ERROR ' + newRole + ' code ' + (next.error ? next.error.code : '?') + ' ' + base(src));
@@ -262,6 +267,7 @@ const Resident = (() => {
   function receiveReply(ev) {
     trace('reply video arrived (' + (ev.kind || 'reply') + ') while ' + session + ' / ' + (role || '-'));
     reply = { src: ev.src, clip: ev.clip, kind: ev.kind };
+    if (ev.clip) replySound[ev.clip] = ev.sound || 'bridge';
     if (session === 'hidden' || session === 'leaving') {
       // Unprompted, or a reply after it had gone: arrive first if we can.
       arrive(); return;
