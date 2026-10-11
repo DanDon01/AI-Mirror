@@ -117,6 +117,20 @@ def _spoken_reply(text: str, max_words: int = 12) -> str:
 PROMPT_VERSION = "portrait-v5-avatar"
 
 
+def speaking_prompt(profile) -> str:
+    """The video prompt for any clip in which the character speaks (replies
+    and pre-made fillers), so they all look and sound alike. The spoken line
+    is appended by FlashTalkService.generate_from_text."""
+    prompt = (
+        "The uploaded character is the only subject, speaking naturally and directly to camera with subtle facial expressions. "
+        "Static camera with no zoom, pan or reframing; the character stays the same size and place and ends in the starting pose. "
+        "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video."
+    )
+    if profile.voice:
+        prompt += f" The character speaks in {profile.voice}."
+    return prompt
+
+
 def _prune_staging(folder: Path, max_age_seconds: float = 86400) -> None:
     """Time-sensitive replies are played from staging and never pooled, so
     drop the ones older than a day rather than let them fill the card."""
@@ -473,10 +487,18 @@ class AvatarModule:
             if self.openai_client is None:
                 from openai import OpenAI
                 self.openai_client = OpenAI()
-            llm_model = os.getenv("AVATAR_LLM_MODEL", "gpt-5-nano-2025-08-07")
+            # Measured on the Pi (Oct 2026): gpt-5.4-nano with priority
+            # processing answered in 0.88-0.93 s; gpt-5-nano on the default
+            # tier took 1-2.5 s in tests and up to 6.5 s on real turns.
+            llm_model = os.getenv("AVATAR_LLM_MODEL", "gpt-5.4-nano-2026-03-17")
             request = {"model": llm_model, "max_output_tokens": int(os.getenv("AVATAR_LLM_MAX_OUTPUT_TOKENS", "160")), "input": [{"role":"system","content":system}, {"role":"user","content":transcript}]}
             if llm_model.startswith("gpt-5"):
-                request["reasoning"] = {"effort": os.getenv("AVATAR_LLM_REASONING_EFFORT", "minimal")}
+                # gpt-5 / gpt-5-nano know "minimal"; 5.1 and later use "none".
+                default_effort = "minimal" if re.match(r"gpt-5(-|$)", llm_model) else "none"
+                request["reasoning"] = {"effort": os.getenv("AVATAR_LLM_REASONING_EFFORT", default_effort)}
+            tier = os.getenv("AVATAR_LLM_SERVICE_TIER", "priority").strip()
+            if tier and tier != "default":
+                request["service_tier"] = tier
             asked = time.monotonic()
             response = self.openai_client.responses.create(**request)
             self.logger.info("Avatar OpenAI %s answered in %.2fs (prompt %d chars, intent %s)",
@@ -502,13 +524,7 @@ class AvatarModule:
             # The spoken line is appended once, by generate_from_text. Adding
             # it here as well made Minimax say it twice in a 5 s clip: two
             # voices, a cut-off second take, and lips that did not match.
-            video_prompt = (
-                "The uploaded character is the only subject, speaking naturally and directly to camera with subtle facial expressions. "
-                "Static camera with no zoom, pan or reframing; the character stays the same size and place and ends in the starting pose. "
-                "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video."
-            )
-            if profile.voice:
-                video_prompt += f" The character speaks in {profile.voice}."
+            video_prompt = speaking_prompt(profile)
             self.logger.info('Avatar Fal prompt: %s The subject says exactly: "%s"', video_prompt, text)
             # Stream the Fal URL by default: the player shows it while it is
             # still arriving, saving the ~3 s download. A player that takes

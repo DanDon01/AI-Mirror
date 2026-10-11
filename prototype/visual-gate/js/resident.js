@@ -42,7 +42,7 @@ const Resident = (() => {
   let role = null;               // role of the clip on the front layer
   let reply = null;              // { src, clip, kind } waiting to play
   const replySound = {};         // clip token -> 'browser' | 'bridge' (who plays its sound)
-  let pool = { appear: [], think: [], idle: [] };
+  let pool = { appear: [], think: [], idle: [], ack: [] };
   let poolKey = '';
   let available = false, lingerSeconds = 15, lingerUntil = 0, key = '';
   let refAspect = 0;             // portrait width/height from the bridge, if the image has not loaded
@@ -88,7 +88,7 @@ const Resident = (() => {
     if (!key || poolKey === key) return;
     try {
       const r = await fetch('api/resident/pool', { cache: 'no-store' });
-      if (r.ok) { pool = Object.assign({ appear: [], think: [], idle: [] }, await r.json()); poolKey = key; }
+      if (r.ok) { pool = Object.assign({ appear: [], think: [], idle: [], ack: [] }, await r.json()); poolKey = key; }
     } catch (e) { /* keep the previous pool */ }
   }
 
@@ -138,7 +138,7 @@ const Resident = (() => {
     load(next, src);
     try { next.currentTime = 0; } catch (e) { /* not loaded yet */ }
     // Only a reply the bridge left to the browser is heard here.
-    next.muted = !(clip && replySound[clip] === 'browser');
+    next.muted = !(newRole === 'ack' || (clip && replySound[clip] === 'browser'));
     next.volume = 1;
     next.onended = () => { trace('clip ended ' + newRole); clipEnded(newRole, clip); };
     next.onerror = () => {
@@ -285,6 +285,18 @@ const Resident = (() => {
     });
   }
 
+  // A spoken filler ('ack' clips, avatar_filler.py) as soon as the
+  // character starts thinking: the wait for the reply becomes part of the
+  // conversation. A cached reply lands within FILLER_DELAY_MS, so cached
+  // answers stay instant. A filler is never cut off; the reply follows it.
+  const FILLER_DELAY_MS = 350;
+  function playFiller() {
+    if (reply || server !== 'thinking' || session !== 'active' || cutting) return;
+    if (!turn || turn.fillerPlayed || !(pool.ack || []).length) return;
+    turn.fillerPlayed = true;
+    cutTo(pick('ack'), 'ack', DISSOLVE_MS);
+  }
+
   function receiveReply(ev) {
     try { if (/^https?:/.test(ev.src)) videoHosts.add(new URL(ev.src).origin); } catch (e) { /* not a URL */ }
     trace('reply video arrived (' + (ev.kind || 'reply') + ') while ' + session + ' / ' + (role || '-'));
@@ -298,7 +310,9 @@ const Resident = (() => {
     if (clearing) return;        // arrive() plays it once the glass is clear
     const cur = vids[front];
     const remaining = cur && Number.isFinite(cur.duration) ? cur.duration - cur.currentTime : 0;
-    if (role === 'portrait' || role === null || remaining > EARLY_CUT_S) {
+    if (role === 'ack' || cutting === 'ack') {
+      load(vids[1 - front], reply.src);     // the filler finishes its line first
+    } else if (role === 'portrait' || role === null || remaining > EARLY_CUT_S) {
       const r = reply; cutTo(r.src, 'reply', role === 'portrait' || role === null ? 0 : DISSOLVE_MS, r.clip);
     } else {
       load(vids[1 - front], reply.src);     // ready for the handover at the clip's end
@@ -326,7 +340,7 @@ const Resident = (() => {
     if (ev.state === 'stop') { reply = null; leave(); return; }
     if (!ev.state) return;
     if (ev.state !== server) trace('bridge stage -> ' + ev.state + (ev.detail ? ' (' + ev.detail + ')' : ''));
-    if (ev.state === 'thinking' && server !== 'thinking') warmVideoHost();
+    if (ev.state === 'thinking' && server !== 'thinking') { warmVideoHost(); setTimeout(playFiller, FILLER_DELAY_MS); }
     server = ev.state === 'error' ? 'idle' : ev.state;
     if (server === 'listening') {
       loadPool();

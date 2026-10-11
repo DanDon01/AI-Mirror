@@ -337,7 +337,7 @@ def _make_resident_class():
             appear clips when no new ones exist."""
             root = THEATRE_ROOT / self.profile.key
             pool = {}
-            for kind in ("appear", "think", "idle"):
+            for kind in ("appear", "think", "idle", "ack"):
                 clips = sorted((root / kind).glob("*.mp4"))
                 if kind == "appear" and not clips:
                     clips = sorted(self.profile.apparition_dir.glob("*.mp4"))
