@@ -291,7 +291,7 @@ class BrowserPlayer:
 
 
 def _make_resident_class():
-    from avatar_module import AvatarModule, _intent_for
+    from avatar_module import PROMPT_VERSION, AvatarModule, _intent_for
 
     class Resident(AvatarModule):
         def __init__(self, publish, root: Path, tuning):
@@ -519,7 +519,7 @@ def _make_resident_class():
             for r in self.cache.inspect():
                 if r["status"] != "approved" or r["intent"] not in UNPROMPTED_INTENTS:
                     continue
-                if r["reference_sha256"] != reference or not r["model"].endswith("::" + profile.key):
+                if r["reference_sha256"] != reference or not r["model"].endswith(f"::{PROMPT_VERSION}::{profile.key}"):
                     continue
                 if not tags.intersection(json.loads(r["tags_json"])):
                     continue

@@ -30,6 +30,9 @@ class AvatarProfile:
     reference_image: Path
     prompt_file: Path
     apparition_dir: Path
+    # How the character sounds, sent to the video model with every reply.
+    # The model invents a voice per clip; describing it keeps them close.
+    voice: str = ""
 
     def reference_hash(self) -> str:
         """Hash the selected portrait so cached videos never cross characters."""
@@ -53,7 +56,9 @@ def load_specs(asset_root: str | Path) -> tuple:
     """The character list from <asset_root>/profiles.json:
 
         [{"key": "robot", "name": "Robot", "description": "Creaky and kind",
-          "image": "Robot.png"}, ...]
+          "image": "Robot.png", "voice": "<how it sounds>"}, ...]
+
+"voice" is optional.
 
     Missing or unreadable means no characters (the avatar stays off)."""
     path = Path(asset_root) / "profiles.json"
@@ -66,7 +71,7 @@ def load_specs(asset_root: str | Path) -> tuple:
         try:
             key = str(entry["key"]).strip().casefold()
             specs.append((key, str(entry.get("name") or key), str(entry.get("description") or ""),
-                          str(entry["image"])))
+                          str(entry["image"]), str(entry.get("voice") or "").strip()))
         except (KeyError, TypeError, AttributeError):
             continue
     return tuple(s for s in specs if s[0])
@@ -92,8 +97,9 @@ class AvatarProfiles:
                 reference_image=self.asset_root / filename,
                 prompt_file=self.asset_root / "prompts" / f"{key}.txt",
                 apparition_dir=self.asset_root / "apparitions" / key,
+                voice=voice,
             )
-            for key, name, description, filename in load_specs(self.asset_root)
+            for key, name, description, filename, voice in load_specs(self.asset_root)
         }
         requested = (default or os.getenv("AVATAR_CHARACTER", "")).strip().casefold()
         self._selected = requested if requested in self._profiles else self._load_selection()

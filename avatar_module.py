@@ -111,6 +111,12 @@ def _spoken_reply(text: str, max_words: int = 12) -> str:
             break
     return " ".join(kept).rstrip(",;:")
 
+# Part of every cached clip's key. Bump it when the video prompt changes in
+# a way that makes older clips wrong; they stay on disk but are never chosen.
+# v5: a fixed per-character voice, still camera, ending on the reference.
+PROMPT_VERSION = "portrait-v5-avatar"
+
+
 def _prune_staging(folder: Path, max_age_seconds: float = 86400) -> None:
     """Time-sensitive replies are played from staging and never pooled, so
     drop the ones older than a day rather than let them fill the card."""
@@ -431,7 +437,7 @@ class AvatarModule:
             model = os.getenv("AVATAR_FAL_MODEL", "minimax/h3-max-turbo/image-to-video")
             # Keep legacy clips on disk for review, but do not select clips
             # created before the apparition/audio and stricter no-mirror path.
-            cache_model = f"{model}::portrait-v4-avatar::{profile.key}"
+            cache_model = f"{model}::{PROMPT_VERSION}::{profile.key}"
             local_intent = _intent_for(transcript)
             intent = local_intent
             if local_intent != "general":
@@ -500,6 +506,8 @@ class AvatarModule:
                 "Static camera with no zoom, pan or reframing; the character stays the same size and place and ends in the starting pose. "
                 "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video."
             )
+            if profile.voice:
+                video_prompt += f" The character speaks in {profile.voice}, the same voice every time."
             self.logger.info('Avatar Fal prompt: %s The subject says exactly: "%s"', video_prompt, text)
             # Download first by default: the page and aplay then play the same
             # local file and stay in sync. Streaming the Fal URL starts the
@@ -521,7 +529,7 @@ class AvatarModule:
                 if streamed.is_set():
                     self._deferred_cache = {"url": stream_url, "staging": staging, "text": text, "intent": intent, "model": cache_model, "duration_seconds": result.duration_seconds, "transcript": transcript, "reference_hash": reference_hash, "avatar": profile.key}
                 else:
-                    record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=reference_hash, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": "portrait-v4-avatar", "avatar": profile.key})
+                    record = self.cache.add_clip(staging, spoken_text=text, intent=intent, model=cache_model, reference_sha256=reference_hash, tags=sorted(time_of_day_tags()), duration_seconds=result.duration_seconds, metadata={"transcript": transcript, "prompt_version": PROMPT_VERSION, "avatar": profile.key})
                     self.ready.put(self.cache.root / record["media_path"])
             else:
                 if not streamed.is_set(): self.ready.put(staging)
@@ -584,7 +592,7 @@ class AvatarModule:
         try:
             self.logger.info("Avatar playback complete; downloading response for cache")
             self.fal.download_video(pending["url"], pending["staging"])
-            record = self.cache.add_clip(pending["staging"], spoken_text=pending["text"], intent=pending["intent"], model=pending["model"], reference_sha256=pending["reference_hash"], tags=sorted(time_of_day_tags()), duration_seconds=pending["duration_seconds"], metadata={"transcript": pending["transcript"], "prompt_version": "portrait-v4-avatar", "avatar": pending["avatar"]})
+            record = self.cache.add_clip(pending["staging"], spoken_text=pending["text"], intent=pending["intent"], model=pending["model"], reference_sha256=pending["reference_hash"], tags=sorted(time_of_day_tags()), duration_seconds=pending["duration_seconds"], metadata={"transcript": pending["transcript"], "prompt_version": PROMPT_VERSION, "avatar": pending["avatar"]})
             self.logger.info("Avatar response saved to cache: %s", record["media_path"])
         except Exception:
             self.logger.exception("Avatar background cache save failed")

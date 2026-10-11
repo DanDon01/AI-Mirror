@@ -10,7 +10,7 @@ from avatar_profiles import AvatarProfiles, NoAvatarsConfigured
 # A sample catalogue, as a house pack's avatars/profiles.json would hold it.
 SPECS = [
     {"key": "pilot", "name": "Pilot", "description": "Calm", "image": "Pilot.png"},
-    {"key": "robot", "name": "Robot", "description": "Creaky", "image": "Robot.png"},
+    {"key": "robot", "name": "Robot", "description": "Creaky", "image": "Robot.png", "voice": "a low hum"},
     {"key": "wizard", "name": "Wizard", "description": "Grand", "image": "Wizard.png"},
 ]
 
@@ -35,6 +35,12 @@ class AvatarProfilesTests(unittest.TestCase):
                 [item["key"] for item in profiles.options()],
                 ["pilot", "robot", "wizard"],
             )
+
+    def test_voice_is_optional(self):
+        with tempfile.TemporaryDirectory() as temp:
+            profiles = AvatarProfiles(self._asset_root(temp), Path(temp) / "selection.json")
+            self.assertEqual(profiles.get("robot").voice, "a low hum")
+            self.assertEqual(profiles.get("pilot").voice, "")
 
     def test_no_profiles_means_no_avatar(self):
         with tempfile.TemporaryDirectory() as temp:
