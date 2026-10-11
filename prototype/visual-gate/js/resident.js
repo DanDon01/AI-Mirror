@@ -118,6 +118,8 @@ const Resident = (() => {
     v.style.height = h.toFixed(1) + 'px';
     v.style.left = ((bw - w) / 2).toFixed(1) + 'px';
     v.style.top = ((bh - h) / 2).toFixed(1) + 'px';
+    return vw + 'x' + vh + ' -> ' + (cw * s).toFixed(0) + 'x' + ((cw / ref) * s).toFixed(0) +
+      ' character' + (rw ? '' : ' (portrait not loaded: fitted to the video)');
   }
 
   // Put `src` on the back layer and hand over to it. fade 0 = a cut on the
@@ -144,8 +146,12 @@ const Resident = (() => {
     const swap = () => {
       next.removeEventListener('playing', swap);
       cutting = null;
+      // Size it now, as it is shown: a fit made before the portrait or the
+      // box had their final size must not carry over into this clip.
+      const fit = fitVideo(next);
       trace('clip playing ' + newRole + ' after ' + ((now() - asked) * 1000).toFixed(0) + 'ms' +
-        (Number.isFinite(next.duration) ? ' (' + next.duration.toFixed(1) + 's long)' : ''));
+        (Number.isFinite(next.duration) ? ' (' + next.duration.toFixed(1) + 's long)' : '') +
+        (fit ? ', ' + fit : ''));
       next.style.transition = fade ? `opacity ${fade}ms linear` : 'none';
       cur.style.transition = fade ? `opacity ${fade}ms linear` : 'none';
       next.style.zIndex = 2; cur.style.zIndex = 1;
@@ -376,6 +382,7 @@ const Resident = (() => {
         note: cache ? 'answer found in the cache' : took('transcript', 'reply') },
       { name: 'Making the video (Fal)', done: has('video') && (has('reply') || cache),
         note: cache ? 'cached video' : took('reply', 'video') },
+      { name: 'Fetching the video', done: has('play'), note: took('video', 'play') },
       { name: 'Playing the answer', done: !!(turn && turn.replyDone), note: '' },
     ];
     const cur = list.findIndex((x) => !x.done);

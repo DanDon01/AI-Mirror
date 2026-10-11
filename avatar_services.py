@@ -447,7 +447,10 @@ class FlashTalkService:
                     # provider schema so a short reply does not fail.
                     "duration": max(5, min(int(duration_seconds), 5)),
                     "resolution": resolution.upper(),
-                    "prompt_expansion_mode": "balanced",
+                    # Minimax rewrites the prompt unless told not to, and the
+                    # rewrite brought camera moves that changed the
+                    # character's size mid-reply. Disabled also saves ~1 s.
+                    "prompt_expansion_mode": os.getenv("AVATAR_FAL_PROMPT_EXPANSION", "disabled"),
                 }
                 if "minimax/" in model:
                     # End on the reference too. Without it the last frame

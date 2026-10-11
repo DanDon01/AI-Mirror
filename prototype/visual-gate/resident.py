@@ -295,6 +295,10 @@ def _make_resident_class():
 
     class Resident(AvatarModule):
         def __init__(self, publish, root: Path, tuning):
+            # aplay cannot follow a reply that is still streaming in, so the
+            # aplay fallback downloads each reply before it plays.
+            if os.getenv("VISUAL_GATE_BROWSER_SOUND", "1").strip().lower() in ("0", "false", "no", "off"):
+                os.environ.setdefault("AVATAR_STREAM_FIRST", "0")
             self._publish_event = publish
             self._media = {}
             self._tuning = tuning

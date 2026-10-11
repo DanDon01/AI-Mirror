@@ -450,11 +450,12 @@ class AvatarModule:
                     self.ready.put(self.cache.root / cached["media_path"]); return
             self.status = f"Cold start - asking {profile.name}..."
             system = _load_system_prompt(profile)
-            max_words = int(os.getenv("AVATAR_MAX_REPLY_WORDS", "8"))
+            max_words = int(os.getenv("AVATAR_MAX_REPLY_WORDS", "10"))
             # Short and plain: the line is spoken in a five second clip, and
             # anything longer is rushed, garbled or cut off by the video model.
-            system += (f" Answer in one short sentence of at most {max_words} words, giving only the one fact asked for."
-                       " Round numbers and write them as words. No digits, symbols, lists or markdown.")
+            system += (f" Reply with one natural, complete sentence of at most {max_words} words that responds directly to what was said."
+                       " For a question about data, give the key fact plainly. Round numbers and write them as words."
+                       " No digits, symbols, lists or markdown.")
             if intent == "general":
                 live_context = context_snapshot or {}
             else:
@@ -509,11 +510,11 @@ class AvatarModule:
             if profile.voice:
                 video_prompt += f" The character speaks in {profile.voice}."
             self.logger.info('Avatar Fal prompt: %s The subject says exactly: "%s"', video_prompt, text)
-            # Download first by default: the page and aplay then play the same
-            # local file and stay in sync. Streaming the Fal URL starts the
-            # picture sooner, but on the Pi the sound has to come through
-            # ffmpeg's slow HTTPS reader and arrives late or clipped.
-            stream_first = os.getenv("AVATAR_STREAM_FIRST", "0").lower() in ("1", "true", "yes", "on")
+            # Stream the Fal URL by default: the player shows it while it is
+            # still arriving, saving the ~3 s download. A player that takes
+            # the sound from a second process (the visual gate's aplay
+            # fallback) cannot keep that in sync, and sets this to 0.
+            stream_first = os.getenv("AVATAR_STREAM_FIRST", "1").lower() in ("1", "true", "yes", "on")
             streamed = threading.Event()
             stream_url = None
             def stream_when_ready(url):
