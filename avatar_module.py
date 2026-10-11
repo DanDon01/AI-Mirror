@@ -100,8 +100,17 @@ def _spoken_reply(text: str, max_words: int = 12) -> str:
     # pronounce whatever it is given, and "12.4°C" or "%" comes out garbled.
     for symbol, spoken in (("°C", " degrees"), ("°F", " degrees"), ("°", " degrees"), ("%", " percent"), ("&", " and "), (";", ",")):
         clean = clean.replace(symbol, spoken)
-    clean = " ".join(clean.split())
-    return " ".join(clean.split()[:max(1, max_words)]).strip()
+    words = clean.split()
+    if len(words) <= max(1, max_words):
+        return " ".join(words)
+    # Over the limit: cut back to the last clause break (keeping at least
+    # three words), so the line ends cleanly rather than mid-phrase.
+    kept = words[:max(1, max_words)]
+    for i in range(len(kept) - 1, 1, -1):
+        if kept[i].endswith((",", ".", "!", "?")):
+            kept = kept[:i + 1]
+            break
+    return " ".join(kept).rstrip(",;:")
 
 class AvatarModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
@@ -424,10 +433,11 @@ class AvatarModule:
                     self.ready.put(self.cache.root / cached["media_path"]); return
             self.status = f"Cold start - asking {profile.name}..."
             system = _load_system_prompt(profile)
-            system += (" Reply with exactly one natural short sentence, at most 12 words. No markdown."
-                       " It will be spoken aloud in a five second clip: write dates, times and numbers as"
-                       " a person would say them (Sunday the eleventh, about twelve degrees),"
-                       " never as digits, symbols, units or ISO dates.")
+            max_words = int(os.getenv("AVATAR_MAX_REPLY_WORDS", "8"))
+            # Short and plain: the line is spoken in a five second clip, and
+            # anything longer is rushed, garbled or cut off by the video model.
+            system += (f" Answer in one short sentence of at most {max_words} words, giving only the one fact asked for."
+                       " Round numbers and write them as words (about twelve degrees). No digits, symbols, lists or markdown.")
             if intent == "general":
                 live_context = context_snapshot or {}
             else:
@@ -437,9 +447,9 @@ class AvatarModule:
                 for name, value in live_context.items()
             }
             system += (
-                " Classify the user's request as exactly one of general, news, weather, calendar, or smarthome. "
-                "Use live facts only for the matching category; if that category is unavailable, say so plainly and invent nothing. "
-                "Return exactly two lines: INTENT: <category> then REPLY: <your reply>. "
+                " Category: general, news, weather, calendar or smarthome. Use only that category's data;"
+                " if it is unavailable, say so and invent nothing."
+                " Return two lines: INTENT: <category> then REPLY: <reply>. "
                 f"Current mirror data: {json.dumps(compact_context, ensure_ascii=False, separators=(',', ':'))}"
             )
             if self.openai_client is None:
@@ -460,7 +470,7 @@ class AvatarModule:
                 raise RuntimeError(f"OpenAI returned no visible response text (status={status}, detail={detail})")
             model_intent, text = _response_intent_and_text(raw_text, local_intent)
             intent = _effective_intent(local_intent, model_intent)
-            text = _spoken_reply(text, int(os.getenv("AVATAR_MAX_REPLY_WORDS", "12")))
+            text = _spoken_reply(text, max_words)
             if not text:
                 raise RuntimeError("OpenAI returned no Avatar reply text")
             self.status = f"Cold start - creating {profile.name} video..."; self.logger.info("Avatar text reply ready in %.2fs; submitting fal video", time.monotonic() - started)

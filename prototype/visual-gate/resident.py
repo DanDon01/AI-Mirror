@@ -36,6 +36,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -73,6 +74,11 @@ class BrowserPlayer:
         self._audio = None
         self._pending_audio = None
         self.audio_note = "idle"
+        self._lock = threading.RLock()
+        self._prepared = {}          # token -> decoded WAV path, or False if decoding failed
+        self._awaiting = None        # token whose video started before its sound was decoded
+        self._video_started_at = 0.0
+        self._stop_after = None
         self.token = None
         self.label = "none"
 
@@ -88,87 +94,165 @@ class BrowserPlayer:
         raw = str(path)
         local = not raw.startswith(("http://", "https://"))
         src = self._media_url(Path(path)) if local else raw
+        self._discard_prepared()
         self.token = secrets.token_hex(6)
         self._playing = True
         self._since = time.monotonic()
+        self._stop_after = None
         self.label = kind + (" (local clip)" if local else " (Fal stream)")
         # The page may hold the reply until the current theatre clip reaches
         # its reference frame, so the sound starts when the page says the
         # reply video has actually started - not now - to stay in sync.
         self._pending_audio = str(Path(path).resolve()) if local else raw
         self.audio_note = "waiting for the video to start"
+        if not local:
+            self._predecode(self.token, raw)
         self._publish({"type": "resident", "state": "speaking", "src": src,
                        "clip": self.token, "kind": kind})
 
-    def started(self, token):
-        if token == self.token and self._pending_audio:
-            source, self._pending_audio = self._pending_audio, None
-            self._since = time.monotonic()
-            self._start_audio(source)
-
-    def _start_audio(self, source):
-        self._stop_audio()
-        ffmpeg, aplay = shutil.which("ffmpeg"), shutil.which("aplay")
-        if not ffmpeg or not aplay:
-            self.audio_note = "silent: ffmpeg or aplay not installed"
+    def _predecode(self, token, url):
+        """Decode a streamed reply's sound to a local WAV while the page is
+        still loading the same video. Decoding from the network only when the
+        video started meant ffmpeg spent the first second connecting and
+        downloading: the voice trailed the lips and lost its last words when
+        the video ended."""
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
             return
-        speaker = os.getenv("VOICE_SPEAKER", "").strip()
-        command = [aplay, "-q"] + (["-D", speaker] if speaker else [])
-        try:
-            self._decoder = subprocess.Popen(
-                [ffmpeg, "-re", "-loglevel", "error", "-i", source, "-vn", "-f", "wav", "-"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self._audio = subprocess.Popen(command, stdin=self._decoder.stdout,
-                                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            self._decoder.stdout.close()
-            self.audio_note = "playing via aplay " + (speaker or "(ALSA default)")
-            logger.info("resident audio started: aplay %s", speaker or "(ALSA default)")
-        except Exception as exc:
-            self.audio_note = f"audio failed to start: {exc}"
-            logger.exception("resident audio failed to start")
+        target = Path(tempfile.gettempdir()) / f"resident-{token}.wav"
+
+        def run():
+            began = time.monotonic()
+            ok = False
+            try:
+                done = subprocess.run(
+                    [ffmpeg, "-y", "-loglevel", "error", "-i", url, "-vn", "-f", "wav", str(target)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20)
+                ok = done.returncode == 0 and target.is_file()
+                if not ok:
+                    tail = done.stderr.decode("utf-8", "replace").strip().splitlines()
+                    logger.warning("resident audio pre-decode failed: %s", tail[-1] if tail else done.returncode)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                logger.warning("resident audio pre-decode failed: %s", exc)
+            if ok:
+                logger.info("resident audio decoded ahead in %.2fs", time.monotonic() - began)
+            with self._lock:
+                self._prepared[token] = target if ok else False
+                late = self._awaiting == token
+                if late:
+                    self._awaiting = None
+            if late and token == self.token and self._playing:
+                # The video is already running: join it where it is now.
+                offset = time.monotonic() - self._video_started_at
+                self._start_audio(str(target) if ok else url, offset)
+
+        threading.Thread(target=run, daemon=True, name="resident-predecode").start()
+
+    def _discard_prepared(self):
+        with self._lock:
+            old, self._prepared, self._awaiting = self._prepared, {}, None
+        for path in old.values():
+            if path:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
+    def started(self, token):
+        if token != self.token or not self._pending_audio:
+            return
+        source, self._pending_audio = self._pending_audio, None
+        self._since = self._video_started_at = time.monotonic()
+        if not source.startswith(("http://", "https://")):
+            self._start_audio(source)
+            return
+        with self._lock:
+            prepared = self._prepared.get(token)
+            if prepared is None:
+                self._awaiting = token
+        if prepared:
+            self._start_audio(str(prepared))
+        elif prepared is False:
+            self._start_audio(source)
+        else:
+            self.audio_note = "decoding the reply sound"
+
+    def _start_audio(self, source, offset=0.0):
+        with self._lock:
+            self._stop_audio()
+            ffmpeg, aplay = shutil.which("ffmpeg"), shutil.which("aplay")
+            if not ffmpeg or not aplay:
+                self.audio_note = "silent: ffmpeg or aplay not installed"
+                return
+            speaker = os.getenv("VOICE_SPEAKER", "").strip()
+            command = [aplay, "-q"] + (["-D", speaker] if speaker else [])
+            seek = ["-ss", f"{offset:.2f}"] if offset > 0.02 else []
+            try:
+                self._decoder = subprocess.Popen(
+                    [ffmpeg, "-re", "-loglevel", "error"] + seek + ["-i", source, "-vn", "-f", "wav", "-"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                self._audio = subprocess.Popen(command, stdin=self._decoder.stdout,
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                self._decoder.stdout.close()
+                self.audio_note = "playing via aplay " + (speaker or "(ALSA default)")
+                where = "network stream" if source.startswith(("http://", "https://")) else "local file"
+                logger.info("resident audio started: aplay %s from %s%s", speaker or "(ALSA default)", where,
+                            f", {offset:.2f}s in to catch the video" if seek else "")
+            except Exception as exc:
+                self.audio_note = f"audio failed to start: {exc}"
+                logger.exception("resident audio failed to start")
 
     def _stop_audio(self):
-        for proc in (self._audio, self._decoder):
-            if proc is not None and proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=0.4)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-        self._audio = self._decoder = None
+        with self._lock:
+            for proc in (self._audio, self._decoder):
+                if proc is not None and proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=0.4)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+            self._audio = self._decoder = None
 
     def _audio_state(self):
         """Report how the audio ended: an aplay/ffmpeg error is exactly what
         someone standing at a silent mirror needs to read."""
-        # Once aplay has played everything and exited 0, ffmpeg losing its
-        # reader (exit 255) is not a fault and must not overwrite the result.
-        aplay_ok = self._audio is not None and self._audio.poll() == 0
-        for name, proc in (("aplay", self._audio), ("ffmpeg", self._decoder)):
-            if proc is None or proc.poll() is None:
-                continue
-            if name == "ffmpeg" and aplay_ok:
-                continue
-            if proc.returncode not in (0, None):
-                err = b""
-                try:
-                    err = proc.stderr.read() if proc.stderr else b""
-                except Exception:
-                    pass
-                line = err.decode("utf-8", "replace").strip().splitlines()
-                self.audio_note = f"{name} exited {proc.returncode}: " + (line[-1][:120] if line else "no message")
-        if self._audio is not None and self._audio.poll() == 0 and "playing" in self.audio_note:
-            self.audio_note = "finished cleanly"
-        return self.audio_note
+        with self._lock:
+            # Once aplay has played everything and exited 0, ffmpeg losing its
+            # reader (exit 255) is not a fault and must not overwrite the result.
+            aplay_ok = self._audio is not None and self._audio.poll() == 0
+            for name, proc in (("aplay", self._audio), ("ffmpeg", self._decoder)):
+                if proc is None or proc.poll() is None:
+                    continue
+                if name == "ffmpeg" and aplay_ok:
+                    continue
+                if proc.returncode not in (0, None):
+                    err = b""
+                    try:
+                        err = proc.stderr.read() if proc.stderr else b""
+                    except Exception:
+                        pass
+                    line = err.decode("utf-8", "replace").strip().splitlines()
+                    self.audio_note = f"{name} exited {proc.returncode}: " + (line[-1][:120] if line else "no message")
+            if aplay_ok and "playing" in self.audio_note:
+                self.audio_note = "finished cleanly"
+            return self.audio_note
 
     def finished(self, token):
         # An apparition ending late must not end the reply that replaced it.
         if token == self.token:
             self._playing = False
             self._audio_state()
-            self._stop_audio()
+            # aplay still holds the last moment of sound when the video ends;
+            # let it finish, and stop it in update() only if it runs on.
+            self._stop_after = time.monotonic() + 1.0
 
     def update(self, _pygame=None):
         self._audio_state()
+        if self._stop_after and time.monotonic() > self._stop_after:
+            self._stop_after = None
+            if self._audio is not None and self._audio.poll() is None:
+                logger.info("resident audio ran on past the video; stopped")
+            self._stop_audio()
         # Waiting for the page to start the clip gets its own, shorter limit.
         limit = 30 if self._pending_audio else self._max
         if self._playing and time.monotonic() - self._since > limit:
@@ -181,7 +265,9 @@ class BrowserPlayer:
             self._publish({"type": "resident", "state": "stop"})
         self._playing = False
         self._pending_audio = None
+        self._stop_after = None
         self._stop_audio()
+        self._discard_prepared()
 
     def draw(self, *args, **kwargs):
         pass
