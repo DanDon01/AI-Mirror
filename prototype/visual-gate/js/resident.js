@@ -45,6 +45,7 @@ const Resident = (() => {
   let pool = { appear: [], think: [], idle: [] };
   let poolKey = '';
   let available = false, lingerSeconds = 15, lingerUntil = 0, key = '';
+  let refAspect = 0;             // portrait width/height from the bridge, if the image has not loaded
   let box, portrait, vids = [], front = 0, debugEl, debugOn = true;
   const last = {};
 
@@ -106,7 +107,7 @@ const Resident = (() => {
     const vw = v.videoWidth, vh = v.videoHeight;
     const rw = portrait.naturalWidth, rh = portrait.naturalHeight;
     if (!vw || !vh || !box) return;
-    const ref = rw && rh ? rw / rh : vw / vh;
+    const ref = rw && rh ? rw / rh : (refAspect || vw / vh);
     const bw = box.clientWidth, bh = box.clientHeight;
     // Where the portrait sits in the box (object-fit: contain).
     const tw = Math.min(bw, bh * ref);
@@ -119,7 +120,8 @@ const Resident = (() => {
     v.style.left = ((bw - w) / 2).toFixed(1) + 'px';
     v.style.top = ((bh - h) / 2).toFixed(1) + 'px';
     return vw + 'x' + vh + ' -> ' + (cw * s).toFixed(0) + 'x' + ((cw / ref) * s).toFixed(0) +
-      ' character' + (rw ? '' : ' (portrait not loaded: fitted to the video)');
+      ' character' + (rw ? '' : refAspect ? ' (portrait not loaded: fitted to its known shape)' :
+                      ' (portrait not loaded: fitted to the video)');
   }
 
   // Put `src` on the back layer and hand over to it. fade 0 = a cut on the
@@ -490,7 +492,16 @@ const Resident = (() => {
     portrait = document.getElementById('residentPortrait');
     vids = [document.getElementById('residentVideoA'), document.getElementById('residentVideoB')];
     vids.forEach((v) => v && v.addEventListener('loadedmetadata', () => fitVideo(v)));
-    if (portrait) portrait.addEventListener('load', () => vids.forEach((v) => v && fitVideo(v)));
+    if (portrait) {
+      portrait.addEventListener('load', () => {
+        trace('portrait loaded ' + portrait.naturalWidth + 'x' + portrait.naturalHeight);
+        vids.forEach((v) => v && fitVideo(v));
+      });
+      portrait.addEventListener('error', () => trace('portrait FAILED to load: ' + base(portrait.src)));
+    }
+    // Space and 'a' only work while the kiosk window has the keyboard.
+    window.addEventListener('blur', () => trace('page lost keyboard focus'));
+    window.addEventListener('focus', () => trace('page has keyboard focus'));
     debugEl = document.getElementById('residentDebug');
     if (!box || !vids[0] || !vids[1]) return;
     setInterval(() => {
@@ -510,7 +521,10 @@ const Resident = (() => {
 
   function apply(payload) {
     const r = payload && payload.resident;
+    const was = available;
     available = !!(r && r.available);
+    if (available !== was) trace('resident ' + (available ? 'available' : 'NOT available') + (r && r.key ? ' (' + r.key + ')' : ''));
+    if (r && Number(r.aspect) > 0) refAspect = Number(r.aspect);
     if (r && r.character) charName = r.character;
     const t = payload && payload._tuning;
     if (t && Number.isFinite(Number(t.resident_linger_seconds))) lingerSeconds = Number(t.resident_linger_seconds);

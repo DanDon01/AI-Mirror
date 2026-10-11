@@ -50,6 +50,36 @@ TWIN_ENTITIES = {
 }
 
 
+
+_ASPECTS = {}
+
+
+def _image_aspect(path):
+    """Width / height of a PNG or JPEG, read from its header (cached)."""
+    key = str(path)
+    if key not in _ASPECTS:
+        aspect = None
+        try:
+            with open(path, "rb") as fh:
+                head = fh.read(65536)
+            if head.startswith(bytes.fromhex("89504e470d0a1a0a")):  # PNG
+                w, h = int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+                aspect = w / h if h else None
+            elif head.startswith(bytes.fromhex("ffd8")):  # JPEG
+                j = 2
+                while j + 9 < len(head):
+                    marker, size = head[j + 1], int.from_bytes(head[j + 2:j + 4], "big")
+                    if marker in (0xC0, 0xC1, 0xC2):
+                        h, w = int.from_bytes(head[j + 5:j + 7], "big"), int.from_bytes(head[j + 7:j + 9], "big")
+                        aspect = w / h if h else None
+                        break
+                    j += 2 + size
+        except OSError:
+            pass
+        _ASPECTS[key] = aspect
+    return _ASPECTS[key]
+
+
 class EventHub:
     """Fan-out of small push events (presence, resident, moments) to every
     open page. Each subscriber gets its own bounded queue; a page that stops
@@ -731,6 +761,8 @@ class Bridge:
 
     def snapshot(self):
         """The page payload. Only keys with real data behind them."""
+        # (resident.aspect: the portrait's width/height, so the page sizes
+        # every clip alike even before - or without - the image loading.)
         with self._lock:
             out = {"_live": True, "_events": True, "generated": int(time.time()),
                    "_visibility": self.visibility.copy(),
@@ -738,7 +770,8 @@ class Bridge:
                    "_moments": {"enabled": dict(self.moments["enabled"])}}
             if getattr(self, "resident", None) is not None:
                 out["resident"] = {"available": True, "character": self.resident.profile.name,
-                                   "key": self.resident.profile.key}
+                                   "key": self.resident.profile.key,
+                                   "aspect": _image_aspect(self.resident.profile.reference_image)}
             configured = bool(self.gate.get("entrance_pir_entity"))
             if configured or self.presence.get("last_seen"):
                 out["presence"] = {"configured": configured, **self.presence}
