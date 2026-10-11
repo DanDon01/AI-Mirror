@@ -530,8 +530,14 @@ const Resident = (() => {
     if (t && Number.isFinite(Number(t.resident_linger_seconds))) lingerSeconds = Number(t.resident_linger_seconds);
     if (r && r.key && r.key !== key) {
       key = r.key; poolKey = '';
-      if (portrait) portrait.src = 'api/avatar/reference?key=' + encodeURIComponent(r.key);
       loadPool();
+    }
+    // The page's first state arrives before mount() has found the portrait,
+    // so set its image whenever it is missing or for another character -
+    // not only when the key changes, or it is never set at all.
+    if (portrait && key) {
+      const want = 'api/avatar/reference?key=' + encodeURIComponent(key);
+      if (portrait.getAttribute('src') !== want) portrait.src = want;
     }
   }
 
