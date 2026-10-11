@@ -34,7 +34,7 @@
 
 const Resident = (() => {
   'use strict';
-  const EARLY_CUT_S = 1.2;       // a reply waits for the clip to end only if it is this close
+  const APPEAR_WAIT_S = 3.0;     // a reply waits for the appear clip to end if it is this close
   const DISSOLVE_MS = 260;       // early reply cut
   const AFTER_REPLY_MS = 420;    // reply -> idle
   let server = 'idle';           // the bridge's stage
@@ -164,6 +164,7 @@ const Resident = (() => {
       front = 1 - front;
       role = newRole;
       if (newRole === 'reply' && clip) post('api/resident/started', { clip });
+      if (reply && newRole !== 'reply') { handOver(); if (cutting) return; }
       preload();
     };
     next.addEventListener('playing', swap);
@@ -179,6 +180,9 @@ const Resident = (() => {
   function wanted() {
     if (reply) return 'reply';
     if (session === 'lingering' && now() > lingerUntil) return 'leave';
+    // After a filler the reply is close: wait on the idle clip, which stays
+    // on the reference frame, so the reply can cut in the moment it arrives.
+    if ((server === 'thinking' || server === 'conjuring') && turn && turn.fillerPlayed && (pool.idle || []).length) return 'idle';
     if ((server === 'thinking' || server === 'conjuring') && (pool.think || []).length) return 'think';
     return (pool.idle || []).length ? 'idle' : 'hold';
   }
@@ -308,14 +312,26 @@ const Resident = (() => {
     }
     session = 'active';
     if (clearing) return;        // arrive() plays it once the glass is clear
+    handOver();
+  }
+
+  // Bring in a waiting reply now or at the current clip's end. Not while
+  // another clip is still loading into the back layer (the reply would
+  // land in the same element); swap() calls this again once it plays.
+  function handOver() {
+    if (!reply || cutting || role === 'reply') return;
     const cur = vids[front];
     const remaining = cur && Number.isFinite(cur.duration) ? cur.duration - cur.currentTime : 0;
-    if (role === 'ack' || cutting === 'ack') {
-      load(vids[1 - front], reply.src);     // the filler finishes its line first
-    } else if (role === 'portrait' || role === null || remaining > EARLY_CUT_S) {
-      const r = reply; cutTo(r.src, 'reply', role === 'portrait' || role === null ? 0 : DISSOLVE_MS, r.clip);
-    } else {
+    // Cutting away mid-clip only looks right from a clip that stays on the
+    // reference frame (the portrait, the still idle clips). think turns the
+    // head away, so the reply waits for it to come back; appear is cut short
+    // only if the wait would be long; a filler always finishes its line.
+    const waitUpTo = role === 'ack' || cutting === 'ack' || role === 'think' ? Infinity
+      : role === 'appear' ? APPEAR_WAIT_S : 0;
+    if (role !== 'portrait' && role !== null && remaining <= waitUpTo) {
       load(vids[1 - front], reply.src);     // ready for the handover at the clip's end
+    } else {
+      const r = reply; cutTo(r.src, 'reply', role === 'portrait' || role === null ? 0 : DISSOLVE_MS, r.clip);
     }
   }
 

@@ -334,9 +334,23 @@ class AvatarModule:
             self.logger.info("Avatar input ignored while the current turn is finishing")
         else: self._start_recording()
 
+    def _warm_text_connection(self):
+        """Reopen the HTTPS connection to OpenAI while the user is still
+        speaking. After minutes idle the pooled connection has gone, and a
+        fresh TLS handshake landed on the reply itself (2.6 s against 0.9 s
+        back to back). A model lookup is free and fills the pool."""
+        try:
+            if self.openai_client is None:
+                from openai import OpenAI
+                self.openai_client = OpenAI()
+            self.openai_client.models.retrieve(os.getenv("AVATAR_LLM_MODEL", "gpt-5.4-nano-2026-03-17"))
+        except Exception as exc:
+            self.logger.debug("Avatar text connection warm-up failed: %s", exc)
+
     def _start_recording(self):
         self._turn_profile = self.profile
         self._turn_active = True
+        threading.Thread(target=self._warm_text_connection, daemon=True, name="avatar-openai-warm").start()
         path = self.cache.root / "capture.wav"; path.parent.mkdir(parents=True, exist_ok=True)
         self.player.stop()
         self._play_apparition()
@@ -501,8 +515,9 @@ class AvatarModule:
                 request["service_tier"] = tier
             asked = time.monotonic()
             response = self.openai_client.responses.create(**request)
-            self.logger.info("Avatar OpenAI %s answered in %.2fs (prompt %d chars, intent %s)",
-                             llm_model, time.monotonic() - asked, len(system), local_intent)
+            self.logger.info("Avatar OpenAI %s answered in %.2fs (prompt %d chars, intent %s, tier %s)",
+                             llm_model, time.monotonic() - asked, len(system), local_intent,
+                             getattr(response, "service_tier", None) or "?")
             raw_text = _response_text(response)
             if not raw_text:
                 status = getattr(response, "status", "unknown")
