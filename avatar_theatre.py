@@ -73,18 +73,13 @@ KIND = {
     "think": "The character briefly looks away as if checking or retrieving information, then returns exactly to the supplied portrait pose, looking at the viewer, for the final second. ",
     "idle": "Only very small, subtle movements: breathing, a blink, a slight movement of the eyes or head. The mouth does not move. The character stays in the supplied portrait pose throughout and ends exactly in it. ",
 }
-# Idle clips describe only what the character does. Listing what the mouth
-# must not do (the rule above) still produced idle clips that talked: naming
-# the mouth seems to draw the model's attention to it. So idle has its own
-# plain, positive prompt, no flavour line (they add movement) and no mouth
-# terms in the negative prompt either.
-IDLE_PROMPT = (
-    "Use the supplied character portrait as the exact identity, pose, crop and framing, "
-    "on a pure black seamless background, with the camera locked off. "
-    "The character stares directly at the camera, concentrating, waiting for instructions, "
-    "holding the supplied portrait pose throughout and ending exactly in it."
-)
-IDLE_NEGATIVE = "blur, distortion, low quality, text, frame, border"
+# Idle clips get a short prompt of their own, with no flavour line (they add
+# movement) and no negative prompt. The long rule list above, and a longer
+# "stares at the camera, concentrating" prompt, both gave idle clips that
+# talked. This is the owner's wording, nothing added: the start and end
+# frames already fix the identity, framing and background.
+IDLE_PROMPT = "Waiting patiently, closed mouth, listening for instructions."
+IDLE_NEGATIVE = ""
 # In-character colour for each kind lives with the characters, in the house
 # pack (avatars/theatre_flavour.json: {key: {appear: [...], think: [...],
 # idle: [...]}}). Characters without an entry get the generic lines. Keep the
@@ -207,7 +202,7 @@ def generate(profile, kind: str, flavour: str, model: str, charged=lambda: None)
         result = fal_client.subscribe(model, arguments={
             "prompt": prompt, "start_image_url": start_url, "end_image_url": end_url,
             "duration": str(CLIP_SECONDS), "generate_audio": False,
-            "negative_prompt": negative,
+            **({"negative_prompt": negative} if negative else {}),
         })
         charged()                      # fal has billed the clip, whatever happens next
         url = (result.get("video") or {}).get("url")
