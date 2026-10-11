@@ -111,6 +111,18 @@ def _spoken_reply(text: str, max_words: int = 12) -> str:
             break
     return " ".join(kept).rstrip(",;:")
 
+def _prune_staging(folder: Path, max_age_seconds: float = 86400) -> None:
+    """Time-sensitive replies are played from staging and never pooled, so
+    drop the ones older than a day rather than let them fill the card."""
+    cutoff = time.time() - max_age_seconds
+    for clip in folder.glob("turn-*.mp4*"):
+        try:
+            if clip.stat().st_mtime < cutoff:
+                clip.unlink()
+        except OSError:
+            pass
+
+
 class AvatarModule:
     def __init__(self, size=420, alsa_device=None, **kwargs):
         self.size = int(size); self.device = alsa_device or os.getenv("VOICE_MIC", "plughw:3,0")
@@ -479,6 +491,7 @@ class AvatarModule:
                 self.logger.info("Avatar cache hit")
                 self.ready.put(self.cache.root / cached["media_path"]); return
             staging = self.cache.root / "staging" / f"turn-{time.time_ns()}.mp4"
+            _prune_staging(staging.parent)
             # The spoken line is appended once, by generate_from_text. Adding
             # it here as well made Minimax say it twice in a 5 s clip: two
             # voices, a cut-off second take, and lips that did not match.
@@ -487,7 +500,11 @@ class AvatarModule:
                 "Use a seamless pure black background. There is no mirror, magical mirror, reflection, reflective glass, frame, border, text, or hands anywhere in the video."
             )
             self.logger.info('Avatar Fal prompt: %s The subject says exactly: "%s"', video_prompt, text)
-            stream_first = os.getenv("AVATAR_STREAM_FIRST", "1").lower() in ("1", "true", "yes", "on")
+            # Download first by default: the page and aplay then play the same
+            # local file and stay in sync. Streaming the Fal URL starts the
+            # picture sooner, but on the Pi the sound has to come through
+            # ffmpeg's slow HTTPS reader and arrives late or clipped.
+            stream_first = os.getenv("AVATAR_STREAM_FIRST", "0").lower() in ("1", "true", "yes", "on")
             streamed = threading.Event()
             stream_url = None
             def stream_when_ready(url):
