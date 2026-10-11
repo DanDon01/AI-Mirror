@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visual gate</title>
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="home-twin.css">
+</head>
+<body>
+
+<div class="mirror">
+
+  <!-- ============ PERSISTENT: always on, edges only ============ -->
+  <header class="frame">
+    <div class="stamp">
+      <p class="date" id="fDate">—</p>
+      <div class="stamp-row">
+        <p class="time" id="fTime">—</p>
+        <div class="stamp-weather">
+          <p class="temp" id="fTemp">—</p>
+          <p class="cond" id="fCond">—</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="sky">
+      <div class="moon"></div>
+      <img class="layer far"  src="assets/sky/cloud-far.webp"  alt="">
+      <img class="layer main" src="assets/sky/cloud-main.webp" alt="">
+      <img class="layer near" src="assets/sky/cloud-near.webp" alt="">
+    </div>
+
+    <!-- One readout, only when the forecast crosses the rain threshold. -->
+    <div class="sky-alert" id="skyAlert" hidden><span class="l"></span><span class="v"></span></div>
+  </header>
+
+  <!-- ============ BIOMETRICS: centred upper-stage module ============ -->
+  <section class="bio" id="bio">
+    <canvas id="bioCanvas"></canvas>
+    <div class="bio-halo" id="bioHalo"></div>
+    <div class="bio-value" id="bioValue">
+      <div class="bio-state" id="bioHeart">
+        <span class="bio-n">—</span><span class="bio-u">BPM</span>
+      </div>
+      <div class="bio-state" id="bioSleep">
+        <span class="bio-n">—</span><span class="bio-u">SLEEP</span>
+      </div>
+      <div class="bio-state" id="bioSteps">
+        <span class="bio-n">—</span><span class="bio-u">STEPS</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PANELS: one scheduled module at a time ============ -->
+  <div class="panels" id="panels">
+    <div class="slot" data-slot="0"></div>
+    <div class="slot" data-slot="1"></div>
+  </div>
+
+  <!-- ============ MARKETS: persistent, along the base ============ -->
+  <footer class="markets" id="markets">
+    <div class="limb"></div>
+    <div class="markets-rail" id="marketsRail">
+      <div class="markets-run" id="marketsRun"></div>
+    </div>
+  </footer>
+
+  <p class="greeting" id="greeting" hidden></p>
+
+  <!-- One caption for whichever Moment is playing; real figures only. -->
+  <div class="moment-caption" id="momentCaption"><div class="big"></div><div class="small"></div></div>
+
+  <!-- ============ RESIDENT: the avatar itself, only while it is here ============ -->
+  <div class="resident" id="resident">
+    <img class="resident-portrait" id="residentPortrait" alt="">
+    <!-- Two stacked layers: the next clip loads behind the current one and
+         takes over on the shared reference frame. -->
+    <video class="resident-video" id="residentVideoA" playsinline muted preload="auto"></video>
+    <video class="resident-video" id="residentVideoB" playsinline muted preload="auto"></video>
+  </div>
+  <div class="resident-debug" id="residentDebug" hidden></div>
+
+  <!-- ============ STAGE: shared WebGL canvas for stage actors ============ -->
+  <canvas class="stage" id="stage"></canvas>
+
+  <p class="fixture-mark">development fixture &middot; not live data</p>
+  <div class="hud" id="hud"></div>
+
+</div>
+
+<script src="assets/vendor/three-r128.min.js"></script>
+<script src="assets/vendor/r128-CopyShader.js"></script>
+<script src="assets/vendor/r128-LuminosityHighPassShader.js"></script>
+<script src="assets/vendor/r128-EffectComposer.js"></script>
+<script src="assets/vendor/r128-UnrealBloomPass.js"></script>
+<script src="assets/vendor/r128-BufferGeometryUtils.js"></script>
+<script src="js/stage.js"></script>
+<script src="js/biometrics.js"></script>
+<script src="js/frame.js"></script>
+<script src="js/home-twin.js"></script>
+<script src="js/home-holo.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/conductor.js"></script>
+<script src="js/resident.js"></script>
+<script src="js/moments.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

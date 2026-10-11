@@ -1,0 +1,13 @@
+Cloud puff sprites (puff_*.png) are from the Kenney "Smoke Particles"
+asset pack by Kenney Vleugels (www.kenney.nl), CC0 1.0 Universal
+(public domain). https://kenney.nl/assets/smoke-particles
+
+    ------------------------------
+            License (CC0)
+    http://creativecommons.org/publicdomain/zero/1.0/
+
+You may use these graphics in personal and commercial projects.
+Credit (Kenney or www.kenney.nl) would be nice but is not mandatory.
+
+Loaded and tinted at runtime by effects_kit.py -- see weather_animations.py
+for how they're composited into the sky-stage cloud banks.

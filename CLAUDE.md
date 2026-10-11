@@ -1,0 +1,274 @@
+# AI-Mirror - Project Instructions
+
+## Overview
+AI-powered smart mirror running on Raspberry Pi 5 with a portrait-oriented display behind two-way mirror acrylic. Built with Python and Pygame. Features a zone-based mirror-optimized UI with edge-hugging modules, scrolling clock/stock bars, right-aligned right-column text, and a clear center for reflection. Displays real-time information (weather, stocks, calendar, news, Fitbit, smart home, system stats) and provides voice-activated AI interaction.
+
+## How to Run
+```bash
+python AI-Mirror.py
+```
+Entry point: `AI-Mirror.py` -> `MagicMirror` class -> `run()` main loop at 30 FPS.
+
+## Target Platform
+- **Runtime:** Raspberry Pi 5 (8GB RAM), Raspberry Pi OS
+- **Development:** Windows 11, VSCode terminal
+- **Deployment:** Push from Windows via git, pull on Pi 5 to test
+- **Display:** Portrait monitor (27" 1440x2560, 24" 1200x1920, or 21" 768x1024). Auto-detects native resolution at startup.
+- **Audio:** USB microphone (ALSA device), built-in monitor speakers
+
+## Project Conventions
+- No emojis in code (not in strings, comments, or print statements)
+- Visual and video changes are judged on the real mirror - Claude cannot see video output
+- All API keys go in `Variables.env` (parent directory, gitignored) - never commit secrets
+- Use `logging` module for all output, not `print()` statements
+- Voice/audio features are Pi hardware-dependent and experimental
+- Modules follow a standard interface: `__init__(config)`, `update()`, `draw(screen, position)`, `cleanup()`
+- Position dicts include `align: 'right'` for right-column modules; use `ModuleDrawHelper.blit_aligned()` for text placement
+
+## UI Design
+- **Mirror-optimized:** Pure black background (transparent through two-way mirror glass), no module backgrounds or boxes
+- **Minimal luxury:** platinum text on black -- primary (226,228,232), secondary (148,150,156), dim (96,98,104). Single champagne accent (196,174,128) for module labels and hairline rules only. Muted functional green/red/amber. Module labels are tracked uppercase with a short hairline rule. Full-width hairlines under the top banner and above the ticker frame the mirror space.
+- **Typography:** Bundled Lato (assets/fonts, OFL) -- light weight for body/hero values, regular for small labels. load_font(weight, size) in config.py; SysFont stack is the fallback. Hero values (temperature, greeting, clock) are large and light.
+- **Design preview:** `python design_preview.py` renders the full UI with fake data to data/preview.png headlessly -- judge design changes on the dev box before deploying.
+- **Layout:** Zone-based with edge padding. Left column (22% width): weather, calendar, countdown, smarthome. Right column (26% width, right-aligned text): greeting, quote, news, fitbit, openclaw, sysinfo. Column height is split by *weight*, not equally -- `LAYOUT_V2['module_weights']` gives a dense graphical module more room than a text one (fitbit is 2.9x). Centre stays ~50% clear for the mirror. Top bar: scrolling monospace clock + date + weather status. Bottom bar: scrolling stock ticker.
+- **Center clear zone:** Reserved for mirror reflection. AI/voice overlays only appear when active. Center notification queue for alerts (stock moves, timer completion, new messages).
+- **Fonts:** Segoe UI / DejaVu Sans (body), Consolas / DejaVu Sans Mono (clock). Sizes scaled for arm's length readability.
+- **Animations:** Per-module eased fade transitions via AnimationManager with staggered boot. Headline rotation with crossfade.
+- **Weather feature band:** The top of the screen reflects the sky (weather_animations.py) in an expanded band (~16% of screen height, EFFECT_H, fading out at the bottom into the mirror's clear centre): radiant rayed sun, big crescent moon + drifting stars, layered cloud banks, wind-slanted rain with splashes, drifting snow with depth, and dramatic storm lightning (full-band flash + bolt). Procedural soft-glow sprites + lines, no PNGs. Clouds keep clear of the time digits. Day/night picks sun vs moon; wind speed slants rain and adds gusts. Preview any condition: `python design_preview.py rain` (clear|partly|clouds|rain|storm|snow). The clock banner scrolls the time (config clock params `scrolling: True`).
+
+## Architecture
+```
+AI-Mirror.py (main loop, event handling, screen auto-detect, state machine)
+  -> ModuleManager (module lifecycle, visibility, voice fallback chain)
+  -> LayoutManager (zone-based positioning, left/right column stacking)
+  -> AnimationManager (fade transitions, state transitions, center notifications)
+  -> ModuleDrawHelper (shared fonts, titles, separators, right-alignment)
+  -> SurfaceCache (per-module render caching for performance)
+  -> Display Modules:
+       clock_module.py       - Scrolling top bar: monospace time, static date, weather status
+       weather_module.py     - OpenWeatherMap + Open-Meteo fallback + weather animations
+       stocks_module.py      - Scrolling bottom ticker (yfinance, batch + history fallback)
+       calendar_module.py    - Google Calendar events
+       fitbit_module.py      - BIOMETRIC MONITOR: habitat-style vital-signs
+                               instrument (scan figure, ECG, segmented gauges,
+                               sleep-stage timeline, 7-day activity graph)
+       body_scan.py          - Anatomical scan figure used by the biometric
+                               monitor (vector human + sweeping scan band)
+       weather_glyphs.py     - Vector condition glyphs, compass rose and
+                               readout icons for the ENVIRONMENT panel
+       countdown_module.py   - Event countdowns + voice timer + center alerts
+       quote_module.py       - Daily quote (ZenQuotes API + local JSON + builtin fallback)
+       news_module.py        - RSS news headlines (feedparser) + breaking news notifications
+       openclaw_module.py    - OpenClaw Gateway multi-channel inbox (WebSocket)
+       smarthome_module.py   - Home Assistant mini view (left column: summary + state dots)
+                               plus on-demand center dashboard overlay (voice "show the
+                               dashboard" or 'h' key; auto-closes after 60s)
+       avatar_module.py      - Selectable Vosk -> OpenAI -> Fal talking-video avatar
+       avatar_profiles.py    - Character catalogue, reference images, prompts, persistence
+       phone_module.py       - iPhone battery (HA Companion app) + leave-by countdown
+                               computed from the calendar module's events
+       sysinfo_module.py     - Pi system stats (CPU temp, memory, disk, uptime via psutil + /proc fallback)
+       greeting_module.py    - Time-based greetings + rotating affirmations
+       retrocharacters_module.py - Falling retro icons screensaver
+  -> Voice/AI Modules (priority order):
+       ai_voice_module.py    - OpenAI Realtime API GA WebSocket (gpt-realtime-mini default,
+                               gpt-realtime-2 optional). Live mic conversations with server
+                               VAD; feeds avatar lipsync + state hooks.
+       AI_Module.py          - gpt-5.4-mini chat + OpenAI TTS (pinned gpt-4o-mini-tts
+                               snapshot), gTTS fallback
+       elevenvoice_module.py - ElevenLabs TTS (eleven_multilingual_v2) + gpt-5.4-mini
+  -> Support:
+       config.py             - All configuration, colors, fonts, layout zones, env vars
+       web_panel.py          - LAN phone control panel (http://<pi-ip>:8780): state,
+                               module toggles, editable stocks watchlist, smart-home
+                               entity checklist, API usage, log tail. Stdlib HTTP server;
+                               writes go through a command queue drained by the main loop.
+       data_cache.py         - Last-good payload cache (weather/news/calendar restore
+                               instantly after reboot, then refresh in background)
+       background_fetcher.py - Runs module network fetches on daemon threads (never
+                               block the 30 FPS render loop); results polled in update()
+       api_tracker.py        - API rate limits, cost tracking, and circuit breaker
+                               (3 consecutive failures -> 30 min backoff per service)
+       module_base.py        - ModuleDrawHelper, SurfaceCache, shared draw utilities
+       animation_manager.py  - Fade transitions, state transitions, center notifications
+       layout_manager.py     - Zone-based position calculation with alignment
+       visual_effects.py     - Shared rendering utilities
+       voice_commands.py     - "show/hide module" command parser
+       weather_animations.py - Weather particle effects (cloud, rain, sun, storm, snow)
+```
+
+## Key File Map
+| File | Purpose | Lines |
+|------|---------|-------|
+| `AI-Mirror.py` | Main app, event loop, screen auto-detect, state machine, module toggle | ~700 |
+| `config.py` | Colors, fonts, layout zones, monitor configs, all module params | ~460 |
+| `module_base.py` | ModuleDrawHelper (fonts, titles, alignment), SurfaceCache | ~110 |
+| `animation_manager.py` | Fade transitions, state transitions, center notification queue | ~100 |
+| `layout_manager.py` | Zone-based positioning, column stacking, right-align tagging | ~140 |
+| `module_manager.py` | Module init, visibility, voice fallback chain | ~176 |
+| `clock_module.py` | Scrolling top bar: monospace time, clipped scroll, static date | ~128 |
+| `weather_module.py` | Dual-source weather (OpenWeatherMap + Open-Meteo) + animations | ~327 |
+| `stocks_module.py` | Bottom ticker: batch + history fallback, scrolling render | ~480 |
+| `calendar_module.py` | Google Calendar integration | ~250 |
+| `fitbit_module.py` | BIOMETRIC MONITOR instrument panel + Fitbit API plumbing | ~990 |
+| `body_scan.py` | Vector anatomical figure + scan-band animation | ~220 |
+| `countdown_module.py` | Event countdowns + voice-activated timer + center alerts | ~190 |
+| `quote_module.py` | Daily quote (ZenQuotes API / local JSON / builtin) | ~202 |
+| `news_module.py` | RSS headlines via feedparser + breaking news notifications | ~189 |
+| `openclaw_module.py` | OpenClaw Gateway WebSocket client | ~386 |
+| `smarthome_module.py` | Home Assistant REST API, auto-discover entities, domain coloring | ~210 |
+| `sysinfo_module.py` | CPU temp, memory, disk, uptime (psutil + /proc/meminfo + statvfs) | ~290 |
+| `greeting_module.py` | Time-based greetings + rotating affirmations | ~189 |
+| `retrocharacters_module.py` | Falling retro icons screensaver | ~77 |
+| `ai_voice_module.py` | OpenAI Realtime API via WebSocket | ~574 |
+| `AI_Module.py` | Fallback GPT-4o + speech recognition + OpenAI TTS | ~890 |
+| `elevenvoice_module.py` | ElevenLabs TTS integration | ~119 |
+| `visual_effects.py` | Shared visual effect utilities | ~94 |
+| `voice_commands.py` | Show/hide command parser | ~57 |
+| `weather_animations.py` | Weather condition particle effects | ~150 |
+
+## Environment Variables (Variables.env)
+Copy `Variables.env.example` to `../Variables.env` (the parent directory of the
+checkout, never committed) and fill in what you use. Every variable is optional;
+modules without their keys hide themselves.
+
+## House pack (this home's own files)
+Everything specific to one home lives outside this repo in a house pack:
+`house/` in the checkout (gitignored) or `MIRROR_HOUSE_DIR`. See
+`house_pack.py` and `house.example/`.
+- `config_local.py` - `OVERRIDES` merged over `CONFIG` (city, watchlist, tweaks)
+- `avatars/profiles.json` + portraits + `prompts/<key>.txt` - the characters;
+  no pack means no avatar
+- `avatars/theatre_flavour.json`, `theatre/<key>/<kind>/` - theatre clips
+- `visual-gate/...` - served in place of the same path in
+  `prototype/visual-gate` (e.g. the home's own `js/home-twin.js`)
+- `CLAUDE.md` - private notes; copy to `CLAUDE.local.md` (gitignored) so
+  Claude Code reads them alongside this file
+Never move house-specific data (names, places, entity IDs, layouts, avatars)
+into this repo; it is public.
+
+## Deployment (Pi as an appliance)
+- **Two boot modes, one display.** The Pi can boot into either front end:
+  - `visual` - the Chromium prototype in `prototype/visual-gate` (unit
+    `ai-mirror-visual.service`). This is the default.
+  - `pygame` - `AI-Mirror.py` (unit `ai-mirror.service`).
+
+  Both units are installed; exactly one is ever enabled, and each carries
+  `Conflicts=` against the other so systemd cannot run the pair. Two front
+  ends on one display means whichever lost the race holds a screen it
+  cannot draw on.
+- `deploy/install-service.sh [visual|pygame]` - fills the unit templates for
+  this user/machine, installs both, enables the chosen one. Defaults to visual.
+- `deploy/mirror-mode.sh [visual|pygame]` - switch modes later without
+  reinstalling. With no argument it reports the current mode.
+- **The visual gate still renders `fixtures/DEV-FIXTURE.json`.** Booting into
+  it puts invented biometrics, prices, appointments and energy figures on the
+  wall. It is labelled on screen, but it is not live data and must not be
+  mistaken for it. Wire the real data sources before treating visual mode as
+  the finished mirror.
+- `deploy/ai-mirror.service`, `deploy/ai-mirror-visual.service` - unit
+  TEMPLATES with `__PLACEHOLDERS__`; never `cp` these directly, run
+  install-service.sh so no personal paths reach git.
+- `deploy/deploy.sh` - run on the Pi: git pull, pip install, smoke test,
+  restart whichever unit is enabled.
+- `smoke_test.py` - headless import + 30-frame draw test; CI runs it on every push
+  (`.github/workflows/ci.yml`). Run it before restarting the mirror after changes.
+- Web panel at `http://<pi-ip>:8780` replaces keyboard controls once wall-mounted
+  (no auth - home LAN only; disable via `web_panel.enabled` in config.py).
+
+## Visual gate (browser front end, the default boot mode)
+House style and architecture: `prototype/visual-gate/README.md`.
+- `js/stage.js` - one full-plate WebGL canvas for all new actors (sky, hologram
+  house, Moments, wake). Bloom with a black floor (empty glass must measure 0),
+  feathered actor rects, adaptive tiers. Three.js stays r128, vendored in
+  `assets/vendor/`. Never load from a CDN.
+- The house: `js/home-twin.js` is a plain example built from a `HOUSE`
+  description; a house pack can supply its own renderer and a hologram
+  (`js/home-holo.js`, `HomeHolo`) - see `HOME-TWIN.md`. Its architecture is
+  locked by `node test_house_layout.js` (`--holo`); regenerate the golden file
+  only after a deliberate, signed-off change.
+- `js/conductor.js` - rest / glance / theatre registers from an entrance PIR
+  (`VISUAL_GATE_ENTRANCE_PIR`), dim hours, event pins. `js/sky.js` - computed
+  sun/moon/phase. `js/moments.js` - curated Moments + director.
+- The resident: `js/resident.js` + `resident.py` - the AvatarModule in the
+  bridge, clips pushed over `/api/events` (SSE) and played as the character
+  itself, no frame. Audio is ffmpeg -> aplay in the bridge (VOICE_SPEAKER);
+  the browser video is muted, and only the mirror's own (loopback) browser
+  may report a clip started/finished. AVATAR DEBUG panel on the glass
+  (AVATAR_DEBUG_OVERLAY=0 hides it), and the page traces each turn to the
+  journal as `resident.page`. Pauses are covered by theatre clips
+  (appear/think/idle) from `avatar_theatre.py` into the house pack, all
+  starting and ending on the flattened reference frame, mouths closed and
+  still; paid calls capped by api_tracker 'fal-theatre' (6/h, 12/day,
+  $4.20/day). Unprompted speech uses pooled clips only, never a new call.
+- Headless checks: `render.py`, `validate.py`, `qa_home.py` (all serve the
+  labelled fixture through `serve.fixture_handler()`); captures never inherit
+  automatic Moments. Pi performance: `measure_on_pi.py --scene house --house holo`.
+- Pygame mode stays supported.
+
+## Keyboard Controls
+| Key | Action |
+|-----|--------|
+| `s` | Cycle state: active -> screensaver -> sleep -> active |
+| `Space` | Trigger voice interaction (AI module) |
+| `d` | Toggle debug overlay (red grid + module bounds) |
+| `h` | Toggle Home Assistant dashboard overlay |
+| `m` | Trigger a random Moment now, ignoring cooldowns (see event_director.py) |
+| `t` | Cycle visual theme: Sci-Fi -> Luxury -> Sunset -> Mono (see theme.py) |
+| `p` | Toggle the portal ring on/off (see portal_ring.py) |
+| `q` / `Esc` | Quit application |
+| `1`-`9`, `0` | Toggle module visibility (1=weather, 2=calendar, 3=countdown, 4=smarthome, 5=greeting, 6=quote, 7=news, 8=fitbit, 9=openclaw, 0=sysinfo) |
+
+## Application States
+- **Active:** All enabled modules visible, voice ready, weather animations active
+- **Screensaver:** Retro character animation + clock only
+- **Sleep:** Clock module only (minimal display)
+- State transitions use fade animations via AnimationManager
+
+## API Lifecycle Notes (June 2026)
+- OpenAI Realtime API: migrated to the GA interface (beta removed May 2026). No
+  OpenAI-Beta header; session.update requires `type: "realtime"` and nested audio
+  config; server events are `response.output_audio.delta` etc.
+- Voice model: `gpt-realtime-mini` (cost/latency sweet spot); switch to
+  `gpt-realtime-2` in config for reasoning-class conversation.
+- TTS uses the pinned `gpt-4o-mini-tts-2025-12-15` snapshot (unversioned alias
+  shuts down 2026-07-23).
+- Fitbit legacy Web API retires September 2026; Google Health API (Google Cloud +
+  Google OAuth + user re-consent) is the replacement. fitbit_module detects HTTP 410
+  and shows "Fitbit API retired" instead of hammering the dead endpoint.
+- yfinance was bumped 0.2.x -> 1.x in requirements.txt; verify the stock ticker on
+  the Pi after upgrading.
+
+## Avatar (selectable generated-video characters)
+- `avatar_module.py`: a warmed Vosk microphone (with a short pre-roll so the
+  first word is not lost), a minimal-reasoning short text reply, a warmed Fal
+  reference upload, immediate URL playback, and a deferred cache download.
+- `avatar_profiles.py` reads the characters from the house pack's
+  `avatars/profiles.json` (key, name, description, image); persona prompts are
+  `avatars/prompts/<key>.txt`. With none, the avatar is off.
+- The LAN web panel changes character only while idle and persists the choice
+  in `data/avatar/selection.json`. Each turn snapshots one profile so its image,
+  prompt, and reference-keyed video cache cannot be mixed with another.
+
+## Known Gotchas
+- `pygame.draw.*` IGNORES the alpha channel of its colour. Passing `(r,g,b,40)` to `draw.line/rect/circle/polygon` renders at full brightness, on plain *and* SRCALPHA surfaces. Anything relying on a dim "track" vs a bright "value" (gauge tracks, grid ruling, scale ticks) silently renders as one flat solid shape. Fix: draw into an SRCALPHA layer and blit that once (`fitbit_module._render`), which makes alpha meaningful and composites correctly. Alpha *does* apply when a surface is blitted, which is why `draw_panel_frame`/`draw_chamfer_frame` (draw-to-temp-surface-then-blit) look correct.
+- `pygame.transform.smoothscale` segfaults (kills the whole process, not a catchable exception) when scaling from a zero-width or zero-height source surface -- e.g. `font.render('')` on a missing/empty string. Use `effects_kit.safe_smoothscale()` instead of calling `pygame.transform.smoothscale` directly anywhere a scaled surface's source text could plausibly be empty (moment banners, dynamic labels).
+- `Variables.env` path is `os.path.join(current_dir, '..', 'Variables.env')` - file must be in parent directory
+- Screen resolution is auto-detected at startup (`pygame.display.Info()`) - config values are overridden with actual display size
+- Audio device indices are hardware-specific (USB mic typically card 2 or 3 on Pi)
+- `ai_voice_module.py` streams the live USB mic via arecord + plughw (ALSA resamples to 24 kHz); SPACE toggles a hands-free conversation with server-side semantic VAD. Falls back to the test WAV (manual commit) when arecord/mic is unavailable, e.g. on the Windows dev box. Mic is gated while the mirror speaks (no barge-in).
+- All display modules fetch over the network via `BackgroundFetcher` - update() submits a fetch and polls the result on later frames; never call requests directly in update()
+- Spoken commands ride the Realtime API's user transcript: ai_voice's command listener queues each utterance, the main loop parses it (dashboard phrases + voice_commands.py show/hide). The AI also replies conversationally to these - it does not know a command fired.
+- ALSA error suppression in `AI-Mirror.py` is aggressive - may hide real audio errors
+- `config.py` calls `pygame.font.init()` at import time (side effect)
+- Voice activation/wake words are experimental - gesture control or PIR detection may replace them
+- yfinance can get rate-limited by Yahoo Finance; the module has 6-hour backoff and history-based fallback
+- Modules auto-hide when unconfigured (openclaw without gateway URL, smarthome without HA URL)
+
+## Future Direction
+- Realtime avatar interaction on the mirror display
+- Camera-based advanced interaction (presence detection, face recognition)
+- Local AI models via Ollama on Windows PC over network (after API-based system is stable)
+- Voice commands for module toggle ("hide weather", "show fitbit")
+- Gesture control or PIR-based wake/sleep
+- Web-based frontend as alternative to Pygame

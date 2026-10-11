@@ -1,0 +1,791 @@
+from dotenv import load_dotenv
+import logging
+import os
+from datetime import time, datetime
+import pygame
+
+# Initialize pygame to access font information
+pygame.font.init()
+
+# Get the directory of the current file (config.py)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Construct the path to Variables.env in the parent directory
+env_path = os.path.join(current_dir, '..', 'Variables.env')
+
+# Load the .env file
+load_dotenv(env_path)
+# ENABLE_PRINCESS remains a one-release migration fallback for existing Pi setups.
+AVATAR_ENABLED = os.getenv(
+    'ENABLE_AVATAR', os.getenv('ENABLE_PRINCESS', '')
+).lower() in ('1', 'true', 'yes', 'on')
+
+#########################################
+# GLOBAL CONSTANTS
+#########################################
+
+# Mirror-optimized color palette
+# Pure black = transparent through two-way mirror glass
+COLOR_WHITE = (255, 255, 255)
+COLOR_BLACK = (0, 0, 0)
+
+# Content brightness multiplier for two-way mirror glass. The glass only
+# transmits part of the light, so content needs more intensity in daylight;
+# after dark a slightly softer treatment is less glaring while still readable.
+# This scales content only: black remains black so the mirror illusion stays.
+#
+# Variables.env controls (all optional):
+#   UI_DISPLAY_MODE=auto|day|night   UI_DAY_BRIGHTNESS=1.18
+#   UI_NIGHT_BRIGHTNESS=0.88         UI_TEXT_SCALE=1.12
+# `UI_BRIGHTNESS` remains a manual override for a particular installation.
+def _env_float(name, default, low, high):
+    try:
+        return max(low, min(float(os.getenv(name, default)), high))
+    except (TypeError, ValueError):
+        return default
+
+
+_display_mode = os.getenv('UI_DISPLAY_MODE', 'auto').strip().lower()
+if _display_mode not in ('auto', 'day', 'night'):
+    _display_mode = 'auto'
+_is_night = _display_mode == 'night' or (
+    _display_mode == 'auto' and not (7 <= datetime.now().hour < 21)
+)
+if os.getenv('UI_BRIGHTNESS', '').strip():
+    _UI_BRIGHTNESS = _env_float('UI_BRIGHTNESS', 1.0, 0.5, 2.0)
+else:
+    _UI_BRIGHTNESS = _env_float(
+        'UI_NIGHT_BRIGHTNESS' if _is_night else 'UI_DAY_BRIGHTNESS',
+        0.88 if _is_night else 1.18,
+        0.5, 2.0,
+    )
+_UI_TEXT_SCALE = _env_float('UI_TEXT_SCALE', 1.12, 0.85, 1.35)
+IS_NIGHT = _is_night  # public alias -- glow/moment intensity leans on this too
+
+
+def _bright(color):
+    """Scale an RGB colour by the UI brightness, clamped to 255."""
+    return tuple(min(255, int(c * _UI_BRIGHTNESS)) for c in color)
+
+
+# Text hierarchy: pushed near-maximum for two-way glass. Primary is pure
+# white; even the "dim" tier is a light grey so it survives the glass.
+# The hierarchy is compressed (less contrast between tiers) on purpose -
+# legibility through the mirror wins over subtlety.
+COLOR_TEXT_PRIMARY = _bright((255, 255, 255))
+COLOR_TEXT_SECONDARY = _bright((238, 240, 244))
+COLOR_TEXT_DIM = _bright((210, 213, 220))
+COLOR_TEXT_ACCENT = _bright((150, 210, 255))
+
+# House accent: electric cyan, not champagne -- a ship's-HUD read, not
+# a minimal-luxury one. Module labels, hairline rules, emphasis, and the
+# default for anything not given its own accent in MODULE_ACCENTS below.
+COLOR_ACCENT_PRIMARY = _bright((110, 214, 255))
+
+# Module title color (legacy name; now the house cyan accent)
+COLOR_TITLE_BLUE = COLOR_ACCENT_PRIMARY
+
+# Clock face: pure white, reads as engraved
+COLOR_CLOCK_FACE = _bright((255, 255, 255))
+
+# Functional accent colors (bright so they read through glass)
+COLOR_ACCENT_BLUE = _bright((150, 190, 245))
+COLOR_ACCENT_GREEN = _bright((150, 228, 178))
+COLOR_ACCENT_RED = _bright((242, 150, 150))
+COLOR_ACCENT_AMBER = _bright((246, 212, 150))
+
+# Per-module category accents -- every module used to share one champagne
+# label/hairline color, which is a big part of why the mirror read as one
+# flat look regardless of what data was actually on screen. These give
+# each module its own identity while staying in the same "bright enough
+# to read through glass" family as the accents above.
+COLOR_ACCENT_PURPLE = _bright((188, 160, 238))
+COLOR_ACCENT_TEAL = _bright((120, 224, 208))
+COLOR_ACCENT_GOLD = _bright((235, 188, 90))
+COLOR_ACCENT_CYAN = _bright((110, 202, 232))
+COLOR_ACCENT_STEEL = _bright((150, 176, 204))
+
+# Separator lines (subtle dividers between sections) -- cool steel-blue,
+# not the old warm champagne-adjacent grey.
+COLOR_SEPARATOR = _bright((70, 90, 110))
+
+# Module name -> its own label/hairline accent (module_base.draw_module_title).
+# Anything not listed falls back to the house cyan COLOR_ACCENT_PRIMARY.
+MODULE_ACCENTS = {
+    'weather': COLOR_ACCENT_BLUE,
+    'calendar': COLOR_ACCENT_PURPLE,
+    'countdown': COLOR_ACCENT_AMBER,
+    'smarthome': COLOR_ACCENT_TEAL,
+    'octopus_energy': COLOR_ACCENT_GOLD,
+    'stocks': COLOR_ACCENT_GOLD,
+    'news': COLOR_ACCENT_RED,
+    'fitbit': COLOR_ACCENT_GREEN,
+    'openclaw': COLOR_ACCENT_CYAN,
+    'sysinfo': COLOR_ACCENT_STEEL,
+}
+
+# Legacy aliases -- modules import these names
+COLOR_FONT_DEFAULT = COLOR_TEXT_PRIMARY
+COLOR_FONT_TITLE = COLOR_TEXT_DIM
+COLOR_FONT_SUBTITLE = COLOR_TEXT_SECONDARY
+COLOR_FONT_BODY = COLOR_TEXT_PRIMARY
+COLOR_FONT_SMALL = COLOR_TEXT_SECONDARY
+COLOR_PASTEL_GREEN = COLOR_ACCENT_GREEN
+COLOR_PASTEL_RED = COLOR_ACCENT_RED
+COLOR_PASTEL_BLUE = COLOR_ACCENT_BLUE
+
+# Module backgrounds: fully transparent on mirror (no visible boxes)
+COLOR_BG_MODULE = (0, 0, 0)
+COLOR_BG_HEADER = (0, 0, 0)
+COLOR_BG_HIGHLIGHT = (0, 0, 0)
+COLOR_BG_MODULE_ALPHA = (0, 0, 0, 0)
+COLOR_BG_HEADER_ALPHA = (0, 0, 0, 0)
+
+# Text opacity is softened only at night; it remains fully opaque in daylight
+# to cut through the two-way glass and ambient reflections.
+TRANSPARENCY = 238 if _is_night else 255
+
+# Typography -- Lato (bundled in assets/fonts, OFL licensed) gives the
+# same premium light weights on Windows and the Pi. SysFont names remain
+# as a fallback if the TTFs are missing.
+FONT_NAME = "segoeui,dejavusans,freesans,arial"
+FONT_NAME_CLOCK = "consolas,dejavusansmono,liberationmono,couriernew,monospace"
+
+_FONTS_DIR = os.path.join(current_dir, 'assets', 'fonts')
+_FONT_FILES = {
+    'light': 'Lato-Light.ttf',
+    'regular': 'Lato-Regular.ttf',
+    'bold': 'Lato-Bold.ttf',
+}
+_font_cache = {}
+
+
+def load_font(weight, size):
+    """Return a Font for ('light'|'regular'|'bold', px). Cached.
+
+    Falls back to the system font stack when the bundled TTF is missing.
+    """
+    key = (weight, size)
+    font = _font_cache.get(key)
+    if font is None:
+        path = os.path.join(_FONTS_DIR, _FONT_FILES.get(weight, 'Lato-Regular.ttf'))
+        try:
+            font = pygame.font.Font(path, size)
+        except Exception:
+            font = pygame.font.SysFont(FONT_NAME, size)
+        _font_cache[key] = font
+    return font
+
+
+FONT_SIZE_CLOCK = 84
+FONT_SIZE_HERO = int(56 * _UI_TEXT_SCALE)       # large feature values
+FONT_SIZE_TITLE = int(28 * _UI_TEXT_SCALE)
+FONT_SIZE_SUBTITLE = int(22 * _UI_TEXT_SCALE)
+FONT_SIZE_BODY = int(19 * _UI_TEXT_SCALE)
+FONT_SIZE_SMALL = int(14 * _UI_TEXT_SCALE)
+FONT_SIZE_LABEL = int(13 * _UI_TEXT_SCALE)      # tracked uppercase labels
+FONT_SIZE_TICKER = int(20 * _UI_TEXT_SCALE)
+FONT_SIZE = FONT_SIZE_BODY
+
+# Letterspacing (px) for tracked uppercase labels
+LABEL_TRACKING = max(3, int(4 * _UI_TEXT_SCALE))
+
+# Spacing and Dimensions
+LINE_SPACING = 30
+DEFAULT_PADDING = 12
+DEFAULT_LINE_HEIGHT = 28
+DEFAULT_RADIUS = 0  # No rounded rects on transparent backgrounds
+
+# Standard screen dimensions
+SCREEN_WIDTH_DEFAULT = 800
+SCREEN_HEIGHT_DEFAULT = 1280
+
+# Paths for assets and data
+assets_dir = os.path.join(current_dir, 'assets')
+retro_icons_path = os.path.join(assets_dir, 'retro_icons')
+weather_icons_path = os.path.join(assets_dir, 'weather_icons')
+sound_effects_path = os.path.join(assets_dir, 'sound_effects')
+data_dir = os.path.join(current_dir, 'data')
+
+#########################################
+# MONITOR CONFIGURATIONS
+#########################################
+
+SCREEN_PADDING = 20
+MODULE_SPACING = 10
+
+MONITOR_CONFIGS = {
+    '27_portrait': {
+        'resolution': (1440, 2560),
+        'module_scale': 1.0,
+        'font_scale': 1.0,
+        'left_col_width': 320,
+        'right_col_width': 380,
+    },
+    '24_portrait': {
+        'resolution': (1200, 1920),
+        'module_scale': 0.833,
+        'font_scale': 0.85,
+        'left_col_width': 265,
+        'right_col_width': 315,
+    },
+    '21_portrait': {
+        'resolution': (768, 1024),
+        'module_scale': 0.533,
+        'font_scale': 0.65,
+        'left_col_width': 170,
+        'right_col_width': 205,
+    }
+}
+
+CURRENT_MONITOR = MONITOR_CONFIGS['27_portrait']
+
+#########################################
+# LAYOUT CONFIGURATION
+#########################################
+
+LAYOUT = {
+    'screen_padding': int(30 * CURRENT_MONITOR['module_scale']),
+    'module_spacing': int(15 * CURRENT_MONITOR['module_scale']),
+    'module_sizes': {
+        'standard': {'width': 18.75, 'height': 15},
+        'large': {'width': 18.75, 'height': 30}
+    },
+    'sections': {
+        'top': 5,
+        'upper': 20,
+        'bottom': 70
+    },
+    'fonts': {
+        'title': {'size': int(FONT_SIZE_TITLE * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_TITLE},
+        'subtitle': {'size': int(FONT_SIZE_SUBTITLE * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_SUBTITLE},
+        'body': {'size': int(FONT_SIZE_BODY * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_BODY},
+        'small': {'size': int(FONT_SIZE_SMALL * CURRENT_MONITOR['font_scale']), 'color': COLOR_FONT_SMALL}
+    },
+    'backgrounds': {
+        'title': {'color': COLOR_BLACK, 'alpha': 180},
+        'content': {'color': COLOR_BLACK, 'alpha': 120}
+    }
+}
+
+#########################################
+# ZONE-BASED LAYOUT (V2 - Mirror Optimized)
+#########################################
+
+LAYOUT_V2 = {
+    'zones': {
+        # Room for the clock plus the live forecast timeline/astronomy
+        # line -- bigger than a thin dashboard strip, but the real
+        # spectacle lives in triggered "moments", not a permanently huge
+        # banner (see event_director.py).
+        'top_bar': {'y': 0, 'height': 115},
+        'bottom_bar': {'height': 40},
+        'left_column': {'x': 0, 'width_pct': 0.22},
+        'right_column': {'width_pct': 0.26},
+        'center': {'width_pct': 0.52},
+    },
+    'left_modules': ['weather', 'calendar', 'countdown', 'smarthome', 'octopus_energy'],
+    'right_modules': ['greeting', 'phone', 'quote', 'news', 'fitbit', 'openclaw', 'sysinfo'],
+    'top_bar_modules': ['clock'],
+    'bottom_bar_modules': ['stocks'],
+    'center_overlay_modules': ['avatar', 'ai_interaction', 'ai_voice', 'eleven_voice'],
+    'fullscreen_overlay_modules': ['retro_characters'],
+    'module_gap': 15,
+    'edge_padding': 15,
+    # Column height is split by weight, not equally (layout_manager
+    # ._stack_column). The biometric monitor is a dense instrument
+    # composition -- scan figure, ECG, gauges, sleep timeline, weekly
+    # graph -- and needs several times the room a few lines of text do.
+    'module_weights': {
+        # Graphical instrument panels need room; text modules do not.
+        'weather': 2.15, 'smarthome': 1.5, 'octopus_energy': 1.3,
+        'calendar': 0.95, 'countdown': 0.45,
+        'fitbit': 2.6, 'news': 1.05, 'sysinfo': 0.65, 'openclaw': 0.8,
+        'phone': 0.42, 'quote': 0.32, 'greeting': 0.26,
+    },
+}
+
+#########################################
+# ANIMATION SETTINGS
+#########################################
+
+ANIMATION = {
+    'fade_duration_ms': 400,
+    'state_transition_ms': 800,
+    'headline_fade_ms': 300,
+    'notification_display_ms': 5000,
+    'notification_fade_ms': 500,
+    'scroll_speed_clock': 0.5,
+    'scroll_speed_ticker': 1.0,
+    'pulse_speed_alert': 2.0,
+}
+
+#########################################
+# MOMENTS (event_director.py / moments_library.py)
+#########################################
+# Rare, short, whole-display theatrical takeovers -- see the project plan
+# ("The Glo-Up") for the full moment library and phasing. `frequency`
+# scales how often ambient/idle moments and the minimum gap between any
+# two moments behave: >1 more often (guests over), <1 quieter (a normal
+# weekday). `daily_cap` is a hard ceiling so a long active day can't turn
+# into a highlight reel. `guest_mode` is flipped by the web panel's
+# manual "trigger a moment" button, which fires on demand and skips
+# per-moment cooldowns.
+
+MOMENTS = {
+    'enabled': True,
+    'frequency': 1.0,
+    'guest_mode': False,
+    # A 4-minute minimum gap meant a normal few-minute look at the mirror
+    # had near-zero odds of ever showing anything built -- the code
+    # worked, but nobody would ever see it work. 90s/120-a-day is still
+    # far from constant, but it means something actually happens within
+    # a short session instead of only over many hours.
+    'min_gap_s': 90.0,
+    'daily_cap': 120,
+    'recent_history': 6,
+}
+
+# Ticker -> themed moment, checked on a big single-day gain (stocks_module.py
+# doesn't track true 52-week-high data, so a large gain is used as a proxy).
+# Add your own watchlist tickers here for a bespoke cameo instead of the
+# generic 'stock_big_gain' moment.
+MOMENT_TICKER_EVENTS = {
+    'BTC-USD': 'crypto_ath',
+    'BTC/USD': 'crypto_ath',
+    'ETH-USD': 'crypto_ath',
+    'SPCE': 'rocket_stock_ath',
+    'RKLB': 'rocket_stock_ath',
+}
+
+#########################################
+# MAIN CONFIGURATION
+#########################################
+
+def draw_module_background_fallback(screen, x, y, module_width, module_height, padding=10):
+    """No-op: mirror UI has no module backgrounds (black = transparent)."""
+    pass
+
+CONFIG = {
+    'screen': {
+        'fullscreen': True,
+        'size': (SCREEN_WIDTH_DEFAULT, SCREEN_HEIGHT_DEFAULT),
+        'scale': 1.0
+    },
+    'layout': LAYOUT,
+    'update_schedule': {
+        'time': time(5, 30),
+        'frequency': 'daily'
+    },
+    'frame_rate': 30,
+    
+    # Module configurations
+    'clock': {
+        'class': 'ClockModule',
+        'params': {
+            'time_font_size': FONT_SIZE_CLOCK,
+            'date_font_size': FONT_SIZE_BODY,
+            'color': COLOR_TEXT_PRIMARY,
+            'time_format': '%H:%M:%S',
+            'date_format': '%A, %B %d, %Y',
+            'timezone': 'local',
+            # The premium static banner hosts the hourly leave-home forecast.
+            # Scrolling mode is retained in ClockModule as a legacy option.
+            'scrolling': False
+        }
+    },
+    'weather': {
+        'class': 'WeatherModule',
+        'params': {
+            'api_key': os.getenv('OPENWEATHERMAP_API_KEY'),
+            # OpenWeatherMap "City,CC". Set yours in the house pack's
+            # config_local.py or with MIRROR_CITY.
+            'city': os.getenv('MIRROR_CITY') or 'London,UK',
+            'screen_width': CURRENT_MONITOR['resolution'][0],
+            'screen_height': CURRENT_MONITOR['resolution'][1],
+            'icons_path': weather_icons_path
+        }
+    },
+    'stocks': {
+        'class': 'StocksModule',
+        'params': {
+            'tickers': ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'RR.L', 'LLOY.L'],
+            'alpha_vantage_key': os.getenv('ALPHA_VANTAGE_KEY', ''),
+        }
+    },
+    'calendar': {
+        'class': 'CalendarModule',
+        'params': {
+            'config': {
+                'client_id': os.getenv('GOOGLE_CLIENT_ID'),
+                'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
+                'access_token': os.getenv('GOOGLE_ACCESS_TOKEN'),
+                'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
+            }
+        }
+    },
+    'fitbit': {
+        'class': 'FitbitModule',
+        'params': {
+            'config': {
+                'client_id': os.getenv('FITBIT_CLIENT_ID'),
+                'client_secret': os.getenv('FITBIT_CLIENT_SECRET'),
+                'access_token': os.getenv('FITBIT_ACCESS_TOKEN'),
+                'refresh_token': os.getenv('FITBIT_REFRESH_TOKEN'),
+            },
+            'update_schedule': {'time': time(5, 30)}
+        }
+    },
+    'retro_characters': {
+        'class': 'RetroCharactersModule',
+        'params': {
+            'screen_size': CURRENT_MONITOR['resolution'],
+            'icon_size': 64,
+            'icon_directory': retro_icons_path,
+            # Drip feed: slow spawn rate, gentle fall, and a high cap so it
+            # never blocks (a low cap caused fill-then-refill batches). More
+            # on screen comes from the slower fall (longer dwell), not a
+            # faster spawn, so appearances stay spread out (~1.2s apart).
+            'spawn_probability': 0.028,
+            'fall_speed': 2.0,
+            'max_active_icons': 60,
+            'rotation_speed': 1
+        }
+    },
+    'ai_voice': {
+        'class': 'AIVoiceModule',
+        'params': {
+            'openai': {
+                'api_key': None,  # Fetched from env in module
+                # Set VOICE_MODEL in Variables.env to switch (no code edit).
+                # gpt-realtime-mini = best cost/latency; gpt-realtime = smarter.
+                'model': os.getenv('VOICE_MODEL', 'gpt-realtime-mini'),
+                'voice': os.getenv('VOICE_VOICE', 'marin'),
+            },
+            'audio': {
+                'device_index': 2,
+                # plughw (not hw) so ALSA resamples the USB mic to the
+                # Realtime API's 24 kHz. Set VOICE_MIC in Variables.env if
+                # your USB mic is not card 3.
+                'alsa_device': os.getenv('VOICE_MIC', 'plughw:3,0'),
+                # Speaker for replies (aplay). Empty = ALSA default output;
+                # set VOICE_SPEAKER (e.g. plughw:0,0 for HDMI) if needed.
+                'speaker_device': os.getenv('VOICE_SPEAKER') or None,
+                # End a live conversation after this many idle seconds
+                'conversation_timeout': 25,
+                # Hard cap on any single conversation, idle or not
+                'max_conversation_seconds': 180,
+            },
+            'debug_write': False,
+        }
+    },
+    'avatar': {
+        'class': 'AvatarModule',
+        'params': {
+            'size': 620,
+            'alsa_device': os.getenv('VOICE_MIC', 'plughw:3,0'),
+        }
+    },
+    'ai_interaction': {
+        'class': 'AIInteractionModule',
+        'params': {
+            'openai': {
+                'api_key': None,  # Fetched from env in module
+                'model': 'gpt-5.4-mini'
+            },
+            'audio': {
+                'device_index': 2,
+                'mic_energy_threshold': 500,
+                'tts_volume': 0.8,
+                'wav_volume': 0.5
+            },
+            'use_direct_audio': True,
+            'disable_audio': False
+        }
+    },
+    'eleven_voice': {
+        'class': 'ElevenVoice',
+        'params': {
+            'api_key': os.getenv('ELEVENLABS_API_KEY', 'your-eleven-api-key'),
+            'voice_id': os.getenv('ELEVENLABS_VOICE_ID', 'your-voice-id'),
+            'openai_key': os.getenv('OPENAI_API_KEY', 'your-openai-api-key')
+        }
+    },
+    'countdown': {
+        'class': 'CountdownModule',
+        'params': {
+            'events': [
+                {'name': 'Christmas', 'date': '2026-12-25'},
+                {'name': 'New Year', 'date': '2027-01-01'},
+            ]
+        }
+    },
+    'quote': {
+        'class': 'QuoteModule',
+        'params': {}
+    },
+    'news': {
+        'class': 'NewsModule',
+        'params': {
+            'feeds': [
+                {'name': 'BBC', 'url': 'http://feeds.bbci.co.uk/news/rss.xml'},
+                {'name': 'Guardian', 'url': 'https://www.theguardian.com/uk/rss'},
+            ],
+            'rotation_interval': 15,
+            'max_headlines': 8
+        }
+    },
+    'openclaw': {
+        'class': 'OpenClawModule',
+        'params': {
+            'gateway_url': os.getenv('OPENCLAW_GATEWAY_URL', ''),
+            'token': os.getenv('OPENCLAW_GATEWAY_TOKEN', ''),
+            'device_id': 'ai-mirror-pi5',
+            'notification_timeout': 10,
+            'max_inbox_messages': 5,
+            'voice_reply_enabled': True
+        }
+    },
+
+    'smarthome': {
+        'class': 'SmartHomeModule',
+        'params': {
+            # Accept both env spellings; some Variables.env copies used the
+            # long HOME_ASSISTANT_* names
+            'ha_url': os.getenv('HA_URL') or os.getenv('HOME_ASSISTANT_URL', ''),
+            'ha_token': os.getenv('HA_TOKEN') or os.getenv('HOME_ASSISTANT_ACCESS_TOKEN', ''),
+            # Curate exactly which entities show by setting HA_ENTITIES in
+            # Variables.env (comma-separated entity ids). Empty = auto-discover.
+            'entities': [e.strip() for e in os.getenv('HA_ENTITIES', '').split(',') if e.strip()],
+            # One full /api/states snapshot is shared with the Phone module.
+            # Five minutes is responsive enough for a glanceable mirror and
+            # keeps baseline HA traffic near 288 calls/day, not ~1,000.
+            'update_interval_minutes': 5,
+            'max_entities': 20,      # discovered total (dashboard shows all)
+            'mini_entities': 8,      # shown in the left-column mini view
+            'dashboard_timeout': 60,  # seconds before dashboard auto-closes
+            # Optional exact people/presence entities for automatic overnight
+            # sleep. Empty uses HA person.* entities only (safe fallback).
+            'presence_entities': [e.strip() for e in os.getenv('HA_PRESENCE_ENTITIES', '').split(',') if e.strip()],
+        }
+    },
+    'sysinfo': {
+        'class': 'SysInfoModule',
+        'params': {
+            'update_interval_seconds': 10,
+        }
+    },
+    'phone': {
+        'class': 'PhoneModule',
+        'params': {
+            'ha_url': os.getenv('HA_URL') or os.getenv('HOME_ASSISTANT_URL', ''),
+            'ha_token': os.getenv('HA_TOKEN') or os.getenv('HOME_ASSISTANT_ACCESS_TOKEN', ''),
+            'battery_entity': '',     # auto-discovers the iPhone battery sensor
+            'travel_minutes': 25,     # commute buffer for the Leave countdown
+            'lead_window_minutes': 180,
+            'update_interval_minutes': 5,
+        }
+    },
+    'greeting': {
+        'class': 'GreetingModule',
+        'params': {
+            'rotation_interval': 60,
+        }
+    },
+    'octopus_energy': {
+        'class': 'OctopusEnergyModule',
+        'params': {
+            'api_key': os.getenv('OCTOPUS_API_KEY', ''),
+            'account_number': os.getenv('OCTOPUS_ACCOUNT_NUMBER', ''),
+        }
+    },
+
+    # Phone control panel served on the LAN (http://<pi-ip>:8780)
+    'web_panel': {
+        'enabled': True,
+        'port': 8780,
+    },
+
+    # Audio and sound effects
+    'sound_effects_path': sound_effects_path,
+    'audio': {
+        'mic_energy_threshold': 500,
+        'tts_volume': 0.8,
+        'wav_volume': 0.5
+    },
+    
+    # Module visibility settings
+    'module_visibility': {
+        'clock': True,
+        'weather': True,
+        'stocks': True,
+        'calendar': True,
+        'fitbit': True,
+        'retro_characters': True,
+        # Voice is opt-in via Variables.env (no code edit, survives git pull):
+        #   ENABLE_VOICE=1           -> Realtime voice (gpt-realtime-mini)
+        #   ENABLE_VOICE_FALLBACK=1  -> older chat+TTS voice (no Realtime access needed)
+        'ai_voice': (not AVATAR_ENABLED) and os.getenv('ENABLE_VOICE', '').lower() in ('1', 'true', 'yes', 'on'),
+        'ai_interaction': (not AVATAR_ENABLED) and os.getenv('ENABLE_VOICE_FALLBACK', '').lower() in ('1', 'true', 'yes', 'on'),
+        'avatar': AVATAR_ENABLED,
+        'countdown': True,
+        'quote': True,
+        'news': True,
+        'openclaw': True,
+        'smarthome': True,
+        'sysinfo': True,
+        'greeting': True,
+        'octopus_energy': True,
+        'phone': True,
+    },
+    
+    # Keyboard toggles: keys 1-9, 0 map to these modules (in order)
+    'toggle_modules': [
+        'weather', 'calendar', 'countdown', 'smarthome',
+        'greeting', 'quote', 'news', 'fitbit',
+        'openclaw', 'sysinfo',
+    ],
+
+    # State-specific module settings
+    'screensaver_modules': ['retro_characters'],
+    'sleep_modules': ['clock'],
+    # Automatic overnight blackout. It only activates when fresh HA presence
+    # data confirms everyone is away; missing/stale HA data always stays awake.
+    'auto_sleep': {
+        'enabled': os.getenv('AUTO_SLEEP_ENABLED', '1').lower() in ('1', 'true', 'yes', 'on'),
+        'start_hour': int(os.getenv('AUTO_SLEEP_START_HOUR', '1')) % 24,
+        'end_hour': int(os.getenv('AUTO_SLEEP_END_HOUR', '5')) % 24,
+        'presence_max_age_seconds': max(30, int(os.getenv('AUTO_SLEEP_PRESENCE_MAX_AGE_SECONDS', '300'))),
+        'wake_grace_seconds': max(0, int(os.getenv('AUTO_SLEEP_WAKE_GRACE_SECONDS', '600'))),
+        # xset DPMS turns off the connected display backlight on desktop/X11
+        # Pi installations. If unavailable, the app still renders pure black.
+        'power_off_display': os.getenv('AUTO_SLEEP_POWER_OFF_DISPLAY', '1').lower() in ('1', 'true', 'yes', 'on'),
+    },
+
+    # Optional Home Assistant sensors used by the browser visual gate.
+    # Keep these environment-driven so the visual prototype can be shared
+    # without embedding a household's entity ids in source control.
+    'visual_gate': {
+        'power_entity': os.getenv('VISUAL_GATE_POWER_ENTITY', os.getenv('HA_POWER_ENTITY', '')),
+        'solar_entity': os.getenv('VISUAL_GATE_SOLAR_ENTITY', os.getenv('HA_SOLAR_ENTITY', '')),
+        'car_soc_entity': os.getenv('VISUAL_GATE_CAR_SOC_ENTITY', os.getenv('HA_CAR_SOC_ENTITY', '')),
+        'light_entities': [e.strip() for e in os.getenv(
+            'VISUAL_GATE_LIGHT_ENTITIES', os.getenv('HA_LIGHT_ENTITIES', '')
+        ).split(',') if e.strip()],
+        'upstairs_temp_entity': os.getenv('VISUAL_GATE_UPSTAIRS_TEMP_ENTITY', ''),
+        'upstairs_humidity_entity': os.getenv('VISUAL_GATE_UPSTAIRS_HUMIDITY_ENTITY', ''),
+        'downstairs_temp_entity': os.getenv('VISUAL_GATE_DOWNSTAIRS_TEMP_ENTITY', ''),
+        'downstairs_humidity_entity': os.getenv('VISUAL_GATE_DOWNSTAIRS_HUMIDITY_ENTITY', ''),
+        'bedroom_occupancy_entity': os.getenv('VISUAL_GATE_BEDROOM_OCCUPANCY_ENTITY', ''),
+        'livingroom_occupancy_entity': os.getenv('VISUAL_GATE_LIVINGROOM_OCCUPANCY_ENTITY', ''),
+        'livingroom_curtain_entity': os.getenv('VISUAL_GATE_LIVINGROOM_CURTAIN_ENTITY', ''),
+        # Optional mappings into the SAME HA snapshot; never separate clients.
+        **{key: os.getenv('VISUAL_GATE_' + key.upper(), '') for key in (
+            'livingroom_light_entity', 'bedroom_light_entity', 'upstairs_light_entity',
+            'porch_light_entity', 'hall_light_entity',
+            'bedroom1_light_entity', 'bedroom2_light_entity', 'bedroom3_light_entity',
+            'bathroom_light_entity', 'livingroom_spotlights_entity',
+            'livingroom_led_entity', 'livingroom_tv_entity', 'alarm_entity',
+            'car_presence_entity', 'upstairs_occupancy_entity', 'front_door_contact_entity',
+            'doorbell_camera_entity', 'external_camera_entity',
+            'doorbell_motion_entity', 'external_motion_entity',
+            'car_charging_entity', 'battery_soc_entity', 'battery_charging_entity')},
+        'car_charging_entity': os.getenv('VISUAL_GATE_CAR_CHARGING', os.getenv('VISUAL_GATE_CAR_CHARGING_ENTITY', '')),
+        'doorbell_motion_entity': os.getenv('VISUAL_GATE_DOORBELL_PERSON', os.getenv('VISUAL_GATE_DOORBELL_MOTION_ENTITY', '')),
+        'external_motion_entity': os.getenv('VISUAL_GATE_FRONTCAMERA_MOTION', os.getenv('VISUAL_GATE_EXTERNAL_MOTION_ENTITY', '')),
+        'rain_probability_pct': int(os.getenv('VISUAL_GATE_RAIN_THRESHOLD', '55')),
+        # Motion sensor in front of the mirror: drives Rest / Glance / wake.
+        'entrance_pir_entity': os.getenv('VISUAL_GATE_ENTRANCE_PIR',
+                                         os.getenv('VISUAL_GATE_ENTRANCE_PIR_ENTITY', '')),
+    },
+    
+    # Debug settings
+    'debug': {
+        'enabled': True,
+        'log_level': 'INFO'
+    },
+    
+    # Visual effects settings
+    'visual_effects': {
+        'enabled': True,
+        'animation_speed': 1.0,
+        'transparency': {
+            'background': 180,
+            'text': 220,
+            'highlights': 255
+        }
+    },
+    
+    # Screen settings
+    'current_monitor': {
+        'width': CURRENT_MONITOR['resolution'][0],
+        'height': CURRENT_MONITOR['resolution'][1],
+        'is_portrait': True,
+    },
+    
+    # Module styling
+    'module_styling': {
+        'font_family': FONT_NAME,
+        'fonts': {
+            'title': {'size': FONT_SIZE_TITLE, 'color': COLOR_TEXT_DIM},
+            'subtitle': {'size': FONT_SIZE_SUBTITLE, 'color': COLOR_TEXT_SECONDARY},
+            'body': {'size': FONT_SIZE_BODY, 'color': COLOR_TEXT_PRIMARY},
+            'small': {'size': FONT_SIZE_SMALL, 'color': COLOR_TEXT_SECONDARY}
+        },
+        'backgrounds': {
+            'module': None,
+            'header': None,
+            'highlight': None
+        },
+        'separator_color': COLOR_SEPARATOR,
+        'spacing': {
+            'line_height': DEFAULT_LINE_HEIGHT,
+            'padding': DEFAULT_PADDING
+        },
+        'radius': DEFAULT_RADIUS,
+        'module_dimensions': {
+            'standard': {'width': 300, 'height': 250, 'header_height': 0},
+            'large': {'width': 300, 'height': 500, 'header_height': 0}
+        }
+    },
+
+    # Layout V2, animation, and moments references
+    'layout_v2': LAYOUT_V2,
+    'animation': ANIMATION,
+    'moments': MOMENTS,
+}
+
+
+#########################################
+# House pack overrides
+#########################################
+# A home's own settings (city, watchlist, module tweaks) live in the house
+# pack, not here: <house>/config_local.py defines OVERRIDES, a dict merged
+# over CONFIG key by key (nested dicts merge, anything else replaces).
+# See house_pack.py and house.example/config_local.py.
+def _merge(base, extra):
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _merge(base[key], value)
+        else:
+            base[key] = value
+
+
+def _apply_house_overrides():
+    import importlib.util
+    from house_pack import house_path
+    path = house_path('config_local.py')
+    if not path.is_file():
+        return
+    try:
+        spec = importlib.util.spec_from_file_location('house_config_local', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        overrides = getattr(module, 'OVERRIDES', {})
+        if isinstance(overrides, dict):
+            _merge(CONFIG, overrides)
+    except Exception:
+        logging.getLogger(__name__).exception('house config_local.py failed to load; using defaults')
+
+
+_apply_house_overrides()

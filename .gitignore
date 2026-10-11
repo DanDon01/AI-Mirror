@@ -1,0 +1,54 @@
+# Virtual environment
+venv/
+/venv
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Log files
+*.log
+
+# Environment variables / secrets
+Variables.env
+.env
+prototype/visual-gate/settings.json
+
+# Data directory (debug output, recordings, temp files)
+data/
+
+# API tracker state (persisted across sessions, machine-specific)
+api_tracker_state.json
+
+# Voice interaction logs
+mirror_voice_log.txt
+
+# Temporary audio files
+*.mp3
+*.wav
+!assets/**/*.mp3
+!assets/**/*.wav
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# Distribution
+dist/
+build/
+*.egg-info/
+google_login.html
+voice_prompt.txt
+
+# This home's house pack (its own private repo) and private Claude notes
+house/
+CLAUDE.local.md

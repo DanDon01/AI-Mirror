@@ -1,0 +1,153 @@
+"""Headless smoke test for AI-Mirror.
+
+Run after a git pull (deploy/deploy.sh does this) or in CI to catch
+import errors and basic module breakage before restarting the mirror.
+No network, no display, no audio hardware required.
+
+Exit code 0 = pass, 1 = fail.
+"""
+
+import importlib
+import os
+import sys
+import traceback
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+PROJECT_MODULES = [
+    "config",
+    "module_base",
+    "animation_manager",
+    "layout_manager",
+    "module_manager",
+    "api_tracker",
+    "background_fetcher",
+    "data_cache",
+    "visual_effects",
+    "voice_commands",
+    "effects_kit",
+    "body_scan",
+    "weather_glyphs",
+    "event_director",
+    "moments_weather",
+    "moments_life",
+    "moments_fun",
+    "moments_arcade",
+    "moments_seasonal",
+    "moments_library",
+    "seasonal_theme",
+    "theme",
+    "portal_ring",
+    "weather_animations",
+    "clock_module",
+    "weather_module",
+    "stocks_module",
+    "calendar_module",
+    "fitbit_module",
+    "countdown_module",
+    "quote_module",
+    "news_module",
+    "openclaw_module",
+    "smarthome_module",
+    "sysinfo_module",
+    "greeting_module",
+    "retrocharacters_module",
+    "octopus_energy_module",
+    "avatar_module",
+    "phone_module",
+    "web_panel",
+    "ai_voice_module",
+    "AI_Module",
+    "elevenvoice_module",
+    "avatar_profiles",
+    "avatar_services",
+    "avatar_context",
+    "avatar_cache",
+    "avatar_player",
+]
+
+
+def main():
+    failures = []
+
+    print("== Import check ==")
+    for name in PROJECT_MODULES:
+        try:
+            importlib.import_module(name)
+            print(f"  ok   {name}")
+        except Exception as e:
+            failures.append((name, e))
+            print(f"  FAIL {name}: {e}")
+
+    print("== Instantiation and draw check ==")
+    try:
+        import pygame
+        pygame.init()
+        screen = pygame.Surface((1440, 2560))
+
+        from avatar_module import AvatarModule
+        from avatar_profiles import AvatarProfiles
+        from greeting_module import GreetingModule
+        from news_module import NewsModule
+        from quote_module import QuoteModule
+
+        instances = {
+            "greeting": GreetingModule(rotation_interval=60),
+            "news": NewsModule(),
+            "quote": QuoteModule(),
+        }
+        # The avatar needs characters from a house pack; without one there
+        # is no avatar on the mirror either, so there is nothing to draw.
+        if AvatarProfiles().options():
+            instances["avatar"] = AvatarModule(size=320)
+        else:
+            print("  skip avatar: no house pack characters")
+        pos = {"x": 20, "y": 20, "width": 320, "height": 320}
+        for _ in range(30):
+            for name, mod in instances.items():
+                mod.update()
+                mod.draw(screen, pos)
+        for mod in instances.values():
+            mod.cleanup()
+        print("  ok   30 frames across " + "/".join(instances))
+    except Exception as e:
+        failures.append(("frame-test", e))
+        print(f"  FAIL frame test: {e}")
+        traceback.print_exc()
+
+    print("== Moments sweep (every registered moment, several elapsed times) ==")
+    # pygame.transform.smoothscale segfaults -- not a catchable exception --
+    # on a zero-size source surface (e.g. font.render('') on a missing ctx
+    # value), so this can't be wrapped in try/except like the checks above:
+    # a regression here crashes this whole process instead of printing
+    # FAIL. That's still a real signal in CI (a non-zero/crashed exit
+    # instead of "SMOKE TEST PASSED"); the per-moment print below at
+    # least leaves a breadcrumb for which one did it.
+    try:
+        from event_director import Director
+        import moments_library
+        director = Director(1440, 2560, {'enabled': True})
+        moments_library.register_all(director)
+        sweep_screen = pygame.Surface((1440, 2560))
+        for name in director.moment_names():
+            moment = director._moments[name]
+            print(f"  testing {name}...", flush=True)
+            for frac in (0.05, 0.5, 0.95):
+                sweep_screen.fill((8, 10, 18))
+                moment.render(sweep_screen, moment.duration_s * frac, None)
+        print(f"  ok   {len(director.moment_names())} moments x 3 elapsed samples each")
+    except Exception as e:
+        failures.append(("moments-sweep", e))
+        print(f"  FAIL moments sweep: {e}")
+        traceback.print_exc()
+
+    if failures:
+        print(f"SMOKE TEST FAILED ({len(failures)} failure(s))")
+        return 1
+    print("SMOKE TEST PASSED")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

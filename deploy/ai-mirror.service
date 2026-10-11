@@ -1,0 +1,39 @@
+# systemd unit TEMPLATE for AI-Mirror on the Raspberry Pi.
+#
+# Do not install this file directly - the __PLACEHOLDERS__ below are
+# filled in for your user and paths by:
+#
+#   ./deploy/install-service.sh
+#
+# That script detects your username, project directory, and venv, writes
+# the real unit to /etc/systemd/system/, and starts it. Logs:
+#   journalctl -u ai-mirror -f   (plus the app's magic_mirror.log)
+#
+# This is the Pygame app. The Chromium visual gate is the other unit,
+# ai-mirror-visual.service; switch between them with:
+#   ./deploy/mirror-mode.sh visual|pygame
+
+[Unit]
+Description=AI-Mirror smart mirror
+After=network-online.target graphical.target
+Wants=network-online.target
+# Boot grace: don't count restarts as failure during slow Pi startup
+StartLimitIntervalSec=120
+StartLimitBurst=10
+# Both units drive the same display, so never let systemd run the pair.
+Conflicts=ai-mirror-visual.service
+
+[Service]
+User=__USER__
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PYTHON__ AI-Mirror.py
+Restart=always
+RestartSec=5
+# Display: X11 path. If the Pi runs Wayland (labwc, the Bookworm default)
+# and this still fails on the display, set DISPLAY/WAYLAND_DISPLAY for your session.
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=__HOME__/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+
+[Install]
+WantedBy=graphical.target

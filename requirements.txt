@@ -1,0 +1,47 @@
+# AI-Mirror dependencies (direct imports only; pip resolves the rest)
+# Updated June 2026. Test on the Pi after upgrading - especially yfinance,
+# which jumped from 0.2.x to 1.x (API mostly compatible but verify ticker
+# data parsing in stocks_module).
+
+# Core display
+pygame==2.6.1
+numpy==2.4.6
+Pillow==10.4.0   # effects_kit.py: real Gaussian blur for cloud/moment textures
+
+# HTTP / parsing
+requests==2.34.2
+python-dotenv==1.2.2
+feedparser==6.0.12
+beautifulsoup4==4.15.0
+lxml==6.1.1
+
+# OpenAI (Realtime GA + chat + TTS; 2.x SDK required for GA realtime)
+openai==2.41.1
+websocket-client==1.9.0
+fal-client==1.0.1
+
+# Google Calendar
+google-api-python-client==2.197.0
+google-auth-oauthlib==1.4.0
+google-auth-httplib2==0.4.0
+
+# Fitbit (legacy Web API - retires September 2026, see fitbit_module.py)
+fitbit==0.3.1
+oauthlib==3.2.2
+requests-oauthlib==2.0.0
+
+# Stocks
+yfinance==1.4.1
+pandas>=2.2,<4
+
+# System stats
+psutil==7.2.2
+
+# Audio / speech (Pi hardware dependent - loose pins so platform
+# wheels resolve cleanly on ARM)
+pyaudio
+SpeechRecognition>=3.14
+sounddevice>=0.5
+soundfile>=0.12
+vosk>=0.3.45
+gtts==2.5.4

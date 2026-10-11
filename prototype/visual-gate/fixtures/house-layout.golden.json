@@ -1,0 +1,790 @@
+{
+ "note": "Architecture lock for this house. Regenerate only after the owner signs it off.",
+ "renderer": "js/home-twin.js",
+ "objects": [
+  {
+   "i": 0,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0,
+    0,
+    0
+   ],
+   "max": [
+    3,
+    1.7,
+    1.7
+   ]
+  },
+  {
+   "i": 1,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 24,
+   "min": [
+    0,
+    0,
+    0
+   ],
+   "max": [
+    3,
+    1.7,
+    1.7
+   ]
+  },
+  {
+   "i": 2,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0,
+    1.7,
+    0.85
+   ],
+   "max": [
+    3,
+    2.3,
+    1.7
+   ]
+  },
+  {
+   "i": 3,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0,
+    1.7,
+    0.85
+   ],
+   "max": [
+    3,
+    2.3,
+    1.7
+   ]
+  },
+  {
+   "i": 4,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0,
+    1.7,
+    0
+   ],
+   "max": [
+    3,
+    2.3,
+    0.85
+   ]
+  },
+  {
+   "i": 5,
+   "type": "LineSegments",
+   "geometry": "EdgesGeometry",
+   "vertices": 8,
+   "min": [
+    0,
+    1.7,
+    0
+   ],
+   "max": [
+    3,
+    2.3,
+    0.85
+   ]
+  },
+  {
+   "i": 6,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.03,
+    0.0375,
+    0.03
+   ],
+   "max": [
+    2.97,
+    0.0625,
+    1.67
+   ]
+  },
+  {
+   "i": 7,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.03,
+    0.8875,
+    0.03
+   ],
+   "max": [
+    2.97,
+    0.9125,
+    1.67
+   ]
+  },
+  {
+   "i": 8,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.02,
+    0.051,
+    0.87
+   ],
+   "max": [
+    1.78,
+    0.748,
+    1.68
+   ]
+  },
+  {
+   "i": 9,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.865,
+    0.725,
+    1.24
+   ],
+   "max": [
+    0.935,
+    0.737,
+    1.31
+   ]
+  },
+  {
+   "i": 10,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    0.76,
+    0.14,
+    1.275
+   ],
+   "max": [
+    1.04,
+    0.54,
+    1.275
+   ]
+  },
+  {
+   "i": 11,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.02,
+    0.051,
+    0.02
+   ],
+   "max": [
+    1.78,
+    0.748,
+    0.83
+   ]
+  },
+  {
+   "i": 12,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.865,
+    0.725,
+    0.39
+   ],
+   "max": [
+    0.935,
+    0.737,
+    0.46
+   ]
+  },
+  {
+   "i": 13,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    0.76,
+    0.14,
+    0.425
+   ],
+   "max": [
+    1.04,
+    0.54,
+    0.425
+   ]
+  },
+  {
+   "i": 14,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.82,
+    0.051,
+    0.02
+   ],
+   "max": [
+    2.98,
+    0.748,
+    1.68
+   ]
+  },
+  {
+   "i": 15,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    2.365,
+    0.725,
+    0.815
+   ],
+   "max": [
+    2.435,
+    0.737,
+    0.885
+   ]
+  },
+  {
+   "i": 16,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    2.26,
+    0.14,
+    0.85
+   ],
+   "max": [
+    2.54,
+    0.54,
+    0.85
+   ]
+  },
+  {
+   "i": 17,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.02,
+    0.901,
+    0.87
+   ],
+   "max": [
+    1.48,
+    1.598,
+    1.68
+   ]
+  },
+  {
+   "i": 18,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.715,
+    1.575,
+    1.24
+   ],
+   "max": [
+    0.785,
+    1.587,
+    1.31
+   ]
+  },
+  {
+   "i": 19,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    0.61,
+    0.99,
+    1.275
+   ],
+   "max": [
+    0.89,
+    1.39,
+    1.275
+   ]
+  },
+  {
+   "i": 20,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.52,
+    0.901,
+    0.87
+   ],
+   "max": [
+    2.98,
+    1.598,
+    1.68
+   ]
+  },
+  {
+   "i": 21,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    2.215,
+    1.575,
+    1.24
+   ],
+   "max": [
+    2.285,
+    1.587,
+    1.31
+   ]
+  },
+  {
+   "i": 22,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    2.11,
+    0.99,
+    1.275
+   ],
+   "max": [
+    2.39,
+    1.39,
+    1.275
+   ]
+  },
+  {
+   "i": 23,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    0.02,
+    0.901,
+    0.02
+   ],
+   "max": [
+    1.48,
+    1.598,
+    0.83
+   ]
+  },
+  {
+   "i": 24,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    0.715,
+    1.575,
+    0.39
+   ],
+   "max": [
+    0.785,
+    1.587,
+    0.46
+   ]
+  },
+  {
+   "i": 25,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    0.61,
+    0.99,
+    0.425
+   ],
+   "max": [
+    0.89,
+    1.39,
+    0.425
+   ]
+  },
+  {
+   "i": 26,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.52,
+    0.901,
+    0.02
+   ],
+   "max": [
+    2.98,
+    1.598,
+    0.83
+   ]
+  },
+  {
+   "i": 27,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 76,
+   "min": [
+    2.215,
+    1.575,
+    0.39
+   ],
+   "max": [
+    2.285,
+    1.587,
+    0.46
+   ]
+  },
+  {
+   "i": 28,
+   "type": "Points",
+   "geometry": "BufferGeometry",
+   "vertices": 7,
+   "min": [
+    2.11,
+    0.99,
+    0.425
+   ],
+   "max": [
+    2.39,
+    1.39,
+    0.425
+   ]
+  },
+  {
+   "i": 29,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    0.45,
+    0.2575,
+    1.712
+   ],
+   "max": [
+    1.35,
+    0.6775,
+    1.712
+   ]
+  },
+  {
+   "i": 30,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    0.4,
+    1.1375,
+    1.712
+   ],
+   "max": [
+    1.1,
+    1.4975,
+    1.712
+   ]
+  },
+  {
+   "i": 31,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    1.9,
+    1.1375,
+    1.712
+   ],
+   "max": [
+    2.6,
+    1.4975,
+    1.712
+   ]
+  },
+  {
+   "i": 32,
+   "type": "Mesh",
+   "geometry": "PlaneGeometry",
+   "vertices": 4,
+   "min": [
+    2.23,
+    0.03,
+    1.715
+   ],
+   "max": [
+    2.57,
+    0.59,
+    1.715
+   ]
+  },
+  {
+   "i": 33,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    1.435,
+    1.47,
+    1.71
+   ],
+   "max": [
+    1.565,
+    1.57,
+    1.75
+   ]
+  },
+  {
+   "i": 34,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.22,
+    1.772,
+    1.309
+   ],
+   "max": [
+    0.83,
+    1.976,
+    1.598
+   ]
+  },
+  {
+   "i": 35,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.87,
+    1.772,
+    1.309
+   ],
+   "max": [
+    1.48,
+    1.976,
+    1.598
+   ]
+  },
+  {
+   "i": 36,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    1.52,
+    1.772,
+    1.309
+   ],
+   "max": [
+    2.13,
+    1.976,
+    1.598
+   ]
+  },
+  {
+   "i": 37,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    2.17,
+    1.772,
+    1.309
+   ],
+   "max": [
+    2.78,
+    1.976,
+    1.598
+   ]
+  },
+  {
+   "i": 38,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.22,
+    2,
+    0.986
+   ],
+   "max": [
+    0.83,
+    2.204,
+    1.275
+   ]
+  },
+  {
+   "i": 39,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    0.87,
+    2,
+    0.986
+   ],
+   "max": [
+    1.48,
+    2.204,
+    1.275
+   ]
+  },
+  {
+   "i": 40,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    1.52,
+    2,
+    0.986
+   ],
+   "max": [
+    2.13,
+    2.204,
+    1.275
+   ]
+  },
+  {
+   "i": 41,
+   "type": "Mesh",
+   "geometry": "BufferGeometry",
+   "vertices": 4,
+   "min": [
+    2.17,
+    2,
+    0.986
+   ],
+   "max": [
+    2.78,
+    2.204,
+    1.275
+   ]
+  },
+  {
+   "i": 42,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    3.2,
+    0.12,
+    0.5
+   ],
+   "max": [
+    3.7,
+    0.28,
+    1.7
+   ]
+  },
+  {
+   "i": 43,
+   "type": "Mesh",
+   "geometry": "BoxGeometry",
+   "vertices": 24,
+   "min": [
+    3.23,
+    0.275,
+    0.75
+   ],
+   "max": [
+    3.67,
+    0.425,
+    1.35
+   ]
+  },
+  {
+   "i": 44,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    3.18,
+    0.0028,
+    0.59
+   ],
+   "max": [
+    3.24,
+    0.2172,
+    0.81
+   ]
+  },
+  {
+   "i": 45,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    3.18,
+    0.0028,
+    1.39
+   ],
+   "max": [
+    3.24,
+    0.2172,
+    1.61
+   ]
+  },
+  {
+   "i": 46,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    3.66,
+    0.0028,
+    0.59
+   ],
+   "max": [
+    3.72,
+    0.2172,
+    0.81
+   ]
+  },
+  {
+   "i": 47,
+   "type": "Mesh",
+   "geometry": "CylinderGeometry",
+   "vertices": 88,
+   "min": [
+    3.66,
+    0.0028,
+    1.39
+   ],
+   "max": [
+    3.72,
+    0.2172,
+    1.61
+   ]
+  },
+  {
+   "i": 48,
+   "type": "Mesh",
+   "geometry": "SphereGeometry",
+   "vertices": 99,
+   "min": [
+    3.425,
+    0.275,
+    0.4562
+   ],
+   "max": [
+    3.475,
+    0.325,
+    0.5038
+   ]
+  }
+ ]
+}

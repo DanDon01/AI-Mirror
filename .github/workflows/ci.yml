@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches Raspberry Pi OS Bookworm
+          python-version: "3.11"
+          cache: pip
+
+      - name: System libraries (pyaudio build, ALSA stubs)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends portaudio19-dev libasound2-dev
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile all sources
+        run: python -m compileall -q .
+
+      - name: Headless smoke test
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python smoke_test.py

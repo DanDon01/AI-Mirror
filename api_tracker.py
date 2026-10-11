@@ -1,0 +1,414 @@
+"""Global API call tracker and rate limiter for AI-Mirror.
+
+Tracks all external API calls across modules, enforces hourly/daily limits,
+estimates costs, and writes a periodic summary to api_usage.log.
+
+Call records are persisted to api_tracker_state.json so that daily limits
+survive application restarts (important for tight free-tier budgets like
+Alpha Vantage's 25 calls/day).
+
+Usage in any module:
+    from api_tracker import api_tracker
+    api_tracker.record("weather", "open-meteo")         # free call
+    api_tracker.record("ai_voice", "openai-realtime", estimated_cost=0.01)
+
+    if not api_tracker.allow("ai_voice", "openai"):
+        return  # limit reached, skip this call
+"""
+
+import json
+import logging
+import os
+import time
+import threading
+from datetime import datetime, timedelta
+from collections import defaultdict
+from logging.handlers import RotatingFileHandler
+
+logger = logging.getLogger("APITracker")
+
+_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+_STATE_FILE = os.path.join(_PROJECT_DIR, 'api_tracker_state.json')
+
+# Default limits per service (calls per hour)
+DEFAULT_LIMITS = {
+    'openai': {'hourly': 60, 'daily': 500, 'daily_cost': 5.00},
+    # Realtime voice: ~20 replies/hour, hard $1/day ceiling. The voice
+    # module also enforces per-conversation time caps on top of this.
+    'openai-realtime': {'hourly': 20, 'daily': 100, 'daily_cost': 1.00},
+    # Talking-avatar generation. The model is currently $0.02/s;
+    # keep the proof and future explicit prewarming inside a hard daily cap.
+    'fal-avatar': {'hourly': 10, 'daily': 50, 'daily_cost': 2.00},
+    # Offline theatre clips (avatar_theatre.py): ~$0.35 each on Kling 2.6
+    # Pro via fal. Kept separate from fal-avatar so testing the pool can
+    # never block live conversations, and small so a mistake costs little.
+    'fal-theatre': {'hourly': 6, 'daily': 12, 'daily_cost': 4.20},
+    'elevenlabs': {'hourly': 30, 'daily': 200, 'daily_cost': 2.00},
+    'openweathermap': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
+    'open-meteo': {'hourly': 20, 'daily': 500, 'daily_cost': 0},
+    'yahoo-finance': {'hourly': 10, 'daily': 100, 'daily_cost': 0},
+    'alpha-vantage': {'hourly': 10, 'daily': 25, 'daily_cost': 0},
+    'fitbit': {'hourly': 10, 'daily': 150, 'daily_cost': 0},
+    'google-calendar': {'hourly': 10, 'daily': 200, 'daily_cost': 0},
+    'zenquotes': {'hourly': 5, 'daily': 10, 'daily_cost': 0},
+    'home-assistant': {'hourly': 60, 'daily': 1000, 'daily_cost': 0},
+    # Octopus REST API is free and generous; the module polls account +
+    # rates + hourly consumption, ~50-70/day, so keep healthy headroom
+    'octopus-energy': {'hourly': 60, 'daily': 400, 'daily_cost': 0},
+}
+
+
+class APITracker:
+    """Singleton API call tracker with rate limiting and cost tracking.
+
+    Persists call records to disk so limits are enforced across restarts.
+    """
+
+    # Circuit breaker: after this many consecutive failures a service is
+    # blocked for BREAKER_COOLDOWN seconds (stops hammering a dead API
+    # and burning rate-limit quota while it is down).
+    BREAKER_THRESHOLD = 3
+    BREAKER_COOLDOWN = 1800  # 30 minutes
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._calls = []  # list of (timestamp, module, service, cost)
+        self._blocked = defaultdict(int)  # service -> blocked count
+        self._failures = defaultdict(int)  # service -> consecutive failures
+        self._breaker_opened = {}  # service -> unix time circuit opened
+        self._limits = dict(DEFAULT_LIMITS)
+        self._daily_cost = 0.0
+        self._session_start = datetime.now()
+        self._last_summary = time.time()
+        self._summary_interval = 300  # log summary every 5 minutes
+        self._last_persist = 0
+        self._persist_interval = 30  # save to disk at most every 30 seconds
+
+        # Dedicated log file for API usage
+        self._usage_logger = logging.getLogger("APIUsage")
+        self._usage_logger.setLevel(logging.INFO)
+        self._usage_logger.propagate = False
+        if not self._usage_logger.handlers:
+            handler = RotatingFileHandler(
+                'api_usage.log', maxBytes=500000, backupCount=3
+            )
+            handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+            self._usage_logger.addHandler(handler)
+
+        # Load persisted state from previous sessions
+        self._load_state()
+
+        self._usage_logger.info("=== API Tracker session started ===")
+        if self._calls:
+            self._usage_logger.info(
+                f"Loaded {len(self._calls)} call records from previous sessions"
+            )
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _load_state(self):
+        """Load call records from disk, pruning anything older than 24h."""
+        try:
+            if not os.path.exists(_STATE_FILE):
+                return
+            with open(_STATE_FILE, 'r') as f:
+                data = json.load(f)
+
+            now = time.time()
+            cutoff = now - 86400
+            loaded = []
+            cost = 0.0
+            for rec in data.get('calls', []):
+                ts = rec[0]
+                if ts > cutoff:
+                    loaded.append(tuple(rec))
+                    cost += rec[3] if len(rec) > 3 else 0.0
+
+            self._calls = loaded
+            self._daily_cost = cost
+            logger.info(
+                f"Loaded {len(loaded)} API call records from disk "
+                f"(cost so far: ${cost:.4f})"
+            )
+        except Exception as e:
+            logger.warning(f"Could not load API tracker state: {e}")
+
+    def _save_state(self):
+        """Persist current call records to disk."""
+        try:
+            now = time.time()
+            cutoff = now - 86400
+            with self._lock:
+                mine = {tuple(rec) for rec in self._calls if rec[0] > cutoff}
+            # Merge with what is on disk: the bridge and a one-off tool
+            # (avatar_theatre.py) share this file, and a plain overwrite
+            # would erase the other's calls - and so weaken the limits.
+            try:
+                with open(_STATE_FILE, 'r') as f:
+                    for rec in json.load(f).get('calls', []):
+                        if rec and rec[0] > cutoff:
+                            mine.add(tuple(rec))
+            except (OSError, ValueError):
+                pass
+            records = sorted([list(rec) for rec in mine], key=lambda r: r[0])
+            data = {'calls': records, 'saved_at': now}
+            # Write atomically: write to temp file then rename
+            tmp = _STATE_FILE + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(data, f)
+            os.replace(tmp, _STATE_FILE)
+        except Exception as e:
+            logger.warning(f"Could not save API tracker state: {e}")
+
+    def _maybe_persist(self):
+        """Save to disk if enough time has passed since last save."""
+        now = time.time()
+        if now - self._last_persist >= self._persist_interval:
+            self._save_state()
+            self._last_persist = now
+
+    # ------------------------------------------------------------------
+    # Rate limiting
+    # ------------------------------------------------------------------
+
+    def set_limit(self, service, hourly=None, daily=None, daily_cost=None):
+        """Override default limits for a service."""
+        if service not in self._limits:
+            self._limits[service] = {'hourly': 100, 'daily': 1000, 'daily_cost': 0}
+        if hourly is not None:
+            self._limits[service]['hourly'] = hourly
+        if daily is not None:
+            self._limits[service]['daily'] = daily
+        if daily_cost is not None:
+            self._limits[service]['daily_cost'] = daily_cost
+
+    def allow(self, module, service):
+        """Check if a call to this service is allowed under current limits.
+
+        Returns True if allowed, False if rate-limited.
+        """
+        limits = self._limits.get(service, {'hourly': 100, 'daily': 1000, 'daily_cost': 0})
+        now = time.time()
+
+        with self._lock:
+            # Circuit breaker: service recently failed repeatedly
+            opened = self._breaker_opened.get(service)
+            if opened is not None:
+                if now - opened < self.BREAKER_COOLDOWN:
+                    self._blocked[service] += 1
+                    if self._blocked[service] % 10 == 1:
+                        remaining = int(self.BREAKER_COOLDOWN - (now - opened))
+                        logger.warning(
+                            f"Circuit open: {service} blocked for {remaining}s more "
+                            f"after {self._failures[service]} consecutive failures"
+                        )
+                    return False
+                # Cooldown elapsed: half-open, allow one attempt through
+                del self._breaker_opened[service]
+                self._failures[service] = self.BREAKER_THRESHOLD - 1
+
+            hour_ago = now - 3600
+            day_ago = now - 86400
+
+            hourly_count = sum(
+                1 for ts, m, s, c in self._calls
+                if s == service and ts > hour_ago
+            )
+            daily_count = sum(
+                1 for ts, m, s, c in self._calls
+                if s == service and ts > day_ago
+            )
+
+            if hourly_count >= limits['hourly']:
+                self._blocked[service] += 1
+                if self._blocked[service] % 10 == 1:
+                    logger.warning(
+                        f"Rate limit: {service} blocked ({hourly_count}/{limits['hourly']} hourly) "
+                        f"from {module}"
+                    )
+                return False
+
+            if daily_count >= limits['daily']:
+                self._blocked[service] += 1
+                if self._blocked[service] % 10 == 1:
+                    logger.warning(
+                        f"Daily limit: {service} blocked ({daily_count}/{limits['daily']}) "
+                        f"from {module}"
+                    )
+                return False
+
+            # Check this service's own daily cost cap. (It used to compare
+            # against the total for every service, so one service's spend
+            # could block another's.)
+            max_cost = limits.get('daily_cost', 0)
+            service_cost = sum(
+                c for ts, m, s, c in self._calls
+                if s == service and ts > day_ago
+            )
+            if max_cost > 0 and service_cost >= max_cost:
+                self._blocked[service] += 1
+                if self._blocked[service] % 10 == 1:
+                    logger.warning(
+                        f"Cost limit: {service} blocked (${service_cost:.2f}/${max_cost:.2f}) "
+                        f"from {module}"
+                    )
+                return False
+
+        return True
+
+    def record(self, module, service, estimated_cost=0.0):
+        """Record an API call. Call this AFTER a successful request.
+
+        Args:
+            module: Module name (e.g. 'weather', 'ai_voice').
+            service: Service name (e.g. 'openai', 'open-meteo').
+            estimated_cost: Estimated USD cost of this call.
+        """
+        now = time.time()
+        with self._lock:
+            self._calls.append((now, module, service, estimated_cost))
+            self._daily_cost += estimated_cost
+
+            # Successful call closes the circuit breaker for this service
+            self._failures[service] = 0
+            self._breaker_opened.pop(service, None)
+
+            # Prune calls older than 24 hours
+            cutoff = now - 86400
+            self._calls = [
+                (ts, m, s, c) for ts, m, s, c in self._calls
+                if ts > cutoff
+            ]
+
+        self._usage_logger.info(
+            f"CALL {module} -> {service}"
+            + (f" (${estimated_cost:.4f})" if estimated_cost > 0 else "")
+        )
+
+        # Paid calls are written through at once: a crash or a short-lived
+        # tool must never lose a charged call from the count.
+        if estimated_cost > 0 or self._limits.get(service, {}).get('daily_cost', 0) > 0:
+            self._save_state()
+            self._last_persist = now
+        else:
+            self._maybe_persist()
+
+        # Periodic summary
+        if now - self._last_summary > self._summary_interval:
+            self._log_summary()
+            self._last_summary = now
+
+    def failure(self, module, service):
+        """Record a failed API call. Call this in fetch exception handlers.
+
+        After BREAKER_THRESHOLD consecutive failures the circuit opens and
+        allow() returns False for BREAKER_COOLDOWN seconds.
+        """
+        with self._lock:
+            self._failures[service] += 1
+            count = self._failures[service]
+            if count >= self.BREAKER_THRESHOLD and service not in self._breaker_opened:
+                self._breaker_opened[service] = time.time()
+                logger.warning(
+                    f"Circuit opened for {service} after {count} consecutive "
+                    f"failures (reported by {module}); backing off "
+                    f"{self.BREAKER_COOLDOWN // 60} minutes"
+                )
+                self._usage_logger.info(
+                    f"BREAKER OPEN {service} ({count} failures, from {module})"
+                )
+
+    def _log_summary(self):
+        """Write a summary of API usage to the log."""
+        now = time.time()
+        hour_ago = now - 3600
+
+        with self._lock:
+            calls_copy = list(self._calls)
+            blocked_copy = dict(self._blocked)
+
+        # Hourly breakdown by service
+        hourly = defaultdict(int)
+        daily = defaultdict(int)
+        daily_cost = defaultdict(float)
+
+        for ts, module, service, cost in calls_copy:
+            daily[service] += 1
+            daily_cost[service] += cost
+            if ts > hour_ago:
+                hourly[service] += 1
+
+        uptime = datetime.now() - self._session_start
+        hours = uptime.total_seconds() / 3600
+
+        lines = [
+            f"=== API Usage Summary (uptime: {hours:.1f}h) ===",
+            f"Total calls (24h): {len(calls_copy)}",
+            f"Total estimated cost: ${self._daily_cost:.4f}",
+        ]
+
+        if daily:
+            lines.append("Per-service (24h / last hour):")
+            for svc in sorted(daily.keys()):
+                h = hourly.get(svc, 0)
+                d = daily[svc]
+                c = daily_cost[svc]
+                limit = self._limits.get(svc, {})
+                h_limit = limit.get('hourly', '?')
+                d_limit = limit.get('daily', '?')
+                cost_str = f" ${c:.4f}" if c > 0 else ""
+                lines.append(
+                    f"  {svc}: {d}/{d_limit} daily, {h}/{h_limit} hourly{cost_str}"
+                )
+
+        if blocked_copy:
+            lines.append("Blocked calls:")
+            for svc, count in sorted(blocked_copy.items()):
+                lines.append(f"  {svc}: {count} blocked")
+
+        summary = "\n".join(lines)
+        self._usage_logger.info(summary)
+        logger.info(summary)
+
+    def get_summary(self):
+        """Return a dict summary for display or debugging."""
+        now = time.time()
+        hour_ago = now - 3600
+
+        with self._lock:
+            calls_copy = list(self._calls)
+
+        hourly = defaultdict(int)
+        daily = defaultdict(int)
+        daily_cost = defaultdict(float)
+
+        for ts, module, service, cost in calls_copy:
+            daily[service] += 1
+            daily_cost[service] += cost
+            if ts > hour_ago:
+                hourly[service] += 1
+
+        return {
+            'total_calls_24h': len(calls_copy),
+            'total_cost': self._daily_cost,
+            'by_service': {
+                svc: {
+                    'hourly': hourly.get(svc, 0),
+                    'daily': daily[svc],
+                    'cost': daily_cost[svc],
+                }
+                for svc in daily
+            },
+            'uptime_hours': (datetime.now() - self._session_start).total_seconds() / 3600,
+        }
+
+    def force_summary(self):
+        """Force a summary log write and persist to disk."""
+        self._log_summary()
+        self._save_state()
+
+
+# Module-level singleton
+api_tracker = APITracker()

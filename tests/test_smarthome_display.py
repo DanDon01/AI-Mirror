@@ -1,0 +1,63 @@
+import unittest
+
+IMPORT_ERROR = None
+try:
+    import pygame  # The display module intentionally depends on Pygame.
+    from config import COLOR_ACCENT_RED
+    from smarthome_module import _friendly_state, _state_color
+except ModuleNotFoundError as exc:  # Minimal Windows test environments omit it.
+    IMPORT_ERROR = exc
+
+
+@unittest.skipIf(IMPORT_ERROR is not None, "Pygame is not installed in this test environment")
+class SmartHomeDisplayTests(unittest.TestCase):
+    def test_open_door_is_readable_and_alert_colored(self):
+        info = {"state": "on", "attributes": {"device_class": "door"}}
+        self.assertEqual(_friendly_state("binary_sensor.front_door", info), "OPEN")
+        self.assertEqual(_state_color("binary_sensor.front_door", "on", info["attributes"]), COLOR_ACCENT_RED)
+
+    def test_light_brightness_and_climate_temperatures_are_glanceable(self):
+        self.assertEqual(
+            _friendly_state("light.hall", {"state": "on", "attributes": {"brightness": 128}}),
+            "On 50%",
+        )
+        self.assertEqual(
+            _friendly_state("climate.lounge", {"state": "heat", "attributes": {"current_temperature": 20.5, "temperature": 21, "unit_of_measurement": "°C"}}),
+            "20.5°C -> 21°C",
+        )
+
+    def test_cover_and_media_states_include_useful_context(self):
+        self.assertEqual(
+            _friendly_state("cover.blinds", {"state": "open", "attributes": {"current_position": 65}}),
+            "Open 65%",
+        )
+        self.assertEqual(
+            _friendly_state("media_player.kitchen", {"state": "playing", "attributes": {"media_title": "Morning News"}}),
+            "Playing: Morning News",
+        )
+
+    def test_presence_is_available_without_being_a_visible_dashboard_entity(self):
+        from smarthome_module import SmartHomeModule
+        module = SmartHomeModule("http://preview", "token", entities=["light.hall"], presence_entities=["person.alex"])
+        module._apply_states([
+            {"entity_id": "light.hall", "state": "off", "attributes": {}},
+            {"entity_id": "person.alex", "state": "not_home", "attributes": {}},
+        ])
+        self.assertIs(module.everyone_away(), True)
+        module._apply_states([
+            {"entity_id": "light.hall", "state": "off", "attributes": {}},
+            {"entity_id": "person.alex", "state": "home", "attributes": {}},
+        ])
+        self.assertIs(module.everyone_away(), False)
+
+    def test_fresh_shared_snapshot_is_available_for_phone_without_another_fetch(self):
+        from smarthome_module import SmartHomeModule
+        module = SmartHomeModule("http://preview", "token", entities=["light.hall"])
+        module._apply_states([{"entity_id": "light.hall", "state": "on", "attributes": {}}])
+        states, updated_at = module.states_snapshot()
+        self.assertEqual(states[0]["entity_id"], "light.hall")
+        self.assertEqual(updated_at, module._states_updated)
+
+
+if __name__ == "__main__":
+    unittest.main()
